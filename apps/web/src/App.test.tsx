@@ -275,22 +275,24 @@ describe('/pair consent route', () => {
 })
 
 describe('App backend configuration chip', () => {
-  it('shows "Browser only" when configured for browser-local storage', () => {
+  it('renders no fixed backend-config overlay (D1: the header connection chip owns this)', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.getByText('Browser only')).toBeTruthy()
+    expect(screen.queryByTestId('backend-config-chip')).toBeNull()
+    expect(screen.queryByText('Browser only')).toBeNull()
   })
 
-  it('shows the daemon URL when configured for a local daemon', () => {
+  it('renders no daemon-URL overlay when configured for a local daemon', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.getByText('Configured for local daemon at http://127.0.0.1:3000')).toBeTruthy()
+    expect(screen.queryByTestId('backend-config-chip')).toBeNull()
+    expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
 
   it('does not render the chip on the invalid-config error page', () => {
@@ -684,7 +686,7 @@ describe('App local-daemon provider state', () => {
     expect(receivedDaemonPageProps?.slug).toBe('canvas-b')
   })
 
-  it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES and neutral chip/banner copy', async () => {
+  it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES and neutral banner copy', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
@@ -706,7 +708,6 @@ describe('App local-daemon provider state', () => {
     expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_CAPABILITIES)
-    expect(screen.getByText('Browser only')).toBeTruthy()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
     expect(
       screen.getByText('Beta preview — your data is stored only in this browser.'),

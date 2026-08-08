@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -334,6 +335,20 @@ export function BrowserLocalCanvasPage({
         }
       >
         <WorkspaceTopBar
+          statusSlot={
+            <ConnectionStatus state="local">
+              <p className="text-muted-foreground">
+                Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
+                combining changes
+              </p>
+              <Suspense fallback={null}>
+                <DaemonDetectedBanner
+                  settingsStore={settingsStore}
+                  fetch={window.fetch.bind(window)}
+                />
+              </Suspense>
+            </ConnectionStatus>
+          }
           dataMode="local"
           workspaceId="local"
           slug={pageState.snapshot.id}
@@ -372,9 +387,6 @@ export function BrowserLocalCanvasPage({
           since <main> does not scope them the way sectioning content does. */}
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-1 text-xs">
         <span className="text-muted-foreground">{persistenceLabel(pageState.persistence)}</span>
-        <Suspense fallback={null}>
-          <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
-        </Suspense>
         {cleanupError && (
           <div role="alert" aria-live="assertive" className="text-destructive">
             {cleanupError}
@@ -385,10 +397,6 @@ export function BrowserLocalCanvasPage({
             {duplicateError}
           </div>
         )}
-        <span className="ml-auto text-muted-foreground">
-          Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
-          combining changes
-        </span>
         <button
           type="button"
           aria-label="Duplicate canvas"

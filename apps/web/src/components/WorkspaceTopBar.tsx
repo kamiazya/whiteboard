@@ -84,6 +84,10 @@ interface Props {
   // app's or Excalidraw's own) produces one.
   onExport?: (format: SceneExportFormat) => Promise<Blob | null>
   onOpenSettings?: () => void
+  // Right-side slot ahead of the secondary actions — the host page's
+  // connection-state chip (design refactor D1) mounts here so the one
+  // status affordance lives in the header instead of a banner row.
+  statusSlot?: ReactNode
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -115,6 +119,7 @@ export default function WorkspaceTopBar({
   versionPanelExtra,
   onExport,
   onOpenSettings,
+  statusSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
@@ -376,6 +381,7 @@ export default function WorkspaceTopBar({
         )}
       </div>
 
+      {statusSlot}
       <TopBarSecondaryActions
         versionsEnabled={versionsEnabled}
         onToggleVersionOpen={() => setVersionOpen((v) => !v)}

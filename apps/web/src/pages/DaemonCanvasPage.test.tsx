@@ -323,7 +323,7 @@ describe('DaemonCanvasPage', () => {
     expect(createdBackends[1]?.disconnectCount).toBe(0)
   })
 
-  it('shows a role=alert banner on WS auth failure (close 1008 -> onAuthError)', async () => {
+  it('flips the connection chip to "Sync off" on WS auth failure (close 1008 -> onAuthError)', async () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -331,22 +331,29 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Healthy session: the chip reads Synced.
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onAuthError?.()
     })
 
-    const alert = screen.getByRole('alert')
-    expect(alert.textContent).toMatch(/daemon rejected/i)
-    // Strengthened banner: an explicit "Live sync off" label, not just the
-    // re-pairing sentence, so the degraded state reads at a glance.
-    expect(alert.textContent).toMatch(/live sync off/i)
-    // Editor chrome stays mounted — auth error is a banner, not a full-page replacement.
+    // D1: no standing role=alert banner — the chip carries the state and a
+    // polite live region announces it to assistive tech.
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
+    expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
+    // Editor chrome stays mounted — auth error never replaces the page.
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
+
+    // The popover is the recovery surface: both ways forward are offered.
+    fireEvent.click(screen.getByTestId('connection-chip'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /re-pair/i })).toBeTruthy())
+    expect(screen.getByText(/edits stay in this browser/i)).toBeTruthy()
   })
 
-  it('shows a persistent "Sync off" indicator distinct from the alert banner while authError is true', async () => {
+  it('keeps the sr-only live region quiet until authError is true', async () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -361,12 +368,9 @@ describe('DaemonCanvasPage', () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
 
-    // Deliberately not role=alert — there must be exactly one alert on the
-    // page (the banner) so existing screen.getByRole('alert') calls stay
-    // unambiguous; the chip is a secondary, persistent status indicator.
-    const chip = screen.getByLabelText(/live sync off/i)
-    expect(chip.getAttribute('role')).not.toBe('alert')
-    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    const region = screen.getByLabelText(/live sync off/i)
+    expect(region.getAttribute('role')).toBe('status')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('renders the "Sync off" indicator even when no canvas is selected', async () => {
@@ -424,7 +428,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
 
     await act(async () => {
@@ -432,12 +436,12 @@ describe('DaemonCanvasPage', () => {
       await selectCanvasFromSwitcher('second')
     })
 
-    // The stale banner (and chip) must not outlive the backend that produced it.
-    expect(screen.queryByRole('alert')).toBeNull()
+    // The stale sync-off state must not outlive the backend that produced it.
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
     expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
   })
 
-  it('renders a browser-local escape button in the auth banner and invokes the callback', async () => {
+  it('offers the browser-local escape inside the chip popover and invokes the callback', async () => {
     const onContinueBrowserLocal = vi.fn()
     await act(async () => {
       render(
@@ -455,7 +459,13 @@ describe('DaemonCanvasPage', () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
 
-    const escapeButton = screen.getByRole('button', { name: /continue in browser-local/i })
+    // D1: the escape lives in the chip's popover, not a banner.
+    await act(async () => {
+      screen.getByTestId('connection-chip').click()
+    })
+    const escapeButton = await screen.findByRole('button', {
+      name: /continue in browser-local/i,
+    })
     await act(async () => {
       escapeButton.click()
     })

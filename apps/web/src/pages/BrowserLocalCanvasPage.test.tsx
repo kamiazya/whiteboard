@@ -738,17 +738,26 @@ describe('BrowserLocalCanvasPage', () => {
     const CTA_TEXT =
       'Connect a local daemon (MCP) to unlock version history, workspaces, variations, and combining changes'
 
-    it('shows a single compact CTA line instead of the four daemon-only teaser buttons', async () => {
+    it('moves the capability CTA into the Local connection chip popover (D1: no standing copy)', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} />)
       })
-      expect(screen.getAllByText(CTA_TEXT)).toHaveLength(1)
+      // No sentence-length CTA sits in the page chrome anymore...
+      expect(screen.queryByText(CTA_TEXT)).toBeNull()
       for (const label of ['Version history', 'Workspaces', 'Branches', 'Merge']) {
         expect(screen.queryByRole('button', { name: label })).toBeNull()
       }
+      // ...it lives in the Local chip's popover, next to the storage note.
+      // (Synchronous assertions: this file runs under fake timers, so
+      // findBy*'s real-timer polling would hang.)
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('connection-chip'))
+      })
+      expect(screen.getByText(/only in this browser/i)).toBeTruthy()
+      expect(screen.getByText(CTA_TEXT)).toBeTruthy()
     })
 
     it('does not render any mode-switch control — mode stays a read-only status', async () => {
