@@ -9,6 +9,21 @@ export interface SpatialNodeStyle {
   readonly stroke: string
 }
 
+/** JSON Canvas 1.0 numbered preset keys ('1' red … '6' purple). */
+export type SpatialPresetKey = '1' | '2' | '3' | '4' | '5' | '6'
+
+/**
+ * One preset accent: the strong stroke and the quiet tint fill. The design
+ * rule (apps/web/DESIGN.md): a preset colors a node's BORDER strongly and
+ * its background as a tint — body text keeps the theme text color, so
+ * readability never depends on the accent hue. Edges (and their J1
+ * arrowheads) take `stroke` directly.
+ */
+export interface SpatialPresetAccent {
+  readonly stroke: string
+  readonly fill: string
+}
+
 export interface SpatialPalette {
   readonly node: Readonly<Record<'text' | 'file' | 'link' | 'group', SpatialNodeStyle>>
   /** Stroke applied to a routed edge when it carries no authored color. */
@@ -17,6 +32,14 @@ export interface SpatialPalette {
   readonly labelFill: string
   /** Uniform corner radius (px) applied to every node's chrome shape. */
   readonly cornerRadiusPx: number
+  /**
+   * The six JSON Canvas preset accents, PER MODE — swappable theme DATA,
+   * never hardcoded in resolver code. Floors any replacement must keep
+   * (pinned by spatial-theme.test.ts, as floors rather than exact values):
+   * stroke >= 3:1 against the mode background (WCAG 1.4.11), labelFill
+   * >= 4.5:1 against the tint fill (WCAG 1.4.3).
+   */
+  readonly presets: Readonly<Record<SpatialPresetKey, SpatialPresetAccent>>
 }
 
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
@@ -39,6 +62,16 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
   edgeStroke: '#737373',
   labelFill: '#404040',
   cornerRadiusPx: 6,
+  // Tailwind 600 strokes (3.2-5.4:1 on white) over 100 tints (body text
+  // 8.5-9.3:1) — the same ramp as the app's approved state colors.
+  presets: {
+    '1': { stroke: '#dc2626', fill: '#fee2e2' },
+    '2': { stroke: '#ea580c', fill: '#ffedd5' },
+    '3': { stroke: '#d97706', fill: '#fef3c7' },
+    '4': { stroke: '#059669', fill: '#d1fae5' },
+    '5': { stroke: '#0891b2', fill: '#cffafe' },
+    '6': { stroke: '#9333ea', fill: '#f3e8ff' },
+  },
 }
 
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a
@@ -58,4 +91,14 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
   edgeStroke: '#9BA3AF',
   labelFill: '#E6E8EB',
   cornerRadiusPx: 4,
+  // Tailwind 400 strokes (7.2-11.9:1 on the near-black canvas) over 950
+  // tints (near-white body text 10.9-13.2:1).
+  presets: {
+    '1': { stroke: '#f87171', fill: '#450a0a' },
+    '2': { stroke: '#fb923c', fill: '#431407' },
+    '3': { stroke: '#fbbf24', fill: '#451a03' },
+    '4': { stroke: '#34d399', fill: '#022c22' },
+    '5': { stroke: '#22d3ee', fill: '#083344' },
+    '6': { stroke: '#c084fc', fill: '#3b0764' },
+  },
 }

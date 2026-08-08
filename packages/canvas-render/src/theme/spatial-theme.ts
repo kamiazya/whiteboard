@@ -28,29 +28,33 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   type SpatialPalette,
+  type SpatialPresetAccent,
 } from './spatial-palette.js'
 
 export type SpatialThemeMode = 'light' | 'dark'
 
 export interface SpatialThemeOptions {
   readonly mode: SpatialThemeMode
+  /**
+   * Wholesale palette replacement — the theme layer's swap point. Presets,
+   * chrome colors, and geometry-adjacent values (corner radius) all come
+   * from the palette, so restyling is a data change, never a resolver
+   * change. Callers providing a palette get a freshly built resolver each
+   * call and own its memoization (the per-mode defaults stay frozen
+   * singletons).
+   */
+  readonly palette?: SpatialPalette
 }
 
-// JSON Canvas 1.0's six numbered color presets, approximated as hex so this
-// theme's Appearance output can carry a concrete fill/stroke without
-// canvas-render ever having to know about presets.
-const PRESET_COLOR_HEX: Readonly<Record<string, string>> = {
-  '1': '#e03131',
-  '2': '#e8590c',
-  '3': '#f08c00',
-  '4': '#2f9e44',
-  '5': '#1971c2',
-  '6': '#9c36b5',
+/** A numbered preset resolved through the palette; null for hex/unknown. */
+function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
+  if (color === undefined || color.startsWith('#')) return null
+  return (palette.presets as Partial<Record<string, SpatialPresetAccent>>)[color] ?? null
 }
 
-function resolvePresetOrHex(color: CanvasColor | undefined): string | undefined {
-  if (color === undefined) return undefined
-  return color.startsWith('#') ? color : PRESET_COLOR_HEX[color]
+/** An author-supplied raw hex, passed through untouched; undefined otherwise. */
+function rawHex(color: CanvasColor | undefined): string | undefined {
+  return color !== undefined && color.startsWith('#') ? color : undefined
 }
 
 function shapeRadius(node: SpatialNode, palette: SpatialPalette): number {
@@ -69,14 +73,19 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
       // (`layoutSpatialCanvas`'s own defensive `unknown-node-kind` branch),
       // keeping this resolver total rather than throwing on a bad node.
       const style = palette.node[node.type] ?? palette.node.text
-      const appearance: Appearance = {
-        fill: resolvePresetOrHex(node.color) ?? style.fill,
-        stroke: style.stroke,
-      }
+      // Preset: accent STROKE + tint FILL (body text keeps the theme text
+      // color — readability never depends on the accent hue). Raw hex: the
+      // author's exact fill, unchanged (their own responsibility).
+      const accent = presetAccent(node.color, palette)
+      const appearance: Appearance =
+        accent !== null
+          ? { fill: accent.fill, stroke: accent.stroke }
+          : { fill: rawHex(node.color) ?? style.fill, stroke: style.stroke }
       return { radius: shapeRadius(node, palette), appearance }
     },
     resolveEdge: (edge: CanvasEdge) => ({
-      stroke: resolvePresetOrHex(edge.color) ?? palette.edgeStroke,
+      stroke:
+        presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
     resolveLabel: () => ({ fill: palette.labelFill, fontFamily: SPATIAL_THEME_FONT_FAMILY }),
   }
@@ -91,5 +100,6 @@ const THEMES: Readonly<Record<SpatialThemeMode, SpatialAppearanceResolver>> = Ob
 })
 
 export function createSpatialTheme(options: SpatialThemeOptions): SpatialAppearanceResolver {
+  if (options.palette !== undefined) return buildTheme(options.palette)
   return THEMES[options.mode]
 }

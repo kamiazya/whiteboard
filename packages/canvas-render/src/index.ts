@@ -47,7 +47,12 @@ export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { SpatialGeometry } from './theme/spatial-geometry.js'
 export { SPATIAL_THEME_GEOMETRY } from './theme/spatial-geometry.js'
-export type { SpatialNodeStyle, SpatialPalette } from './theme/spatial-palette.js'
+export type {
+  SpatialNodeStyle,
+  SpatialPalette,
+  SpatialPresetAccent,
+  SpatialPresetKey,
+} from './theme/spatial-palette.js'
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
 export { createSpatialTheme } from './theme/spatial-theme.js'
