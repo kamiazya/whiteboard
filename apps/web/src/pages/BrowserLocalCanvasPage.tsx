@@ -316,9 +316,18 @@ export function BrowserLocalCanvasPage({
       (loaded) => {
         if (cancelled) return
         setImageUrls((prev) => {
+          // When every load failed, keep the SAME map instance: a fresh
+          // (equal) map would re-trigger this effect and spin the failed
+          // reads forever. Failed refs retry only on the next canvas change.
+          let added = false
           const next = new Map(prev)
-          for (const [ref, url] of loaded) if (url !== undefined) next.set(ref, url)
-          return next
+          for (const [ref, url] of loaded) {
+            if (url !== undefined) {
+              next.set(ref, url)
+              added = true
+            }
+          }
+          return added ? next : prev
         })
       },
     )
@@ -565,6 +574,7 @@ export function BrowserLocalCanvasPage({
             resolveFileCanvas={resolveFileCanvas}
             resolveFileImage={resolveFileImage}
             onAddImage={storeImageAsset}
+            isImageFileRef={isImageRef}
             paletteLeading={
               <HistoryCluster
                 onUndo={() => void undo()}

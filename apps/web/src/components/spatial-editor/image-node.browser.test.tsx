@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -15,10 +16,16 @@ const PNG_HREF =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 function makeHost(initial: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas; commands: string[]; stored: File[] } = {
+  const latest: {
+    canvas: SpatialCanvas
+    commands: string[]
+    stored: File[]
+    opened: string[]
+  } = {
     canvas: initial,
     commands: [],
     stored: [],
+    opened: [],
   }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
@@ -39,6 +46,8 @@ function makeHost(initial: SpatialCanvas) {
           resolveFileImage={(file) =>
             file.startsWith('asset:') ? { href: PNG_HREF, alt: 'stored image' } : undefined
           }
+          isImageFileRef={(file) => file.startsWith('asset:')}
+          onOpenFileRef={(file) => latest.opened.push(file)}
         />
       </div>
     )
@@ -124,4 +133,32 @@ it('without the storage seam, image affordances hide and non-image drops are ign
       (b) => b.getAttribute('aria-label') === 'Add image',
     ),
   ).toBe(false)
+})
+
+it('image references get no canvas actions: double-click never navigates, menu skips follow/retarget', async () => {
+  const withImage: SpatialCanvas = {
+    nodes: [{ id: 'i1', type: 'file', x: 100, y: 100, width: 240, height: 180, file: 'asset:img' }],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(withImage)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(latest.opened).toEqual([])
+
+  const r = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.left + 200,
+      clientY: r.top + 150,
+      button: 2,
+    }),
+  )
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  expect(container.textContent).not.toContain('Open canvas')
+  expect(container.textContent).not.toContain('Change target')
 })

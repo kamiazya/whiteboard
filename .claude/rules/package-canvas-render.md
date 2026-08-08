@@ -246,7 +246,7 @@
    constants naming the same string remains a deliberate, documented
    duplication rather than a shared import.
 
-8. **`ImageSceneNode` and the `resolveFileImage` seam** (J5b): the scene
+9. **`ImageSceneNode` and the `resolveFileImage` seam** (J5b): the scene
    graph's one raster/vector image node — `bbox` is the FRAME (aspect always
    preserved via `preserveAspectRatio="xMidYMid meet"`), `href` is emitted
    verbatim (data: URI in exports, blob:/app URL live), `alt` renders as a

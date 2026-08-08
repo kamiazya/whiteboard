@@ -163,6 +163,8 @@ describe('file-node images', () => {
     // Padded box of the 220x180 node at (100,100).
     expect(image.bbox.x).toBeGreaterThan(100)
     expect(image.bbox.w).toBeLessThan(220)
+    expect(image.bbox.y).toBeGreaterThan(100)
+    expect(image.bbox.h).toBeLessThan(180)
     // No label run overlaps the picture.
     expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
   })

@@ -180,6 +180,12 @@ export interface SpatialEditorProps {
    * created). Absent → all image-creation affordances hide.
    */
   readonly onAddImage?: (file: File) => Promise<string | undefined>
+  /**
+   * Whether a file reference denotes a stored IMAGE asset rather than a
+   * canvas. Image references get no canvas actions (follow, retarget) —
+   * navigating to an asset reference is a dead end.
+   */
+  readonly isImageFileRef?: (file: string) => boolean
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -252,6 +258,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       resolveFileCanvas,
       resolveFileImage,
       onAddImage,
+      isImageFileRef,
     },
     forwardedRef,
   ) {
@@ -481,14 +488,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (node === undefined) return undefined
       const rendered = renderCanvasToSvg(
         { nodes: [node], edges: [] },
-        { measure: resolvedMeasure, theme, resolveFileLabel },
+        { measure: resolvedMeasure, theme, resolveFileLabel, resolveFileImage },
       )
       return {
         svg: rendered.svg,
         originX: gestureState.startX - rendered.bounds.x,
         originY: gestureState.startY - rendered.bounds.y,
       }
-    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel])
+    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel, resolveFileImage])
 
     useImperativeHandle(
       forwardedRef,
@@ -967,8 +974,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           return
         }
         // A file node's double press follows the reference (navigate), the
-        // same primary-action rule as link nodes.
-        if (node?.type === 'file' && onOpenFileRef !== undefined) {
+        // same primary-action rule as link nodes. Image references are not
+        // followable — navigating to an asset id is a dead end.
+        if (
+          node?.type === 'file' &&
+          onOpenFileRef !== undefined &&
+          isImageFileRef?.(node.file) !== true
+        ) {
           applyResult(result)
           onOpenFileRef(node.file, node.subpath)
           return
@@ -1514,9 +1526,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }}
         onDrop={(e) => {
           if (onAddImage === undefined) return
+          if (e.dataTransfer.files.length === 0) return
+          // Cancel the browser's default file-drop handling (navigation to
+          // the file) for EVERY file drop, then only act on images.
+          e.preventDefault()
           const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
           if (file === undefined) return
-          e.preventDefault()
           const root = rootRef.current
           if (root === null) return
           const local = clientPointToRootLocal(e, root)
@@ -1797,7 +1812,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 })
                 items.push({ kind: 'separator' })
               }
-              if (node.type === 'file') {
+              if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
                 if (onOpenFileRef !== undefined) {
                   items.push({
                     label: 'Open canvas',
