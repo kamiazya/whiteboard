@@ -136,9 +136,9 @@ describe('DaemonCanvasPage', () => {
     // The bar's History button is the real versions-capability affordance
     // now that WorkspaceTopBar owns it (see WorkspaceTopBar.tsx).
     expect(screen.getByRole('button', { name: /history/i })).toBeTruthy()
-    // Workspaces is now a real switcher (not a static teaser) once
-    // capabilities.workspaces is true and the daemon has workspaces to list.
-    expect(screen.getByLabelText('Workspaces')).toBeTruthy()
+    // A single-workspace daemon renders no workspace selector at all —
+    // one raw id is not a choice, and every header row costs canvas height.
+    expect(screen.queryByLabelText('Workspaces')).toBeNull()
   })
 
   describe('workspace switcher', () => {
@@ -898,7 +898,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
         toggle.click()
       })
@@ -950,7 +950,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
         toggle.click()
       })
@@ -1041,7 +1041,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
         toggle.click()
       })

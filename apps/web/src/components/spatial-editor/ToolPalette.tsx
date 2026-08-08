@@ -8,10 +8,18 @@
  * controls only — it must never grow per-object actions like delete or
  * color, which belong on the selected object.
  *
+ * Icon-only buttons (chrome carries no sentence-shaped copy): every button
+ * keeps its full accessible name via aria-label — which is also what the
+ * existing getByRole('button', { name: ... }) tests and screen readers
+ * resolve — and a tooltip supplies the sighted-hover equivalent.
+ *
  * Marked `data-editor-overlay` so the canvas root's gesture handlers ignore
  * presses originating here (see SpatialEditor's isOverlayEvent): without
  * that, the root would capture the pointer and swallow the buttons' clicks.
  */
+import { MousePointer2, Spline, StickyNote } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
 export type EditorTool = 'select' | 'connect'
 
 interface ToolPaletteProps {
@@ -21,7 +29,7 @@ interface ToolPaletteProps {
 }
 
 const TOOL_BUTTON_CLASS =
-  'rounded-md border px-3 py-1.5 text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:font-medium'
+  'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
 
 export function ToolPalette({ onCreateNode, tool, onToolChange }: ToolPaletteProps) {
   return (
@@ -30,34 +38,53 @@ export function ToolPalette({ onCreateNode, tool, onToolChange }: ToolPalettePro
       data-testid="tool-palette"
       role="toolbar"
       aria-label="Canvas tools"
-      className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-lg border bg-background p-1 shadow-md"
+      className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
     >
-      <button
-        type="button"
-        data-testid="select-tool-button"
-        aria-pressed={tool === 'select'}
-        onClick={() => onToolChange('select')}
-        className={TOOL_BUTTON_CLASS}
-      >
-        Select
-      </button>
-      <button
-        type="button"
-        data-testid="connect-tool-button"
-        aria-pressed={tool === 'connect'}
-        onClick={() => onToolChange('connect')}
-        className={TOOL_BUTTON_CLASS}
-      >
-        Connect
-      </button>
-      <button
-        type="button"
-        data-testid="add-node-button"
-        onClick={onCreateNode}
-        className="rounded-md border bg-background px-3 py-1.5 text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Add note
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="select-tool-button"
+            aria-pressed={tool === 'select'}
+            aria-label="Select"
+            onClick={() => onToolChange('select')}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <MousePointer2 aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Select</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="connect-tool-button"
+            aria-pressed={tool === 'connect'}
+            aria-label="Connect"
+            onClick={() => onToolChange('connect')}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <Spline aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Connect nodes</TooltipContent>
+      </Tooltip>
+      <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="add-node-button"
+            aria-label="Add note"
+            onClick={onCreateNode}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <StickyNote aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Add note</TooltipContent>
+      </Tooltip>
     </div>
   )
 }

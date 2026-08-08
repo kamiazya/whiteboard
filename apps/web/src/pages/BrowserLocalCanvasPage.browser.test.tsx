@@ -57,6 +57,38 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
     expect(container.clientWidth).toBeGreaterThan(600)
   })
 
+  it('layout: the editor area is never clipped below the viewport, whatever the header stacks', async () => {
+    // Regression: the old flex column let a growing/wrapping header push the
+    // editor's bottom edge past the viewport. The grid shell gives the
+    // header stack an auto row and the editor minmax(0,1fr) — the editor's
+    // bottom must sit exactly at the viewport's bottom edge.
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    const container = screen.getByTestId('spatial-editor-container')
+    const rect = container.getBoundingClientRect()
+    expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+    // And it truly fills the remainder — no dead strip above the fold.
+    expect(rect.bottom).toBeGreaterThan(window.innerHeight - 2)
+
+    // The actual regression: GROW the header stack (as a wrapping row or an
+    // appearing banner would) and the editor must give up exactly that
+    // height instead of sliding its bottom edge below the viewport.
+    const headerStack = container.closest('main')?.firstElementChild as HTMLElement
+    const filler = document.createElement('div')
+    filler.style.height = '120px'
+    headerStack.appendChild(filler)
+    try {
+      const grown = container.getBoundingClientRect()
+      expect(grown.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+      expect(grown.height).toBeLessThan(rect.height)
+    } finally {
+      filler.remove()
+    }
+  })
+
   it('cleanup: delete canvas shows cleanup-completed', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
     await waitFor(

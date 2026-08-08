@@ -132,7 +132,7 @@ describe('WorkspaceTopBar browser mode', () => {
   it('opens History from the real top bar and keeps the popover list scrollable', async () => {
     const { container } = renderTopBar()
 
-    await page.getByRole('button', { name: 'History' }).click()
+    await page.getByRole('button', { name: 'Version history' }).click()
 
     await waitFor(() => {
       expect(container.textContent).toContain('Version history')
@@ -167,7 +167,7 @@ describe('WorkspaceTopBar browser mode', () => {
   it('keeps the version popover open when a mousedown lands inside the restore confirmation dialog (RED-first)', async () => {
     renderTopBar()
 
-    await page.getByRole('button', { name: 'History' }).click()
+    await page.getByRole('button', { name: 'Version history' }).click()
     await waitFor(() => {
       expect(screen.getByText('Version history')).toBeTruthy()
     })
@@ -228,7 +228,7 @@ describe('WorkspaceTopBar browser mode', () => {
     const onRestored = vi.fn()
     renderTopBar({ onRestored })
 
-    await page.getByRole('button', { name: 'History' }).click()
+    await page.getByRole('button', { name: 'Version history' }).click()
     await page.getByText(/^Version 1$/).click()
 
     await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
@@ -503,9 +503,9 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // Exposed right-side actions are hidden at this width.
     await waitFor(() => {
-      expect(isDisplayNone(screen.getByRole('button', { name: 'History', hidden: true }))).toBe(
-        true,
-      )
+      expect(
+        isDisplayNone(screen.getByRole('button', { name: 'Version history', hidden: true })),
+      ).toBe(true)
       expect(
         isDisplayNone(screen.getByRole('button', { name: /Theme: light/i, hidden: true })),
       ).toBe(true)
@@ -556,7 +556,7 @@ describe('WorkspaceTopBar browser mode', () => {
     renderTopBar({ theme: 'light', onToggleTheme: vi.fn() })
     await waitFor(() => {
       expect(isDisplayNone(screen.getByTestId('topbar-more-actions-trigger'))).toBe(true)
-      expect(isDisplayNone(screen.getByRole('button', { name: 'History' }))).toBe(false)
+      expect(isDisplayNone(screen.getByRole('button', { name: 'Version history' }))).toBe(false)
       expect(isDisplayNone(screen.getByRole('button', { name: /Theme: light/i }))).toBe(false)
       expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
     })
