@@ -14,8 +14,10 @@ describe('ConnectionStatus chip', () => {
 
     const chip = screen.getByRole('button', { name: /synced/i })
     expect(chip).toBeTruthy()
-    // No standing sentence copy outside the popover.
-    expect(screen.queryByText(/data lives/i)).toBeNull()
+    // No standing sentence copy outside the popover: the actual popover
+    // explanation must not be rendered until the chip is opened.
+    expect(screen.queryByText(/changes are saved to your local daemon/i)).toBeNull()
+    expect(screen.queryByText(/live sync is on/i)).toBeNull()
 
     fireEvent.click(chip)
     expect(await screen.findByText(/live sync is on/i)).toBeTruthy()
