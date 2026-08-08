@@ -54,7 +54,7 @@
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-react": "^6.0.5",
     "@vitest/browser-playwright": "catalog:",
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.7.0",
