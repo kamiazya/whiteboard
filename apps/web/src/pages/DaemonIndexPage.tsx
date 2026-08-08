@@ -283,7 +283,7 @@ export function DaemonIndexPage({
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      <div className="flex h-dvh flex-col overflow-y-auto p-4">
+      <div className="flex h-full flex-col overflow-y-auto p-4">
         <h1 className="sr-only">Canvases</h1>
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
           {workspaces.length > 1 && (

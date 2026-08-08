@@ -235,7 +235,7 @@ export function DaemonCanvasPage({
       <div
         role="alert"
         aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="max-w-md text-sm text-destructive">{controller.loadError}</p>
       </div>
@@ -296,7 +296,7 @@ export function DaemonCanvasPage({
           auto row, and the canvas owns minmax(0,1fr) — however many banner
           rows appear (or however tall they wrap), the canvas row is always
           exactly the remaining viewport height, never clipped below it. */}
-      <main className="relative grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)]">
+      <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
         <div className="min-w-0">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
           {controller.switchError && (

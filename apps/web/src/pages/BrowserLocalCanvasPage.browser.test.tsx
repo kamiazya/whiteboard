@@ -10,7 +10,13 @@ import '../index.css'
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
 function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+  return rtlRender(
+    // Pages fill their allotted height (h-full) — the app shell owns the
+    // viewport in production, so tests supply the equivalent sized parent.
+    <div style={{ height: '100vh' }}>
+      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+    </div>,
+  )
 }
 
 async function clearDb(): Promise<void> {
@@ -87,6 +93,35 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
     } finally {
       filler.remove()
     }
+  })
+
+  it('layout: respects the height its parent allots (app-level banner scenario)', async () => {
+    // The phone bug: the app shell stacks a beta banner ABOVE the page, so
+    // the page must size to the remaining height (h-full). A page that
+    // claims the whole viewport (h-dvh) under an in-flow banner slides its
+    // bottom — the tool palette — past the viewport edge.
+    const BANNER_PX = 40
+    rtlRender(
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ height: BANNER_PX, flexShrink: 0 }} />
+        <div style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
+          <MemoryRouter initialEntries={['/']}>
+            <BrowserLocalCanvasPage store={new IndexedDBStore()} />
+          </MemoryRouter>
+        </div>
+      </div>,
+    )
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    const container = screen.getByTestId('spatial-editor-container')
+    const rect = container.getBoundingClientRect()
+    expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+    const main = container.closest('main') as HTMLElement
+    expect(main.getBoundingClientRect().height).toBeLessThanOrEqual(
+      window.innerHeight - BANNER_PX + 1,
+    )
   })
 
   it('cleanup: delete canvas shows cleanup-completed', async () => {

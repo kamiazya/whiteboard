@@ -33,7 +33,13 @@ import '../index.css'
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
 function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+  return rtlRender(
+    // Pages fill their allotted height (h-full) — the app shell owns the
+    // viewport in production, so tests supply the equivalent sized parent.
+    <div style={{ height: '100vh' }}>
+      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+    </div>,
+  )
 }
 
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void

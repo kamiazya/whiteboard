@@ -281,7 +281,7 @@ export function BrowserLocalCanvasPage({
       <div
         role="alert"
         aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
         <button
@@ -299,7 +299,7 @@ export function BrowserLocalCanvasPage({
     return (
       <div
         data-testid="cleanup-completed"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="text-sm text-muted-foreground">Canvas removed.</p>
         <button
@@ -322,7 +322,7 @@ export function BrowserLocalCanvasPage({
     // every header-shaped row stacks inside the auto row, and the editor
     // owns minmax(0,1fr) — however many rows appear or however tall they
     // wrap, the editor row is always exactly the remaining viewport height.
-    <main ref={mainRef} className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)]">
+    <main ref={mainRef} className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for

@@ -70,7 +70,11 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       [{ path: '*', element: <BrowserLocalCanvasPage store={store} /> }],
       { initialEntries: ['/'] },
     )
-    rtlRender(<RouterProvider router={router} />)
+    rtlRender(
+      <div style={{ height: '100vh' }}>
+        <RouterProvider router={router} />
+      </div>,
+    )
 
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
