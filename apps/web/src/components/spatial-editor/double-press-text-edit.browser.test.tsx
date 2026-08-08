@@ -25,6 +25,7 @@ function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
   return (
     <div style={{ width: 800, height: 600 }}>
       <SpatialEditor
+        defaultTool="select"
         canvas={canvas}
         onChange={(next, command) => {
           onCommand?.(command.kind)

@@ -17,6 +17,7 @@ function renderAt(width: number) {
   return render(
     <div className="relative bg-background" style={{ width, height: 600 }}>
       <SpatialEditor
+        defaultTool="select"
         canvas={{ nodes: [], edges: [] }}
         onChange={vi.fn()}
         theme="light"
@@ -38,6 +39,27 @@ it('the dock keeps history and tools in ONE single-row container that fits a pho
   expect(palette.contains(cluster)).toBe(true)
 
   // The dock fits the narrow host in a single row.
+  const hostRect = host.getBoundingClientRect()
+  const dockRect = palette.getBoundingClientRect()
+  expect(dockRect.left).toBeGreaterThanOrEqual(hostRect.left)
+  expect(dockRect.right).toBeLessThanOrEqual(hostRect.right)
+  const tops = new Set(
+    [...palette.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)),
+  )
+  expect(tops.size).toBe(1)
+})
+
+it('hand mode swaps history for the zoom cluster and still fits a phone width in one row', () => {
+  const { container } = renderAt(375)
+  const host = container.firstElementChild as HTMLElement
+  const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+
+  fireEvent.click(palette.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
+  expect(container.querySelector('[data-testid="history-cluster"]')).toBeNull()
+  expect(palette.querySelector('[data-testid="zoom-reset-button"]')).not.toBeNull()
+
+  // The wider zoom cluster (4 controls incl. the % readout) must not push
+  // the dock past the phone edge or wrap it to a second row.
   const hostRect = host.getBoundingClientRect()
   const dockRect = palette.getBoundingClientRect()
   expect(dockRect.left).toBeGreaterThanOrEqual(hostRect.left)

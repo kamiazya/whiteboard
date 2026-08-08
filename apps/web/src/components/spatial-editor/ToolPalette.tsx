@@ -53,7 +53,7 @@ interface ToolPaletteProps {
   readonly onToolChange: (tool: EditorTool) => void
 }
 
-const TOOL_BUTTON_CLASS =
+export const TOOL_BUTTON_CLASS =
   'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
 
 interface AddMenuEntry {
@@ -148,21 +148,9 @@ export function ToolPalette({
           <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
         </>
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="select-tool-button"
-            aria-pressed={tool === 'select'}
-            aria-label="Select"
-            onClick={() => onToolChange('select')}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <MousePointer2 aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Select</TooltipContent>
-      </Tooltip>
+      {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
+          user decision 2026-08-08), so it sits leftmost where the active
+          mode reads first. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -177,6 +165,21 @@ export function ToolPalette({
           </button>
         </TooltipTrigger>
         <TooltipContent>Hand — drag to pan</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="select-tool-button"
+            aria-pressed={tool === 'select'}
+            aria-label="Select"
+            onClick={() => onToolChange('select')}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <MousePointer2 aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Select</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

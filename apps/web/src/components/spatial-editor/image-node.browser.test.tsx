@@ -33,6 +33,7 @@ function makeHost(initial: SpatialCanvas) {
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={canvas}
           onChange={(next, command) => {
             latest.commands.push(command.kind)
@@ -120,7 +121,12 @@ it('without the storage seam, image affordances hide and non-image drops are ign
     const [canvas, setCanvas] = useState<SpatialCanvas>({ nodes: [], edges: [] })
     return (
       <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor canvas={canvas} onChange={(next) => setCanvas(next)} theme="light" />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
       </div>
     )
   }

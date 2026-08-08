@@ -32,6 +32,7 @@ function makeHost(initial: SpatialCanvas) {
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={canvas}
           onChange={(next, command) => {
             latest.commands.push(command.kind)
