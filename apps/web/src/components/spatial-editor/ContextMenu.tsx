@@ -115,7 +115,11 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       // edge-clamping above measures the absolutely-positioned box, and it
       // must behave the same where the app stylesheet is absent
       // (browser-mode component tests).
-      style={{ position: 'absolute', zIndex: 20, left: pos.x, top: pos.y }}
+      // width: max-content keeps the measured size intrinsic — an absolute
+      // box otherwise shrinks to fit the space left of the containing-block
+      // edge, so a menu opened near the edge would measure (and wrap) narrow
+      // and the clamp would compute from the wrong width.
+      style={{ position: 'absolute', zIndex: 20, width: 'max-content', left: pos.x, top: pos.y }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()

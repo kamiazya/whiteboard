@@ -286,8 +286,10 @@ it('a menu opened near the right/bottom edge is nudged back inside the editor', 
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
   const root = rootOf(container).getBoundingClientRect()
   const rect = menu.getBoundingClientRect()
-  expect(rect.right).toBeLessThanOrEqual(root.right)
-  expect(rect.bottom).toBeLessThanOrEqual(root.bottom)
+  // The clamp keeps a 4px gap, not mere containment — a regression that
+  // flushes the menu against the edge must fail here too.
+  expect(rect.right).toBeLessThanOrEqual(root.right - 4)
+  expect(rect.bottom).toBeLessThanOrEqual(root.bottom - 4)
   expect(rect.left).toBeGreaterThanOrEqual(root.left)
   expect(rect.top).toBeGreaterThanOrEqual(root.top)
 })
