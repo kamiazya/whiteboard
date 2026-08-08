@@ -17,9 +17,7 @@ const OPTIONS = [
 ] as const
 
 const withFileNode: SpatialCanvas = {
-  nodes: [
-    { id: 'f1', type: 'file', x: 100, y: 100, width: 200, height: 60, file: 'canvas-a' },
-  ],
+  nodes: [{ id: 'f1', type: 'file', x: 100, y: 100, width: 200, height: 60, file: 'canvas-a' }],
   edges: [],
 }
 
@@ -70,9 +68,9 @@ it('Add canvas opens the picker and picking creates a file node with that refere
   fireEvent.click(container.querySelector('[data-testid="add-canvas-button"]') as HTMLElement)
   await expect.element(page.getByTestId('canvas-picker-dialog')).toBeInTheDocument()
 
-  const option = [...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button')].find(
-    (b) => b.textContent === 'Meeting notes',
-  ) as HTMLButtonElement
+  const option = [
+    ...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button'),
+  ].find((b) => b.textContent === 'Meeting notes') as HTMLButtonElement
   fireEvent.click(option)
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
@@ -112,9 +110,9 @@ it('the file context menu offers Open canvas and Change target retargets via the
   ]
   expect(current.map((b) => b.textContent)).toEqual(['Release plan'])
 
-  const target = [...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button')].find(
-    (b) => b.textContent === 'Meeting notes',
-  ) as HTMLButtonElement
+  const target = [
+    ...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button'),
+  ].find((b) => b.textContent === 'Meeting notes') as HTMLButtonElement
   fireEvent.click(target)
 
   await vi.waitFor(() =>
