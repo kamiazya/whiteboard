@@ -563,3 +563,44 @@ describe('batch', () => {
     ).toBe(canvas)
   })
 })
+
+// create-edge (slice 3): duplicate/paste re-create edges WITH their
+// properties (sides/ends/color/label) — connect-nodes only carries
+// endpoints, so a full-edge creation command is needed.
+describe('create-edge', () => {
+  const fullEdge = {
+    id: 'e-dup',
+    fromNode: 'a',
+    toNode: 'b',
+    fromSide: 'right',
+    toSide: 'left',
+    fromEnd: 'arrow',
+    label: 'kept',
+    color: '3',
+  } as const
+
+  it('appends the edge verbatim, preserving every optional property', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, { kind: 'create-edge', edge: fullEdge })
+    expect(next.edges).toEqual([fullEdge])
+    expect(next.nodes).toBe(canvas.nodes)
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
+  it('is total: duplicate edge id, missing endpoint, and self-loop are no-ops returning the input', () => {
+    const canvas = applyCommand(baseCanvas(), { kind: 'create-edge', edge: fullEdge })
+    expect(applyCommand(canvas, { kind: 'create-edge', edge: fullEdge })).toBe(canvas)
+    expect(
+      applyCommand(canvas, {
+        kind: 'create-edge',
+        edge: { ...fullEdge, id: 'x', toNode: 'ghost' },
+      }),
+    ).toBe(canvas)
+    expect(
+      applyCommand(canvas, {
+        kind: 'create-edge',
+        edge: { ...fullEdge, id: 'y', fromNode: 'a', toNode: 'a' },
+      }),
+    ).toBe(canvas)
+  })
+})

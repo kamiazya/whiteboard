@@ -15,6 +15,7 @@
 import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
+  | 'duplicate-selection'
   | 'reorder-forward'
   | 'reorder-backward'
   | 'reorder-front'
@@ -54,6 +55,14 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  {
+    id: 'duplicate-selection',
+    keys: ['d'],
+    mod: true,
+    display: 'Cmd+D',
+    description: 'Duplicate the selection',
+    tools: ['select'],
+  },
   // Z-order (tldraw parity). Array order is z-order, last = topmost.
   {
     id: 'reorder-forward',

@@ -212,6 +212,8 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
       return next.nodes.some((n) => n.id === command.node.id)
     case 'connect-nodes':
       return next.edges.some((e) => e.id === command.edgeId)
+    case 'create-edge':
+      return next.edges.some((e) => e.id === command.edge.id)
     case 'delete-node':
     case 'delete-edge':
       // Deletes are no-ops for absent ids — always writable.
@@ -241,6 +243,11 @@ function writeSubCommand(
     }
     case 'connect-nodes': {
       const edge = next.edges.find((e) => e.id === command.edgeId)
+      if (edge) writer.writeEdge(edge)
+      return
+    }
+    case 'create-edge': {
+      const edge = next.edges.find((e) => e.id === command.edge.id)
       if (edge) writer.writeEdge(edge)
       return
     }
