@@ -17,13 +17,14 @@
  * presses originating here (see SpatialEditor's isOverlayEvent): without
  * that, the root would capture the pointer and swallow the buttons' clicks.
  */
-import { MousePointer2, Spline, StickyNote } from 'lucide-react'
+import { Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type EditorTool = 'select' | 'connect'
 
 interface ToolPaletteProps {
   readonly onCreateNode: () => void
+  readonly onCreateLink: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
 }
@@ -31,7 +32,7 @@ interface ToolPaletteProps {
 const TOOL_BUTTON_CLASS =
   'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
 
-export function ToolPalette({ onCreateNode, tool, onToolChange }: ToolPaletteProps) {
+export function ToolPalette({ onCreateNode, onCreateLink, tool, onToolChange }: ToolPaletteProps) {
   return (
     <div
       data-editor-overlay
@@ -84,6 +85,20 @@ export function ToolPalette({ onCreateNode, tool, onToolChange }: ToolPalettePro
           </button>
         </TooltipTrigger>
         <TooltipContent>Add note</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="add-link-button"
+            aria-label="Add link"
+            onClick={onCreateLink}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <Link aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Add link</TooltipContent>
       </Tooltip>
     </div>
   )
