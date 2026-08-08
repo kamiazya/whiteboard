@@ -3,6 +3,7 @@ import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
@@ -17,6 +18,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
@@ -274,6 +276,26 @@ export function DaemonCanvasPage({
       </div>
     ) : null
 
+  // The ONE connection affordance (design refactor D1): a header chip whose
+  // popover carries the explanation and both recovery paths. Re-pairing
+  // navigates top-level to the daemon's own /pair consent page — the same
+  // trust anchor first-time pairing uses.
+  const connectionStatus = (
+    <ConnectionStatus
+      state={authError ? 'sync-off' : 'synced'}
+      daemonBaseUrl={daemonBaseUrl}
+      onRepair={() => {
+        void beginPairingGrant({
+          daemonBaseUrl,
+          hostedOrigin: window.location.origin,
+          sessionStorage: window.sessionStorage,
+          navigate: (url) => window.location.assign(url),
+        })
+      }}
+      onContinueBrowserLocal={onContinueBrowserLocal}
+    />
+  )
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <main className="relative flex h-dvh w-full flex-col">
@@ -287,48 +309,17 @@ export function DaemonCanvasPage({
             <span className="text-xs text-destructive">{controller.switchError}</span>
           </div>
         )}
-        {authError && (
-          <>
-            <div
-              role="alert"
-              aria-live="assertive"
-              className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-1"
-            >
-              <span aria-hidden="true" className="text-sm text-destructive">
-                ⚠
-              </span>
-              <span className="text-xs font-semibold text-destructive">Live sync off:</span>
-              <span className="text-xs text-destructive">
-                The daemon rejected this session. Try re-pairing.
-              </span>
-              {onContinueBrowserLocal && (
-                <button
-                  type="button"
-                  onClick={onContinueBrowserLocal}
-                  className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
-                >
-                  Continue in browser-local
-                </button>
-              )}
-            </div>
-            {/* Rendered at the page level (not inside `{canvas && ...}`) so the
-                degraded state stays visible even in the no-canvas/empty-workspace
-                view where WorkspaceTopBar itself doesn't mount. Deliberately
-                role="status" rather than role="alert": the page must keep exactly
-                one alert (the banner above) so existing screen.getByRole('alert')
-                assertions stay unambiguous, while this chip persists as a compact
-                reminder once attention moves past it. */}
-            <div
-              role="status"
-              aria-label="Live sync off"
-              className="flex w-fit items-center gap-1 self-start rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
-            >
-              Sync off
-            </div>
-          </>
+        {/* Rendered at the page level when WorkspaceTopBar has nowhere to
+            mount (no-canvas/empty-workspace view) so the degraded state
+            never disappears with the canvas-gated chrome. */}
+        {authError && !canvas && (
+          <div className="flex items-center border-b bg-background px-4 py-1.5">
+            {connectionStatus}
+          </div>
         )}
         {canvas && (
           <WorkspaceTopBar
+            statusSlot={connectionStatus}
             workspaceId={canvas.workspaceId}
             slug={canvas.slug}
             canvases={controller.canvases}

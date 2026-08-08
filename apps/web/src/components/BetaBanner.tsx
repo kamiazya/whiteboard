@@ -9,7 +9,7 @@ interface BetaBannerProps {
 }
 
 // Thin top banner, not fixed-positioned, so it stays clear of
-// BackendConfigChip's bottom-right fixed overlay in App.tsx.
+// the connection chip in the page header (ConnectionStatus).
 export function BetaBanner({ store, message }: BetaBannerProps) {
   const [dismissedAt, setDismissedAt] = useState(() => store.load().storage.dismissedBetaBannerAt)
 
