@@ -108,6 +108,23 @@
   }
 
   /*
+   * One-shot attention echo (ConnectionStatus sync-off entry): an
+   * expanding, fading ring behind the chip dot. Compositor props only;
+   * a FINITE iteration count at the use site keeps it a pulse that
+   * guides attention on entry, never a standing ping.
+   */
+  @keyframes attention-pulse {
+    from {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    to {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  /*
    * Reduced-motion floor: neutralize every animation and transition —
    * including tw-animate-css's data-state entrances — for users who asked
    * the OS for less motion. 0.01ms instead of 0 so `animationend` /
