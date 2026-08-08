@@ -693,3 +693,31 @@ describe('renderSceneToSvg — document envelope options', () => {
     ).toBe(true)
   })
 })
+
+describe('image nodes', () => {
+  it('emits <image> with fixed attribute order, escaped href, and title-as-alt', () => {
+    const svg = renderSceneToSvg({
+      nodes: [
+        {
+          kind: 'image',
+          bbox: { x: 10, y: 20, w: 100, h: 50 },
+          href: 'data:image/png;base64,A&B"C',
+          alt: 'A <chart>',
+        },
+      ],
+    })
+    expect(svg).toContain(
+      '<image x="10" y="20" width="100" height="50" href="data:image/png;base64,A&amp;B&quot;C" preserveAspectRatio="xMidYMid meet"><title>A &lt;chart&gt;</title></image>',
+    )
+  })
+
+  it('an alt-less image is marked presentation', () => {
+    const svg = renderSceneToSvg({
+      nodes: [
+        { kind: 'image', bbox: { x: 0, y: 0, w: 10, h: 10 }, href: 'data:image/png;base64,AA' },
+      ],
+    })
+    expect(svg).toContain('role="presentation"')
+    expect(svg).not.toContain('<title>')
+  })
+})

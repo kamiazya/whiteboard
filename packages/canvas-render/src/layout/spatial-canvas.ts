@@ -90,6 +90,16 @@ export interface SpatialLayoutOptions {
    * editor decides by on-screen size, export by intrinsic size.
    */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /**
+   * Resolves a file node's reference to a renderable IMAGE (href emitted
+   * verbatim into the SVG — a data: URI in exports, a blob:/app URL in the
+   * editor). Checked BEFORE the canvas-embed seam and not LOD-gated: a
+   * scaled-down image is still a meaningful thumbnail, unlike crushed
+   * canvas content. `undefined` (or a throw) keeps the card.
+   */
+  readonly resolveFileImage?: (
+    file: string,
+  ) => { readonly href: string; readonly alt?: string } | undefined
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
@@ -287,9 +297,40 @@ function composeFileEmbed(
   }
 }
 
+/** The image rendering of a file node: fills the padded box, aspect kept. */
+function composeFileImage(
+  node: Extract<SpatialNode, { type: 'file' }>,
+  options: ResolvedLayoutOptions,
+): SceneNode | undefined {
+  if (options.resolveFileImage === undefined) return undefined
+  let resolved: { readonly href: string; readonly alt?: string } | undefined
+  try {
+    resolved = options.resolveFileImage(node.file)
+  } catch {
+    resolved = undefined
+  }
+  if (resolved === undefined) return undefined
+  const padding = options.geometry.paddingPx
+  const w = node.width - 2 * padding
+  const h = node.height - 2 * padding
+  if (!(w > 0) || !(h > 0)) return undefined
+  return {
+    kind: 'image',
+    bbox: { x: node.x + padding, y: node.y + padding, w, h },
+    href: resolved.href,
+    ...(resolved.alt !== undefined ? { alt: resolved.alt } : {}),
+  }
+}
+
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   switch (node.type) {
     case 'file': {
+      const image = composeFileImage(node, options)
+      if (image !== undefined) {
+        // Full-bleed image, no label run — the filename would overlap the
+        // picture; the accessible name travels on the image node itself.
+        return [chromeShape(node, options), image]
+      }
       const embed = composeFileEmbed(node, options)
       if (embed !== undefined) {
         const chrome = chromeShape(node, options)

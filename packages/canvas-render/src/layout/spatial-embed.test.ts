@@ -139,3 +139,49 @@ describe('file-node inline embeds', () => {
     expect(depth).toBe(3)
   })
 })
+
+describe('file-node images', () => {
+  it('renders a resolved image full-bleed in the padded box with the accessible name', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: (file) =>
+          file === 'child' ? { href: 'data:image/png;base64,AAA', alt: 'A chart' } : undefined,
+      }),
+    )
+    const image = scene.nodes.find((n) => n.kind === 'image')
+    if (image === undefined || image.kind !== 'image') throw new Error('image expected')
+    expect(image.href).toBe('data:image/png;base64,AAA')
+    expect(image.alt).toBe('A chart')
+    // Padded box of the 220x180 node at (100,100).
+    expect(image.bbox.x).toBeGreaterThan(100)
+    expect(image.bbox.w).toBeLessThan(220)
+    // No label run overlaps the picture.
+    expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
+  })
+
+  it('image resolution wins over the canvas-embed seam and failures keep the card', () => {
+    const both = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: () => ({ href: 'data:image/png;base64,AAA' }),
+        resolveFileCanvas: () => childCanvas,
+        expandFileNode: () => true,
+      }),
+    )
+    expect(both.nodes.some((n) => n.kind === 'image')).toBe(true)
+    expect(both.nodes.some((n) => n.kind === 'embedResolved')).toBe(false)
+
+    const throwing = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: () => {
+          throw new Error('boom')
+        },
+      }),
+    )
+    expect(throwing.nodes.some((n) => n.kind === 'image')).toBe(false)
+    // The card label still renders.
+    expect(throwing.nodes.some((n) => n.kind === 'textRun')).toBe(true)
+  })
+})

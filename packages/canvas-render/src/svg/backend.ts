@@ -185,6 +185,18 @@ function renderNode(node: SceneNode): string {
     }
     case 'shape':
       return renderShape(node)
+    case 'image': {
+      // Fixed attribute order (x y width height href preserveAspectRatio)
+      // per this package's canonical-serialization rule. Aspect is always
+      // preserved; alt renders as a <title> child (the SVG accessible-name
+      // mechanism), absence marks the image as presentation.
+      const title =
+        node.alt !== undefined && node.alt.length > 0
+          ? `<title>${escapeXmlText(node.alt)}</title>`
+          : ''
+      const roleAttr = title === '' ? ` ${PRESENTATION_ATTR}` : ''
+      return `<image ${rectAttrs(node.bbox)} href="${escapeXmlAttr(node.href)}" preserveAspectRatio="xMidYMid meet"${roleAttr}>${title}</image>`
+    }
   }
 }
 
