@@ -64,6 +64,61 @@ describe('BrowserLocalCanvasPage create/delete-node reload persistence (browser 
     cleanup()
   })
 
+  it('tapping Undo in the history cluster reverts the last committed edit', async () => {
+    // The mobile path: no keyboard exists, so the cluster button must drive
+    // the same Loro UndoManager the Cmd/Ctrl+Z shortcut does.
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+
+    const created = textNodeCanvas('undo-probe-node', 20, 20)
+    // Retried like the neighboring tests: right after hydrate the page can
+    // swap backend identity (fresh canvas creation), so the first captured
+    // onChange may belong to a torn-down session. Re-sending an identical
+    // canvas is a no-op on the doc, so retries never stack extra undo steps.
+    const undoButton = screen.getByRole('button', { name: 'Undo' })
+    await waitFor(
+      () => {
+        act(() => {
+          latestOnChange!(created, createNodeCommand('undo-probe-node', 20, 20))
+        })
+        expect(undoButton.getAttribute('aria-disabled')).toBe('false')
+      },
+      { timeout: 10000, interval: 600 },
+    )
+
+    act(() => {
+      undoButton.click()
+    })
+
+    await waitFor(
+      () => {
+        const latest = latestMountedCanvases.at(-1)
+        expect(latest).toBeDefined()
+        expect(latest!.nodes.map((n) => n.id)).not.toContain('undo-probe-node')
+      },
+      { timeout: 5000 },
+    )
+    // And redo brings it back through the same cluster.
+    const redoButton = screen.getByRole('button', { name: 'Redo' })
+    await waitFor(() => expect(redoButton.getAttribute('aria-disabled')).toBe('false'), {
+      timeout: 5000,
+    })
+    act(() => {
+      redoButton.click()
+    })
+    await waitFor(
+      () => {
+        const latest = latestMountedCanvases.at(-1)
+        expect(latest!.nodes.map((n) => n.id)).toContain('undo-probe-node')
+      },
+      { timeout: 5000 },
+    )
+  })
+
   it('a node created via create-node survives remount; deleting it via delete-node stays gone after another remount', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
     await waitFor(

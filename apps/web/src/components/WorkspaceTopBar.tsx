@@ -22,7 +22,6 @@ import { useCopyCanvasUrl } from './workspace-top-bar/useCopyCanvasUrl'
 import { useCreateCanvas } from './workspace-top-bar/useCreateCanvas'
 import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
 import { useSceneExport } from './workspace-top-bar/useSceneExport'
-import { VersionPanel } from './workspace-top-bar/VersionPanel'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
@@ -37,7 +36,6 @@ interface Props {
   workspaceId: string
   slug: string
   canvases: CanvasInfo[]
-  onRestored?: () => void
   getThumbnailBlob?: () => Promise<Blob | null>
   // Theme preference is owned by the page so reloads can rehydrate from
   // localStorage and pass the resolved value to <Excalidraw theme=...>. The
@@ -71,11 +69,6 @@ interface Props {
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
   branchRefreshSignal?: number
-  versionRefreshSignal?: number
-  // Slot rendered inside the opened History panel below VersionTimeline, so
-  // a host page can keep its own "Save version" button + status message
-  // without this component needing to know about it.
-  versionPanelExtra?: ReactNode
   // Renders the scene through the same export utility Excalidraw's own
   // (harder-to-discover) hamburger-menu export dialog uses. Omitted (the
   // default) hides the "Export as PNG/SVG/JSON" menu items entirely rather
@@ -102,7 +95,6 @@ export default function WorkspaceTopBar({
   workspaceId,
   slug,
   canvases,
-  onRestored,
   theme,
   onToggleTheme,
   onEnterFullscreen,
@@ -115,8 +107,6 @@ export default function WorkspaceTopBar({
   onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
-  versionRefreshSignal,
-  versionPanelExtra,
   onExport,
   onOpenSettings,
   statusSlot,
@@ -135,9 +125,7 @@ export default function WorkspaceTopBar({
     daemonFetch,
   })
 
-  const [versionOpen, setVersionOpen] = useState(false)
   const [canvasSearch, setCanvasSearch] = useState('')
-  const versionPanelRef = useRef<HTMLDivElement | null>(null)
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -180,29 +168,6 @@ export default function WorkspaceTopBar({
   const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? slug.slice(0, slashIndex) : null
   const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? slug.slice(slashIndex + 1) : null
   const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? slug : null)
-
-  // Close the version history popover on outside clicks.
-  useEffect(() => {
-    if (!versionOpen) return
-    const onClick = (e: MouseEvent) => {
-      const panel = versionPanelRef.current
-      if (!panel) return
-      const target = e.target as Node | null
-      if (target && !panel.contains(target)) {
-        const targetEl = e.target as HTMLElement
-        // Ignore clicks on the trigger itself because the toggle button handles those.
-        const isTrigger = targetEl.closest('[data-version-trigger]')
-        // Radix dialogs (e.g. VersionTimeline's restore confirmation) render
-        // into a document.body portal, outside versionPanelRef's DOM subtree —
-        // treat clicks inside them as "inside" so confirming a restore doesn't
-        // also close the version popover behind it.
-        const isInPortalDialog = targetEl.closest('[role="dialog"], [role="alertdialog"]')
-        if (!isTrigger && !isInPortalDialog) setVersionOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [versionOpen])
 
   const {
     renamingCanvas,
@@ -383,8 +348,6 @@ export default function WorkspaceTopBar({
 
       {statusSlot}
       <TopBarSecondaryActions
-        versionsEnabled={versionsEnabled}
-        onToggleVersionOpen={() => setVersionOpen((v) => !v)}
         theme={theme}
         onToggleTheme={onToggleTheme}
         onEnterFullscreen={onEnterFullscreen}
@@ -403,17 +366,6 @@ export default function WorkspaceTopBar({
         busy={newCanvasBusy}
         onSubmit={() => void submitNewCanvas()}
       />
-
-      {versionOpen && (
-        <VersionPanel
-          panelRef={versionPanelRef}
-          workspaceId={workspaceId}
-          slug={slug}
-          onRestored={onRestored}
-          refreshSignal={versionRefreshSignal}
-          versionPanelExtra={versionPanelExtra}
-        />
-      )}
     </header>
   )
 }

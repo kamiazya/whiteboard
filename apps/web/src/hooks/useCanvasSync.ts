@@ -35,6 +35,13 @@ export interface UseCanvasSyncResult {
   restoreInProgress: boolean
   restoreLabel: string | null
   clearLocalUndo: () => void
+  // Same Loro UndoManager the Cmd/Ctrl+Z keyboard path drives — exposed so
+  // pointer surfaces (the canvas HistoryCluster) share one history. The
+  // can* reads are live (recomputed each render), never cached state.
+  undo: () => boolean
+  redo: () => boolean
+  canUndo: () => boolean
+  canRedo: () => boolean
   // null when the requested format is unavailable in this environment (e.g.
   // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
   // that the same as "export unavailable right now" rather than throwing.
@@ -141,6 +148,8 @@ export function useCanvasSync(
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
   const [externalVersion, setExternalVersion] = useState(0)
+  // Render signal only — the value itself is never read.
+  const [, setHistoryVersion] = useState(0)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
 
@@ -185,11 +194,16 @@ export function useCanvasSync(
       setCanvas(next)
       if (origin === 'external') setExternalVersion((v) => v + 1)
     })
+    // Undo-stack pushes land on COMMIT, after the canvas publish that drove
+    // the consumer's last render — bump a version so canUndo/canRedo reads
+    // re-run when the stack changes shape.
+    const unsubscribeHistory = session.subscribeHistory(() => setHistoryVersion((v) => v + 1))
     session.connect()
     session.onEditorReady()
 
     return () => {
       unsubscribe()
+      unsubscribeHistory()
       session.dispose()
     }
   }, [backend])
@@ -204,6 +218,17 @@ export function useCanvasSync(
 
   const clearLocalUndo = useCallback(() => {
     sessionRef.current?.clearUndo()
+  }, [])
+
+  // Live affordance state for undo/redo buttons. Not memoized state: every
+  // publish re-renders the consumer (setCanvas above), so reading through
+  // the session on each render is always current and never stale.
+  const canUndo = useCallback(() => {
+    return sessionRef.current?.canUndo() ?? false
+  }, [])
+
+  const canRedo = useCallback(() => {
+    return sessionRef.current?.canRedo() ?? false
   }, [])
 
   // Derives the export blob from the hook-owned canvas value — no imperative
@@ -268,6 +293,10 @@ export function useCanvasSync(
     restoreInProgress,
     restoreLabel,
     clearLocalUndo,
+    undo: loroUndo,
+    redo: loroRedo,
+    canUndo,
+    canRedo,
     exportScene,
   }
 }

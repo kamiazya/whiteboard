@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
+import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -249,7 +250,8 @@ export function BrowserLocalCanvasPage({
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { canvas, onChange, externalVersion, exportScene } = useCanvasSync(backend)
+  const { canvas, onChange, externalVersion, exportScene, undo, redo, canUndo, canRedo } =
+    useCanvasSync(backend)
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
@@ -473,6 +475,17 @@ export function BrowserLocalCanvasPage({
             onChange={onChange}
             externalVersion={externalVersion}
             theme={resolvedTheme}
+          />
+        )}
+        {/* Markdown canvases keep CodeMirror's own history (its keymap
+            already handles undo); the cluster drives the Loro UndoManager,
+            which only the spatial editor path routes edits through. */}
+        {canvasKind !== 'markdown' && (
+          <HistoryCluster
+            onUndo={() => void undo()}
+            onRedo={() => void redo()}
+            canUndo={canUndo()}
+            canRedo={canRedo()}
           />
         )}
       </div>

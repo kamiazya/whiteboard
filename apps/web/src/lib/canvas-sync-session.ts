@@ -117,6 +117,15 @@ export interface CanvasSyncSession {
   clearUndo(): void
   undo(): boolean
   redo(): boolean
+  // Live UndoManager state for button affordances (aria-disabled, tooltip
+  // copy). Cheap reads — recompute on every render of the consumer.
+  canUndo(): boolean
+  canRedo(): boolean
+  // Fires whenever the undo stack changes shape (a step pushed on commit, or
+  // popped by undo/redo) — the re-render signal button affordances need,
+  // since pushes happen on COMMIT, after the canvas publish that triggered
+  // the consumer's last render.
+  subscribeHistory(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -208,6 +217,15 @@ export function createCanvasSyncSession(
   let disposed = false
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
+  const historyListeners = new Set<() => void>()
+  // Microtask defer: onPush fires inside Loro's commit, and a listener that
+  // synchronously setStates mid-commit would re-enter React from a doc
+  // mutation path.
+  function notifyHistoryChanged(): void {
+    queueMicrotask(() => {
+      for (const listener of historyListeners) listener()
+    })
+  }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
@@ -378,7 +396,16 @@ export function createCanvasSyncSession(
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
         doc = newDoc
-        undoManager = new UndoManager(newDoc, { mergeInterval: 500 })
+        undoManager = new UndoManager(newDoc, {
+          mergeInterval: 500,
+          onPush: () => {
+            notifyHistoryChanged()
+            return { value: null, cursors: [] }
+          },
+          onPop: () => {
+            notifyHistoryChanged()
+          },
+        })
 
         newDoc.subscribeLocalUpdates((update) => {
           // No isStale() guard here: this callback is bound to this specific
@@ -439,7 +466,7 @@ export function createCanvasSyncSession(
       onRestoreComplete() {
         if (isStale()) return
         deps.onRestoreChange(false, null)
-        undoManager?.clear()
+        clearUndo()
       },
 
       onHeadChanged(payload) {
@@ -566,7 +593,12 @@ export function createCanvasSyncSession(
   }
 
   function clearUndo(): void {
-    undoManager?.clear()
+    if (!undoManager) return
+    undoManager.clear()
+    // clear() empties the stack without an onPop, so notify explicitly —
+    // otherwise a consumer keeps rendering an enabled Undo button over an
+    // empty stack after a version restore.
+    notifyHistoryChanged()
   }
 
   function undo(): boolean {
@@ -585,6 +617,21 @@ export function createCanvasSyncSession(
     return true
   }
 
+  function canUndo(): boolean {
+    return (undoManager !== null && doc !== null && undoManager.canUndo()) === true
+  }
+
+  function canRedo(): boolean {
+    return (undoManager !== null && doc !== null && undoManager.canRedo()) === true
+  }
+
+  function subscribeHistory(listener: () => void): () => void {
+    historyListeners.add(listener)
+    return () => {
+      historyListeners.delete(listener)
+    }
+  }
+
   return {
     connect,
     dispose,
@@ -593,7 +640,10 @@ export function createCanvasSyncSession(
     clearUndo,
     undo,
     redo,
+    canUndo,
+    canRedo,
     getCanvas,
     subscribe,
+    subscribeHistory,
   }
 }

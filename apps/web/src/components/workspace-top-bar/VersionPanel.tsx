@@ -10,7 +10,8 @@ interface VersionPanelProps {
   versionPanelExtra?: ReactNode
 }
 
-// Version history popover docked under the top-right controls.
+// Version history panel surface. Position-agnostic: the mount site (the
+// canvas history cluster) owns placement; this component owns the surface.
 export function VersionPanel({
   panelRef,
   workspaceId,
@@ -22,7 +23,7 @@ export function VersionPanel({
   return (
     <div
       ref={panelRef}
-      className="absolute right-3 top-[calc(100%+6px)] z-40 w-[340px] overflow-hidden rounded-lg border bg-background shadow-lg"
+      className="w-[340px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border bg-background shadow-lg"
     >
       <div className="flex h-[480px] min-h-0 flex-col">
         <VersionTimeline

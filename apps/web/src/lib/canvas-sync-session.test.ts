@@ -551,6 +551,50 @@ describe('createCanvasSyncSession', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls).toHaveLength(0)
   })
 
+  it('subscribeHistory fires when a committed edit pushes an undo step, and canUndo flips', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+    expect(session.canUndo()).toBe(false)
+
+    const historyListener = vi.fn()
+    const unsubscribe = session.subscribeHistory(historyListener)
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(historyListener).toHaveBeenCalled()
+    expect(session.canUndo()).toBe(true)
+    unsubscribe()
+  })
+
+  it('clearUndo() (the restore-complete path) notifies history listeners so canUndo flips back', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(session.canUndo()).toBe(true)
+
+    const historyListener = vi.fn()
+    const unsubscribe = session.subscribeHistory(historyListener)
+
+    session.clearUndo()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(session.canUndo()).toBe(false)
+    // Without the notification the consumer keeps rendering an enabled Undo
+    // button over an empty stack — the exact stale-affordance a version
+    // restore would otherwise leave behind.
+    expect(historyListener).toHaveBeenCalled()
+    unsubscribe()
+  })
+
   it('undo() reverts the last committed edit and notifies subscribers with the "external" origin', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
