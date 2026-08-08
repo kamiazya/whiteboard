@@ -1687,6 +1687,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.
             setContextMenu(null)
+            // Entering hand mode drops EVERY edit affordance, not just the
+            // menu: a surviving selection would keep Delete/resize/connect
+            // handles live, an open editor would keep accepting text, and
+            // an armed connect could still complete — all edits in a mode
+            // whose contract is "no press can change the canvas". The
+            // in-flight gesture is cancelled like Escape (uncommitted text
+            // is discarded, not committed).
+            if (next === 'hand') {
+              if (gestureState.kind !== 'idle') {
+                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+              }
+              setSelectedId(null)
+              setExtraIds(new Set())
+              setSelectedEdgeId(null)
+              setEdgeLabelEditId(null)
+              setGroupLabelEditId(null)
+              setMarquee(null)
+            }
           }}
         />
         {onAddImage !== undefined && (
