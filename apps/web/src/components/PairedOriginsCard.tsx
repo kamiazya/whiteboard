@@ -145,7 +145,7 @@ export function PairedOriginsCard() {
           <ul className="space-y-1.5">
             {state.grants.map((grant) => (
               <li key={grant.grantId} className="flex items-center justify-between gap-2 text-xs">
-                <span className="truncate font-mono">{grant.origin}</span>
+                <span className="min-w-0 break-all font-mono">{grant.origin}</span>
                 <button
                   type="button"
                   aria-label={`Revoke ${grant.origin}`}

@@ -1,4 +1,5 @@
 import { Monitor, Moon, Palette, Sun } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useCallback, useId } from 'react'
 import {
   Dialog,
@@ -17,6 +18,11 @@ interface SettingsPanelProps {
   onThemeChange: (next: ThemeMode) => void
   webMcpEnabled: boolean
   onWebMcpChange?: (enabled: boolean) => void
+  // Host-supplied operational sections (design refactor D2): the daemon
+  // index passes its Paired-web-apps and Storage cards here so those
+  // surfaces live under Settings instead of a top-level tab. Browser-local
+  // hosts omit it.
+  extraSections?: ReactNode
 }
 
 const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
@@ -34,6 +40,7 @@ export function SettingsPanel({
   onThemeChange,
   webMcpEnabled,
   onWebMcpChange,
+  extraSections,
 }: SettingsPanelProps) {
   const themeGroupId = useId()
   const webMcpLabelId = useId()
@@ -50,7 +57,11 @@ export function SettingsPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[85dvh] overflow-y-auto sm:max-w-md data-[has-extra=true]:sm:max-w-xl"
+        data-has-extra={extraSections != null}
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
@@ -120,6 +131,8 @@ export function SettingsPanel({
               </button>
             </div>
           </section>
+
+          {extraSections}
         </div>
       </DialogContent>
     </Dialog>
