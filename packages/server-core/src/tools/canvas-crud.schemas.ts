@@ -19,6 +19,14 @@ export const createCanvasInputSchema = z
     workspaceId: workspaceIdSchema,
     segment: segmentSchema,
     parentId: treeIdSchema.optional(),
+    // Workspaces are never materialized implicitly: a typo'd or hallucinated
+    // workspaceId must fail loudly instead of silently writing data into a
+    // workspace nobody asked for. Creating a genuinely new workspace is an
+    // explicit opt-in via this flag.
+    createWorkspace: z
+      .boolean()
+      .optional()
+      .describe('Set true to create the workspace if it does not exist yet.'),
   })
   .strict()
 

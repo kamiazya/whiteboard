@@ -22,7 +22,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     expect(res.status).toBe(201)
     const body = createCanvasOutputSchema.parse(await res.json())
@@ -45,9 +45,19 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/..%2Ftraversal/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     expect(res.status).toBe(400)
+  })
+
+  it('POST into an unknown workspace without createWorkspace returns 404', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/typo-probe-ws/canvases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ segment: 'doc-a' }),
+    })
+    expect(res.status).toBe(404)
   })
 
   it('POST creating a duplicate sibling segment returns 409', async () => {
@@ -55,12 +65,12 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     expect(res.status).toBe(409)
   })
@@ -70,7 +80,7 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases')
     expect(res.status).toBe(200)
@@ -83,7 +93,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -101,7 +111,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -123,7 +133,7 @@ describe('canvas OKF read route', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
     await tools.canvasImportOkf.execute({
@@ -143,7 +153,7 @@ describe('canvas OKF read route', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
     const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.canvasId}/okf`)

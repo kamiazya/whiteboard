@@ -7,6 +7,7 @@ import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
   CanvasSegmentConflictError,
+  WorkspaceNotFoundError,
 } from './tools/canvas-crud.errors.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 import {
@@ -137,6 +138,9 @@ export function createServer(deps: ServerDeps) {
 
 function mapCanvasError(c: Context, err: unknown) {
   if (err instanceof CanvasNotFoundError) {
+    return c.json({ error: err.message }, 404)
+  }
+  if (err instanceof WorkspaceNotFoundError) {
     return c.json({ error: err.message }, 404)
   }
   if (err instanceof CanvasSegmentConflictError) {

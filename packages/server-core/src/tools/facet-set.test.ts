@@ -125,7 +125,11 @@ describe('facet_set tool', () => {
 
   test('reindexes the workspace so queryFacet reflects the newly-set facet', async () => {
     const deps = makeDeps(new FakeCanvasDocStore())
-    const created = await wbCanvasCreate(deps, { workspaceId: WORKSPACE_ID, segment: 'doc-a' })
+    const created = await wbCanvasCreate(deps, {
+      workspaceId: WORKSPACE_ID,
+      segment: 'doc-a',
+      createWorkspace: true,
+    })
     const tool = createFacetSetTool(deps)
 
     await tool.execute({

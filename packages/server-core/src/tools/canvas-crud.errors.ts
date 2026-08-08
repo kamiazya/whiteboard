@@ -15,6 +15,16 @@ export class CanvasNotFoundError extends Error {
   }
 }
 
+export class WorkspaceNotFoundError extends Error {
+  constructor(readonly workspaceId: string) {
+    super(
+      `Workspace not found: "${workspaceId}". ` +
+        'Pass createWorkspace: true to create it along with the canvas.',
+    )
+    this.name = 'WorkspaceNotFoundError'
+  }
+}
+
 export class CanvasSegmentConflictError extends Error {
   constructor(readonly segment: string) {
     super(`Segment conflict: "${segment}" already exists under this parent`)

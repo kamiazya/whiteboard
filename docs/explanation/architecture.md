@@ -73,7 +73,10 @@ Every tool above operates on the persisted document and never requires a
 connected browser tab — canvas rendering and export are headless. `wb_canvas_create`
 is the only tool that lazily creates a canvas on first touch; the patch/render/export/
 version tools all fail with an explicit error if `canvasId` does not resolve to an
-existing canvas, instead of silently creating a new, empty one.
+existing canvas, instead of silently creating a new, empty one. The same discipline
+applies one level up: an unknown `workspaceId` is an error, never an implicit new
+workspace — bootstrapping a genuinely new workspace requires passing
+`createWorkspace: true` to `wb_canvas_create`.
 
 ## Why Loro
 

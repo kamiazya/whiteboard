@@ -53,7 +53,7 @@ describe('registerOpenCanvasTools', () => {
     }
 
     const created = await findHandler('wb_canvas_create')(
-      { workspaceId: 'ws-1', segment: 'canvas-a' },
+      { workspaceId: 'ws-1', segment: 'canvas-a', createWorkspace: true },
       { requestId: 'req-0' },
     )
     const canvasId = created.structuredContent.canvasId as string

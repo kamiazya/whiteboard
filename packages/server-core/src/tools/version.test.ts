@@ -172,7 +172,11 @@ describe('version_restore tool', () => {
     const store = new FakeCanvasDocStore()
     const deps = makeDeps(store)
     const { wbCanvasCreate } = await import('./canvas-crud.js')
-    const created = await wbCanvasCreate(deps, { workspaceId: WORKSPACE_ID, segment: 'doc-a' })
+    const created = await wbCanvasCreate(deps, {
+      workspaceId: WORKSPACE_ID,
+      segment: 'doc-a',
+      createWorkspace: true,
+    })
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
 
