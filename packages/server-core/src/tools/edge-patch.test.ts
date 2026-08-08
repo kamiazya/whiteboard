@@ -9,7 +9,7 @@ import {
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
-import { createEdgePatchTool } from './edge-patch.js'
+import { createEdgePatchTool, edgePatchFieldsSchema } from './edge-patch.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -64,6 +64,35 @@ describe('edge_patch tool', () => {
       label: 'connects',
       fromSide: 'right',
       toSide: 'left',
+    })
+  })
+
+  test('the patch schema accepts fromEnd/toEnd and rejects invalid ends', () => {
+    // The tool's execute is schema-gated at the MCP layer, so the SCHEMA is
+    // the contract that must admit ends — a strict schema without them
+    // silently locked agents out of arrowheads.
+    expect(edgePatchFieldsSchema.safeParse({ fromEnd: 'arrow', toEnd: 'none' }).success).toBe(true)
+    expect(edgePatchFieldsSchema.safeParse({ toEnd: 'diamond' }).success).toBe(false)
+  })
+
+  test('patches fromEnd/toEnd so an agent can restyle arrowheads', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      patch: { fromEnd: 'arrow', toEnd: 'none' },
+    })
+
+    expect(result.edge).toEqual({
+      id: 'e1',
+      fromNode: 'n1',
+      toNode: 'n2',
+      fromEnd: 'arrow',
+      toEnd: 'none',
     })
   })
 

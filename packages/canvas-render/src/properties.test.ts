@@ -137,6 +137,8 @@ const sceneNodeArb: fc.Arbitrary<SceneNode> = fc.oneof(
       path,
       fromSide: 'right' as const,
       toSide: 'left' as const,
+      fromEnd: 'none' as const,
+      toEnd: 'none' as const,
     })),
   shapeNodeArb,
 )

@@ -1,3 +1,4 @@
+import { edgeArrowPolygons } from './edge-arrows.js'
 import type {
   BoundingBox,
   ListItemNode,
@@ -132,6 +133,17 @@ export function sceneBounds(scene: Scene): BoundingBox {
         if (isFinitePoint(p.x, p.y)) {
           const x = p.x + offsetX
           extent = widen(extent, x, p.y, x, p.y)
+        }
+      }
+      // Arrowhead wings reach beyond the polyline's own envelope; the
+      // shared geometry helper keeps this walk agreeing with what the SVG
+      // backend actually draws.
+      for (const arrow of edgeArrowPolygons(node)) {
+        for (const p of arrow.points) {
+          if (isFinitePoint(p.x, p.y)) {
+            const x = p.x + offsetX
+            extent = widen(extent, x, p.y, x, p.y)
+          }
         }
       }
     } else {

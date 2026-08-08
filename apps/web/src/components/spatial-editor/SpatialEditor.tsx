@@ -20,7 +20,9 @@
  * Backspace-while-typing edits text instead of deleting the node), select
  * an edge (click its line) and delete it (Delete/Backspace), and edit an
  * edge's label (double-click its line; commits on blur, empty removes,
- * Escape cancels).
+ * Escape cancels), and restyle an edge from its context menu (arrowhead
+ * direction per JSON Canvas fromEnd/toEnd, and per-endpoint side pinning
+ * with an auto option).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -28,12 +30,23 @@
  *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * grouping, undo/redo, arrow-side pinning, snapping,
+ * grouping, undo/redo, snapping,
  * persistence, and sync. Those are later phases.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import {
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
+  PanelTop,
+  Pencil,
+  SquareDashed,
+  StickyNote,
+  Tag,
+  Trash2,
+} from 'lucide-react'
 import {
   forwardRef,
   useEffect,
@@ -44,7 +57,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { ContextMenu } from './ContextMenu.js'
+import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -87,7 +100,6 @@ export const SPATIAL_EDITOR_UNSUPPORTED = [
   'shape-tools',
   'grouping',
   'undo-redo',
-  'arrow-side-pinning',
   'snapping',
   'persistence',
   'sync',
@@ -1116,10 +1128,80 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   ? undefined
                   : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
               if (node === undefined && edge !== undefined) {
+                // Property pickers are inline option rows (one tap per
+                // choice, menu stays open) — a cycling item costs an
+                // open-tap-reopen per step. Sections group the menu:
+                // actions, then properties, then the destructive entry.
+                // Arrow direction reads the JSON Canvas defaults (fromEnd
+                // none, toEnd arrow).
+                const fromEnd = edge.fromEnd ?? 'none'
+                const toEnd = edge.toEnd ?? 'arrow'
+                const arrowStates = [
+                  { label: '→', ariaLabel: 'Forward', fromEnd: 'none', toEnd: 'arrow' },
+                  { label: '↔', ariaLabel: 'Both', fromEnd: 'arrow', toEnd: 'arrow' },
+                  { label: '←', ariaLabel: 'Backward', fromEnd: 'arrow', toEnd: 'none' },
+                  { label: '−', ariaLabel: 'None', fromEnd: 'none', toEnd: 'none' },
+                ] as const
+                const applyEdgeCommand = (command: EditorCommand) =>
+                  applyResult({ state: { kind: 'idle' }, commands: [command] })
+                // Excel-border-style side pickers: a rectangle with the
+                // pinned side emphasized; dashed = unpinned (auto).
+                const SIDES = [
+                  { label: 'auto', ariaLabel: 'Auto', icon: <SquareDashed />, side: undefined },
+                  { label: 'top', ariaLabel: 'Top', icon: <PanelTop />, side: 'top' },
+                  { label: 'right', ariaLabel: 'Right', icon: <PanelRight />, side: 'right' },
+                  { label: 'bottom', ariaLabel: 'Bottom', icon: <PanelBottom />, side: 'bottom' },
+                  { label: 'left', ariaLabel: 'Left', icon: <PanelLeft />, side: 'left' },
+                ] as const
+                const sideRow = (endpoint: 'from' | 'to') => {
+                  const current = endpoint === 'from' ? edge.fromSide : edge.toSide
+                  return {
+                    kind: 'options' as const,
+                    label: endpoint === 'from' ? 'From side' : 'To side',
+                    options: SIDES.map((entry) => ({
+                      label: entry.label,
+                      icon: entry.icon,
+                      ariaLabel: entry.ariaLabel,
+                      selected: current === entry.side,
+                      onSelect: () =>
+                        applyEdgeCommand({
+                          kind: 'set-edge-side',
+                          id: edge.id,
+                          endpoint,
+                          side: entry.side,
+                        }),
+                    })),
+                  }
+                }
                 return [
-                  { label: 'Edit label', onSelect: () => setEdgeLabelEditId(edge.id) },
+                  {
+                    label: 'Edit label',
+                    icon: <Tag />,
+                    onSelect: () => setEdgeLabelEditId(edge.id),
+                  },
+                  { kind: 'separator' as const },
+                  {
+                    kind: 'options' as const,
+                    label: 'Arrows',
+                    options: arrowStates.map((state) => ({
+                      label: state.label,
+                      ariaLabel: state.ariaLabel,
+                      selected: state.fromEnd === fromEnd && state.toEnd === toEnd,
+                      onSelect: () =>
+                        applyEdgeCommand({
+                          kind: 'set-edge-ends',
+                          id: edge.id,
+                          fromEnd: state.fromEnd,
+                          toEnd: state.toEnd,
+                        }),
+                    })),
+                  },
+                  sideRow('from'),
+                  sideRow('to'),
+                  { kind: 'separator' as const },
                   {
                     label: 'Delete',
+                    icon: <Trash2 />,
                     danger: true,
                     onSelect: () => {
                       applyResult({
@@ -1132,12 +1214,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ]
               }
               if (node === undefined) {
-                return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
+                return [
+                  {
+                    label: 'Add note here',
+                    icon: <StickyNote />,
+                    onSelect: () => createNodeAt(contextMenu.point),
+                  },
+                ]
               }
-              const items = []
+              const items: ContextMenuItem[] = []
               if (node.type === 'text') {
                 items.push({
                   label: 'Edit text',
+                  icon: <Pencil />,
                   onSelect: () => {
                     applyResult(
                       reduceGesture(gestureState, canvas, {
@@ -1148,9 +1237,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     )
                   },
                 })
+                // Same grouping rule as the edge menu: the destructive
+                // entry sits in its own section.
+                items.push({ kind: 'separator' })
               }
               items.push({
                 label: 'Delete',
+                icon: <Trash2 />,
                 danger: true,
                 onSelect: () => {
                   applyResult(

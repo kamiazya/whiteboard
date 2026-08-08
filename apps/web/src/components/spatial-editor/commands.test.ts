@@ -163,6 +163,72 @@ describe('applyCommand', () => {
     expect(next).toBe(canvas)
   })
 
+  it('set-edge-ends stores only non-default ends and removes fields at the spec default', () => {
+    const connected = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+
+    const both = applyCommand(connected, {
+      kind: 'set-edge-ends',
+      id: 'e1',
+      fromEnd: 'arrow',
+      toEnd: 'arrow',
+    })
+    expect(both.edges[0]).toMatchObject({ fromEnd: 'arrow' })
+    // toEnd 'arrow' IS the spec default — canonical form omits it.
+    expect(both.edges[0]).not.toHaveProperty('toEnd')
+    expect(spatialCanvasSchema.safeParse(both).success).toBe(true)
+
+    const none = applyCommand(both, {
+      kind: 'set-edge-ends',
+      id: 'e1',
+      fromEnd: 'none',
+      toEnd: 'none',
+    })
+    expect(none.edges[0]).not.toHaveProperty('fromEnd')
+    expect(none.edges[0]).toMatchObject({ toEnd: 'none' })
+
+    const defaults = applyCommand(none, {
+      kind: 'set-edge-ends',
+      id: 'e1',
+      fromEnd: 'none',
+      toEnd: 'arrow',
+    })
+    expect(defaults.edges[0]).not.toHaveProperty('fromEnd')
+    expect(defaults.edges[0]).not.toHaveProperty('toEnd')
+  })
+
+  it('set-edge-side pins one endpoint and undefined returns it to auto', () => {
+    const connected = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+
+    const pinned = applyCommand(connected, {
+      kind: 'set-edge-side',
+      id: 'e1',
+      endpoint: 'from',
+      side: 'top',
+    })
+    expect(pinned.edges[0]).toMatchObject({ fromSide: 'top' })
+    expect(pinned.edges[0]).not.toHaveProperty('toSide')
+    expect(spatialCanvasSchema.safeParse(pinned).success).toBe(true)
+
+    const auto = applyCommand(pinned, {
+      kind: 'set-edge-side',
+      id: 'e1',
+      endpoint: 'from',
+      side: undefined,
+    })
+    expect(auto.edges[0]).not.toHaveProperty('fromSide')
+    expect(spatialCanvasSchema.safeParse(auto).success).toBe(true)
+  })
+
   it('set-edge-label sets, updates, and (with an empty string) removes the label', () => {
     const connected = applyCommand(baseCanvas(), {
       kind: 'connect-nodes',

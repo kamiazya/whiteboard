@@ -3,7 +3,7 @@
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -159,6 +159,73 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
     (container.querySelector('[data-testid="edge-label-editor"]') as HTMLTextAreaElement).value,
   ).toBe('link')
   expect(latest.canvas.edges).toHaveLength(1)
+})
+
+// Deterministic option-click for the inline property rows: applying an
+// option re-routes the edge and re-renders the scene under the pointer,
+// which Playwright's stability check intermittently reads as "element not
+// stable"; the menu button itself is static, so a direct DOM click is the
+// faithful interaction.
+function clickOption(container: HTMLElement, groupName: string, optionName: string) {
+  const group = [...container.querySelectorAll('fieldset')].find(
+    (g) => g.getAttribute('aria-label') === groupName,
+  ) as HTMLElement
+  const option = [...group.querySelectorAll('[role="menuitemradio"]')].find(
+    (o) => o.getAttribute('aria-label') === optionName,
+  ) as HTMLElement
+  fireEvent.click(option)
+}
+
+it('the arrow option row marks the spec default and applies a new direction in one tap', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // Default fromEnd none / toEnd arrow reads as the checked "Forward" radio.
+  const forward = [...container.querySelectorAll('[role="menuitemradio"]')].find(
+    (o) => o.getAttribute('aria-label') === 'Forward',
+  )
+  expect(forward?.getAttribute('aria-checked')).toBe('true')
+
+  clickOption(container, 'Arrows', 'Both')
+  await vi.waitFor(() => expect(latest.canvas.edges[0].fromEnd).toBe('arrow'))
+  // toEnd 'arrow' is the spec default — canonical form omits the field.
+  expect(latest.canvas.edges[0]).not.toHaveProperty('toEnd')
+  expect(latest.commands).toContain('set-edge-ends')
+
+  // Property picks keep the menu OPEN (several adjustments = one visit) and
+  // the rendered scene now draws both arrowheads.
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await vi.waitFor(() =>
+    expect(
+      container.querySelectorAll('[data-testid="viewport-transform"] svg polygon').length,
+    ).toBe(2),
+  )
+})
+
+it('the side option rows pin an endpoint directly, without cycling', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // Direct pick inside the "From side" group — one tap to any side.
+  clickOption(container, 'From side', 'Bottom')
+  await vi.waitFor(() => expect(latest.canvas.edges[0].fromSide).toBe('bottom'))
+  expect(latest.commands).toContain('set-edge-side')
+
+  // Menu is still open — pin the other endpoint in the same visit.
+  clickOption(container, 'To side', 'Top')
+  await vi.waitFor(() => expect(latest.canvas.edges[0].toSide).toBe('top'))
+
+  // And back to auto removes the pin.
+  clickOption(container, 'From side', 'Auto')
+  await vi.waitFor(() => expect(latest.canvas.edges[0]).not.toHaveProperty('fromSide'))
 })
 
 it('Delete from the edge menu removes the edge and leaves the nodes', async () => {

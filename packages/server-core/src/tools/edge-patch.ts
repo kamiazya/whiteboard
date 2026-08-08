@@ -19,6 +19,8 @@ export const edgePatchFieldsSchema = z
     toNode: nodeIdSchema.optional(),
     fromSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
     toSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
+    fromEnd: z.enum(['none', 'arrow']).optional(),
+    toEnd: z.enum(['none', 'arrow']).optional(),
     color: canvasColorSchema.optional(),
     label: z.string().optional(),
   })

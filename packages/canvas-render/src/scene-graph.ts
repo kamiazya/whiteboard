@@ -213,6 +213,11 @@ export interface ResolvedEdgeNode {
   readonly path: readonly { readonly x: number; readonly y: number }[]
   readonly fromSide: 'top' | 'right' | 'bottom' | 'left'
   readonly toSide: 'top' | 'right' | 'bottom' | 'left'
+  // Always resolved by the producer (routeEdge applies the JSON Canvas
+  // defaults: fromEnd 'none', toEnd 'arrow') — required here so no scene
+  // constructor can forget which ends carry an arrowhead.
+  readonly fromEnd: 'none' | 'arrow'
+  readonly toEnd: 'none' | 'arrow'
   readonly appearance?: Appearance
 }
 

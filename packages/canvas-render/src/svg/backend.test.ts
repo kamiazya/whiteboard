@@ -415,6 +415,8 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
           ],
           fromSide: 'right',
           toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
           appearance: { stroke: '#888', strokeWidth: 1.5 },
         },
       ],
@@ -433,11 +435,102 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
           path: [{ x: 0, y: 0 }],
           fromSide: 'right',
           toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
         },
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0" role="presentation"/></svg>',
+    )
+  })
+
+  it('draws a filled destination arrowhead for toEnd=arrow, oriented along the last segment', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 30, y: 0 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+    )
+  })
+
+  it('draws both arrowheads for fromEnd=arrow toEnd=arrow, source arrow first', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 30, y: 0 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'arrow',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="0,0 10,-4 10,4" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+    )
+  })
+
+  it('the arrowhead inherits the edge stroke color as its fill', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 30, y: 0 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+          appearance: { stroke: '#888' },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" stroke="#888" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="#888" role="presentation"/></svg>',
+    )
+  })
+
+  it('a degenerate zero-length edge draws no arrowhead', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 5, y: 5 },
+            { x: 5, y: 5 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'arrow',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="5,5 5,5" role="presentation"/></svg>',
     )
   })
 

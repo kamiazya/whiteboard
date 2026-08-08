@@ -1,3 +1,4 @@
+import { edgeArrowPolygons } from '../edge-arrows.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -160,7 +161,27 @@ function renderNode(node: SceneNode): string {
     case 'edge': {
       const points = node.path.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
       const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
-      return `<polyline points="${points}"${appearance} ${PRESENTATION_ATTR}/>`
+      const polyline = `<polyline points="${points}"${appearance} ${PRESENTATION_ATTR}/>`
+      // Arrowheads are filled triangles in the edge's stroke color, drawn
+      // after (over) the polyline. Geometry comes from the shared helper so
+      // sceneBounds always agrees on how far the wings reach.
+      const stroke = node.appearance?.stroke
+      // No stroke means the polyline itself is invisible (SVG's default
+      // stroke is none) — the arrow must match it, not fall back to the
+      // polygon's default black fill and float detached.
+      const arrowFill =
+        typeof stroke === 'string' && stroke.length > 0
+          ? ` fill="${escapeXmlAttr(stroke)}"`
+          : ' fill="none"'
+      const arrows = edgeArrowPolygons(node)
+        .map((arrow) => {
+          const arrowPoints = arrow.points
+            .map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`)
+            .join(' ')
+          return `<polygon points="${arrowPoints}"${arrowFill} ${PRESENTATION_ATTR}/>`
+        })
+        .join('')
+      return `${polyline}${arrows}`
     }
     case 'shape':
       return renderShape(node)

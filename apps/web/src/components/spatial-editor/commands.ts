@@ -41,6 +41,19 @@ export type EditorCommand =
   | { readonly kind: 'delete-node'; readonly id: string }
   | { readonly kind: 'delete-edge'; readonly id: string }
   | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
+  | {
+      readonly kind: 'set-edge-ends'
+      readonly id: string
+      readonly fromEnd: 'none' | 'arrow'
+      readonly toEnd: 'none' | 'arrow'
+    }
+  | {
+      readonly kind: 'set-edge-side'
+      readonly id: string
+      readonly endpoint: 'from' | 'to'
+      // undefined returns the endpoint to derived (auto) routing.
+      readonly side: 'top' | 'right' | 'bottom' | 'left' | undefined
+    }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -144,6 +157,48 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
 
 /** An empty label removes the field: the model's `label` is optional and an
  * empty string would serialize as an authored-but-blank label. */
+/** Ends equal to the JSON Canvas defaults (fromEnd none, toEnd arrow) are
+ * removed rather than written, keeping the stored document canonical. */
+function setEdgeEnds(
+  canvas: SpatialCanvas,
+  id: string,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      const { fromEnd: _from, toEnd: _to, ...rest } = edge
+      return {
+        ...rest,
+        ...(fromEnd === 'none' ? {} : { fromEnd }),
+        ...(toEnd === 'arrow' ? {} : { toEnd }),
+      }
+    }),
+  }
+}
+
+/** `side: undefined` removes the pin so routing derives the side again. */
+function setEdgeSide(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  side: 'top' | 'right' | 'bottom' | 'left' | undefined,
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  const key = endpoint === 'from' ? 'fromSide' : 'toSide'
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      const { [key]: _removed, ...rest } = edge
+      return side === undefined ? rest : { ...rest, [key]: side }
+    }),
+  }
+}
+
 function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
   if (!canvas.edges.some((edge) => edge.id === id)) return canvas
   return {
@@ -175,6 +230,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== command.id) }
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
+    case 'set-edge-ends':
+      return setEdgeEnds(canvas, command.id, command.fromEnd, command.toEnd)
+    case 'set-edge-side':
+      return setEdgeSide(canvas, command.id, command.endpoint, command.side)
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }
