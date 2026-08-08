@@ -2210,9 +2210,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               if (group === undefined || group.type !== 'group') return null
               return (
                 <TextNodeEditor
-                  // The label renders along the frame's top edge — the
-                  // editor covers that band rather than the whole frame.
-                  box={{ x: group.x, y: group.y, width: group.width, height: 48 }}
+                  // The label renders OUTSIDE, above the frame (container
+                  // convention) — the editor sits on that band.
+                  box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
                   initialText={group.label ?? ''}
                   testId="group-label-editor"
                   onCommit={(label) => {

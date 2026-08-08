@@ -337,6 +337,11 @@ describe('layoutSpatialCanvas', () => {
     const scene = layoutSpatialCanvas(canvas([labeled]), baseOptions())
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('Section A')
+    // Container labels sit OUTSIDE the frame, above its top edge (the
+    // jsoncanvas.org convention) — that is what visually distinguishes a
+    // container from a regular node.
+    expect(label !== undefined && label.bbox.y + label.bbox.h <= labeled.y).toBe(true)
+    expect(label?.bbox.x).toBe(labeled.x)
 
     const unlabeled: Extract<SpatialNode, { type: 'group' }> = {
       ...labeled,

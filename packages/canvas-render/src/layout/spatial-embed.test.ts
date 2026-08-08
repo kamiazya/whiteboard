@@ -66,6 +66,13 @@ describe('file-node inline embeds', () => {
     expect(box.bbox.x).toBeGreaterThanOrEqual(100)
     expect(box.bbox.x + box.bbox.w).toBeLessThanOrEqual(320)
     expect(box.bbox.y + box.bbox.h).toBeLessThanOrEqual(280)
+
+    // The reference label sits OUTSIDE, above the frame (container
+    // convention), leaving the whole padded box to the miniature.
+    const label = scene.nodes.find(
+      (n): n is import('../scene-graph.js').TextRunNode => n.kind === 'textRun',
+    )
+    expect(label !== undefined && label.bbox.y + label.bbox.h <= 100).toBe(true)
   })
 
   it('never upscales a small child (fit caps at 1)', () => {

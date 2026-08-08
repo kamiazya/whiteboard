@@ -191,6 +191,23 @@ function placeInNode(
   return translateScene(content, node.x + padding, node.y + padding).nodes
 }
 
+/** Gap between a container's outside label and its frame's top edge. */
+const CONTAINER_LABEL_GAP_PX = 4
+
+/**
+ * Places a container's label OUTSIDE the frame, above its top-left corner
+ * — the jsoncanvas.org convention. An outside label is what visually
+ * distinguishes a container (group frame, expanded canvas embed) from a
+ * regular node, whose label stays inside its card.
+ */
+function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[] {
+  const bottom = Math.max(
+    0,
+    ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+  )
+  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes
+}
+
 /**
  * Composes a `text` node's chrome plus its laid-out markdown body. A
  * malformed body (one whose parsed mdast falls outside the caller's
@@ -279,16 +296,16 @@ function composeFileEmbed(
   })
   const bounds = sceneBounds(childScene)
   const padding = options.geometry.paddingPx
-  // The label band keeps the reference title readable above the miniature.
-  const labelBand = options.geometry.labelFontSizePx * 1.6
+  // The reference label sits OUTSIDE the frame (see placeAboveNode), so
+  // the miniature gets the whole padded box.
   const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding - labelBand
+  const innerH = node.height - 2 * padding
   const fit = Math.min(innerW / bounds.w, innerH / bounds.h, 1)
   if (!Number.isFinite(fit) || fit <= 0) return undefined
 
   const atOrigin = translateScene(childScene, -bounds.x, -bounds.y)
   const scaled = scaleScene(atOrigin, fit)
-  const placed = translateScene(scaled, node.x + padding, node.y + padding + labelBand)
+  const placed = translateScene(scaled, node.x + padding, node.y + padding)
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
@@ -337,7 +354,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
         const label = labelOf(node, options)
         return label === undefined
           ? [chrome, embed]
-          : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options), embed]
+          : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
       }
       break
     }
@@ -347,9 +364,15 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
   switch (node.type) {
     case 'text':
       return composeTextNode(node, options)
-    case 'file':
-    case 'link':
     case 'group': {
+      const chrome = chromeShape(node, options)
+      const label = labelOf(node, options)
+      return label === undefined
+        ? [chrome]
+        : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
+    }
+    case 'file':
+    case 'link': {
       const chrome = chromeShape(node, options)
       const label = labelOf(node, options)
       return label === undefined
