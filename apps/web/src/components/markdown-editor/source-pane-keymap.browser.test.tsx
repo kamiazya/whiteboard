@@ -77,10 +77,16 @@ describe('SourcePane keymap (real browser)', () => {
   })
 
   it('long lines soft-wrap instead of scrolling horizontally', async () => {
-    const { editable } = mountEditor()
-    await userEvent.click(editable)
-    await userEvent.keyboard('word '.repeat(80).trim())
+    // The behavior under test is wrap LAYOUT, not typing: mount with the
+    // long line as the initial value instead of sending ~400 individual
+    // keystrokes through the real event pipeline — per-key CodeMirror
+    // update cycles made this test time out under full-suite load.
+    render(<MarkdownEditor value={'word '.repeat(80).trim()} onChange={vi.fn()} />)
+    // Wait for the long line to actually render first — asserting widths on a
+    // not-yet-measured (effectively empty) editor would pass vacuously.
+    const content = document.querySelector('.cm-content') as HTMLElement
+    await expect.poll(() => content.textContent?.includes('word word')).toBe(true)
     const scroller = document.querySelector('.cm-scroller') as HTMLElement
-    expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth + 1)
+    await expect.poll(() => scroller.scrollWidth <= scroller.clientWidth + 1).toBe(true)
   })
 })
