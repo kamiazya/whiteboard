@@ -26,6 +26,7 @@
 import {
   FileBox,
   Frame,
+  Hand,
   Image as ImageIcon,
   Link,
   MousePointer2,
@@ -36,7 +37,7 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-export type EditorTool = 'select' | 'connect'
+export type EditorTool = 'select' | 'hand' | 'connect'
 
 interface ToolPaletteProps {
   /** Host-supplied controls (undo/redo/versions) docked as the leading group. */
@@ -161,6 +162,21 @@ export function ToolPalette({
           </button>
         </TooltipTrigger>
         <TooltipContent>Select</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="hand-tool-button"
+            aria-pressed={tool === 'hand'}
+            aria-label="Hand (pan)"
+            onClick={() => onToolChange('hand')}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <Hand aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Hand — drag to pan</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

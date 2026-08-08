@@ -657,7 +657,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPointForPan = clientPointToRootLocal(e, root)
       // Middle-button (or Space-held) drag pans from ANYWHERE — Excalidraw
       // semantics; a plain left drag on empty space marquee-selects instead.
-      if (e.button === 1 || (e.button === 0 && spaceDownRef.current)) {
+      // The hand tool makes EVERY plain press a pan (nodes included): it is
+      // the one-handed touch navigation mode, where a second finger is not
+      // available to promote the gesture.
+      if (e.button === 1 || (e.button === 0 && (spaceDownRef.current || tool === 'hand'))) {
         e.preventDefault()
         isPanningRef.current = true
         lastPanPointRef.current = screenPointForPan
@@ -1515,6 +1518,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           overflow: 'hidden',
           touchAction: 'none',
           outline: 'none',
+          cursor: tool === 'hand' ? 'grab' : undefined,
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
