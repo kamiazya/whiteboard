@@ -1,11 +1,14 @@
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { LayoutGrid, ListTree, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
+import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useThemeMode } from '../hooks/useThemeMode.js'
 import {
   createCanvas,
   createDaemonFetch,
@@ -18,6 +21,7 @@ import {
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopySlug } from '../lib/derive-copy-slug.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
 // workspace selector picks which workspace's canvases populate the grid.
@@ -96,7 +100,7 @@ function formatRelative(iso: string): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-type TabKey = 'canvases' | 'files' | 'storage'
+type ViewKey = 'grid' | 'tree'
 
 export function DaemonIndexPage({
   daemonBaseUrl,
@@ -106,7 +110,13 @@ export function DaemonIndexPage({
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
-  const [tab, setTab] = useState<TabKey>('canvases')
+  const [view, setView] = useState<ViewKey>('grid')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { theme, setTheme } = useThemeMode()
+  const [settingsStore] = useState(() => createUserSettingsStore())
+  const [webMcpEnabled, setWebMcpEnabled] = useState(
+    () => settingsStore.load().capabilities.webMcpEnabled !== false,
+  )
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   const [rows, setRows] = useState<CanvasRow[]>([])
@@ -266,43 +276,7 @@ export function DaemonIndexPage({
       <div className="flex h-dvh flex-col overflow-y-auto p-4">
         <h1 className="sr-only">Canvases</h1>
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
-          <div
-            role="tablist"
-            aria-label="Daemon index tabs"
-            className="flex items-center gap-1 rounded-md border p-0.5"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'canvases'}
-              onClick={() => setTab('canvases')}
-              className="rounded px-3 py-1 text-sm font-medium data-[selected=true]:bg-accent"
-              data-selected={tab === 'canvases'}
-            >
-              Canvases
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'files'}
-              onClick={() => setTab('files')}
-              className="rounded px-3 py-1 text-sm font-medium data-[selected=true]:bg-accent"
-              data-selected={tab === 'files'}
-            >
-              Files
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'storage'}
-              onClick={() => setTab('storage')}
-              className="rounded px-3 py-1 text-sm font-medium data-[selected=true]:bg-accent"
-              data-selected={tab === 'storage'}
-            >
-              Storage
-            </button>
-          </div>
-          {(tab === 'canvases' || tab === 'files') && workspaces.length > 0 && (
+          {workspaces.length > 0 && (
             <select
               aria-label="Workspace"
               value={selectedWorkspace ?? ''}
@@ -316,7 +290,7 @@ export function DaemonIndexPage({
               ))}
             </select>
           )}
-          {tab === 'canvases' && (
+          {view === 'grid' && (
             <>
               <input
                 aria-label="Search canvases"
@@ -347,6 +321,39 @@ export function DaemonIndexPage({
               </form>
             </>
           )}
+          <div className="ml-auto flex items-center gap-1">
+            {/* One canvas surface, two projections: the toggle switches how
+                the SAME list renders (thumbnail grid / alias tree+preview)
+                instead of the former Canvases-vs-Files tab split. */}
+            <div className="flex items-center gap-0.5 rounded-md border p-0.5">
+              <button
+                type="button"
+                aria-label="Grid view"
+                aria-pressed={view === 'grid'}
+                onClick={() => setView('grid')}
+                className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+              >
+                <LayoutGrid className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Tree view"
+                aria-pressed={view === 'tree'}
+                onClick={() => setView('tree')}
+                className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+              >
+                <ListTree className="size-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              aria-label="Settings"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Settings className="size-4" />
+            </button>
+          </div>
         </div>
 
         {createError && (
@@ -360,12 +367,7 @@ export function DaemonIndexPage({
           </div>
         )}
 
-        {tab === 'storage' ? (
-          <div className="space-y-4">
-            <PairedOriginsCard />
-            <StorageReportCard />
-          </div>
-        ) : tab === 'files' ? (
+        {view === 'tree' ? (
           selectedWorkspace ? (
             <WorkspaceFilesPanel
               daemonFetch={daemonFetch}
@@ -441,6 +443,24 @@ export function DaemonIndexPage({
             })}
           </div>
         )}
+        <SettingsPanel
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          theme={theme}
+          onThemeChange={setTheme}
+          webMcpEnabled={webMcpEnabled}
+          onWebMcpChange={setWebMcpEnabled}
+          extraSections={
+            <>
+              <section aria-label="Paired web apps">
+                <PairedOriginsCard />
+              </section>
+              <section aria-label="Storage">
+                <StorageReportCard />
+              </section>
+            </>
+          }
+        />
       </div>
     </DaemonApiContext.Provider>
   )

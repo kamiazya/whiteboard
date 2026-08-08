@@ -71,7 +71,7 @@ const CATEGORIES: CategoryDescriptor[] = [
   {
     key: 'libraries',
     label: 'User libraries',
-    description: 'Excalidraw library packs you installed',
+    description: 'Library packs you installed',
     softCapBytes: USER_LIBRARIES_SOFT_CAP_BYTES,
   },
 ]
@@ -483,7 +483,9 @@ export function StorageReportCard() {
         </Button>
       </div>
 
-      {error && <div className="text-xs text-destructive">Error: {error}</div>}
+      {error && (
+        <div className="text-xs text-destructive">Couldn't load storage usage ({error}).</div>
+      )}
 
       <ul className="rounded-lg border divide-y">
         {CATEGORIES.map(({ key, label, description, softCapBytes }) => {
@@ -635,9 +637,9 @@ export function StorageReportCard() {
           <DialogHeader>
             <DialogTitle>User libraries</DialogTitle>
             <DialogDescription>
-              Installed Excalidraw library packs. Removing a pack deletes its{' '}
-              <code>.excalidrawlib</code> file from disk and drops the registry row — canvases that
-              referenced it keep their embedded copies of any item already inserted.
+              Installed library packs. Removing a pack deletes its <code>.excalidrawlib</code> file
+              from disk and drops the registry row — canvases that referenced it keep their embedded
+              copies of any item already inserted.
             </DialogDescription>
           </DialogHeader>
           {libsLoading ? (

@@ -56,14 +56,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('DaemonIndexPage Files tab', () => {
+describe('DaemonIndexPage tree view', () => {
   it('shows the alias tree and previews a canvas OKF on click', async () => {
     installFetchMock()
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Files' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
 
     await waitFor(() => {
       expect(screen.getByTestId('workspace-files-panel')).not.toBeNull()

@@ -573,7 +573,7 @@ describe('DaemonIndexPage', () => {
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
-  it('mounts StorageReportCard when the Storage tab is selected', async () => {
+  it('has no Storage tab — storage and pairing live in Settings (design refactor D2)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
@@ -582,9 +582,30 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
     await screen.findByText('alpha')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Storage' }))
+    // The top level is the canvas surface only: no tablist at all.
+    expect(screen.queryByRole('tab')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Storage' })).toBeNull()
 
+    // The operational surfaces open from Settings instead.
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(await screen.findByText('Storage usage')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-index-canvas-card')).toBeNull()
+    expect(screen.getByText('Paired web apps')).toBeTruthy()
+    // The canvas grid stays mounted behind the dialog.
+    expect(screen.getByTestId('daemon-index-canvas-card')).toBeTruthy()
+  })
+
+  it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    const grid = screen.getByRole('button', { name: 'Grid view' })
+    const tree = screen.getByRole('button', { name: 'Tree view' })
+    expect(grid.getAttribute('aria-pressed')).toBe('true')
+    expect(tree.getAttribute('aria-pressed')).toBe('false')
   })
 })

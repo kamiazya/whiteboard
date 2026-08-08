@@ -1,4 +1,5 @@
 import { Monitor, Moon, Palette, Sun } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useCallback, useId } from 'react'
 import {
   Dialog,
@@ -17,6 +18,11 @@ interface SettingsPanelProps {
   onThemeChange: (next: ThemeMode) => void
   webMcpEnabled: boolean
   onWebMcpChange?: (enabled: boolean) => void
+  // Host-supplied operational sections (design refactor D2): the daemon
+  // index passes its Paired-web-apps and Storage cards here so those
+  // surfaces live under Settings instead of a top-level tab. Browser-local
+  // hosts omit it.
+  extraSections?: ReactNode
 }
 
 const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
@@ -34,6 +40,7 @@ export function SettingsPanel({
   onThemeChange,
   webMcpEnabled,
   onWebMcpChange,
+  extraSections,
 }: SettingsPanelProps) {
   const themeGroupId = useId()
   const webMcpLabelId = useId()
@@ -120,6 +127,8 @@ export function SettingsPanel({
               </button>
             </div>
           </section>
+
+          {extraSections}
         </div>
       </DialogContent>
     </Dialog>
