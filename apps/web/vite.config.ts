@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
+import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 
@@ -104,6 +105,9 @@ export default defineConfig({
     // VitePWA hashes dist/ contents for the precache manifest in closeBundle,
     // so the wasm bytes must already be stripped when that hook runs.
     stripWasmSourceMapPlugin(),
+    // Production _headers parity in dev/preview responses — a CSP gap must
+    // reproduce locally, not first on the deployed Pages origin.
+    cloudflareDevHeadersPlugin(),
     VitePWA(pwaOptions),
   ],
 })
