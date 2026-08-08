@@ -281,6 +281,46 @@ describe('applyCommand', () => {
     expect(next).toBe(canvas)
   })
 
+  it('set-node-url updates a link node and ignores non-link targets', () => {
+    const withLink = applyCommand(baseCanvas(), {
+      kind: 'create-node',
+      node: {
+        id: 'l1',
+        type: 'link',
+        x: 0,
+        y: 200,
+        width: 200,
+        height: 60,
+        url: 'https://example.com/',
+      },
+    })
+
+    const updated = applyCommand(withLink, {
+      kind: 'set-node-url',
+      id: 'l1',
+      url: 'https://jsoncanvas.org/',
+    })
+    expect(updated.nodes.find((n) => n.id === 'l1')).toMatchObject({
+      url: 'https://jsoncanvas.org/',
+    })
+    expect(spatialCanvasSchema.safeParse(updated).success).toBe(true)
+
+    // A text node has no url — the command is a no-op, not a corruption.
+    const onText = applyCommand(withLink, {
+      kind: 'set-node-url',
+      id: 'a',
+      url: 'https://example.com/',
+    })
+    expect(onText).toBe(withLink)
+
+    const onMissing = applyCommand(withLink, {
+      kind: 'set-node-url',
+      id: 'missing',
+      url: 'https://example.com/',
+    })
+    expect(onMissing).toBe(withLink)
+  })
+
   it('create then delete the same node is the identity (up to deep equality)', () => {
     const canvas = baseCanvas()
     const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const

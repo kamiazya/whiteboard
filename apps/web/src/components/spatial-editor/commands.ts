@@ -64,6 +64,13 @@ export type EditorCommand =
       readonly color: CanvasColor | undefined
     }
   | {
+      // Rewrites a link node's destination. Only link nodes carry a url —
+      // any other target (or a missing id) is a no-op, never a corruption.
+      readonly kind: 'set-node-url'
+      readonly id: string
+      readonly url: string
+    }
+  | {
       readonly kind: 'set-edge-side'
       readonly id: string
       readonly endpoint: 'from' | 'to'
@@ -213,6 +220,16 @@ function setNodeColor(
   }
 }
 
+function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id && node.type === 'link')) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) =>
+      node.id === id && node.type === 'link' ? { ...node, url } : node,
+    ),
+  }
+}
+
 function setEdgeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -287,6 +304,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setNodeColor(canvas, command.id, command.color)
     case 'set-edge-color':
       return setEdgeColor(canvas, command.id, command.color)
+    case 'set-node-url':
+      return setNodeUrl(canvas, command.id, command.url)
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }
