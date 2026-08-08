@@ -276,7 +276,7 @@ export function DaemonCanvasPage({
       </div>
     ) : null
 
-  // The ONE connection affordance (design refactor D1): a header chip whose
+  // The ONE connection affordance: a header chip whose
   // popover carries the explanation and both recovery paths. Re-pairing
   // navigates top-level to the daemon's own /pair consent page — the same
   // trust anchor first-time pairing uses.

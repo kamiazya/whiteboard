@@ -2,7 +2,7 @@
  * jsdom cannot tell us whether dark-mode chrome is actually *visible* — this
  * mounts SpatialEditor in a real browser and reads the injected SVG's real
  * attribute values, pinning the exact intended hex per theme (never merely
- * "not #333333", which would pass for any wrong color too).
+ * "not #737373", which would pass for any wrong color too).
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render } from '@testing-library/react'
@@ -38,7 +38,7 @@ afterEach(() => {
 })
 
 describe('SpatialEditor theme chrome (real browser)', () => {
-  it('renders dark-mode chrome and edge stroke as the intended dark hex, never #333333', () => {
+  it('renders dark-mode chrome and edge stroke as the intended dark hex, never #737373', () => {
     document.documentElement.classList.add('dark')
     const { container } = render(
       <SpatialEditor
@@ -62,7 +62,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     }
   })
 
-  it('renders light-mode chrome as #333333, proving the light path is untouched', () => {
+  it('renders light-mode chrome as #737373, proving the light path is untouched', () => {
     const { container } = render(
       <SpatialEditor
         canvas={twoNodeCanvasWithEdge()}

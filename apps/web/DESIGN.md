@@ -1,7 +1,7 @@
 # apps/web design system
 
-Direction (approved brief `design-refactor-brief-2026-08-08`): **quiet tool**
-(Linear/Figma lineage). The canvas content is the only hero; chrome recedes.
+Direction: **quiet tool** (Linear/Figma lineage). The canvas content is the
+only hero; chrome recedes.
 Hierarchy comes from surfaces and whitespace, not boxes. Accent color carries
 **state meaning only** — never decoration.
 
@@ -56,9 +56,9 @@ Tailwind palette colors in chrome.
   interaction feedback, `prefers-reduced-motion` respected. No entrance
   animation without an explicit reason.
 
-## Canvas theme (D4 boundary)
+## Canvas theme boundary
 
 Canvas rendering (nodes/edges/selection) is themed by canvas-render's
-`createSpatialTheme` — a separate authority whose palette will join this
-token language in slice D4. The editor UI must not restyle scene SVG output
-directly; export bytes never depend on the app's ambient UI theme.
+`createSpatialTheme` — a separate authority that shares this document's
+direction. The editor UI must not restyle scene SVG output directly; export
+bytes never depend on the app's ambient UI theme.

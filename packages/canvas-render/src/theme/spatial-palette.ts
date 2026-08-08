@@ -24,19 +24,24 @@ export interface SpatialPalette {
 // — this is what lets a single stroke/label value keep clearing the WCAG
 // floors the editor already tested for, while node fill still
 // differentiates by kind the way export's chrome did.
+// Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
+// a mid neutral instead of near-black — chrome recedes so content reads
+// first — while still
+// clearing the WCAG 1.4.11 non-text floor (#737373 vs white = 4.74:1);
+// labels stay comfortably past the 1.4.3 text floor (#404040 = 10.4:1).
 export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
   node: {
-    text: { fill: '#ffffff', stroke: '#333333' },
-    file: { fill: '#f5f5f5', stroke: '#333333' },
-    link: { fill: '#eef4ff', stroke: '#333333' },
+    text: { fill: '#ffffff', stroke: '#737373' },
+    file: { fill: '#f5f5f5', stroke: '#737373' },
+    link: { fill: '#eef4ff', stroke: '#737373' },
     // Groups stay unfilled: a filled group rect emitted in document order
     // alongside a member node would otherwise risk painting over/under it
     // depending on emission order.
-    group: { fill: 'none', stroke: '#333333' },
+    group: { fill: 'none', stroke: '#737373' },
   },
-  edgeStroke: '#333333',
-  labelFill: '#333333',
-  cornerRadiusPx: 4,
+  edgeStroke: '#737373',
+  labelFill: '#404040',
+  cornerRadiusPx: 6,
 }
 
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a

@@ -50,9 +50,9 @@ function fakeParseBody(text: string): MdastRoot {
 // (explicitly, or via layout's 'sans-serif' fallback) and why the measurer
 // above is family-sensitive.
 const editorShaped: SpatialAppearanceResolver = {
-  resolveNode: () => ({ appearance: { fill: 'none', stroke: '#333333' } }),
-  resolveEdge: () => ({ stroke: '#333333' }),
-  resolveLabel: () => ({ fill: '#333333' }),
+  resolveNode: () => ({ appearance: { fill: 'none', stroke: '#737373' } }),
+  resolveEdge: () => ({ stroke: '#737373' }),
+  resolveLabel: () => ({ fill: '#737373' }),
 }
 
 const viewerShaped: SpatialAppearanceResolver = {

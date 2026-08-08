@@ -1,5 +1,5 @@
 /**
- * The ONE connection-state affordance (design refactor D1). A small header
+ * The ONE connection-state affordance. A small header
  * chip signals the state; every sentence-shaped explanation and recovery
  * action lives in its popover — no standing banners.
  *
