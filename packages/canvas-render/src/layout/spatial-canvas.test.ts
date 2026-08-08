@@ -272,6 +272,43 @@ describe('layoutSpatialCanvas', () => {
     expect(label?.bbox.x).toBe(node.x + NODE_PADDING_PX)
   })
 
+  it('resolveFileLabel replaces a file node label; failures fall back to the raw reference', () => {
+    const node: Extract<SpatialNode, { type: 'file' }> = {
+      id: 'f1',
+      type: 'file',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      file: 'opaque-id-123',
+    }
+    const resolved = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileLabel: (file) => (file === 'opaque-id-123' ? 'Release plan' : undefined),
+    })
+    const label = resolved.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
+    expect(label?.text).toBe('Release plan')
+
+    // Unknown reference -> undefined -> the raw string still shows, and a
+    // throwing resolver degrades the same way instead of aborting layout.
+    const unknown = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileLabel: () => undefined,
+    })
+    expect(unknown.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
+      'opaque-id-123',
+    )
+    const throwing = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileLabel: () => {
+        throw new Error('boom')
+      },
+    })
+    expect(throwing.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
+      'opaque-id-123',
+    )
+  })
+
   it('renders a link node as chrome plus a label containing the url', () => {
     const node: Extract<SpatialNode, { type: 'link' }> = {
       id: 'l1',
