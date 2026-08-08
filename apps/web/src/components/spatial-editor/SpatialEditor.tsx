@@ -67,6 +67,7 @@ import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { editorTextFill } from './editor-appearance.js'
+import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import {
   distanceToPolyline,
@@ -1126,8 +1127,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /** The one place a stored URL is turned into navigation. noopener keeps
-     * the canvas tab unreachable from the opened page. */
+     * the canvas tab unreachable from the opened page, and the scheme guard
+     * holds HERE (not only in the dialog) because canvases arrive via sync
+     * and import — a hostile javascript:/data: URL must never reach
+     * window.open. */
     const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
+      if (!isFollowableUrl(node.url)) return
       window.open(node.url, '_blank', 'noopener,noreferrer')
     }
 

@@ -13,8 +13,11 @@
  */
 import { useState } from 'react'
 import { z } from 'zod'
+import { isFollowableUrl } from './followable-url.js'
 
-const urlSchema = z.url()
+// z.url() alone accepts any parseable URL — including javascript: — so the
+// scheme allowlist is part of validity here, not just of the open sink.
+const urlSchema = z.url().refine(isFollowableUrl)
 
 export interface LinkUrlDialogProps {
   readonly title: string

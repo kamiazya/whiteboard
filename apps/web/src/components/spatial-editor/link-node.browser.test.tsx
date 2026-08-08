@@ -169,3 +169,45 @@ it('the link context menu offers Open link and Edit URL rewrites the target', as
   )
   expect(latest.commands).toContain('set-node-url')
 })
+
+// The model schema's z.url() accepts any parseable URL — including
+// javascript: — because JSON Canvas doesn't restrict the field. FOLLOWING
+// one is this editor's decision, and canvases arrive via sync/import, so
+// the guard must live at the open sink, not only in the dialog.
+it('a javascript: URL is neither followable nor accepted by the dialog', async () => {
+  const hostile: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'x1',
+        type: 'link',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 60,
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal fixture
+        url: 'javascript:alert(1)',
+      },
+    ],
+    edges: [],
+  }
+  const { Host } = makeHost(hostile)
+  const { container } = render(<Host />)
+  const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+  try {
+    await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 130 } })
+    // Give any (buggy) open a tick to fire before asserting silence.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(openSpy).not.toHaveBeenCalled()
+  } finally {
+    openSpy.mockRestore()
+  }
+
+  // And the dialog refuses to mint one in the first place.
+  await userEvent.click(page.getByRole('button', { name: 'Add link' }))
+  const input = container.querySelector('[data-testid="link-url-dialog"] input') as HTMLInputElement
+  await userEvent.fill(input, 'javascript:alert(1)')
+  const ok = [...container.querySelectorAll('button')].find(
+    (b) => b.textContent === 'OK',
+  ) as HTMLButtonElement
+  expect(ok.disabled).toBe(true)
+})
