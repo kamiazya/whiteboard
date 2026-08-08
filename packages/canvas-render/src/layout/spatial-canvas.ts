@@ -27,6 +27,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { MeasureText } from '../measure.js'
+import { sceneBounds } from '../scene-bounds.js'
 import type {
   ResolvedEdgeNode,
   Scene,
@@ -36,6 +37,7 @@ import type {
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
+import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import { routeEdge } from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
@@ -74,10 +76,27 @@ export interface SpatialLayoutOptions {
    * resolver, so exported labels stay a pure function of the canvas.
    */
   readonly resolveFileLabel?: (file: string) => string | undefined
+  /**
+   * Resolves a file node's reference to the referenced spatial canvas for
+   * INLINE embedding. Absent, or `undefined` for a reference, keeps the
+   * card-only rendering. Recursion is depth-capped (3) with path-local
+   * cycle detection — a re-visit on the current path degrades to the card.
+   */
+  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /**
+   * The caller's expansion policy (the LOD gate): called per file node
+   * when `resolveFileCanvas` is present; `false` (or an absent callback)
+   * keeps the card. canvas-render itself has no expansion policy — the
+   * editor decides by on-screen size, export by intrinsic size.
+   */
+  readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /** File references on the CURRENT recursion path, plus its depth. */
+  readonly embedPath: ReadonlySet<string>
+  readonly embedDepth: number
   readonly geometry: SpatialGeometry
 }
 
@@ -214,7 +233,76 @@ function labelOf(
   }
 }
 
+/** Depth cap matching embed-recursion.ts's contract: root is 0, the 4th level degrades. */
+const FILE_EMBED_DEPTH_CAP = 3
+
+/**
+ * The inline-embedded rendering of a file node: the referenced canvas laid
+ * out at native size, scaled to fit the node's content area (never
+ * upscaled), and placed under the label band. Returns undefined whenever
+ * the card should render instead — no resolver, policy says collapsed,
+ * unresolvable reference, cycle on the current path, depth cap, or a
+ * degenerate fit.
+ */
+function composeFileEmbed(
+  node: Extract<SpatialNode, { type: 'file' }>,
+  options: ResolvedLayoutOptions,
+): SceneNode | undefined {
+  const resolveFileCanvas = options.resolveFileCanvas
+  if (resolveFileCanvas === undefined) return undefined
+  if (options.expandFileNode?.(node) !== true) return undefined
+  if (options.embedDepth >= FILE_EMBED_DEPTH_CAP || options.embedPath.has(node.file)) {
+    return undefined
+  }
+  let child: SpatialCanvas | undefined
+  try {
+    child = resolveFileCanvas(node.file)
+  } catch {
+    child = undefined
+  }
+  if (child === undefined) return undefined
+
+  const childScene = layoutSpatialCanvasInternal(child, {
+    ...options,
+    embedPath: new Set([...options.embedPath, node.file]),
+    embedDepth: options.embedDepth + 1,
+  })
+  const bounds = sceneBounds(childScene)
+  const padding = options.geometry.paddingPx
+  // The label band keeps the reference title readable above the miniature.
+  const labelBand = options.geometry.labelFontSizePx * 1.6
+  const innerW = node.width - 2 * padding
+  const innerH = node.height - 2 * padding - labelBand
+  const fit = Math.min(innerW / bounds.w, innerH / bounds.h, 1)
+  if (!Number.isFinite(fit) || fit <= 0) return undefined
+
+  const atOrigin = translateScene(childScene, -bounds.x, -bounds.y)
+  const scaled = scaleScene(atOrigin, fit)
+  const placed = translateScene(scaled, node.x + padding, node.y + padding + labelBand)
+  return {
+    kind: 'embedResolved',
+    bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
+    canvasId: node.file,
+    children: placed.nodes,
+  }
+}
+
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  switch (node.type) {
+    case 'file': {
+      const embed = composeFileEmbed(node, options)
+      if (embed !== undefined) {
+        const chrome = chromeShape(node, options)
+        const label = labelOf(node, options)
+        return label === undefined
+          ? [chrome, embed]
+          : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options), embed]
+      }
+      break
+    }
+    default:
+      break
+  }
   switch (node.type) {
     case 'text':
       return composeTextNode(node, options)
@@ -322,10 +410,18 @@ function composeEdgeLabel(
  * `resolveGeometry`) and threaded to every helper as `ResolvedLayoutOptions`.
  */
 export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayoutOptions): Scene {
-  const resolved: ResolvedLayoutOptions = {
+  return layoutSpatialCanvasInternal(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
-  }
+    embedPath: new Set(),
+    embedDepth: 0,
+  })
+}
+
+function layoutSpatialCanvasInternal(
+  canvas: SpatialCanvas,
+  resolved: ResolvedLayoutOptions,
+): Scene {
   const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
   const edgeContent = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
   const labelContent = canvas.edges
