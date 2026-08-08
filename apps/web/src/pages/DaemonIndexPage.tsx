@@ -121,6 +121,12 @@ export function DaemonIndexPage({
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   const [rows, setRows] = useState<CanvasRow[]>([])
+  // False from the moment a workspace switch clears rows until its canvases
+  // fetch settles — rows=[] alone cannot distinguish "still loading" from
+  // "genuinely empty", and rendering an empty state during the gap reads as
+  // data loss.
+  const [loaded, setLoaded] = useState(false)
+  const newCanvasInputRef = useRef<HTMLInputElement | null>(null)
   const [search, setSearch] = useState('')
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -183,9 +189,11 @@ export function DaemonIndexPage({
           }
         })
         setRows(sortRows(nextRows))
+        setLoaded(true)
       } catch {
         if (isStale()) return
         setRows([])
+        setLoaded(true)
         setLoadError('Failed to load canvases for this workspace.')
       }
     },
@@ -199,6 +207,7 @@ export function DaemonIndexPage({
     // workspace's rows visible during the switch lets a click pair the new
     // workspace id with an old workspace's slug — a mismatched identity.
     setRows([])
+    setLoaded(false)
     setLoadError(null)
     void loadWorkspace(selectedWorkspace, () => cancelled)
     return () => {
@@ -308,6 +317,7 @@ export function DaemonIndexPage({
                 }}
               >
                 <input
+                  ref={newCanvasInputRef}
                   aria-label="New canvas name"
                   placeholder="New canvas name…"
                   value={newCanvasSlug}
@@ -380,8 +390,36 @@ export function DaemonIndexPage({
           <div role="alert" className="text-sm text-destructive">
             {loadError}
           </div>
-        ) : visible.length === 0 ? (
+        ) : !loaded ? (
+          <div
+            role="status"
+            aria-label="Loading canvases"
+            className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse rounded-lg border p-2">
+                <div className="aspect-[4/3] rounded-md bg-muted" />
+                <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        ) : visible.length === 0 && search !== '' ? (
           <p className="text-sm text-muted-foreground">No canvases match.</p>
+        ) : visible.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-sm font-medium">No canvases yet</p>
+            <p className="text-sm text-muted-foreground">
+              Name your first canvas and it opens ready to draw.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => newCanvasInputRef.current?.focus()}
+            >
+              Create a canvas
+            </Button>
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {visible.map((row) => {

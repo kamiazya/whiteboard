@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
@@ -311,15 +312,7 @@ export function BrowserLocalCanvasPage({
   }
 
   if (pageState.kind === 'loading') {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
-      >
-        Loading…
-      </div>
-    )
+    return <CanvasPageSkeleton label="Loading canvas" />
   }
 
   return (
