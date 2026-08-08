@@ -15,6 +15,8 @@ export {
   readCoreFacets,
   readFacets,
   readSpatialCanvas,
+  type SpatialBatchWriter,
+  withSpatialBatch,
   writeCoreFacets,
   writeFacets,
   writeSpatialCanvas,

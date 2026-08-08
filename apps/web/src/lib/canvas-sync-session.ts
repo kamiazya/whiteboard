@@ -2,6 +2,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
   readSpatialCanvas,
+  type SpatialBatchWriter,
+  withSpatialBatch,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
@@ -10,7 +12,7 @@ import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
 import {
   type ExportRequestHandlerDeps,
@@ -51,6 +53,10 @@ function commandTargetKey(command: EditorCommand): string {
       return `edge:${command.edgeId}`
     case 'create-node':
       return `node:${command.node.id}`
+    case 'batch':
+      // Mapped in writeCommandTarget (unlike the default arm), but each
+      // batch is one distinct user action — never deduped against another.
+      return `batch:${++unmappedCommandCounter}`
     default:
       return `unmapped:${++unmappedCommandCounter}`
   }
@@ -174,8 +180,80 @@ function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCo
       // exist in `next` to know what to write).
       deleteSpatialNode(doc, command.id)
       return true
+    case 'batch': {
+      // Pre-validate BEFORE any write: a batch is all-or-nothing at this
+      // layer. One unsupported member (or a missing target) sends the WHOLE
+      // batch down the full-resync fallback — still exactly one commit and
+      // one undo step, just with whole-canvas granularity.
+      if (!command.commands.every((sub) => isBatchWritable(sub, next))) return false
+      withSpatialBatch(doc, (writer) => {
+        for (const sub of command.commands) writeSubCommand(writer, next, sub)
+      })
+      return true
+    }
     default:
       return false
+  }
+}
+
+/**
+ * The leaf kinds a batch can write fine-grained: exactly the operations
+ * `SpatialBatchWriter` exposes. `delete-edge` is deliberately included here
+ * even though the non-batch path has no case for it (multi-delete needs
+ * it); the other kinds fall back to the full resync as a whole batch.
+ */
+function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boolean {
+  switch (command.kind) {
+    case 'move-node':
+    case 'resize-node':
+    case 'set-text':
+      return next.nodes.some((n) => n.id === command.id)
+    case 'create-node':
+      return next.nodes.some((n) => n.id === command.node.id)
+    case 'connect-nodes':
+      return next.edges.some((e) => e.id === command.edgeId)
+    case 'delete-node':
+    case 'delete-edge':
+      // Deletes are no-ops for absent ids — always writable.
+      return true
+    default:
+      return false
+  }
+}
+
+function writeSubCommand(
+  writer: SpatialBatchWriter,
+  next: SpatialCanvas,
+  command: EditorLeafCommand,
+): void {
+  switch (command.kind) {
+    case 'move-node':
+    case 'resize-node':
+    case 'set-text': {
+      const node = next.nodes.find((n) => n.id === command.id)
+      if (node) writer.writeNode(node)
+      return
+    }
+    case 'create-node': {
+      const node = next.nodes.find((n) => n.id === command.node.id)
+      if (node) writer.writeNode(node)
+      return
+    }
+    case 'connect-nodes': {
+      const edge = next.edges.find((e) => e.id === command.edgeId)
+      if (edge) writer.writeEdge(edge)
+      return
+    }
+    case 'delete-node':
+      writer.deleteNode(command.id)
+      return
+    case 'delete-edge':
+      writer.deleteEdge(command.id)
+      return
+    default:
+      // Unreachable behind isBatchWritable; a miss here writes nothing and
+      // the batch still commits what the other members wrote.
+      return
   }
 }
 

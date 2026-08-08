@@ -25,7 +25,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
 
-export type EditorCommand =
+export type EditorLeafCommand =
   | { readonly kind: 'move-node'; readonly id: string; readonly x: number; readonly y: number }
   | {
       readonly kind: 'resize-node'
@@ -109,6 +109,17 @@ export type EditorCommand =
       // undefined returns the endpoint to derived (auto) routing.
       readonly side: 'top' | 'right' | 'bottom' | 'left' | undefined
     }
+
+/**
+ * One user action composed of N leaf commands (paste, duplicate,
+ * multi-delete). The two-type split (rather than a self-referential union)
+ * type-forbids nested batches, mirroring the sync layer's one-commit rule.
+ * Application is a pure fold; the one-Loro-commit/one-undo-step guarantee
+ * lives in canvas-sync-session's batch write path, not here.
+ */
+export type EditorCommand =
+  | EditorLeafCommand
+  | { readonly kind: 'batch'; readonly commands: readonly EditorLeafCommand[] }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -380,6 +391,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return deleteNode(canvas, command.id)
     case 'reorder-nodes':
       return reorderNodes(canvas, command.ids, command.placement)
+    case 'batch':
+      // Pure fold; a batch of no-ops folds back to the input reference,
+      // preserving the union-wide "nothing changed → same object" contract.
+      return command.commands.reduce(applyCommand, canvas)
   }
 }
 

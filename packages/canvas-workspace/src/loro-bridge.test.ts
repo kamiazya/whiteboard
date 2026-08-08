@@ -13,6 +13,7 @@ import {
   readCoreFacets,
   readFacets,
   readSpatialCanvas,
+  withSpatialBatch,
   writeCoreFacets,
   writeFacets,
   writeSpatialCanvas,
@@ -560,5 +561,121 @@ describe('core facets bridge', () => {
     doc.commit()
 
     expect(readCoreFacets(doc)).toBeUndefined()
+  })
+})
+
+// withSpatialBatch (editor-completeness slice 1): N writes inside ONE Loro
+// commit — one UndoManager step, with the N=1 path byte-identical to the
+// corresponding single committing helper. Spike verdict 2026-08-09 (option
+// C); Loro's UndoManager.groupStart()/groupEnd() was considered and
+// rejected — a remote import mid-group can split the group, while a single
+// commit is indivisible.
+describe('withSpatialBatch', () => {
+  const seeded = () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    return doc
+  }
+
+  test('a batch of one writeNode is byte-identical to writeSpatialNode', () => {
+    const a = new LoroDoc()
+    a.setPeerId(1n)
+    const b = new LoroDoc()
+    b.setPeerId(1n)
+    writeSpatialNode(a, TEXT_NODE)
+    withSpatialBatch(b, (w) => w.writeNode(TEXT_NODE))
+    expect(b.export({ mode: 'update' })).toEqual(a.export({ mode: 'update' }))
+  })
+
+  test('a batch of one writeEdge / deleteNode / deleteEdge each mirrors its helper byte-for-byte', () => {
+    const base = new LoroDoc()
+    base.setPeerId(9n)
+    writeSpatialCanvas(base, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    const snapshot = base.export({ mode: 'snapshot' })
+    const pair = () => {
+      const a = new LoroDoc()
+      a.import(snapshot)
+      a.setPeerId(1n)
+      const b = new LoroDoc()
+      b.import(snapshot)
+      b.setPeerId(1n)
+      return { a, b }
+    }
+
+    const edgePair = pair()
+    writeSpatialEdge(edgePair.a, { ...EDGE, label: 'renamed' })
+    withSpatialBatch(edgePair.b, (w) => w.writeEdge({ ...EDGE, label: 'renamed' }))
+    expect(edgePair.b.export({ mode: 'update' })).toEqual(edgePair.a.export({ mode: 'update' }))
+
+    const delNodePair = pair()
+    deleteSpatialNode(delNodePair.a, TEXT_NODE.id)
+    withSpatialBatch(delNodePair.b, (w) => w.deleteNode(TEXT_NODE.id))
+    expect(delNodePair.b.export({ mode: 'update' })).toEqual(
+      delNodePair.a.export({ mode: 'update' }),
+    )
+
+    const delEdgePair = pair()
+    deleteSpatialEdge(delEdgePair.a, EDGE.id)
+    withSpatialBatch(delEdgePair.b, (w) => w.deleteEdge(EDGE.id))
+    expect(delEdgePair.b.export({ mode: 'update' })).toEqual(
+      delEdgePair.a.export({ mode: 'update' }),
+    )
+  })
+
+  test('deleting an ABSENT id inside a batch preserves the helper no-op: no ops, no undo step', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = seeded()
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(undoManager.canUndo()).toBe(false)
+    withSpatialBatch(doc, (w) => {
+      w.deleteNode('ghost')
+      w.deleteEdge('ghost-edge')
+    })
+    expect(undoManager.canUndo()).toBe(false)
+    expect(readSpatialCanvas(doc).nodes).toHaveLength(2)
+  })
+
+  test('one batch of N writes = exactly one undo step (mergeInterval 0 so timing cannot mask it)', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = seeded()
+    const before = readSpatialCanvas(doc)
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(undoManager.canUndo()).toBe(false)
+    withSpatialBatch(doc, (w) => {
+      w.writeNode(LINK_NODE)
+      w.writeNode(GROUP_NODE)
+      w.deleteNode(TEXT_NODE.id)
+    })
+    expect(
+      readSpatialCanvas(doc)
+        .nodes.map((n) => n.id)
+        .sort(),
+    ).toEqual(['node-2', 'node-3', 'node-4'].sort())
+    undoManager.undo()
+    expect(readSpatialCanvas(doc)).toEqual(before)
+    expect(undoManager.canUndo()).toBe(false)
+  })
+
+  test('error contract: a mid-batch throw commits NOTHING; the partial ops stay pending until a later committing write converges the doc', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = seeded()
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(() =>
+      withSpatialBatch(doc, (w) => {
+        w.writeNode(LINK_NODE)
+        throw new Error('boom')
+      }),
+    ).toThrow('boom')
+    // Commit is an undo/sync boundary, not a visibility boundary: the
+    // partial write IS visible to readers, but no undo step exists.
+    expect(undoManager.canUndo()).toBe(false)
+    expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toContain(LINK_NODE.id)
+    // The session-layer fallback (writeSpatialCanvas to the intended next
+    // state) absorbs the pending ops into ONE converged commit/undo step.
+    const next: SpatialCanvas = { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] }
+    writeSpatialCanvas(doc, next)
+    expect(readSpatialCanvas(doc)).toEqual(next)
+    undoManager.undo()
+    expect(undoManager.canUndo()).toBe(false)
   })
 })
