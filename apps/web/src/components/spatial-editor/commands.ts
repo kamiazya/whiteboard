@@ -44,6 +44,17 @@ export type EditorCommand =
     }
   | { readonly kind: 'create-node'; readonly node: SpatialNode }
   | { readonly kind: 'delete-node'; readonly id: string }
+  | {
+      /**
+       * Z-order move. Array order IS z-order in JSON Canvas (last = topmost),
+       * so this is a pure permutation of `nodes`. A multi-selection moves as
+       * ONE block preserving its relative order; forward/backward step the
+       * block over the nearest non-member above/below it.
+       */
+      readonly kind: 'reorder-nodes'
+      readonly ids: readonly string[]
+      readonly placement: 'forward' | 'backward' | 'front' | 'back'
+    }
   | { readonly kind: 'delete-edge'; readonly id: string }
   | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
   | {
@@ -367,5 +378,64 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setGroupLabel(canvas, command.id, command.label)
     case 'delete-node':
       return deleteNode(canvas, command.id)
+    case 'reorder-nodes':
+      return reorderNodes(canvas, command.ids, command.placement)
   }
+}
+
+function reorderNodes(
+  canvas: SpatialCanvas,
+  ids: readonly string[],
+  placement: 'forward' | 'backward' | 'front' | 'back',
+): SpatialCanvas {
+  const members = new Set(ids)
+  const block = canvas.nodes.filter((node) => members.has(node.id))
+  if (block.length === 0) return canvas
+  const rest = canvas.nodes.filter((node) => !members.has(node.id))
+
+  let insertAt: number
+  switch (placement) {
+    case 'front':
+      insertAt = rest.length
+      break
+    case 'back':
+      insertAt = 0
+      break
+    case 'forward': {
+      // Step the block over the nearest non-member ABOVE its topmost member.
+      // (Index loops, not findLast/findLastIndex — the tsconfig lib target
+      // predates es2023.)
+      let top = -1
+      for (let i = canvas.nodes.length - 1; i >= 0; i--) {
+        if (members.has(canvas.nodes[i].id)) {
+          top = i
+          break
+        }
+      }
+      const over = canvas.nodes.slice(top + 1).find((node) => !members.has(node.id))
+      if (over === undefined) return canvas
+      insertAt = rest.indexOf(over) + 1
+      break
+    }
+    case 'backward': {
+      // Mirror: step under the nearest non-member BELOW its bottom member.
+      const bottom = canvas.nodes.findIndex((node) => members.has(node.id))
+      let under: SpatialCanvas['nodes'][number] | undefined
+      for (let i = bottom - 1; i >= 0; i--) {
+        if (!members.has(canvas.nodes[i].id)) {
+          under = canvas.nodes[i]
+          break
+        }
+      }
+      if (under === undefined) return canvas
+      insertAt = rest.indexOf(under)
+      break
+    }
+  }
+
+  const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
+  // No-op permutations return the input so callers can cheaply detect "did
+  // anything move" (and undo history stays free of empty steps).
+  if (next.every((node, index) => node === canvas.nodes[index])) return canvas
+  return { ...canvas, nodes: next }
 }
