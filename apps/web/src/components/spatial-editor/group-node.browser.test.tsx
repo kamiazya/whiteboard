@@ -177,3 +177,39 @@ it('deleting the frame keeps its members', async () => {
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(false))
   expect(latest.canvas.nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'c'])
 })
+
+it('a palette-created frame that lands off-screen pans the viewport to show it', async () => {
+  // The viewport center is fully occupied, so the free-spot cascade pushes
+  // the new frame outside the visible viewport — creation must bring it
+  // back into view instead of leaving the user staring at nothing.
+  const crowded: SpatialCanvas = {
+    nodes: [
+      { id: 'wall', type: 'text', x: -400, y: -300, width: 1600, height: 1200, text: 'wall' },
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(crowded)
+  const { container } = render(<Host />)
+
+  // The wall node covers the palette in the unstyled test env (no app CSS =
+  // no z-index), so Playwright refuses the click — the button itself is
+  // static, so a direct DOM click is the faithful interaction.
+  fireEvent.click(container.querySelector('[data-testid="add-group-button"]') as HTMLElement)
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
+
+  const root = rootOf(container).getBoundingClientRect()
+  await vi.waitFor(() => {
+    const frameRect = [
+      ...(container.querySelectorAll(
+        '[data-testid="viewport-transform"] svg rect',
+      ) as NodeListOf<SVGRectElement>),
+    ]
+      .filter((r) => Number(r.getAttribute('width')) >= 300)
+      .map((r) => r.getBoundingClientRect())[0]
+    expect(frameRect).toBeDefined()
+    expect(frameRect.left).toBeGreaterThanOrEqual(root.left)
+    expect(frameRect.top).toBeGreaterThanOrEqual(root.top)
+    expect(frameRect.right).toBeLessThanOrEqual(root.right)
+    expect(frameRect.bottom).toBeLessThanOrEqual(root.bottom)
+  })
+})
