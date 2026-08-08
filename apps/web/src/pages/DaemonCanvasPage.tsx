@@ -7,6 +7,7 @@ import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeas
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
@@ -157,6 +158,10 @@ export function DaemonCanvasPage({
     onChange,
     externalVersion,
     clearLocalUndo,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     exportScene,
   } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
@@ -329,9 +334,6 @@ export function DaemonCanvasPage({
                 merge: capabilities.merge,
               }}
               branchRefreshSignal={branchRefreshSignal}
-              versionRefreshSignal={versionRefreshSignal}
-              onRestored={clearLocalUndo}
-              versionPanelExtra={versionPanelExtra}
               onNavigateBack={onNavigateBack}
               onExport={exportScene}
               onOpenSettings={handleOpenSettings}
@@ -478,6 +480,23 @@ export function DaemonCanvasPage({
               onChange={onChange}
               externalVersion={externalVersion}
               theme={resolvedTheme}
+            />
+            <HistoryCluster
+              onUndo={() => void undo()}
+              onRedo={() => void redo()}
+              canUndo={canUndo()}
+              canRedo={canRedo()}
+              versions={
+                capabilities.versions && canvas
+                  ? {
+                      workspaceId: canvas.workspaceId,
+                      slug: canvas.slug,
+                      onRestored: clearLocalUndo,
+                      refreshSignal: versionRefreshSignal,
+                      versionPanelExtra,
+                    }
+                  : undefined
+              }
             />
           </div>
         )}

@@ -129,62 +129,6 @@ afterEach(async () => {
 })
 
 describe('WorkspaceTopBar browser mode', () => {
-  it('opens History from the real top bar and keeps the popover list scrollable', async () => {
-    const { container } = renderTopBar()
-
-    await page.getByRole('button', { name: 'Version history' }).click()
-
-    await waitFor(() => {
-      expect(container.textContent).toContain('Version history')
-      expect(container.textContent).toContain('Version 1')
-      expect(container.textContent).toContain('Version 24')
-      expect(container.textContent).toContain('👤 Alice')
-    })
-
-    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
-    expect(viewport).toBeInstanceOf(HTMLDivElement)
-
-    await waitFor(() => {
-      expect(viewport!.clientHeight).toBeGreaterThan(0)
-      expect(viewport!.scrollHeight).toBeGreaterThan(viewport!.clientHeight)
-    })
-
-    const before = viewport!.scrollTop
-    viewport!.scrollTo({ top: viewport!.scrollHeight })
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-
-    expect(viewport!.scrollTop).toBeGreaterThan(before)
-
-    // Outside-click to close the popover. Workspace identity is no longer
-    // surfaced in the header so we click the back-button (always present)
-    // which is outside the version-history Popover bounds.
-    fireEvent.mouseDown(screen.getByRole('button', { name: /back to canvas list/i }))
-    await waitFor(() => {
-      expect(container.textContent).not.toContain('Version 24')
-    })
-  })
-
-  it('keeps the version popover open when a mousedown lands inside the restore confirmation dialog (RED-first)', async () => {
-    renderTopBar()
-
-    await page.getByRole('button', { name: 'Version history' }).click()
-    await waitFor(() => {
-      expect(screen.getByText('Version history')).toBeTruthy()
-    })
-
-    await page.getByText(/^Version 1$/).click()
-    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
-
-    // The AlertDialog renders through a Radix portal into document.body, so
-    // this mousedown target is outside versionPanelRef's DOM subtree — the
-    // outside-click handler must still recognize it as "inside" via role.
-    const dialog = screen.getByRole('alertdialog')
-    fireEvent.mouseDown(dialog)
-
-    expect(screen.getByText('Version history')).toBeTruthy()
-    expect(screen.getByText('Restore this version?')).toBeTruthy()
-  })
-
   it('exposes a theme toggle that cycles light → dark → system → light', async () => {
     const onToggleTheme = vi.fn()
     const { rerender } = renderTopBar({ theme: 'light', onToggleTheme })
@@ -222,26 +166,6 @@ describe('WorkspaceTopBar browser mode', () => {
     rerenderWith('system')
     fireEvent.click(screen.getByRole('button', { name: /Theme: system/i }))
     expect(onToggleTheme).toHaveBeenLastCalledWith('light')
-  })
-
-  it('opens the restore dialog from a real history row and posts restore on confirm', async () => {
-    const onRestored = vi.fn()
-    renderTopBar({ onRestored })
-
-    await page.getByRole('button', { name: 'Version history' }).click()
-    await page.getByText(/^Version 1$/).click()
-
-    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
-
-    await waitFor(() => {
-      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/versions/v-0/restore'),
-        expect.objectContaining({ method: 'POST' }),
-      )
-      expect(onRestored).toHaveBeenCalledTimes(1)
-    })
   })
 
   it('new-canvas dialog: shows Problem Details title on 409 and shows fallback on missing title', async () => {
@@ -504,9 +428,6 @@ describe('WorkspaceTopBar browser mode', () => {
     // Exposed right-side actions are hidden at this width.
     await waitFor(() => {
       expect(
-        isDisplayNone(screen.getByRole('button', { name: 'Version history', hidden: true })),
-      ).toBe(true)
-      expect(
         isDisplayNone(screen.getByRole('button', { name: /Theme: light/i, hidden: true })),
       ).toBe(true)
       expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen', hidden: true }))).toBe(
@@ -538,14 +459,6 @@ describe('WorkspaceTopBar browser mode', () => {
     await page.getByRole('menuitem', { name: 'Fullscreen' }).click()
     expect(onEnterFullscreen).toHaveBeenCalledTimes(1)
 
-    // Opening the kebab and selecting History opens the version popover
-    // (covers the Radix-menu-close vs. outside-click-close race).
-    await page.getByRole('button', { name: 'More actions' }).click()
-    await page.getByRole('menuitem', { name: 'History' }).click()
-    await waitFor(() => {
-      expect(screen.getByText('Version history')).toBeTruthy()
-    })
-
     // At ≥400px the kebab is hidden again and the three buttons are visible.
     // 401 (not exactly 400) sidesteps the boundary ambiguity between
     // `max-[400px]:hidden` and `min-[400px]:hidden`, which both match at
@@ -556,7 +469,6 @@ describe('WorkspaceTopBar browser mode', () => {
     renderTopBar({ theme: 'light', onToggleTheme: vi.fn() })
     await waitFor(() => {
       expect(isDisplayNone(screen.getByTestId('topbar-more-actions-trigger'))).toBe(true)
-      expect(isDisplayNone(screen.getByRole('button', { name: 'Version history' }))).toBe(false)
       expect(isDisplayNone(screen.getByRole('button', { name: /Theme: light/i }))).toBe(false)
       expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
     })

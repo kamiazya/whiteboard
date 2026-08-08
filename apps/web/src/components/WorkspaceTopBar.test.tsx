@@ -809,7 +809,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Fullscreen')).toBeNull()
   })
 
-  it('hides HeaderSaveDot and the History button when capabilities.versions is false', () => {
+  it('hides HeaderSaveDot when capabilities.versions is false', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
@@ -822,6 +822,9 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       />,
       { container: document.body },
     )
+    expect(screen.queryByTestId('header-save-dot')).toBeNull()
+    // The version-history trigger lives in the canvas HistoryCluster now,
+    // never in the top bar.
     expect(screen.queryByRole('button', { name: /history/i })).toBeNull()
   })
 
@@ -874,24 +877,6 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     // would otherwise be required — the real assertion lives in the
     // conditional render below via a spy-friendly mock override.
     expect(screen.queryByTestId('header-branch-chip')).toBeNull()
-  })
-
-  it('renders versionPanelExtra inside the opened History panel', async () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onNavigateBack={() => {}}
-        onEnterFullscreen={() => {}}
-        onNavigateToCanvas={() => {}}
-        versionPanelExtra={<div data-testid="version-panel-extra-slot">extra</div>}
-      />,
-      { container: document.body },
-    )
-    const historyButton = screen.getByRole('button', { name: /history/i })
-    fireEvent.click(historyButton)
-    expect(await screen.findByTestId('version-panel-extra-slot')).not.toBeNull()
   })
 })
 

@@ -1,4 +1,4 @@
-import { EllipsisVertical, History, Maximize2, Settings } from 'lucide-react'
+import { EllipsisVertical, Maximize2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -21,20 +21,16 @@ const THEME_CYCLE: Record<ThemeMode, ThemeMode> = {
 }
 
 interface TopBarSecondaryActionsProps {
-  versionsEnabled: boolean
-  onToggleVersionOpen: () => void
   theme?: ThemeMode
   onToggleTheme?: (next: ThemeMode) => void
   onEnterFullscreen?: () => void
   onOpenSettings?: () => void
 }
 
-// Right side: version history, theme, and fullscreen — plus the "More
-// actions" kebab that reuses the exact same handlers below 400px so the
-// header never wraps.
+// Right side: theme and fullscreen — plus the "More actions" kebab that
+// reuses the exact same handlers below 400px so the header never wraps.
+// Version history moved to the canvas's HistoryCluster (bottom-left).
 export function TopBarSecondaryActions({
-  versionsEnabled,
-  onToggleVersionOpen,
   theme,
   onToggleTheme,
   onEnterFullscreen,
@@ -46,23 +42,6 @@ export function TopBarSecondaryActions({
         data-testid="topbar-right-actions-exposed"
         className="flex shrink-0 items-center gap-1 max-[400px]:hidden"
       >
-        {versionsEnabled && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                data-version-trigger
-                variant="ghost"
-                size="sm"
-                className="size-8 p-0"
-                onClick={onToggleVersionOpen}
-                aria-label="Version history"
-              >
-                <History className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Version history</TooltipContent>
-          </Tooltip>
-        )}
         {onToggleTheme && theme && <ThemeToggleButton theme={theme} onChange={onToggleTheme} />}
         {onEnterFullscreen && (
           <Tooltip>
@@ -111,12 +90,6 @@ export function TopBarSecondaryActions({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {versionsEnabled && (
-            <DropdownMenuItem data-version-trigger onSelect={onToggleVersionOpen} className="gap-2">
-              <History className="size-3.5" />
-              History
-            </DropdownMenuItem>
-          )}
           {onToggleTheme && theme && (
             <DropdownMenuItem
               onSelect={() => onToggleTheme(THEME_CYCLE[theme])}

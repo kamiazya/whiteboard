@@ -551,6 +551,25 @@ describe('createCanvasSyncSession', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls).toHaveLength(0)
   })
 
+  it('subscribeHistory fires when a committed edit pushes an undo step, and canUndo flips', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+    expect(session.canUndo()).toBe(false)
+
+    const historyListener = vi.fn()
+    const unsubscribe = session.subscribeHistory(historyListener)
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(historyListener).toHaveBeenCalled()
+    expect(session.canUndo()).toBe(true)
+    unsubscribe()
+  })
+
   it('undo() reverts the last committed edit and notifies subscribers with the "external" origin', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
