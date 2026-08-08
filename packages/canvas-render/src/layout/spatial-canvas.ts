@@ -168,14 +168,19 @@ function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
     sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(text, font)
+  // A TRUE top-left bbox with an explicit baseline — the earlier
+  // baseline-smuggled-into-bbox.y convention made every geometric
+  // computation over the box (outside-label placement, bounds) off by one
+  // ascent while rendering identically.
   return {
     kind: 'textRun',
     bbox: {
       x: 0,
-      y: metrics.ascent,
+      y: 0,
       w: metrics.advanceWidth,
       h: metrics.ascent + metrics.descent,
     },
+    baseline: metrics.ascent,
     text,
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
