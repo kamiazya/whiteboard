@@ -157,7 +157,7 @@
     "prepack": "node scripts/verify-web-app-dist.mjs && node scripts/verify-widget-dist.mjs && node scripts/verify-export-font-dist.mjs"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.12",
+    "@hono/node-server": "^2.1.0",
     "@libsql/client": "^0.17.3",
     "@libsql/kysely-libsql": "^0.4.1",
     "@modelcontextprotocol/ext-apps": "1.7.4",
