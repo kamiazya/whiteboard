@@ -40,7 +40,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "loro-crdt": "catalog:",
-    "lucide-react": "^1.11.0",
+    "lucide-react": "^1.28.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router-dom": "^7.18.0",
