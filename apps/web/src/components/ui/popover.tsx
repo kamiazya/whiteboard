@@ -25,6 +25,12 @@ function PopoverContent({
         sideOffset={sideOffset}
         className={cn(
           'z-50 w-80 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md outline-none',
+          // Entrance/exit: scale+fade micro emphasis (DESIGN.md Motion) via
+          // the shared motion tokens; reduced-motion is neutralized by the
+          // global guard in index.css.
+          'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]',
+          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98]',
+          'duration-(--motion-duration-normal) ease-(--motion-ease-out)',
           className,
         )}
         {...props}

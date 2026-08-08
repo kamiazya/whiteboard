@@ -30,6 +30,16 @@
 
 :root {
   --radius: 0.625rem;
+  /*
+   * Motion tokens (see DESIGN.md "Motion"): every transition/animation in
+   * chrome uses these instead of ad-hoc numbers. fast = hover/press
+   * feedback, normal = state changes and small surfaces (popover, toast).
+   * The easing is a soft ease-out — human acceleration, gentle settle,
+   * never bouncy.
+   */
+  --motion-duration-fast: 150ms;
+  --motion-duration-normal: 220ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -95,5 +105,23 @@
   ::before,
   ::after {
     border-color: var(--color-border);
+  }
+
+  /*
+   * Reduced-motion floor: neutralize every animation and transition —
+   * including tw-animate-css's data-state entrances — for users who asked
+   * the OS for less motion. 0.01ms instead of 0 so `animationend` /
+   * `transitionend` listeners still fire and state machines that wait on
+   * them cannot deadlock.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
