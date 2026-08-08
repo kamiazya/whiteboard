@@ -403,7 +403,15 @@ function reorderNodes(
       break
     case 'forward': {
       // Step the block over the nearest non-member ABOVE its topmost member.
-      const top = canvas.nodes.findLastIndex((node) => members.has(node.id))
+      // (Index loops, not findLast/findLastIndex — the tsconfig lib target
+      // predates es2023.)
+      let top = -1
+      for (let i = canvas.nodes.length - 1; i >= 0; i--) {
+        if (members.has(canvas.nodes[i].id)) {
+          top = i
+          break
+        }
+      }
       const over = canvas.nodes.slice(top + 1).find((node) => !members.has(node.id))
       if (over === undefined) return canvas
       insertAt = rest.indexOf(over) + 1
@@ -412,7 +420,13 @@ function reorderNodes(
     case 'backward': {
       // Mirror: step under the nearest non-member BELOW its bottom member.
       const bottom = canvas.nodes.findIndex((node) => members.has(node.id))
-      const under = canvas.nodes.slice(0, bottom).findLast((node) => !members.has(node.id))
+      let under: SpatialCanvas['nodes'][number] | undefined
+      for (let i = bottom - 1; i >= 0; i--) {
+        if (!members.has(canvas.nodes[i].id)) {
+          under = canvas.nodes[i]
+          break
+        }
+      }
       if (under === undefined) return canvas
       insertAt = rest.indexOf(under)
       break
