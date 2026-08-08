@@ -200,6 +200,21 @@ export interface EmbedResolvedNode {
   readonly children: readonly SceneNode[]
 }
 
+/**
+ * A rendered raster/vector image. `href` is emitted verbatim as the SVG
+ * image reference — a data: URI in exports (deterministic given the same
+ * bytes), a blob:/app URL in the live editor. Aspect is always preserved
+ * (xMidYMid meet), so the bbox is the FRAME, not necessarily the painted
+ * extent.
+ */
+export interface ImageSceneNode {
+  readonly kind: 'image'
+  readonly bbox: BoundingBox
+  readonly href: string
+  /** Accessible name for the image; absent renders as presentation. */
+  readonly alt?: string
+}
+
 export interface GroupSceneNode {
   readonly kind: 'group'
   readonly bbox: BoundingBox
@@ -238,6 +253,7 @@ export type SceneNode =
   | TextRunNode
   | ResolvedEdgeNode
   | ShapeSceneNode
+  | ImageSceneNode
 
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {

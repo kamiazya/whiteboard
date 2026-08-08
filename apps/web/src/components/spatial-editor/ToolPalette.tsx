@@ -23,7 +23,16 @@
  * Marked `data-editor-overlay` so the canvas root's gesture handlers
  * ignore presses originating here (see SpatialEditor's isOverlayEvent).
  */
-import { FileBox, Frame, Link, MousePointer2, Plus, Spline, StickyNote } from 'lucide-react'
+import {
+  FileBox,
+  Frame,
+  Image as ImageIcon,
+  Link,
+  MousePointer2,
+  Plus,
+  Spline,
+  StickyNote,
+} from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -37,6 +46,8 @@ interface ToolPaletteProps {
   readonly onCreateGroup: () => void
   /** Absent when the host supplies no canvas listing — the entry hides. */
   readonly onCreateCanvasRef?: () => void
+  /** Absent when the host supplies no image storage — the entry hides. */
+  readonly onCreateImage?: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
 }
@@ -56,6 +67,7 @@ export function ToolPalette({
   onCreateLink,
   onCreateGroup,
   onCreateCanvasRef,
+  onCreateImage,
   tool,
   onToolChange,
 }: ToolPaletteProps) {
@@ -106,6 +118,15 @@ export function ToolPalette({
             label: 'Add canvas',
             icon: <FileBox aria-hidden="true" className="size-4" />,
             onSelect: onCreateCanvasRef,
+          },
+        ]
+      : []),
+    ...(onCreateImage !== undefined
+      ? [
+          {
+            label: 'Add image',
+            icon: <ImageIcon aria-hidden="true" className="size-4" />,
+            onSelect: onCreateImage,
           },
         ]
       : []),

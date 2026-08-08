@@ -12,6 +12,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('canvas-embed-content')
@@ -36,4 +37,37 @@ export async function loadEmbeddedSpatialCanvas(
 /** The file references present in a canvas, deduplicated. */
 export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
   return [...new Set(canvas.nodes.flatMap((node) => (node.type === 'file' ? [node.file] : [])))]
+}
+
+/** Reference prefix distinguishing stored image assets from canvas ids. */
+const IMAGE_REF_PREFIX = 'asset:'
+
+export function isImageRef(file: string): boolean {
+  return file.startsWith(IMAGE_REF_PREFIX)
+}
+
+/**
+ * Stores a picked/dropped/pasted image in the canvas file store and returns
+ * the reference for the created file node, or undefined on failure.
+ */
+export async function storeImageAsset(file: File): Promise<string | undefined> {
+  try {
+    const ref = `${IMAGE_REF_PREFIX}${crypto.randomUUID()}`
+    await new CanvasFileStore().put(ref, {
+      mimeType: file.type,
+      blob: file,
+      created: Date.now(),
+    })
+    return ref
+  } catch (err) {
+    log.warn('image asset store failed', { err })
+    return undefined
+  }
+}
+
+/** Loads a stored image asset as an object URL, or undefined when missing. */
+export async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
+  const blob = await new CanvasFileStore().get(ref)
+  if (blob === null) return undefined
+  return URL.createObjectURL(blob)
 }

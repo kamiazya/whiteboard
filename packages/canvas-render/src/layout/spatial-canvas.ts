@@ -90,6 +90,16 @@ export interface SpatialLayoutOptions {
    * editor decides by on-screen size, export by intrinsic size.
    */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /**
+   * Resolves a file node's reference to a renderable IMAGE (href emitted
+   * verbatim into the SVG — a data: URI in exports, a blob:/app URL in the
+   * editor). Checked BEFORE the canvas-embed seam and not LOD-gated: a
+   * scaled-down image is still a meaningful thumbnail, unlike crushed
+   * canvas content. `undefined` (or a throw) keeps the card.
+   */
+  readonly resolveFileImage?: (
+    file: string,
+  ) => { readonly href: string; readonly alt?: string } | undefined
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
@@ -158,14 +168,19 @@ function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
     sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(text, font)
+  // A TRUE top-left bbox with an explicit baseline — the earlier
+  // baseline-smuggled-into-bbox.y convention made every geometric
+  // computation over the box (outside-label placement, bounds) off by one
+  // ascent while rendering identically.
   return {
     kind: 'textRun',
     bbox: {
       x: 0,
-      y: metrics.ascent,
+      y: 0,
       w: metrics.advanceWidth,
       h: metrics.ascent + metrics.descent,
     },
+    baseline: metrics.ascent,
     text,
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
@@ -179,6 +194,23 @@ function placeInNode(
 ): readonly SceneNode[] {
   const padding = options.geometry.paddingPx
   return translateScene(content, node.x + padding, node.y + padding).nodes
+}
+
+/** Gap between a container's outside label and its frame's top edge. */
+const CONTAINER_LABEL_GAP_PX = 4
+
+/**
+ * Places a container's label OUTSIDE the frame, above its top-left corner
+ * — the jsoncanvas.org convention. An outside label is what visually
+ * distinguishes a container (group frame, expanded canvas embed) from a
+ * regular node, whose label stays inside its card.
+ */
+function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[] {
+  const bottom = Math.max(
+    0,
+    ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+  )
+  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes
 }
 
 /**
@@ -269,16 +301,16 @@ function composeFileEmbed(
   })
   const bounds = sceneBounds(childScene)
   const padding = options.geometry.paddingPx
-  // The label band keeps the reference title readable above the miniature.
-  const labelBand = options.geometry.labelFontSizePx * 1.6
+  // The reference label sits OUTSIDE the frame (see placeAboveNode), so
+  // the miniature gets the whole padded box.
   const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding - labelBand
+  const innerH = node.height - 2 * padding
   const fit = Math.min(innerW / bounds.w, innerH / bounds.h, 1)
   if (!Number.isFinite(fit) || fit <= 0) return undefined
 
   const atOrigin = translateScene(childScene, -bounds.x, -bounds.y)
   const scaled = scaleScene(atOrigin, fit)
-  const placed = translateScene(scaled, node.x + padding, node.y + padding + labelBand)
+  const placed = translateScene(scaled, node.x + padding, node.y + padding)
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
@@ -287,16 +319,47 @@ function composeFileEmbed(
   }
 }
 
+/** The image rendering of a file node: fills the padded box, aspect kept. */
+function composeFileImage(
+  node: Extract<SpatialNode, { type: 'file' }>,
+  options: ResolvedLayoutOptions,
+): SceneNode | undefined {
+  if (options.resolveFileImage === undefined) return undefined
+  let resolved: { readonly href: string; readonly alt?: string } | undefined
+  try {
+    resolved = options.resolveFileImage(node.file)
+  } catch {
+    resolved = undefined
+  }
+  if (resolved === undefined) return undefined
+  const padding = options.geometry.paddingPx
+  const w = node.width - 2 * padding
+  const h = node.height - 2 * padding
+  if (!(w > 0) || !(h > 0)) return undefined
+  return {
+    kind: 'image',
+    bbox: { x: node.x + padding, y: node.y + padding, w, h },
+    href: resolved.href,
+    ...(resolved.alt !== undefined ? { alt: resolved.alt } : {}),
+  }
+}
+
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   switch (node.type) {
     case 'file': {
+      const image = composeFileImage(node, options)
+      if (image !== undefined) {
+        // Full-bleed image, no label run — the filename would overlap the
+        // picture; the accessible name travels on the image node itself.
+        return [chromeShape(node, options), image]
+      }
       const embed = composeFileEmbed(node, options)
       if (embed !== undefined) {
         const chrome = chromeShape(node, options)
         const label = labelOf(node, options)
         return label === undefined
           ? [chrome, embed]
-          : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options), embed]
+          : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
       }
       break
     }
@@ -306,9 +369,15 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
   switch (node.type) {
     case 'text':
       return composeTextNode(node, options)
-    case 'file':
-    case 'link':
     case 'group': {
+      const chrome = chromeShape(node, options)
+      const label = labelOf(node, options)
+      return label === undefined
+        ? [chrome]
+        : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
+    }
+    case 'file':
+    case 'link': {
       const chrome = chromeShape(node, options)
       const label = labelOf(node, options)
       return label === undefined

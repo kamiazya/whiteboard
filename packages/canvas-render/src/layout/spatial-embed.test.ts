@@ -66,6 +66,13 @@ describe('file-node inline embeds', () => {
     expect(box.bbox.x).toBeGreaterThanOrEqual(100)
     expect(box.bbox.x + box.bbox.w).toBeLessThanOrEqual(320)
     expect(box.bbox.y + box.bbox.h).toBeLessThanOrEqual(280)
+
+    // The reference label sits OUTSIDE, above the frame (container
+    // convention), leaving the whole padded box to the miniature.
+    const label = scene.nodes.find(
+      (n): n is import('../scene-graph.js').TextRunNode => n.kind === 'textRun',
+    )
+    expect(label !== undefined && label.bbox.y + label.bbox.h <= 100).toBe(true)
   })
 
   it('never upscales a small child (fit caps at 1)', () => {
@@ -137,5 +144,53 @@ describe('file-node inline embeds', () => {
       current = current.children.find((n): n is EmbedResolvedNode => n.kind === 'embedResolved')
     }
     expect(depth).toBe(3)
+  })
+})
+
+describe('file-node images', () => {
+  it('renders a resolved image full-bleed in the padded box with the accessible name', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: (file) =>
+          file === 'child' ? { href: 'data:image/png;base64,AAA', alt: 'A chart' } : undefined,
+      }),
+    )
+    const image = scene.nodes.find((n) => n.kind === 'image')
+    if (image === undefined || image.kind !== 'image') throw new Error('image expected')
+    expect(image.href).toBe('data:image/png;base64,AAA')
+    expect(image.alt).toBe('A chart')
+    // Padded box of the 220x180 node at (100,100).
+    expect(image.bbox.x).toBeGreaterThan(100)
+    expect(image.bbox.w).toBeLessThan(220)
+    expect(image.bbox.y).toBeGreaterThan(100)
+    expect(image.bbox.h).toBeLessThan(180)
+    // No label run overlaps the picture.
+    expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
+  })
+
+  it('image resolution wins over the canvas-embed seam and failures keep the card', () => {
+    const both = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: () => ({ href: 'data:image/png;base64,AAA' }),
+        resolveFileCanvas: () => childCanvas,
+        expandFileNode: () => true,
+      }),
+    )
+    expect(both.nodes.some((n) => n.kind === 'image')).toBe(true)
+    expect(both.nodes.some((n) => n.kind === 'embedResolved')).toBe(false)
+
+    const throwing = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: () => {
+          throw new Error('boom')
+        },
+      }),
+    )
+    expect(throwing.nodes.some((n) => n.kind === 'image')).toBe(false)
+    // The card label still renders.
+    expect(throwing.nodes.some((n) => n.kind === 'textRun')).toBe(true)
   })
 })

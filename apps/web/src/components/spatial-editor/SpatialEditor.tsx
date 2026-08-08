@@ -50,6 +50,7 @@ import {
   ExternalLink,
   FileBox,
   Frame,
+  Image as ImageIcon,
   Link,
   PanelBottom,
   PanelLeft,
@@ -169,6 +170,22 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
+  readonly resolveFileImage?: (
+    file: string,
+  ) => { readonly href: string; readonly alt?: string } | undefined
+  /**
+   * Stores a picked/dropped/pasted image and returns the reference to put
+   * in the created file node, or undefined on failure (nothing is
+   * created). Absent → all image-creation affordances hide.
+   */
+  readonly onAddImage?: (file: File) => Promise<string | undefined>
+  /**
+   * Whether a file reference denotes a stored IMAGE asset rather than a
+   * canvas. Image references get no canvas actions (follow, retarget) —
+   * navigating to an asset reference is a dead end.
+   */
+  readonly isImageFileRef?: (file: string) => boolean
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -239,6 +256,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileImage,
+      onAddImage,
+      isImageFileRef,
     },
     forwardedRef,
   ) {
@@ -413,8 +433,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           resolveFileLabel,
           resolveFileCanvas,
           expandFileNode,
+          resolveFileImage,
         }),
-      [canvas, resolvedMeasure, theme, resolveFileLabel, resolveFileCanvas, expandFileNode],
+      [
+        canvas,
+        resolvedMeasure,
+        theme,
+        resolveFileLabel,
+        resolveFileCanvas,
+        expandFileNode,
+        resolveFileImage,
+      ],
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
@@ -459,14 +488,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (node === undefined) return undefined
       const rendered = renderCanvasToSvg(
         { nodes: [node], edges: [] },
-        { measure: resolvedMeasure, theme, resolveFileLabel },
+        { measure: resolvedMeasure, theme, resolveFileLabel, resolveFileImage },
       )
       return {
         svg: rendered.svg,
         originX: gestureState.startX - rendered.bounds.x,
         originY: gestureState.startY - rendered.bounds.y,
       }
-    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel])
+    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel, resolveFileImage])
 
     useImperativeHandle(
       forwardedRef,
@@ -945,8 +974,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           return
         }
         // A file node's double press follows the reference (navigate), the
-        // same primary-action rule as link nodes.
-        if (node?.type === 'file' && onOpenFileRef !== undefined) {
+        // same primary-action rule as link nodes. Image references are not
+        // followable — navigating to an asset id is a dead end.
+        if (
+          node?.type === 'file' &&
+          onOpenFileRef !== undefined &&
+          isImageFileRef?.(node.file) !== true
+        ) {
           applyResult(result)
           onOpenFileRef(node.file, node.subpath)
           return
@@ -1305,6 +1339,48 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
+    /** Default frame for a created image node; the picture letterboxes into it. */
+    const IMAGE_NODE_WIDTH = 240
+    const IMAGE_NODE_HEIGHT = 180
+    const imageInputRef = useRef<HTMLInputElement | null>(null)
+    /** Where the pending picker-created image should land; null = viewport center. */
+    const pendingImagePointRef = useRef<Point | null>(null)
+
+    const createImageNodeAt = (file: string, at?: Point) => {
+      const root = rootRef.current
+      const centerScreen =
+        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+      const preferred = screenToCanvas(centerScreen, viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point =
+        at ??
+        findFreeSpot(preferred, { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT }, occupied)
+      const id = newId()
+      const node: SpatialNode = {
+        id,
+        type: 'file',
+        x: Math.round(point.x - IMAGE_NODE_WIDTH / 2),
+        y: Math.round(point.y - IMAGE_NODE_HEIGHT / 2),
+        width: IMAGE_NODE_WIDTH,
+        height: IMAGE_NODE_HEIGHT,
+        file,
+      }
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [{ kind: 'create-node', node }],
+        selectedId: id,
+      })
+      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
+    }
+
+    /** Stores the image via the host seam, then creates the node. */
+    const addImageFile = (file: File, at?: Point) => {
+      if (onAddImage === undefined || !file.type.startsWith('image/')) return
+      void onAddImage(file).then((ref) => {
+        if (ref !== undefined) createImageNodeAt(ref, at)
+      })
+    }
+
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
      * holds HERE (not only in the dialog) because canvases arrive via sync
@@ -1441,6 +1517,33 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
+        // Image intake: drop anywhere on the canvas, or paste — both route
+        // through the same host storage seam as the picker.
+        onDragOver={(e) => {
+          if (onAddImage !== undefined && e.dataTransfer.types.includes('Files')) {
+            e.preventDefault()
+          }
+        }}
+        onDrop={(e) => {
+          if (onAddImage === undefined) return
+          if (e.dataTransfer.files.length === 0) return
+          // Cancel the browser's default file-drop handling (navigation to
+          // the file) for EVERY file drop, then only act on images.
+          e.preventDefault()
+          const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+          if (file === undefined) return
+          const root = rootRef.current
+          if (root === null) return
+          const local = clientPointToRootLocal(e, root)
+          addImageFile(file, screenToCanvas(local, viewport))
+        }}
+        onPaste={(e) => {
+          if (onAddImage === undefined) return
+          const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
+          if (file === undefined) return
+          e.preventDefault()
+          addImageFile(file)
+        }}
         onKeyUp={(e) => {
           if (e.key === ' ') spaceDownRef.current = false
         }}
@@ -1462,9 +1565,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateCanvasRef={
             fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
           }
+          onCreateImage={
+            onAddImage === undefined
+              ? undefined
+              : () => {
+                  pendingImagePointRef.current = null
+                  imageInputRef.current?.click()
+                }
+          }
           tool={tool}
           onToolChange={setTool}
         />
+        {onAddImage !== undefined && (
+          <input
+            ref={imageInputRef}
+            data-editor-overlay
+            data-testid="image-file-input"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file !== undefined) {
+                addImageFile(file, pendingImagePointRef.current ?? undefined)
+                pendingImagePointRef.current = null
+              }
+            }}
+          />
+        )}
         {contextMenu !== null && (
           <ContextMenu
             x={contextMenu.x}
@@ -1650,6 +1779,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     onSelect: () => setCanvasPicker({ mode: 'create', point: contextMenu.point }),
                   })
                 }
+                if (onAddImage !== undefined) {
+                  emptyItems.push({
+                    label: 'Add image here',
+                    icon: <ImageIcon />,
+                    onSelect: () => {
+                      pendingImagePointRef.current = contextMenu.point
+                      imageInputRef.current?.click()
+                    },
+                  })
+                }
                 return emptyItems
               }
               const items: ContextMenuItem[] = []
@@ -1673,7 +1812,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 })
                 items.push({ kind: 'separator' })
               }
-              if (node.type === 'file') {
+              if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
                 if (onOpenFileRef !== undefined) {
                   items.push({
                     label: 'Open canvas',
@@ -2086,9 +2225,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               if (group === undefined || group.type !== 'group') return null
               return (
                 <TextNodeEditor
-                  // The label renders along the frame's top edge — the
-                  // editor covers that band rather than the whole frame.
-                  box={{ x: group.x, y: group.y, width: group.width, height: 48 }}
+                  // The label renders OUTSIDE, above the frame (container
+                  // convention) — the editor sits on that band.
+                  box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
                   initialText={group.label ?? ''}
                   testId="group-label-editor"
                   onCommit={(label) => {

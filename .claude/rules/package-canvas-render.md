@@ -246,6 +246,16 @@
    constants naming the same string remains a deliberate, documented
    duplication rather than a shared import.
 
+9. **`ImageSceneNode` and the `resolveFileImage` seam** (J5b): the scene
+   graph's one raster/vector image node — `bbox` is the FRAME (aspect always
+   preserved via `preserveAspectRatio="xMidYMid meet"`), `href` is emitted
+   verbatim (data: URI in exports, blob:/app URL live), `alt` renders as a
+   `<title>` child and its absence marks the image presentation.
+   `layoutSpatialCanvas`'s `resolveFileImage` is checked BEFORE the
+   canvas-embed seam and is not LOD-gated (a scaled-down image is still a
+   meaningful thumbnail); any failure keeps the card. Image nodes are
+   bbox-only leaves for sceneBounds/translate/scale.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
