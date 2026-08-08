@@ -26,6 +26,10 @@ export interface RenderCanvasOptions {
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /** Passed through to layout: image content for media file nodes. */
+  readonly resolveFileImage?: (
+    file: string,
+  ) => { readonly href: string; readonly alt?: string } | undefined
 }
 
 export interface RenderedCanvas {
@@ -66,6 +70,7 @@ export function renderCanvasToSvg(
     resolveFileLabel: options.resolveFileLabel,
     resolveFileCanvas: options.resolveFileCanvas,
     expandFileNode: options.expandFileNode,
+    resolveFileImage: options.resolveFileImage,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, {

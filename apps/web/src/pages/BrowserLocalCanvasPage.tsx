@@ -27,7 +27,13 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { collectFileRefs, loadEmbeddedSpatialCanvas } from '../lib/canvas-embed-content.js'
+import {
+  collectFileRefs,
+  isImageRef,
+  loadEmbeddedSpatialCanvas,
+  loadImageAssetUrl,
+  storeImageAsset,
+} from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -161,6 +167,17 @@ export function BrowserLocalCanvasPage({
   // updatedAt moves in the list (edits elsewhere show up on next refresh).
   const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, SpatialCanvas>>(new Map())
   const embedStampsRef = useRef<Map<string, string>>(new Map())
+  // Image assets are immutable once stored, so object URLs cache forever
+  // per session and are revoked together on unmount.
+  const [imageUrls, setImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
+  const imageUrlsRef = useRef<ReadonlyMap<string, string>>(imageUrls)
+  imageUrlsRef.current = imageUrls
+  useEffect(
+    () => () => {
+      for (const url of imageUrlsRef.current.values()) URL.revokeObjectURL(url)
+    },
+    [],
+  )
   const listGenerationRef = useRef(0)
   // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
@@ -264,7 +281,7 @@ export function BrowserLocalCanvasPage({
   // Pre-fetch referenced canvases for inline embeds; refresh when the
   // referenced canvas's updatedAt moves in the list.
   useEffect(() => {
-    const refs = collectFileRefs(canvas)
+    const refs = collectFileRefs(canvas).filter((ref) => !isImageRef(ref))
     if (refs.length === 0) return
     let cancelled = false
     const stampOf = new Map(canvases.map((entry) => [entry.id, entry.updatedAt]))
@@ -291,6 +308,31 @@ export function BrowserLocalCanvasPage({
     }
   }, [canvas, canvases, embedContent])
   const resolveFileCanvas = useCallback((file: string) => embedContent.get(file), [embedContent])
+  useEffect(() => {
+    const refs = collectFileRefs(canvas).filter((ref) => isImageRef(ref) && !imageUrls.has(ref))
+    if (refs.length === 0) return
+    let cancelled = false
+    void Promise.all(refs.map(async (ref) => [ref, await loadImageAssetUrl(ref)] as const)).then(
+      (loaded) => {
+        if (cancelled) return
+        setImageUrls((prev) => {
+          const next = new Map(prev)
+          for (const [ref, url] of loaded) if (url !== undefined) next.set(ref, url)
+          return next
+        })
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [canvas, imageUrls])
+  const resolveFileImage = useCallback(
+    (file: string) => {
+      const href = imageUrls.get(file)
+      return href === undefined ? undefined : { href }
+    },
+    [imageUrls],
+  )
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
@@ -521,6 +563,8 @@ export function BrowserLocalCanvasPage({
               .map((entry) => ({ file: entry.id, label: entry.name }))}
             onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
             resolveFileCanvas={resolveFileCanvas}
+            resolveFileImage={resolveFileImage}
+            onAddImage={storeImageAsset}
             paletteLeading={
               <HistoryCluster
                 onUndo={() => void undo()}
