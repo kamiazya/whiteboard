@@ -378,11 +378,16 @@ export function DaemonIndexPage({
 
         {view === 'tree' ? (
           selectedWorkspace ? (
-            <WorkspaceFilesPanel
-              daemonFetch={daemonFetch}
-              daemonBaseUrl={daemonBaseUrl}
-              workspaceId={selectedWorkspace}
-            />
+            // The wrapper remounts on every grid/tree toggle, so the fade
+            // re-runs and the view switch reads as one continuous surface
+            // changing shape rather than an instant swap.
+            <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
+              <WorkspaceFilesPanel
+                daemonFetch={daemonFetch}
+                daemonBaseUrl={daemonBaseUrl}
+                workspaceId={selectedWorkspace}
+              />
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">No workspace selected.</p>
           )
@@ -406,7 +411,7 @@ export function DaemonIndexPage({
         ) : visible.length === 0 && search !== '' ? (
           <p className="text-sm text-muted-foreground">No canvases match.</p>
         ) : visible.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex flex-col items-center gap-3 py-16 text-center animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             <p className="text-sm font-medium">No canvases yet</p>
             <p className="text-sm text-muted-foreground">
               Name your first canvas and it opens ready to draw.
@@ -421,7 +426,9 @@ export function DaemonIndexPage({
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          // Mounts when the skeleton unmounts: the fade carries the
+          // skeleton-to-content handoff instead of an instant swap.
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             {visible.map((row) => {
               const hasDisplayName = row.displayName !== row.slug
               return (

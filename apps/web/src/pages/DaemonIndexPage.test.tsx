@@ -117,6 +117,22 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByText('beta')).toBeNull()
   })
 
+  it('fades the loaded grid in for skeleton-to-content continuity', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+
+    const card = await screen.findByTestId('daemon-index-canvas-card')
+    const grid = card.parentElement as HTMLElement
+    expect(grid.className).toMatch(/\banimate-in\b/)
+    expect(grid.className).toMatch(/\bfade-in-0\b/)
+  })
+
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
