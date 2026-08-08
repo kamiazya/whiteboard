@@ -22,7 +22,9 @@
  * edge's label (double-click its line; commits on blur, empty removes,
  * Escape cancels), and restyle an edge from its context menu (arrowhead
  * direction per JSON Canvas fromEnd/toEnd, and per-endpoint side pinning
- * with an auto option).
+ * with an auto option), create a link node (the palette's "Add link" URL
+ * dialog), follow it (double-click, or "Open link" in its context menu —
+ * opens in a new tab with noopener), and rewrite its URL ("Edit URL").
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -33,11 +35,12 @@
  * grouping, undo/redo, snapping,
  * persistence, and sync. Those are later phases.
  */
-import type { CanvasColor, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasColor, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
+  ExternalLink,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -64,6 +67,7 @@ import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { editorTextFill } from './editor-appearance.js'
+import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import {
   distanceToPolyline,
@@ -73,9 +77,9 @@ import {
   polylineMidpoint,
   resizeBoxByDelta,
 } from './geometry.js'
-
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
@@ -331,6 +335,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
+    // The URL dialog serves both palette-create and context-menu-edit; which
+    // one decides what its submit does.
+    const [linkDialog, setLinkDialog] = useState<
+      { readonly mode: 'create' } | { readonly mode: 'edit'; readonly nodeId: string } | null
+    >(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
     /**
@@ -807,6 +816,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )
           return
         }
+        // A link node's double press follows the reference, mirroring the
+        // text node's double-press-edits rule: the object's primary action.
+        if (node?.type === 'link') {
+          applyResult(result)
+          openLinkNode(node)
+          return
+        }
       }
       const moved = result.commands.find((c) => c.kind === 'move-node')
       if (moved !== undefined && extraIds.size > 0 && gestureState.kind === 'moving') {
@@ -1075,6 +1091,51 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       createNodeAt(point)
     }
 
+    /** Link nodes are label-only chrome — a note-height box would be mostly
+     * empty, so they get a shorter default. */
+    const LINK_NODE_HEIGHT = 60
+    const createLinkAtViewportCenter = (url: string) => {
+      const root = rootRef.current
+      const centerScreen =
+        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+      const preferred = screenToCanvas(centerScreen, viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        occupied,
+      )
+      const id =
+        createId?.() ??
+        (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : String(Math.random()))
+      const node: SpatialNode = {
+        id,
+        type: 'link',
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - LINK_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: LINK_NODE_HEIGHT,
+        url,
+      }
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [{ kind: 'create-node', node }],
+        selectedId: id,
+      })
+    }
+
+    /** The one place a stored URL is turned into navigation. noopener keeps
+     * the canvas tab unreachable from the opened page, and the scheme guard
+     * holds HERE (not only in the dialog) because canvases arrive via sync
+     * and import — a hostile javascript:/data: URL must never reach
+     * window.open. */
+    const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
+      if (!isFollowableUrl(node.url)) return
+      window.open(node.url, '_blank', 'noopener,noreferrer')
+    }
+
     return (
       <div
         ref={rootRef}
@@ -1113,7 +1174,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
-        <ToolPalette onCreateNode={createNodeAtViewportCenter} tool={tool} onToolChange={setTool} />
+        <ToolPalette
+          onCreateNode={createNodeAtViewportCenter}
+          onCreateLink={() => setLinkDialog({ mode: 'create' })}
+          tool={tool}
+          onToolChange={setTool}
+        />
         {contextMenu !== null && (
           <ContextMenu
             x={contextMenu.x}
@@ -1281,6 +1347,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ]
               }
               const items: ContextMenuItem[] = []
+              if (node.type === 'link') {
+                items.push({
+                  label: 'Open link',
+                  icon: <ExternalLink />,
+                  onSelect: () => openLinkNode(node),
+                })
+                items.push({
+                  label: 'Edit URL',
+                  icon: <Pencil />,
+                  onSelect: () => setLinkDialog({ mode: 'edit', nodeId: node.id }),
+                })
+                items.push({ kind: 'separator' })
+              }
               if (node.type === 'text') {
                 items.push({
                   label: 'Edit text',
@@ -1323,6 +1402,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               })
               return items
             })()}
+          />
+        )}
+        {linkDialog !== null && (
+          <LinkUrlDialog
+            title={linkDialog.mode === 'create' ? 'Add link' : 'Edit URL'}
+            initialUrl={
+              linkDialog.mode === 'edit'
+                ? (() => {
+                    const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
+                    return target?.type === 'link' ? target.url : undefined
+                  })()
+                : undefined
+            }
+            onSubmit={(url) => {
+              if (linkDialog.mode === 'create') {
+                createLinkAtViewportCenter(url)
+              } else {
+                applyResult({
+                  state: { kind: 'idle' },
+                  commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
+                })
+              }
+              setLinkDialog(null)
+            }}
+            onCancel={() => setLinkDialog(null)}
           />
         )}
         <div
