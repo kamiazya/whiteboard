@@ -36,6 +36,7 @@ export function translateNode(node: SceneNode, dx: number, dy: number): SceneNod
     case 'svgFragment':
     case 'embedPlaceholder':
     case 'shape':
+    case 'image':
       return { ...node, bbox }
     case 'heading':
     case 'paragraph':
