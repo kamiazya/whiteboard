@@ -85,7 +85,7 @@ interface Props {
   onExport?: (format: SceneExportFormat) => Promise<Blob | null>
   onOpenSettings?: () => void
   // Right-side slot ahead of the secondary actions — the host page's
-  // connection-state chip (design refactor D1) mounts here so the one
+  // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
   statusSlot?: ReactNode
 }

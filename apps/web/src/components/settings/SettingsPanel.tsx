@@ -18,7 +18,7 @@ interface SettingsPanelProps {
   onThemeChange: (next: ThemeMode) => void
   webMcpEnabled: boolean
   onWebMcpChange?: (enabled: boolean) => void
-  // Host-supplied operational sections (design refactor D2): the daemon
+  // Host-supplied operational sections: the daemon
   // index passes its Paired-web-apps and Storage cards here so those
   // surfaces live under Settings instead of a top-level tab. Browser-local
   // hosts omit it.

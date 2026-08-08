@@ -55,8 +55,8 @@ describe('renderCanvasToSvg', () => {
     const light = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'light' })
     const dark = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'dark' })
     expect(omitted.svg).toBe(light.svg)
-    expect(omitted.svg).toContain('#333333')
-    expect(dark.svg).not.toContain('#333333')
+    expect(omitted.svg).toContain('#737373')
+    expect(dark.svg).not.toContain('#737373')
     expect(dark.svg).toContain('#9BA3AF')
   })
 

@@ -276,10 +276,11 @@ export function DaemonCanvasPage({
       </div>
     ) : null
 
-  // The ONE connection affordance (design refactor D1): a header chip whose
-  // popover carries the explanation and both recovery paths. Re-pairing
-  // navigates top-level to the daemon's own /pair consent page — the same
-  // trust anchor first-time pairing uses.
+  // The ONE connection affordance: a header chip whose popover carries
+  // the explanation and the available recovery paths — re-pairing always,
+  // plus continue-in-browser-local when the host page provides that
+  // escape. Re-pairing navigates top-level to the daemon's own /pair
+  // consent page, the same trust anchor first-time pairing uses.
   const connectionStatus = (
     <ConnectionStatus
       state={authError ? 'sync-off' : 'synced'}

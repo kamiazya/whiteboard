@@ -20,15 +20,15 @@ const edge = { id: 'e', fromNode: 'a', toNode: 'b' }
 describe('createEditorAppearance', () => {
   it('resolves the light theme with the shared per-type fill and the accessible stroke', () => {
     // The stroke value stays byte-identical to the pre-theme-layer editor
-    // (`#333333`); node FILL now differentiates per type (canvas-render's
+    // (`#737373`); node FILL now differentiates per type (canvas-render's
     // shared palette), which is the theme layer's intended convergence with
     // the viewer/export surfaces — see package-canvas-render.md decision #8.
     const appearance = createEditorAppearance('light')
     expect(appearance.resolveNode(textNode).appearance).toEqual({
       fill: '#ffffff',
-      stroke: '#333333',
+      stroke: '#737373',
     })
-    expect(appearance.resolveEdge(edge as never)).toEqual({ stroke: '#333333' })
+    expect(appearance.resolveEdge(edge as never)).toEqual({ stroke: '#737373' })
   })
 
   it('resolves a dark palette with real contrast against the dark canvas surface', () => {
@@ -40,7 +40,7 @@ describe('createEditorAppearance', () => {
     expect(appearance.resolveEdge(edge as never)).toEqual({
       stroke: EDITOR_DARK_PALETTE.chromeStroke,
     })
-    expect(EDITOR_DARK_PALETTE.chromeStroke).not.toBe('#333333')
+    expect(EDITOR_DARK_PALETTE.chromeStroke).not.toBe('#737373')
     expect(EDITOR_DARK_PALETTE.chromeStroke).not.toBe(EDITOR_LIGHT_PALETTE.chromeStroke)
   })
 
