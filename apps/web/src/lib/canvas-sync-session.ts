@@ -466,7 +466,7 @@ export function createCanvasSyncSession(
       onRestoreComplete() {
         if (isStale()) return
         deps.onRestoreChange(false, null)
-        undoManager?.clear()
+        clearUndo()
       },
 
       onHeadChanged(payload) {
@@ -593,7 +593,12 @@ export function createCanvasSyncSession(
   }
 
   function clearUndo(): void {
-    undoManager?.clear()
+    if (!undoManager) return
+    undoManager.clear()
+    // clear() empties the stack without an onPop, so notify explicitly —
+    // otherwise a consumer keeps rendering an enabled Undo button over an
+    // empty stack after a version restore.
+    notifyHistoryChanged()
   }
 
   function undo(): boolean {
