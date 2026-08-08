@@ -1,8 +1,10 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
+import {
+  Client,
+  LATEST_PROTOCOL_VERSION,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -460,6 +462,41 @@ describe('createApp daemon mutation auth', () => {
         text: JSON.stringify(createResult.structuredContent),
       },
     ])
+    await transport.close()
+  })
+
+  it('serves the 2026-07-28 revision on /mcp for a modern-pinned client', async () => {
+    // versionNegotiation pin means no legacy fallback: connect() succeeds only
+    // when the endpoint actually serves the modern (2026-07-28) era.
+    const app = createApp(createRuntimeOptions('secret'))
+    const client = new Client(
+      { name: 'app-modern-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    )
+    const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+      fetch: (input, init) => {
+        const headers = new Headers(init?.headers)
+        headers.set('Authorization', 'Bearer secret')
+        headers.set('Origin', 'http://127.0.0.1:6274')
+        return app.request(input instanceof URL ? input.toString() : String(input), {
+          ...init,
+          headers,
+        })
+      },
+    })
+
+    await client.connect(transport)
+    expect(client.getProtocolEra()).toBe('modern')
+    const tools = await client.listTools()
+    expect(tools.tools.some((tool) => tool.name === 'wb_canvas_create')).toBe(true)
+    const createResult = await client.callTool({
+      name: 'wb_canvas_create',
+      arguments: { workspaceId: 'default', segment: 'via-modern-mcp' },
+    })
+    expect(createResult.structuredContent).toMatchObject({
+      canvasId: expect.any(String),
+      segment: 'via-modern-mcp',
+    })
     await transport.close()
   })
 

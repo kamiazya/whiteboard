@@ -50,7 +50,7 @@ vi.mock('../../di/container.js', () => ({
     blobStore: {},
   })),
 }))
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+vi.mock('@modelcontextprotocol/server', () => ({
   McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
     this.server = { registerCapabilities: vi.fn() }
     this.registerResource = vi.fn()
@@ -59,8 +59,8 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
     this.close = vi.fn(async () => undefined)
   }),
 }))
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn(function FakeStdioServerTransport() {}),
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
+  serveStdio: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
 }))
 
 describe('main()', () => {

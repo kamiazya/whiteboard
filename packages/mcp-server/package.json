@@ -161,7 +161,6 @@
     "@libsql/client": "^0.17.3",
     "@libsql/kysely-libsql": "^0.4.1",
     "@modelcontextprotocol/ext-apps": "1.7.5",
-    "@modelcontextprotocol/sdk": "~1.30.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/context-zone": "^2.8.0",
     "@opentelemetry/core": "^2.8.0",
@@ -186,7 +185,9 @@
     "pino": "^10.3.1",
     "ws": "^8.21.0",
     "yaml": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.4.1",
