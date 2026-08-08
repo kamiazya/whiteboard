@@ -87,6 +87,47 @@ it('right-clicking empty space offers creation at that point', async () => {
   await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
 })
 
+it('empty space offers the full creation set, anchored at the click point', async () => {
+  const { Host, latest } = (() => {
+    const l: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
+    function H() {
+      const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+      l.canvas = canvas
+      return (
+        <div style={{ width: 800, height: 600 }}>
+          <SpatialEditor
+            canvas={canvas}
+            onChange={(next, command) => {
+              l.commands.push(command.kind)
+              setCanvas(next)
+            }}
+            theme="light"
+            fileRefOptions={[{ file: 'c1', label: 'Other canvas' }]}
+          />
+        </div>
+      )
+    }
+    return { Host: H, latest: l }
+  })()
+  const { container } = render(<Host />)
+  rightClick(rootOf(container), 600, 450)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // The dock's + menu creation set, repeated "here" (canvas entry appears
+  // because the host supplies the reference seam).
+  for (const label of ['Add note here', 'Add link here', 'Add group here', 'Add canvas here']) {
+    expect(container.textContent).toContain(label)
+  }
+
+  await userEvent.click(page.getByRole('menuitem', { name: 'Add group here' }))
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
+  const frame = latest.canvas.nodes.find((n) => n.type === 'group')
+  if (frame === undefined) throw new Error('frame missing')
+  // Centered on the click point (600,450 screen = canvas at identity view).
+  expect(frame.x + frame.width / 2).toBeCloseTo(600, 0)
+  expect(frame.y + frame.height / 2).toBeCloseTo(450, 0)
+})
+
 it('Escape closes the menu without acting', async () => {
   const commands: string[] = []
   const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
