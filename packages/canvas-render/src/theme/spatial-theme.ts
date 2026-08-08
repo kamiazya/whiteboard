@@ -84,8 +84,7 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
       return { radius: shapeRadius(node, palette), appearance }
     },
     resolveEdge: (edge: CanvasEdge) => ({
-      stroke:
-        presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
+      stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
     resolveLabel: () => ({ fill: palette.labelFill, fontFamily: SPATIAL_THEME_FONT_FAMILY }),
   }
