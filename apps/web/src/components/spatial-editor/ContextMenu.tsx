@@ -19,12 +19,14 @@
  * discrete pointerdown loses the focus fight with mousedown's default
  * action, while click fires after those defaults.
  */
-import { useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface ContextMenuActionItem {
   readonly kind?: 'action'
   readonly label: string
+  /** Leading icon (a lucide element); decorative — the label carries the name. */
+  readonly icon?: ReactNode
   readonly onSelect: () => void
   /** Visually separates destructive entries (Delete). */
   readonly danger?: boolean
@@ -33,6 +35,8 @@ export interface ContextMenuActionItem {
 export interface ContextMenuOption {
   /** Visible content of the option button (often a glyph). */
   readonly label: string
+  /** Icon rendered INSTEAD of the label text when provided (decorative). */
+  readonly icon?: ReactNode
   /** Accessible name when the visible label is a glyph; defaults to label. */
   readonly ariaLabel?: string
   readonly selected: boolean
@@ -123,7 +127,13 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                   // reopen for every adjustment.
                   onClick={option.onSelect}
                 >
-                  {option.label}
+                  {option.icon !== undefined ? (
+                    <span aria-hidden="true" className="[&>svg]:size-3.5">
+                      {option.icon}
+                    </span>
+                  ) : (
+                    option.label
+                  )}
                 </button>
               ))}
             </span>
@@ -133,7 +143,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             key={item.label}
             type="button"
             role="menuitem"
-            className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
+            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
               item.danger ? 'text-red-600' : ''
             }`}
             onClick={() => {
@@ -141,6 +151,15 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
               item.onSelect()
             }}
           >
+            {item.icon !== undefined && (
+              // Danger rows keep the destructive color on the icon too.
+              <span
+                aria-hidden="true"
+                className={cn('[&>svg]:size-3.5', !item.danger && 'text-muted-foreground')}
+              >
+                {item.icon}
+              </span>
+            )}
             {item.label}
           </button>
         ),

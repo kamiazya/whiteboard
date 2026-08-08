@@ -37,6 +37,17 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
+  PanelTop,
+  Pencil,
+  SquareDashed,
+  StickyNote,
+  Tag,
+  Trash2,
+} from 'lucide-react'
+import {
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -1133,12 +1144,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ] as const
                 const applyEdgeCommand = (command: EditorCommand) =>
                   applyResult({ state: { kind: 'idle' }, commands: [command] })
+                // Excel-border-style side pickers: a rectangle with the
+                // pinned side emphasized; dashed = unpinned (auto).
                 const SIDES = [
-                  { label: 'auto', ariaLabel: 'Auto', side: undefined },
-                  { label: '↑', ariaLabel: 'Top', side: 'top' },
-                  { label: '→', ariaLabel: 'Right', side: 'right' },
-                  { label: '↓', ariaLabel: 'Bottom', side: 'bottom' },
-                  { label: '←', ariaLabel: 'Left', side: 'left' },
+                  { label: 'auto', ariaLabel: 'Auto', icon: <SquareDashed />, side: undefined },
+                  { label: 'top', ariaLabel: 'Top', icon: <PanelTop />, side: 'top' },
+                  { label: 'right', ariaLabel: 'Right', icon: <PanelRight />, side: 'right' },
+                  { label: 'bottom', ariaLabel: 'Bottom', icon: <PanelBottom />, side: 'bottom' },
+                  { label: 'left', ariaLabel: 'Left', icon: <PanelLeft />, side: 'left' },
                 ] as const
                 const sideRow = (endpoint: 'from' | 'to') => {
                   const current = endpoint === 'from' ? edge.fromSide : edge.toSide
@@ -1147,6 +1160,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     label: endpoint === 'from' ? 'From side' : 'To side',
                     options: SIDES.map((entry) => ({
                       label: entry.label,
+                      icon: entry.icon,
                       ariaLabel: entry.ariaLabel,
                       selected: current === entry.side,
                       onSelect: () =>
@@ -1160,7 +1174,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   }
                 }
                 return [
-                  { label: 'Edit label', onSelect: () => setEdgeLabelEditId(edge.id) },
+                  {
+                    label: 'Edit label',
+                    icon: <Tag />,
+                    onSelect: () => setEdgeLabelEditId(edge.id),
+                  },
                   { kind: 'separator' as const },
                   {
                     kind: 'options' as const,
@@ -1183,6 +1201,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   { kind: 'separator' as const },
                   {
                     label: 'Delete',
+                    icon: <Trash2 />,
                     danger: true,
                     onSelect: () => {
                       applyResult({
@@ -1195,12 +1214,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ]
               }
               if (node === undefined) {
-                return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
+                return [
+                  {
+                    label: 'Add note here',
+                    icon: <StickyNote />,
+                    onSelect: () => createNodeAt(contextMenu.point),
+                  },
+                ]
               }
               const items: ContextMenuItem[] = []
               if (node.type === 'text') {
                 items.push({
                   label: 'Edit text',
+                  icon: <Pencil />,
                   onSelect: () => {
                     applyResult(
                       reduceGesture(gestureState, canvas, {
@@ -1217,6 +1243,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }
               items.push({
                 label: 'Delete',
+                icon: <Trash2 />,
                 danger: true,
                 onSelect: () => {
                   applyResult(
