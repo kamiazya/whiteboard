@@ -62,6 +62,7 @@ export function ToolPalette({
   const [addOpen, setAddOpen] = useState(false)
   const dockRef = useRef<HTMLDivElement | null>(null)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
+  const addButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Menu convention: opening moves focus to the first entry, so the
   // keyboard path is + → Enter → Enter without a mouse detour.
@@ -159,6 +160,7 @@ export function ToolPalette({
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            ref={addButtonRef}
             type="button"
             data-testid="add-button"
             aria-label="Add"
@@ -186,6 +188,10 @@ export function ToolPalette({
             if (e.key === 'Escape') {
               e.stopPropagation()
               setAddOpen(false)
+              // Closing unmounts the focused entry; without an explicit
+              // hand-back, focus falls to <body> and the keyboard user
+              // loses their place.
+              addButtonRef.current?.focus()
             }
           }}
         >

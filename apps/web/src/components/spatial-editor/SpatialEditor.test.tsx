@@ -53,6 +53,32 @@ describe('Add button (creation menu)', () => {
     const command = onChange.mock.calls[0][1] as { kind: string }
     expect(command.kind).toBe('create-node')
   })
+
+  it('Escape closes the menu and hands focus back to the + trigger', () => {
+    // Programmatic focus reads as focus-visible to Radix, which opens the
+    // trigger's tooltip and measures it — jsdom has no ResizeObserver, so
+    // stub the minimal contract for this test only.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    const { getByTestId } = render(
+      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+    )
+    const button = getByTestId('add-button') as HTMLButtonElement
+    fireEvent.click(button)
+    const menu = getByTestId('add-menu')
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    expect(getByTestId('tool-palette').querySelector('[data-testid="add-menu"]')).toBeNull()
+    // Closing unmounts the focused entry — without the hand-back, focus
+    // falls to <body> and the keyboard user loses their place.
+    expect(document.activeElement).toBe(button)
+    vi.unstubAllGlobals()
+  })
 })
 
 describe('SpatialEditorHandle', () => {
