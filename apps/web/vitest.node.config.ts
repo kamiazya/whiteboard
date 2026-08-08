@@ -12,6 +12,7 @@ export default defineConfig({
     include: [
       'vite-pwa-options.test.ts',
       'public-headers.test.ts',
+      'vite-dev-headers.test.ts',
       'vite-plugin-strip-wasm-sourcemap.test.ts',
       'scripts/**/*.test.ts',
     ],
