@@ -47,6 +47,9 @@ export function HeaderSaveDot({
           data-testid="header-save-dot"
           className={cn(
             'relative inline-flex size-4 shrink-0 items-center justify-center rounded-full',
+            // Appears only when there is something to save — a soft
+            // fade+scale entrance keeps the dot from popping into the header.
+            'animate-in fade-in-0 zoom-in-75 duration-(--motion-duration-fast) ease-(--motion-ease-out)',
             'transition-transform hover:scale-110 focus-visible:outline-none',
             'focus-visible:ring-2 focus-visible:ring-primary/50',
             saving ? 'cursor-progress' : 'cursor-pointer',

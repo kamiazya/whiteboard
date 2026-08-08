@@ -64,10 +64,22 @@ export function ConnectionStatus({
           data-testid="connection-chip"
           className={cn(
             'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent',
+            'duration-(--motion-duration-normal) ease-(--motion-ease-out)',
             state === 'sync-off' && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
           )}
         >
-          <span aria-hidden="true" className={cn('size-2 rounded-full', DOT_CLASS[state])} />
+          <span aria-hidden="true" className="relative inline-flex size-2">
+            {state === 'sync-off' && (
+              // One-shot attention echo behind the dot: mounts exactly when
+              // the chip enters sync-off, pulses twice, then rests. Finite
+              // by design — a standing ping would be noise, not guidance.
+              <span
+                data-testid="connection-chip-pulse"
+                className="absolute inset-0 rounded-full bg-amber-500 animate-[attention-pulse_900ms_var(--motion-ease-out)_2]"
+              />
+            )}
+            <span className={cn('absolute inset-0 rounded-full', DOT_CLASS[state])} />
+          </span>
           {CHIP_LABEL[state]}
         </button>
       </PopoverTrigger>

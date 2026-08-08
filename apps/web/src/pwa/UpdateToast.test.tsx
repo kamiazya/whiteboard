@@ -28,9 +28,14 @@ describe('UpdateToast', () => {
     // positioning with a stacking z-index is what keeps it visible.
     render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
 
+    // The centering/positioning wrapper and the animated surface are
+    // separate elements (the enter keyframe owns `transform`), so the
+    // fixed+z contract holds on the status element or an ancestor.
     const toast = screen.getByRole('status')
-    expect(toast.className).toMatch(/\bfixed\b/)
-    expect(toast.className).toMatch(/\bz-\d+\b/)
+    const overlay = toast.closest('[class*="fixed"]') as HTMLElement | null
+    expect(overlay).not.toBeNull()
+    expect(overlay?.className).toMatch(/\bfixed\b/)
+    expect(overlay?.className).toMatch(/\bz-\d+\b/)
   })
 
   it('hides the toast and calls onDismiss when Dismiss is clicked', () => {
