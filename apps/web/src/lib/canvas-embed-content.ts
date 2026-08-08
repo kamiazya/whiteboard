@@ -40,7 +40,7 @@ export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
 }
 
 /** Reference prefix distinguishing stored image assets from canvas ids. */
-export const IMAGE_REF_PREFIX = 'asset:'
+const IMAGE_REF_PREFIX = 'asset:'
 
 export function isImageRef(file: string): boolean {
   return file.startsWith(IMAGE_REF_PREFIX)
