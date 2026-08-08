@@ -1,3 +1,4 @@
+export * from './clipboard.js'
 export * from './facets.js'
 export * from './ids.js'
 export * from './markdown.js'
