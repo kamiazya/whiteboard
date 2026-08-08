@@ -57,7 +57,11 @@ export function SettingsPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[85dvh] overflow-y-auto sm:max-w-md data-[has-extra=true]:sm:max-w-xl"
+        data-has-extra={extraSections != null}
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="sr-only">Application settings</DialogDescription>
