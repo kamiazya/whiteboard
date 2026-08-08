@@ -33,8 +33,9 @@
  * grouping, undo/redo, snapping,
  * persistence, and sync. Those are later phases.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { CanvasColor, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
+import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   PanelBottom,
@@ -1127,6 +1128,60 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contextMenu.edgeId === undefined
                   ? undefined
                   : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
+              // The swatch chips preview the CURRENT mode's preset strokes so
+              // the picker shows what will actually render; the stored value
+              // stays the semantic slot ('1'..'6'), never a resolved hex.
+              const presetSwatches = (
+                theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+              ).presets
+              const presetEntries: readonly {
+                readonly key: SpatialPresetKey
+                readonly name: string
+              }[] = [
+                { key: '1', name: 'Red' },
+                { key: '2', name: 'Orange' },
+                { key: '3', name: 'Yellow' },
+                { key: '4', name: 'Green' },
+                { key: '5', name: 'Cyan' },
+                { key: '6', name: 'Purple' },
+              ]
+              const colorRow = (
+                current: CanvasColor | undefined,
+                apply: (color: CanvasColor | undefined) => void,
+              ) => ({
+                kind: 'options' as const,
+                label: 'Color',
+                options: [
+                  {
+                    label: 'default',
+                    ariaLabel: 'Default',
+                    icon: <SquareDashed />,
+                    selected: current === undefined,
+                    onSelect: () => apply(undefined),
+                  },
+                  ...presetEntries.map((entry) => ({
+                    label: entry.key,
+                    ariaLabel: entry.name,
+                    icon: (
+                      // Paint-critical props are inline, not utility classes:
+                      // a default-inline span ignores width/height entirely
+                      // (it laid out 0x0 live), and the chip must also paint
+                      // where the app stylesheet is absent.
+                      <span
+                        style={{
+                          display: 'block',
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          backgroundColor: presetSwatches[entry.key].stroke,
+                        }}
+                      />
+                    ),
+                    selected: current === entry.key,
+                    onSelect: () => apply(entry.key),
+                  })),
+                ],
+              })
               if (node === undefined && edge !== undefined) {
                 // Property pickers are inline option rows (one tap per
                 // choice, menu stays open) — a cycling item costs an
@@ -1198,6 +1253,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   },
                   sideRow('from'),
                   sideRow('to'),
+                  colorRow(edge.color, (color) =>
+                    applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
+                  ),
                   { kind: 'separator' as const },
                   {
                     label: 'Delete',
@@ -1241,6 +1299,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // entry sits in its own section.
                 items.push({ kind: 'separator' })
               }
+              items.push(
+                colorRow(node.color, (color) =>
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [{ kind: 'set-node-color', id: node.id, color }],
+                  }),
+                ),
+              )
+              items.push({ kind: 'separator' })
               items.push({
                 label: 'Delete',
                 icon: <Trash2 />,

@@ -3,6 +3,7 @@
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -275,4 +276,89 @@ it('context-menu targeting keeps node and edge selection mutually exclusive', as
   // the edge selection made by the second right-click only.
   await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
   expect(latest.canvas.nodes).toHaveLength(2)
+})
+
+// --- Color row: presets are one-tap picks on both node and edge menus ---
+
+function makeNodeHost() {
+  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
+  function NodeHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          canvas={canvas}
+          onChange={(next, command) => {
+            latest.commands.push(command.kind)
+            setCanvas(next)
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  return { NodeHost, latest }
+}
+
+it('the node Color row applies a preset in one tap and Default removes it', async () => {
+  const { NodeHost, latest } = makeNodeHost()
+  const { container } = render(<NodeHost />)
+  rightClick(rootOf(container), 200, 150)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // The swatch chip must actually paint: a default-inline span ignores
+  // size-* and lays out 0x0 (a real defect caught live), so pin its box.
+  const colorGroup = [...container.querySelectorAll('fieldset')].find(
+    (g) => g.getAttribute('aria-label') === 'Color',
+  ) as HTMLElement
+  // firstElementChild twice: button > icon wrapper > swatch chip. A `span
+  // span` selector would match the wrapper itself (its ancestor span sits
+  // outside the button, but querySelector still counts it).
+  const redSwatch = [...colorGroup.querySelectorAll('[role="menuitemradio"]')].find(
+    (o) => o.getAttribute('aria-label') === 'Red',
+  )?.firstElementChild?.firstElementChild as HTMLElement
+  expect(redSwatch.getBoundingClientRect().width).toBeGreaterThan(0)
+  expect(redSwatch.style.backgroundColor).not.toBe('')
+
+  clickOption(container, 'Color', 'Red')
+  await vi.waitFor(() => expect(latest.canvas.nodes[0].color).toBe('1'))
+  expect(latest.commands).toContain('set-node-color')
+
+  // Property picks keep the menu open, and the scene re-renders with the
+  // preset accent: the node's chrome rect now carries the palette stroke.
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const accent = SPATIAL_LIGHT_PALETTE.presets['1']
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector(
+        `[data-testid="viewport-transform"] svg rect[stroke="${accent.stroke}"]`,
+      ),
+    ).not.toBeNull(),
+  )
+
+  clickOption(container, 'Color', 'Default')
+  await vi.waitFor(() => expect(latest.canvas.nodes[0]).not.toHaveProperty('color'))
+})
+
+it('the edge Color row recolors the stroke via the palette preset', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  clickOption(container, 'Color', 'Purple')
+  await vi.waitFor(() => expect(latest.canvas.edges[0].color).toBe('6'))
+  expect(latest.commands).toContain('set-edge-color')
+
+  const accent = SPATIAL_LIGHT_PALETTE.presets['6']
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector(
+        `[data-testid="viewport-transform"] svg polyline[stroke="${accent.stroke}"]`,
+      ),
+    ).not.toBeNull(),
+  )
 })

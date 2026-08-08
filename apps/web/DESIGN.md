@@ -70,3 +70,17 @@ Canvas rendering (nodes/edges/selection) is themed by canvas-render's
 `createSpatialTheme` — a separate authority that shares this document's
 direction. The editor UI must not restyle scene SVG output directly; export
 bytes never depend on the app's ambient UI theme.
+
+### Preset colors ('1'..'6')
+
+JSON Canvas preset colors are semantic slots stored in the data, resolved
+to concrete paint by the theme palette (`SpatialPalette.presets` in
+canvas-render) — swappable data, never hardcoded in resolver code. Per
+mode the accents are: light = Tailwind 600 strokes over 100-tint fills,
+dark = 400 strokes over 950-tint fills. Nodes render accent stroke +
+tint fill (text keeps the theme's text color); edges render the accent
+as stroke. Floors are pinned by tests, not exact hexes: preset strokes
+hold ≥3:1 against the mode background, and label text holds ≥4.5:1
+against the tint fill — a replacement palette must keep passing both.
+The editor's Color row previews swatches from the CURRENT mode's palette
+strokes, while the stored value stays the slot key.
