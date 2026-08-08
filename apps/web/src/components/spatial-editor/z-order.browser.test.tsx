@@ -9,11 +9,13 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
+// An overlapping chain (a∩b, b∩c, a∦c): forward/backward are
+// overlap-aware, so the fixture must actually overlap for them to move.
 const initial: SpatialCanvas = {
   nodes: (['a', 'b', 'c'] as const).map((id, index) => ({
     id,
     type: 'text',
-    x: index * 220,
+    x: index * 150,
     y: 100,
     width: 200,
     height: 80,
@@ -44,14 +46,14 @@ function makeHost() {
 function selectNodeB(container: HTMLElement): HTMLElement {
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
-  // Node b spans x 220..420 at identity viewport.
+  // x 250 lands on b ONLY (a ends at 200, c starts at 300).
   fireEvent.pointerDown(root, {
     button: 0,
     pointerId: 1,
-    clientX: r.left + 320,
+    clientX: r.left + 250,
     clientY: r.top + 140,
   })
-  fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 320, clientY: r.top + 140 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 250, clientY: r.top + 140 })
   expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
   return root
 }
@@ -106,13 +108,13 @@ it("the node context menu's Order row applies each placement in one tap", () => 
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
 
-  fireEvent.contextMenu(root, { clientX: r.left + 320, clientY: r.top + 140 })
+  fireEvent.contextMenu(root, { clientX: r.left + 250, clientY: r.top + 140 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
   expect(menu).not.toBeNull()
   fireEvent.click(menu.querySelector('[aria-label="Bring to front"]') as HTMLElement)
   expect(orderOf(latest.canvas)).toEqual(['a', 'c', 'b'])
 
-  fireEvent.contextMenu(root, { clientX: r.left + 320, clientY: r.top + 140 })
+  fireEvent.contextMenu(root, { clientX: r.left + 250, clientY: r.top + 140 })
   const menu2 = container.querySelector('[data-testid="context-menu"]') as HTMLElement
   fireEvent.click(menu2.querySelector('[aria-label="Send to back"]') as HTMLElement)
   expect(orderOf(latest.canvas)).toEqual(['b', 'a', 'c'])

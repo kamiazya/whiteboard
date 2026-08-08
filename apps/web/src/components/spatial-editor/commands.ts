@@ -383,6 +383,20 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
   }
 }
 
+/** Strict bbox intersection — flush-touching edges are NOT overlap. */
+function overlapsAny(
+  candidate: SpatialCanvas['nodes'][number],
+  block: readonly SpatialCanvas['nodes'][number][],
+): boolean {
+  return block.some(
+    (member) =>
+      candidate.x < member.x + member.width &&
+      member.x < candidate.x + candidate.width &&
+      candidate.y < member.y + member.height &&
+      member.y < candidate.y + candidate.height,
+  )
+}
+
 function reorderNodes(
   canvas: SpatialCanvas,
   ids: readonly string[],
@@ -402,9 +416,13 @@ function reorderNodes(
       insertAt = 0
       break
     case 'forward': {
-      // Step the block over the nearest non-member ABOVE its topmost member.
-      // (Index loops, not findLast/findLastIndex — the tsconfig lib target
-      // predates es2023.)
+      // Step the block over the nearest OVERLAPPING non-member above its
+      // topmost member (tldraw semantics, user feedback 2026-08-09):
+      // hopping over a node the selection does not visually overlap
+      // changes nothing on screen and reads as the shortcut "not working".
+      // No overlapping node above → the block is already visually on top
+      // of its pile → no-op. (Index loops, not findLast/findLastIndex —
+      // the tsconfig lib target predates es2023.)
       let top = -1
       for (let i = canvas.nodes.length - 1; i >= 0; i--) {
         if (members.has(canvas.nodes[i].id)) {
@@ -412,18 +430,22 @@ function reorderNodes(
           break
         }
       }
-      const over = canvas.nodes.slice(top + 1).find((node) => !members.has(node.id))
+      const over = canvas.nodes
+        .slice(top + 1)
+        .find((node) => !members.has(node.id) && overlapsAny(node, block))
       if (over === undefined) return canvas
       insertAt = rest.indexOf(over) + 1
       break
     }
     case 'backward': {
-      // Mirror: step under the nearest non-member BELOW its bottom member.
+      // Mirror: step under the nearest overlapping non-member below the
+      // bottom member.
       const bottom = canvas.nodes.findIndex((node) => members.has(node.id))
       let under: SpatialCanvas['nodes'][number] | undefined
       for (let i = bottom - 1; i >= 0; i--) {
-        if (!members.has(canvas.nodes[i].id)) {
-          under = canvas.nodes[i]
+        const node = canvas.nodes[i]
+        if (!members.has(node.id) && overlapsAny(node, block)) {
+          under = node
           break
         }
       }

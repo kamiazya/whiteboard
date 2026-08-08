@@ -392,13 +392,18 @@ describe('applyCommand', () => {
 
   // Array order IS z-order in JSON Canvas (last = topmost), so reorder is a
   // pure array permutation: node objects stay reference-equal.
+  // forward/backward are OVERLAP-aware (user feedback 2026-08-09, tldraw
+  // semantics): the block steps over the nearest node it visually overlaps,
+  // because stepping over a non-overlapping neighbor changes nothing on
+  // screen and reads as the shortcut "not working".
   describe('reorder-nodes', () => {
-    function orderedCanvas(): SpatialCanvas {
+    /** Four nodes stacked on the same spot — everything overlaps. */
+    function stackedCanvas(): SpatialCanvas {
       return {
-        nodes: (['a', 'b', 'c', 'd'] as const).map((id, index) => ({
+        nodes: (['a', 'b', 'c', 'd'] as const).map((id) => ({
           id,
           type: 'text',
-          x: index * 100,
+          x: 0,
           y: 0,
           width: 80,
           height: 40,
@@ -409,8 +414,8 @@ describe('applyCommand', () => {
     }
     const orderOf = (canvas: SpatialCanvas) => canvas.nodes.map((node) => node.id)
 
-    it('forward swaps toward the top; backward toward the bottom', () => {
-      const canvas = orderedCanvas()
+    it('forward steps over the nearest overlapping node above; backward mirrors', () => {
+      const canvas = stackedCanvas()
       expect(
         orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'forward' })),
       ).toEqual(['a', 'c', 'b', 'd'])
@@ -423,8 +428,52 @@ describe('applyCommand', () => {
       expect(next.edges).toBe(canvas.edges)
     })
 
-    it('front moves to the end of the array; back to the start', () => {
-      const canvas = orderedCanvas()
+    it('forward/backward SKIP non-overlapping neighbors and land past the overlapping one', () => {
+      // z-order a < b < c < d; spatially only a and d overlap (b, c live
+      // far away). Forward from a must step over d directly — hopping over
+      // b or c would change nothing visible.
+      const canvas: SpatialCanvas = {
+        nodes: [
+          { id: 'a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'a' },
+          { id: 'b', type: 'text', x: 500, y: 500, width: 80, height: 40, text: 'b' },
+          { id: 'c', type: 'text', x: 700, y: 500, width: 80, height: 40, text: 'c' },
+          { id: 'd', type: 'text', x: 40, y: 20, width: 80, height: 40, text: 'd' },
+        ],
+        edges: [],
+      }
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a'], placement: 'forward' })),
+      ).toEqual(['b', 'c', 'd', 'a'])
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d'], placement: 'backward' })),
+      ).toEqual(['d', 'a', 'b', 'c'])
+      // No overlapping node in the step direction → visually already on
+      // top/bottom of its pile → no-op, even with array neighbors present.
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d'], placement: 'forward' }),
+      ).toBe(canvas)
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'backward' }),
+      ).toBe(canvas)
+    })
+
+    it('touching edges do not count as overlap', () => {
+      // b sits exactly flush against a's right edge — adjacent, not
+      // overlapping, so forward has nothing to step over.
+      const canvas: SpatialCanvas = {
+        nodes: [
+          { id: 'a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'a' },
+          { id: 'b', type: 'text', x: 80, y: 0, width: 80, height: 40, text: 'b' },
+        ],
+        edges: [],
+      }
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a'], placement: 'forward' }),
+      ).toBe(canvas)
+    })
+
+    it('front moves to the end of the array; back to the start (position-independent)', () => {
+      const canvas = stackedCanvas()
       expect(
         orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'front' })),
       ).toEqual(['a', 'c', 'd', 'b'])
@@ -434,7 +483,7 @@ describe('applyCommand', () => {
     })
 
     it('a multi-selection moves as ONE block preserving its relative order', () => {
-      const canvas = orderedCanvas()
+      const canvas = stackedCanvas()
       expect(
         orderOf(
           applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d', 'a'], placement: 'front' }),
@@ -445,7 +494,8 @@ describe('applyCommand', () => {
           applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a', 'c'], placement: 'back' }),
         ),
       ).toEqual(['a', 'c', 'b', 'd'])
-      // Forward steps the block over the next non-member; backward mirrors.
+      // Forward steps the block over the next overlapping non-member (a
+      // member overlaps when ANY of its nodes intersects the candidate).
       expect(
         orderOf(
           applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a', 'b'], placement: 'forward' }),
@@ -459,7 +509,7 @@ describe('applyCommand', () => {
     })
 
     it('is total: extremes, unknown ids, and empty selections are no-ops returning the input', () => {
-      const canvas = orderedCanvas()
+      const canvas = stackedCanvas()
       expect(
         applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d'], placement: 'forward' }),
       ).toBe(canvas)
