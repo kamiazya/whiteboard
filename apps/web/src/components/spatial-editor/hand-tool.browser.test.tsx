@@ -4,7 +4,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -172,6 +173,50 @@ it('switching tools closes an open context menu — no edit affordance survives 
 
   fireEvent.click(container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
   expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+})
+
+it('entering hand mode clears edit state: selection, open text editor, armed connect', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  const selectBtn = container.querySelector('[data-testid="select-tool-button"]') as HTMLElement
+  const handBtn = container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement
+
+  // Selection does not survive into hand mode, so Delete cannot mutate.
+  fireEvent.click(selectBtn)
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 1,
+    clientX: r.left + 150,
+    clientY: r.top + 130,
+  })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 150, clientY: r.top + 130 })
+  expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
+  fireEvent.click(handBtn)
+  expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
+  fireEvent.keyDown(root, { key: 'Delete' })
+  expect(latest.canvas.nodes).toHaveLength(1)
+
+  // An open text editor closes (uncommitted text is discarded, like Escape).
+  fireEvent.click(selectBtn)
+  await userEvent.dblClick(root, { position: { x: 150, y: 130 } })
+  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  fireEvent.click(handBtn)
+  expect(container.querySelector('textarea')).toBeNull()
+
+  // An armed connect never completes across the mode switch.
+  fireEvent.click(container.querySelector('[data-testid="connect-tool-button"]') as HTMLElement)
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 2,
+    clientX: r.left + 150,
+    clientY: r.top + 130,
+  })
+  fireEvent.click(handBtn)
+  fireEvent.pointerUp(root, { pointerId: 2, clientX: r.left + 150, clientY: r.top + 130 })
+  expect(latest.canvas.edges).toHaveLength(0)
+  expect(latest.commands).not.toContain('connect-nodes')
 })
 
 it('switching to select restores normal behavior (press on a node selects it)', () => {
