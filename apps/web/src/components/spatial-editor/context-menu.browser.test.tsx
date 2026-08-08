@@ -161,6 +161,44 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
   expect(latest.canvas.edges).toHaveLength(1)
 })
 
+it('the edge menu marks the spec-default arrow state and applies a new direction', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // Default fromEnd none / toEnd arrow reads as the checked "Arrow →".
+  await expect.element(page.getByRole('menuitem', { name: '✓ Arrow →' })).toBeInTheDocument()
+
+  await userEvent.click(page.getByRole('menuitem', { name: 'Arrow ↔' }))
+  await vi.waitFor(() => expect(latest.canvas.edges[0].fromEnd).toBe('arrow'))
+  // toEnd 'arrow' is the spec default — canonical form omits the field.
+  expect(latest.canvas.edges[0]).not.toHaveProperty('toEnd')
+  expect(latest.commands).toContain('set-edge-ends')
+
+  // The rendered scene now draws both arrowheads.
+  await vi.waitFor(() =>
+    expect(
+      container.querySelectorAll('[data-testid="viewport-transform"] svg polygon').length,
+    ).toBe(2),
+  )
+})
+
+it('the edge menu pins the from-side one step per activation (auto -> top)', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  await userEvent.click(page.getByRole('menuitem', { name: 'From side: auto' }))
+  await vi.waitFor(() => expect(latest.canvas.edges[0].fromSide).toBe('top'))
+  expect(latest.commands).toContain('set-edge-side')
+})
+
 it('Delete from the edge menu removes the edge and leaves the nodes', async () => {
   const { EdgeHost, latest } = makeEdgeHost()
   const { container } = render(<EdgeHost />)

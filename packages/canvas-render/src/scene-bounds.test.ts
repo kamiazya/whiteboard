@@ -80,11 +80,43 @@ describe('sceneBounds', () => {
           ],
           fromSide: 'right',
           toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
         },
-        { kind: 'edge', id: 'e2', path: [], fromSide: 'top', toSide: 'bottom' },
+        {
+          kind: 'edge',
+          id: 'e2',
+          path: [],
+          fromSide: 'top',
+          toSide: 'bottom',
+          fromEnd: 'none',
+          toEnd: 'none',
+        },
       ],
     }
     expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 50, h: 30 })
+  })
+
+  it('includes arrowhead wings in the bounds so a derived viewBox never clips them', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 30, y: 0 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    // The horizontal polyline alone spans y [0, 0]; the destination arrow's
+    // wings reach y = -4 and y = 4 at x = 20.
+    expect(sceneBounds(scene)).toEqual({ x: 0, y: -4, w: 30, h: 8 })
   })
 
   it('widens the bounds when a nested descendant lies outside its parent bbox', () => {

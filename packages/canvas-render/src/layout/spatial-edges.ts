@@ -92,6 +92,10 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
   const toNode = nodes.find((n) => n.id === edge.toNode)
 
+  // JSON Canvas 1.0 defaults: no source arrowhead, a destination arrowhead.
+  const fromEnd = edge.fromEnd ?? 'none'
+  const toEnd = edge.toEnd ?? 'arrow'
+
   if (!fromNode || !toNode) {
     const origin = { x: 0, y: 0 }
     return {
@@ -100,6 +104,8 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
       path: [origin, origin],
       fromSide: edge.fromSide ?? 'right',
       toSide: edge.toSide ?? 'left',
+      fromEnd,
+      toEnd,
     }
   }
 
@@ -115,7 +121,15 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
     const start = sidePoint(fromRect, fromSide)
     const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
     const end = sidePoint(toRect, toSide)
-    return { kind: 'edge', id: edge.id, path: [start, loopOut, loopBack, end], fromSide, toSide }
+    return {
+      kind: 'edge',
+      id: edge.id,
+      path: [start, loopOut, loopBack, end],
+      fromSide,
+      toSide,
+      fromEnd,
+      toEnd,
+    }
   }
 
   const derived = deriveDefaultSides(fromRect, toRect)
@@ -125,5 +139,5 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
   const start = sidePoint(fromRect, fromSide)
   const end = sidePoint(toRect, toSide)
 
-  return { kind: 'edge', id: edge.id, path: [start, end], fromSide, toSide }
+  return { kind: 'edge', id: edge.id, path: [start, end], fromSide, toSide, fromEnd, toEnd }
 }

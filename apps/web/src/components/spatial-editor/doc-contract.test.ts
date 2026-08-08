@@ -6,7 +6,6 @@ const REQUIRED_UNSUPPORTED = [
   'shape-tools',
   'grouping',
   'undo-redo',
-  'arrow-side-pinning',
   'snapping',
   'persistence',
   'sync',

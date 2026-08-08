@@ -53,6 +53,29 @@ describe('routeEdge', () => {
     expect(result.toSide).toBe('bottom')
   })
 
+  it('threads the spec-default ends: fromEnd none, toEnd arrow', () => {
+    const nodes = [node('a', 0, 0, 100, 100), node('b', 200, 0, 100, 100)]
+    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    expect(result.fromEnd).toBe('none')
+    expect(result.toEnd).toBe('arrow')
+  })
+
+  it('passes explicit fromEnd/toEnd through', () => {
+    const nodes = [node('a', 0, 0, 100, 100), node('b', 200, 0, 100, 100)]
+    const result = routeEdge(
+      nodes,
+      edge({ id: 'e1', fromNode: 'a', toNode: 'b', fromEnd: 'arrow', toEnd: 'none' }),
+    )
+    expect(result.fromEnd).toBe('arrow')
+    expect(result.toEnd).toBe('none')
+  })
+
+  it('the degraded missing-endpoint edge still carries ends', () => {
+    const result = routeEdge([], edge({ id: 'e1', fromNode: 'ghost-a', toNode: 'ghost-b' }))
+    expect(result.fromEnd).toBe('none')
+    expect(result.toEnd).toBe('arrow')
+  })
+
   it('produces a deterministic self-edge loop path without throwing', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'a' }))

@@ -125,6 +125,8 @@ describe('sceneDigest', () => {
           ],
           fromSide: 'right',
           toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
         },
       ],
     }

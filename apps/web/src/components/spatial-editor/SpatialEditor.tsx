@@ -20,7 +20,9 @@
  * Backspace-while-typing edits text instead of deleting the node), select
  * an edge (click its line) and delete it (Delete/Backspace), and edit an
  * edge's label (double-click its line; commits on blur, empty removes,
- * Escape cancels).
+ * Escape cancels), and restyle an edge from its context menu (arrowhead
+ * direction per JSON Canvas fromEnd/toEnd, and per-endpoint side pinning
+ * with an auto option).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -87,7 +89,6 @@ export const SPATIAL_EDITOR_UNSUPPORTED = [
   'shape-tools',
   'grouping',
   'undo-redo',
-  'arrow-side-pinning',
   'snapping',
   'persistence',
   'sync',
@@ -1116,8 +1117,52 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   ? undefined
                   : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
               if (node === undefined && edge !== undefined) {
+                // Arrow direction reads the JSON Canvas defaults (fromEnd
+                // none, toEnd arrow); the four states are explicit items so
+                // one tap reaches any target state, with the current one
+                // check-marked.
+                const fromEnd = edge.fromEnd ?? 'none'
+                const toEnd = edge.toEnd ?? 'arrow'
+                const arrowStates = [
+                  { label: 'Arrow →', fromEnd: 'none', toEnd: 'arrow' },
+                  { label: 'Arrow ↔', fromEnd: 'arrow', toEnd: 'arrow' },
+                  { label: 'Arrow ←', fromEnd: 'arrow', toEnd: 'none' },
+                  { label: 'No arrows', fromEnd: 'none', toEnd: 'none' },
+                ] as const
+                const applyEdgeCommand = (command: EditorCommand) =>
+                  applyResult({ state: { kind: 'idle' }, commands: [command] })
+                const SIDE_CYCLE = [undefined, 'top', 'right', 'bottom', 'left'] as const
+                const sideItem = (endpoint: 'from' | 'to') => {
+                  const current = endpoint === 'from' ? edge.fromSide : edge.toSide
+                  const next = SIDE_CYCLE[(SIDE_CYCLE.indexOf(current) + 1) % SIDE_CYCLE.length]
+                  return {
+                    label: `${endpoint === 'from' ? 'From' : 'To'} side: ${current ?? 'auto'}`,
+                    onSelect: () =>
+                      applyEdgeCommand({
+                        kind: 'set-edge-side',
+                        id: edge.id,
+                        endpoint,
+                        side: next,
+                      }),
+                  }
+                }
                 return [
                   { label: 'Edit label', onSelect: () => setEdgeLabelEditId(edge.id) },
+                  ...arrowStates.map((state) => ({
+                    label:
+                      state.fromEnd === fromEnd && state.toEnd === toEnd
+                        ? `✓ ${state.label}`
+                        : state.label,
+                    onSelect: () =>
+                      applyEdgeCommand({
+                        kind: 'set-edge-ends',
+                        id: edge.id,
+                        fromEnd: state.fromEnd,
+                        toEnd: state.toEnd,
+                      }),
+                  })),
+                  sideItem('from'),
+                  sideItem('to'),
                   {
                     label: 'Delete',
                     danger: true,
