@@ -50,6 +50,7 @@ import {
   BringToFront,
   ChevronDown,
   ChevronUp,
+  Copy as CopyIcon,
   ExternalLink,
   FileBox,
   Focus,
@@ -80,6 +81,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { extractClipboardFragment, remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
@@ -227,6 +229,9 @@ const DOUBLE_PRESS_WINDOW_MS = 400
 
 /** One click of the hand-mode zoom buttons scales by this factor. */
 const ZOOM_STEP_FACTOR = 1.25
+
+/** Duplicated copies land offset by this much, cascading on repeat. */
+const DUPLICATE_OFFSET_PX = 16
 const ZOOM_WHEEL_FACTOR = 1.1
 /** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
 const RESIZE_KEYBOARD_STEP = 8
@@ -1081,9 +1086,60 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
+    /**
+     * Clones the selection as ONE batch command (one undo step): reminted
+     * ids via the clipboard-fragment helpers, +16px offset (the standard
+     * duplicate-again cascade), edges kept only when both endpoints are
+     * selected — with their properties. The copies become the selection.
+     */
+    const duplicateSelection = (): boolean => {
+      if (selection === undefined) return false
+      const current = canvasRef.current
+      const fragment = extractClipboardFragment(current, new Set([selection.id, ...extraIds]))
+      if (fragment.nodes.length === 0) return false
+      const existingIds = new Set([
+        ...current.nodes.map((node) => node.id),
+        ...current.edges.map((edge) => edge.id),
+      ])
+      const reminted = remintClipboardFragment(
+        fragment,
+        () => createId?.() ?? crypto.randomUUID(),
+        existingIds,
+      )
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: [
+          ...reminted.nodes.map(
+            (node) =>
+              ({
+                kind: 'create-node',
+                node: {
+                  ...node,
+                  x: node.x + DUPLICATE_OFFSET_PX,
+                  y: node.y + DUPLICATE_OFFSET_PX,
+                },
+              }) as const,
+          ),
+          ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
+        ],
+      }
+      const running = applyCommand(current, command)
+      if (running === current) return false
+      onChange(running, command)
+      const [first, ...rest] = reminted.nodes.map((node) => node.id)
+      if (first !== undefined) {
+        setSelectedId(first)
+        setExtraIds(new Set(rest))
+        setSelectedEdgeId(null)
+      }
+      return true
+    }
+
     /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
     const runShortcut = (id: ShortcutId): boolean => {
       switch (id) {
+        case 'duplicate-selection':
+          return duplicateSelection()
         case 'reorder-forward':
           return reorderSelection('forward')
         case 'reorder-backward':
@@ -2040,6 +2096,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // entry sits in its own section.
                 items.push({ kind: 'separator' })
               }
+              // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
+              // right-click already made this node the primary selection,
+              // so the shared handler clones the full multi-selection.
+              items.push({
+                label: 'Duplicate',
+                icon: <CopyIcon />,
+                onSelect: () => {
+                  duplicateSelection()
+                },
+              })
               items.push(
                 colorRow(node.color, (color) =>
                   applyResult({

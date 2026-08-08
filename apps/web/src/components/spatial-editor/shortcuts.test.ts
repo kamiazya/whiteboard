@@ -98,10 +98,25 @@ describe('findShortcutIn modifier semantics', () => {
     expect(findShortcutIn([scoped], event({ ...KEY_C, metaKey: true }), 'hand')).toBeUndefined()
   })
 
-  it('regression: no existing catalog entry declares mod/alt, so the table is unaffected', () => {
-    for (const spec of EDITOR_SHORTCUTS) {
-      expect(spec.mod).toBeUndefined()
-      expect(spec.alt).toBeUndefined()
+  it('regression: the pre-modifier catalog entries still declare neither mod nor alt', () => {
+    // The z-order and inline-handled bindings predate modifier support and
+    // must keep firing exactly as before; only chords added SINCE (e.g.
+    // duplicate-selection) may claim a modifier.
+    const preModifierIds = [
+      'reorder-forward',
+      'reorder-backward',
+      'reorder-front',
+      'reorder-back',
+      'delete-selection',
+      'cancel',
+      'space-pan',
+      'nudge-selection',
+    ]
+    for (const id of preModifierIds) {
+      const spec = EDITOR_SHORTCUTS.find((entry) => entry.id === id)
+      expect(spec).toBeDefined()
+      expect(spec?.mod).toBeUndefined()
+      expect(spec?.alt).toBeUndefined()
     }
   })
 })

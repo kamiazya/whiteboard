@@ -46,6 +46,16 @@ export type EditorLeafCommand =
   | { readonly kind: 'delete-node'; readonly id: string }
   | {
       /**
+       * Appends a full edge verbatim (sides/ends/color/label preserved) —
+       * what duplicate/paste re-create edges with; `connect-nodes` only
+       * carries endpoints. Total: duplicate id, missing endpoint, and
+       * self-loop are no-ops.
+       */
+      readonly kind: 'create-edge'
+      readonly edge: CanvasEdge
+    }
+  | {
+      /**
        * Z-order move. Array order IS z-order in JSON Canvas (last = topmost),
        * so this is a pure permutation of `nodes`. A multi-selection moves as
        * ONE block preserving its relative order; forward/backward step the
@@ -391,11 +401,21 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return deleteNode(canvas, command.id)
     case 'reorder-nodes':
       return reorderNodes(canvas, command.ids, command.placement)
+    case 'create-edge':
+      return createEdge(canvas, command.edge)
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,
       // preserving the union-wide "nothing changed → same object" contract.
       return command.commands.reduce(applyCommand, canvas)
   }
+}
+
+function createEdge(canvas: SpatialCanvas, edge: CanvasEdge): SpatialCanvas {
+  if (canvas.edges.some((existing) => existing.id === edge.id)) return canvas
+  if (edge.fromNode === edge.toNode) return canvas
+  const nodeIds = new Set(canvas.nodes.map((node) => node.id))
+  if (!nodeIds.has(edge.fromNode) || !nodeIds.has(edge.toNode)) return canvas
+  return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
 /** Strict bbox intersection — flush-touching edges are NOT overlap. */
