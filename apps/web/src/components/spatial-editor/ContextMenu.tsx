@@ -19,8 +19,11 @@
  * discrete pointerdown loses the focus fight with mousedown's default
  * action, while click fires after those defaults.
  */
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+
+/** Gap kept between the menu and the editor edge when nudging it inside. */
+const MENU_EDGE_MARGIN_PX = 4
 
 export interface ContextMenuActionItem {
   readonly kind?: 'action'
@@ -66,6 +69,25 @@ export interface ContextMenuProps {
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
+  // A menu opened near the editor's right/bottom edge would clip outside it,
+  // so the requested position is nudged back inside once the real menu size
+  // is measurable. useLayoutEffect corrects before paint — no visible jump.
+  const [pos, setPos] = useState({ x, y })
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    const parent = el?.offsetParent
+    if (el == null || !(parent instanceof HTMLElement)) {
+      setPos((prev) => (prev.x === x && prev.y === y ? prev : { x, y }))
+      return
+    }
+    const clamp = (value: number, max: number) =>
+      Math.max(MENU_EDGE_MARGIN_PX, Math.min(value, max))
+    const next = {
+      x: clamp(x, parent.clientWidth - el.offsetWidth - MENU_EDGE_MARGIN_PX),
+      y: clamp(y, parent.clientHeight - el.offsetHeight - MENU_EDGE_MARGIN_PX),
+    }
+    setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
+  }, [x, y])
 
   // Focus the menu on open so Escape works without an extra click, and close
   // on any pointerdown outside — both standard menu dismissal paths.
@@ -88,8 +110,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       role="menu"
       aria-label="Canvas actions"
       tabIndex={-1}
-      className="absolute z-20 min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none"
-      style={{ left: x, top: y }}
+      className="min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none"
+      // Positioning (incl. stacking) is inline, not utility classes: the
+      // edge-clamping above measures the absolutely-positioned box, and it
+      // must behave the same where the app stylesheet is absent
+      // (browser-mode component tests).
+      style={{ position: 'absolute', zIndex: 20, left: pos.x, top: pos.y }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()

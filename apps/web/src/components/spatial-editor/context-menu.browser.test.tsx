@@ -278,6 +278,20 @@ it('context-menu targeting keeps node and edge selection mutually exclusive', as
   expect(latest.canvas.nodes).toHaveLength(2)
 })
 
+it('a menu opened near the right/bottom edge is nudged back inside the editor', async () => {
+  const { container } = render(<Host />)
+  rightClick(rootOf(container), 795, 590)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const root = rootOf(container).getBoundingClientRect()
+  const rect = menu.getBoundingClientRect()
+  expect(rect.right).toBeLessThanOrEqual(root.right)
+  expect(rect.bottom).toBeLessThanOrEqual(root.bottom)
+  expect(rect.left).toBeGreaterThanOrEqual(root.left)
+  expect(rect.top).toBeGreaterThanOrEqual(root.top)
+})
+
 // --- Color row: presets are one-tap picks on both node and edge menus ---
 
 function makeNodeHost() {
