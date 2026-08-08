@@ -92,6 +92,7 @@ import {
 } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
@@ -1968,6 +1969,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // string and escapes text/attrs (see svg/format.ts) — the same
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
             dangerouslySetInnerHTML={{ __html: svg }}
+          />
+          {/* Editor-only iframe embeds for link nodes (never in exports).
+              Rides the same transform as every canvas-space overlay; the
+              LOD gate mirrors the canvas-embed thresholds. */}
+          <LinkEmbedLayer
+            canvas={canvas}
+            shouldOffer={(node) =>
+              node.width * viewport.zoom >= EXPAND_MIN_W &&
+              node.height * viewport.zoom >= EXPAND_MIN_H
+            }
           />
           {marquee !== null && (
             <svg
