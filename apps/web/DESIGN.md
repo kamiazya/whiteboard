@@ -52,9 +52,17 @@ Tailwind palette colors in chrome.
   single-choice selectors (one workspace) render nothing at all.
 - **Both themes always.** Any new color must be defined for `:root` and
   `.dark`, and respect the WCAG 1.4.3/1.4.11 floors the contrast tests pin.
-- **Motion**: compositor props only (`transform`, `opacity`), ≤200ms for
-  interaction feedback, `prefers-reduced-motion` respected. No entrance
-  animation without an explicit reason.
+- **Motion**: every animation must serve hierarchy, feedback, or
+  continuity — if it serves none, delete it. Compositor props only
+  (`transform`, `opacity`). Use the motion tokens from `src/index.css`
+  instead of ad-hoc numbers: `--motion-duration-fast` (150ms,
+  hover/press feedback), `--motion-duration-normal` (220ms, state
+  changes and small surfaces like popovers/toasts),
+  `--motion-ease-out` (soft ease-out — never bouncy in chrome).
+  Entrances are fade + small rise/scale (0.98→1); no entrance animation
+  without an explicit reason. `prefers-reduced-motion` is enforced
+  globally by the base-layer guard in `src/index.css` — component code
+  must not assume an animation ran (never gate logic on motion).
 
 ## Canvas theme boundary
 
