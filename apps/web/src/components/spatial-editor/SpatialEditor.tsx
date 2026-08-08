@@ -4,7 +4,9 @@
  * canvas-viewer's read-only `CanvasViewer` uses — this is NOT a fourth
  * scene builder).
  *
- * Supported: display, pan, zoom, select (click / click-empty-to-clear),
+ * Supported: display, pan, zoom (wheel / Space-drag / middle-drag on
+ * desktop; two-finger drag pans and pinch zooms on touch — one finger
+ * keeps the select/move semantics), select (click / click-empty-to-clear),
  * move (drag a selected node), resize (drag a corner/edge handle,
  * anchor-preserving, OR arrow-key nudge a focused resize handle), edit
  * text (double-click a text node; commits on blur/Cmd+Enter, Escape
@@ -64,6 +66,7 @@ import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, ToolPalette } from './ToolPalette.js'
+import { computePinchUpdate } from './touch-pinch.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
@@ -236,6 +239,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null)
     const spaceDownRef = useRef(false)
     const isPanningRef = useRef(false)
+    // Two-finger touch navigation (`touch-action: none` disables the
+    // browser's own scrolling/zooming, so the editor must supply it):
+    // root-local positions per active touch pointer, and whether a pinch
+    // owns the touch sequence. The flag stays up until EVERY finger lifts,
+    // so the lone finger left behind after a pinch cannot fall through to
+    // the marquee/move path mid-air.
+    const touchPointsRef = useRef<Map<number, Point>>(new Map())
+    const pinchActiveRef = useRef(false)
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
@@ -460,6 +471,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
+      if (e.pointerType === 'touch') {
+        touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
+        if (pinchActiveRef.current) return
+        if (touchPointsRef.current.size === 2) {
+          // The second finger converts whatever the first finger started
+          // (marquee, node move, double-press arming) into navigation:
+          // cancel it all, then pan/zoom until every finger lifts.
+          pinchActiveRef.current = true
+          setMarquee(null)
+          isPanningRef.current = false
+          lastPressRef.current = null
+          doublePressRef.current = null
+          if (gestureState.kind !== 'idle') {
+            applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+          }
+          capturePointer(root, e.pointerId)
+          return
+        }
+      }
       const screenPointForPan = clientPointToRootLocal(e, root)
       // Middle-button (or Space-held) drag pans from ANYWHERE — Excalidraw
       // semantics; a plain left drag on empty space marquee-selects instead.
@@ -607,6 +637,29 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      if (e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
+        const points = touchPointsRef.current
+        const nextPoint = clientPointToRootLocal(e, root)
+        if (pinchActiveRef.current && points.size >= 2) {
+          // The pinch pair is the two longest-lived fingers (Map preserves
+          // insertion order); later fingers are tracked but inert.
+          const [idA, idB] = points.keys()
+          if (e.pointerId === idA || e.pointerId === idB) {
+            const prev = { a: points.get(idA)!, b: points.get(idB)! }
+            const next = {
+              a: e.pointerId === idA ? nextPoint : prev.a,
+              b: e.pointerId === idB ? nextPoint : prev.b,
+            }
+            const { panDelta, zoomFactor, anchor } = computePinchUpdate(prev, next)
+            setViewport((vp) => zoomAt(panBy(vp, panDelta), anchor, zoomFactor))
+          }
+          points.set(e.pointerId, nextPoint)
+          return
+        }
+        points.set(e.pointerId, nextPoint)
+        // A lone finger left behind by a pinch stays inert until it lifts.
+        if (pinchActiveRef.current) return
+      }
       // First movement of an in-flight gesture: take capture now (see the
       // handlePointerDown comment for why not at the press). Idempotent —
       // re-capturing the same pointer is a no-op.
@@ -638,6 +691,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
+      if (e.pointerType === 'touch') {
+        touchPointsRef.current.delete(e.pointerId)
+        if (pinchActiveRef.current) {
+          if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
+          // Fingers lifting out of a pinch never run the click/marquee
+          // release logic — the sequence was navigation, not a gesture.
+          return
+        }
+      }
       activePointerIdRef.current = null
       const armed = doublePressRef.current
       doublePressRef.current = null
@@ -743,7 +805,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult(result)
     }
 
-    const handlePointerCancel = () => {
+    const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.pointerType === 'touch') {
+        touchPointsRef.current.delete(e.pointerId)
+        if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
+      }
       isPanningRef.current = false
       activePointerIdRef.current = null
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
