@@ -77,4 +77,18 @@ describe('main()', () => {
     expect(tracingCallOrder).toBeDefined()
     expect(installCallOrder).toBeLessThan(tracingCallOrder as number)
   })
+
+  it('serves stdio through serveStdio with a per-connection factory', async () => {
+    const { main } = await import('./index.js')
+    const { serveStdio } = await import('@modelcontextprotocol/server/stdio')
+
+    await main()
+
+    // serveStdio owns the connection's era decision; main() must hand it a
+    // FACTORY (not a pre-built server), so each opening exchange can pin a
+    // fresh instance for its era.
+    expect(serveStdio).toHaveBeenCalled()
+    const [factory] = vi.mocked(serveStdio).mock.calls.at(-1) ?? []
+    expect(typeof factory).toBe('function')
+  })
 })
