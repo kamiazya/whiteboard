@@ -156,6 +156,23 @@ If behavior diverges, fall back to renaming `.mcp.json` to `.mcp.json.published`
 
 This does not affect normal published usage through `npx -y @kamiazya/whiteboard-mcp@latest`, because each launch is a fresh spawn.
 
+## Cloudflare Pages header parity in local dev
+
+`apps/web/public/_headers` (security headers, CSP) is only served by
+Cloudflare Pages, so a policy mistake there used to be invisible until the
+deployed origin broke (the missing `frame-src` shipped exactly this way).
+Two layers close that gap:
+
+- **Every `vite` dev/preview response** carries the `_headers` global block
+  via `apps/web/vite-dev-headers.ts`. The one dev-only amendment is
+  `script-src … 'unsafe-inline'` (the react-refresh preamble is inline);
+  everything else — including what the CSP blocks — matches production. A
+  CSP violation during normal dogfooding is therefore a real production
+  bug, not dev noise.
+- **Byte-exact Pages behavior** (path-scoped blocks, redirects):
+  `pnpm --filter @kamiazya/whiteboard-web preview:pages` builds and serves
+  `dist/` through `wrangler pages dev`.
+
 ## Test commands
 
 ```bash
