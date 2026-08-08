@@ -22,6 +22,10 @@ export interface RenderCanvasOptions {
   readonly theme?: ResolvedTheme
   /** Passed through to layout: opaque file references become readable labels. */
   readonly resolveFileLabel?: (file: string) => string | undefined
+  /** Passed through to layout: referenced canvas content for inline embeds. */
+  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /** Passed through to layout: the LOD gate deciding card vs miniature. */
+  readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
 }
 
 export interface RenderedCanvas {
@@ -60,6 +64,8 @@ export function renderCanvasToSvg(
     parseBody: parseMarkdownBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
     resolveFileLabel: options.resolveFileLabel,
+    resolveFileCanvas: options.resolveFileCanvas,
+    expandFileNode: options.expandFileNode,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, {

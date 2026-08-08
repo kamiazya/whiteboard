@@ -163,6 +163,12 @@ export interface SpatialEditorProps {
    * leading group — the palette is the single bottom-chrome container.
    */
   readonly paletteLeading?: ReactNode
+  /**
+   * Referenced canvas CONTENT for inline embeds (embed spec J5a-2). Must
+   * be synchronous — hosts pre-fetch and cache; an unresolved reference
+   * returns undefined and the card renders. Absent → embeds never expand.
+   */
+  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -232,6 +238,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       fileRefOptions,
       onOpenFileRef,
       paletteLeading,
+      resolveFileCanvas,
     },
     forwardedRef,
   ) {
@@ -348,6 +355,49 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, externalVersion])
 
+    /**
+     * The LOD gate (embed spec v2, user decision 2026-08-08): a file node
+     * expands into an inline miniature only while its ON-SCREEN box is
+     * large enough to be legible. Hysteresis (expand at >=200x140, collapse
+     * below 160x110 CSS px) keeps pinch-zoom from flickering at the
+     * boundary, and a budget caps simultaneous miniatures at the largest
+     * candidates (deterministic tie-break by node id). The set is state so
+     * layout re-runs only when membership actually changes — never per
+     * zoom frame.
+     */
+    const EXPAND_MIN_W = 200
+    const EXPAND_MIN_H = 140
+    const COLLAPSE_MIN_W = 160
+    const COLLAPSE_MIN_H = 110
+    const EMBED_BUDGET = 8
+    const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
+    useEffect(() => {
+      if (resolveFileCanvas === undefined) return
+      const zoom = viewport.zoom
+      const candidates = canvas.nodes
+        .filter((node): node is Extract<SpatialNode, { type: 'file' }> => node.type === 'file')
+        .filter((node) => {
+          const w = node.width * zoom
+          const h = node.height * zoom
+          return expandedFileIds.has(node.id)
+            ? w >= COLLAPSE_MIN_W && h >= COLLAPSE_MIN_H
+            : w >= EXPAND_MIN_W && h >= EXPAND_MIN_H
+        })
+        .sort((a, b) => b.width * b.height - a.width * a.height || a.id.localeCompare(b.id))
+        .slice(0, EMBED_BUDGET)
+      const next = new Set(candidates.map((node) => node.id))
+      const unchanged =
+        next.size === expandedFileIds.size && [...next].every((id) => expandedFileIds.has(id))
+      if (!unchanged) setExpandedFileIds(next)
+    }, [canvas, viewport.zoom, resolveFileCanvas, expandedFileIds])
+    const expandFileNode = useMemo(
+      () =>
+        resolveFileCanvas === undefined
+          ? undefined
+          : (node: Extract<SpatialNode, { type: 'file' }>) => expandedFileIds.has(node.id),
+      [resolveFileCanvas, expandedFileIds],
+    )
+
     // Opaque file references (browser-local canvas ids) become readable
     // card labels through the host-supplied options list.
     const resolveFileLabel = useMemo(() => {
@@ -356,8 +406,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return (file: string) => byFile.get(file)
     }, [fileRefOptions])
     const { svg, bounds, scene } = useMemo(
-      () => renderCanvasToSvg(canvas, { measure: resolvedMeasure, theme, resolveFileLabel }),
-      [canvas, resolvedMeasure, theme, resolveFileLabel],
+      () =>
+        renderCanvasToSvg(canvas, {
+          measure: resolvedMeasure,
+          theme,
+          resolveFileLabel,
+          resolveFileCanvas,
+          expandFileNode,
+        }),
+      [canvas, resolvedMeasure, theme, resolveFileLabel, resolveFileCanvas, expandFileNode],
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a

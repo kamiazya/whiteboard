@@ -1,3 +1,4 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { Copy, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -26,6 +27,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { collectFileRefs, loadEmbeddedSpatialCanvas } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -153,6 +155,12 @@ export function BrowserLocalCanvasPage({
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
+  // Referenced-canvas content cache for inline embeds: the editor's
+  // resolveFileCanvas seam is synchronous, so referenced canvases are
+  // pre-fetched here. Entries refresh when the referenced canvas's
+  // updatedAt moves in the list (edits elsewhere show up on next refresh).
+  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, SpatialCanvas>>(new Map())
+  const embedStampsRef = useRef<Map<string, string>>(new Map())
   const listGenerationRef = useRef(0)
   // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
@@ -252,6 +260,37 @@ export function BrowserLocalCanvasPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const { canvas, onChange, externalVersion, exportScene, undo, redo, canUndo, canRedo } =
     useCanvasSync(backend)
+
+  // Pre-fetch referenced canvases for inline embeds; refresh when the
+  // referenced canvas's updatedAt moves in the list.
+  useEffect(() => {
+    const refs = collectFileRefs(canvas)
+    if (refs.length === 0) return
+    let cancelled = false
+    const stampOf = new Map(canvases.map((entry) => [entry.id, entry.updatedAt]))
+    const stale = refs.filter(
+      (ref) => !embedContent.has(ref) || embedStampsRef.current.get(ref) !== stampOf.get(ref),
+    )
+    if (stale.length === 0) return
+    void Promise.all(
+      stale.map(async (ref) => [ref, await loadEmbeddedSpatialCanvas(ref)] as const),
+    ).then((loaded) => {
+      if (cancelled) return
+      setEmbedContent((prev) => {
+        const next = new Map(prev)
+        for (const [ref, content] of loaded) {
+          if (content !== undefined) next.set(ref, content)
+          else next.delete(ref)
+          embedStampsRef.current.set(ref, stampOf.get(ref) ?? '')
+        }
+        return next
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [canvas, canvases, embedContent])
+  const resolveFileCanvas = useCallback((file: string) => embedContent.get(file), [embedContent])
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
@@ -481,6 +520,7 @@ export function BrowserLocalCanvasPage({
               .filter((entry) => entry.id !== canvasId)
               .map((entry) => ({ file: entry.id, label: entry.name }))}
             onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
+            resolveFileCanvas={resolveFileCanvas}
             paletteLeading={
               <HistoryCluster
                 onUndo={() => void undo()}

@@ -16,6 +16,15 @@
   translation used to place a node's laid-out content at its absolute
   position, alongside the renderers whose x-transform-boundary convention
   it must agree with (see decision #5 and `svg/backend.ts`).
+- `scaleScene` (`layout/scale-scene.ts`): the multiplicative sibling of
+  `translateScene` — uniform scaling about the origin for composing a
+  resolved child canvas into a parent node's box (scale-then-translate).
+  Uniform scaling commutes with the x-transform-boundary representation,
+  so unlike translation it needs no wrapper special-casing. Size-bearing
+  paint fields (fontSize/strokeWidth/radius/baseline) scale with the
+  geometry; `svgFragment` payloads and backend-derived arrowhead sizing
+  deliberately do not (documented, test-pinned). Total: factor 1 is the
+  identity, non-finite/non-positive factors return the input unchanged.
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
