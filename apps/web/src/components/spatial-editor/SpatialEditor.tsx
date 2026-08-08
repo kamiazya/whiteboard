@@ -645,6 +645,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // pointerdown path): Delete acts on a selected edge FIRST, so leaving
       // the other object type selected makes Delete remove the wrong thing.
       if (hitId !== undefined) {
+        // Right-clicking a member of an existing multi-selection must not
+        // shrink it: promote the target to primary and keep the old primary
+        // in the extras, or "Group selection" silently loses a node.
+        if (extraIds.has(hitId)) {
+          setExtraIds((prev) => {
+            const next = new Set(prev)
+            next.delete(hitId)
+            if (selectedId !== null && selectedId !== hitId) next.add(selectedId)
+            return next
+          })
+        }
         setSelectedId(hitId)
         setSelectedEdgeId(null)
       }
@@ -1500,8 +1511,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 items.push({ kind: 'separator' })
               }
               // Framing an existing multi-selection is reached from any of
-              // its members — the frame encloses every selected node.
-              if (extraIds.size > 0 && node.type !== 'group') {
+              // its members — the frame encloses every selected node,
+              // including group frames: nesting is geometric in JSON Canvas,
+              // and containment moves already handle nested frames.
+              if (extraIds.size > 0) {
                 items.push({
                   label: 'Group selection',
                   icon: <Frame />,

@@ -129,6 +129,20 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
   await userEvent.click(root, { position: { x: 700, y: 500 } })
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).toMatchObject({ label: 'phase 1' }))
   expect(latest.commands).toContain('set-group-label')
+
+  // Clearing the label through the SAME UI path (fill empty + blur-commit)
+  // removes the field — the reducer's empty-removes rule reached from the
+  // editor, not only from commands.test.ts.
+  await userEvent.dblClick(root, { position: { x: 100, y: 100 } })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="group-label-editor"]')).not.toBeNull(),
+  )
+  const reopened = container.querySelector(
+    '[data-testid="group-label-editor"]',
+  ) as HTMLTextAreaElement
+  await userEvent.fill(reopened, '')
+  await userEvent.click(root, { position: { x: 700, y: 500 } })
+  await vi.waitFor(() => expect(nodeById(latest, 'g1')).not.toHaveProperty('label'))
 })
 
 it('Group selection from a multi-selected node frames the selection with padding', async () => {
@@ -211,5 +225,44 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
     expect(frameRect.top).toBeGreaterThanOrEqual(root.top)
     expect(frameRect.right).toBeLessThanOrEqual(root.right)
     expect(frameRect.bottom).toBeLessThanOrEqual(root.bottom)
+  })
+})
+
+it('Group selection can frame a selection that includes a group frame', async () => {
+  const mixed: SpatialCanvas = {
+    nodes: [
+      { id: 'g1', type: 'group', x: 80, y: 80, width: 200, height: 140 },
+      { id: 'a', type: 'text', x: 120, y: 120, width: 100, height: 60, text: 'A' },
+      { id: 'b', type: 'text', x: 400, y: 120, width: 120, height: 60, text: 'B' },
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(mixed)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Marquee over everything: frame, its member, and the loose node.
+  fireEvent.pointerDown(root, { pointerId: 1, clientX: 40, clientY: 40, buttons: 1 })
+  fireEvent.pointerMove(root, { pointerId: 1, clientX: 600, clientY: 400, buttons: 1 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: 600, clientY: 400 })
+  await vi.waitFor(() =>
+    expect(
+      container.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length,
+    ).toBeGreaterThanOrEqual(1),
+  )
+
+  rightClick(root, 450, 150)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(page.getByRole('menuitem', { name: 'Group selection' }))
+
+  // A new OUTER frame prepends, enclosing the inner frame and both nodes
+  // (min corner 80,80 / max corner 520,220, plus 24px padding).
+  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(4))
+  expect(latest.canvas.nodes[0]).toMatchObject({
+    type: 'group',
+    x: 56,
+    y: 56,
+    width: 488,
+    height: 188,
   })
 })
