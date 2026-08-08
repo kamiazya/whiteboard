@@ -448,6 +448,8 @@ export function createApp(options: AppOptions) {
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       shutdown: options.shutdown,
+      grantStore: oauthAuthz?.store,
+      pairingTokens: options.authMode === 'local-daemon' ? options.pairing?.tokens : undefined,
     }),
   )
   // Branches router: branch metadata plus checkout / broadcast integration.

@@ -43,6 +43,8 @@ vi.mock('../../daemon/log-rotation.js', () => ({
 
 const { createRuntimeRouter } = await import('./runtime.js')
 const { buildSignedPayload, createDaemonIdentity } = await import('../security/daemon-identity.js')
+const { createPairingTokenStore } = await import('../security/pairing-session.js')
+const { createOAuthTransactionStore } = await import('../security/oauth-authz-transactions.js')
 
 // Real identity in an isolated temp dir (injected — the router never touches
 // the mocked config seam for it).
@@ -58,10 +60,11 @@ function verifyIdentitySignature(parts: readonly string[], signatureB64u: string
   return cryptoVerify(null, buildSignedPayload(parts), key, Buffer.from(signatureB64u, 'base64url'))
 }
 
-function createApp() {
+function createApp(extra: Partial<Parameters<typeof createRuntimeRouter>[0]> = {}) {
   const touch = vi.fn()
   const shutdown = vi.fn(async () => undefined)
   const app = createRuntimeRouter({
+    ...extra,
     token: 'secret',
     instanceId: 'test-instance-id',
     identity: testIdentity,
@@ -170,6 +173,101 @@ describe('runtime routes', () => {
     expect(body.lastAutoCompactedAt).toBe(1_700_000_000_000)
     expect(touch).toHaveBeenCalledTimes(1)
     expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
+  })
+
+  describe('pairing session tokens on runtime routes', () => {
+    const PAIRED_ORIGIN = 'http://localhost:5199'
+
+    function createPairedApp() {
+      const pairingTokens = createPairingTokenStore()
+      const { token: sessionToken } = pairingTokens.mint(PAIRED_ORIGIN)
+      return { ...createApp({ pairingTokens }), sessionToken }
+    }
+
+    it('allows GET /api/runtime/storage with a pairing bearer and its paired origin', async () => {
+      const { app, sessionToken } = createPairedApp()
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${sessionToken}`, Origin: PAIRED_ORIGIN },
+      })
+      expect(res.status).toBe(200)
+      expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a pairing bearer presented with a different origin', async () => {
+      const { app, sessionToken } = createPairedApp()
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${sessionToken}`, Origin: 'https://evil.example' },
+      })
+      expect(res.status).toBe(401)
+      expect(mockComputeStorageReport).not.toHaveBeenCalled()
+    })
+
+    it('rejects a pairing bearer without an Origin header', async () => {
+      const { app, sessionToken } = createPairedApp()
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      })
+      expect(res.status).toBe(401)
+      expect(mockComputeStorageReport).not.toHaveBeenCalled()
+    })
+
+    it('rejects a pairing bearer on admin routes (shutdown stays daemon-token-only)', async () => {
+      const { app, shutdown, sessionToken } = createPairedApp()
+      const res = await app.request('/api/runtime/shutdown', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${sessionToken}`, Origin: PAIRED_ORIGIN },
+      })
+      expect(res.status).toBe(401)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(shutdown).not.toHaveBeenCalled()
+    })
+
+    it('rejects a pairing bearer on POST /api/runtime/logs/prune', async () => {
+      const { app, sessionToken } = createPairedApp()
+      const res = await app.request('/api/runtime/logs/prune', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${sessionToken}`, Origin: PAIRED_ORIGIN },
+      })
+      expect(res.status).toBe(401)
+      expect(mockPurgeOldDaemonLogs).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('OAuth grants on runtime routes', () => {
+    it('allows GET /api/runtime/storage with a runtime:read grant', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['runtime:read'], 'hosted-client')
+      const { app } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(200)
+      expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a grant without runtime:read and the handler never runs', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['canvas:read'], 'hosted-client')
+      const { app } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(401)
+      expect(mockComputeStorageReport).not.toHaveBeenCalled()
+    })
+
+    it('rejects a runtime:read grant on admin routes (shutdown stays daemon-token-only)', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['runtime:read'], 'hosted-client')
+      const { app, shutdown } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/shutdown', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(401)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(shutdown).not.toHaveBeenCalled()
+    })
   })
 
   it('rejects /api/runtime/storage without a bearer token', async () => {
