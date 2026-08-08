@@ -62,6 +62,7 @@ import {
 } from 'lucide-react'
 import {
   forwardRef,
+  type ReactNode,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -156,6 +157,11 @@ export interface SpatialEditorProps {
   readonly fileRefOptions?: readonly FileRefOption[]
   /** Follows a file node's reference (navigation). Absent → follow hides. */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
+  /**
+   * Host controls (undo/redo/version history) docked as the palette's
+   * leading group — the palette is the single bottom-chrome container.
+   */
+  readonly paletteLeading?: ReactNode
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -224,6 +230,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme = 'light',
       fileRefOptions,
       onOpenFileRef,
+      paletteLeading,
     },
     forwardedRef,
   ) {
@@ -1391,6 +1398,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
         <ToolPalette
+          leading={paletteLeading}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}

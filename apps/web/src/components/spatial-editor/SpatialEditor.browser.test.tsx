@@ -65,6 +65,17 @@ afterEach(() => {
   cleanup()
 })
 
+/** Creation moved into the dock's + menu — one path for every entry. */
+async function addNoteViaMenu() {
+  await page
+    .getByTestId('add-button')
+    .element()
+    .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  const item = page.getByRole('menuitem', { name: 'Add note' })
+  await expect.element(item).toBeInTheDocument()
+  await item.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+}
+
 describe('SpatialEditor (browser)', () => {
   it('renders the canvas-render svg for both nodes', async () => {
     const onChange = vi.fn()
@@ -1172,7 +1183,8 @@ describe('SpatialEditor (browser)', () => {
     // cannot detect the root capturing the pointer and swallowing the
     // button's click — the bug that made this button do nothing in the
     // running app while this test stayed green.
-    await userEvent.click(page.getByTestId('add-node-button'))
+    await userEvent.click(page.getByTestId('add-button'))
+    await userEvent.click(page.getByRole('menuitem', { name: 'Add note' }))
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
@@ -1192,13 +1204,16 @@ describe('SpatialEditor (browser)', () => {
         />
       </div>,
     )
-    const button = page.getByTestId('add-node-button')
+    const button = page.getByTestId('add-button')
     ;(button.element() as HTMLButtonElement).focus()
     expect(document.activeElement).toBe(button.element())
     // A real key press through the browser, not a synthetic keydown followed
     // by a synthetic click: dispatching the click ourselves would exercise
     // the mouse path and prove nothing about keyboard reachability, which is
-    // the whole point of this case.
+    // the whole point of this case. Opening the + menu moves focus to its
+    // first entry (Add note), so the whole path is Enter, Enter.
+    await userEvent.keyboard('{Enter}')
+    await expect.element(page.getByTestId('add-menu')).toBeInTheDocument()
     await userEvent.keyboard('{Enter}')
 
     expect(onChange).toHaveBeenCalledTimes(1)
@@ -1741,13 +1756,12 @@ describe('node placement and affordances', () => {
         />
       </div>,
     )
-    const button = page.getByTestId('add-node-button')
-    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await addNoteViaMenu()
     await waitFor(() => {
       const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
       expect(canvas.nodes).toHaveLength(1)
     })
-    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await addNoteViaMenu()
     await waitFor(() => {
       const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
       expect(canvas.nodes).toHaveLength(2)
@@ -1771,8 +1785,7 @@ describe('node placement and affordances', () => {
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
-    const button = page.getByTestId('add-node-button')
-    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await addNoteViaMenu()
 
     const textEditor = page.getByTestId('text-node-editor')
     await textEditor.fill('typed before clicking away')
@@ -1816,8 +1829,7 @@ describe('node placement and affordances', () => {
         />
       </div>,
     )
-    const button = page.getByTestId('add-node-button')
-    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await addNoteViaMenu()
 
     const textEditor = page.getByTestId('text-node-editor')
     await textEditor.fill('should be discarded')
@@ -1839,11 +1851,12 @@ describe('node placement and affordances', () => {
         <SpatialEditor canvas={{ nodes: [], edges: [] }} onChange={vi.fn()} measure={fakeMeasure} />
       </div>,
     )
-    const button = page.getByTestId('add-node-button').element() as HTMLButtonElement
+    const button = page.getByTestId('add-button').element() as HTMLButtonElement
     const icon = button.querySelector('svg')
     expect(icon).not.toBeNull()
     expect((icon as SVGElement).getBoundingClientRect().width).toBeGreaterThan(0)
-    expect(button.getAttribute('aria-label')).toBe('Add note')
+    expect(button.getAttribute('aria-label')).toBe('Add')
+    expect(button.getAttribute('aria-haspopup')).toBe('menu')
     const palette = button.closest('[data-testid="tool-palette"]') as HTMLElement
     expect(Number.parseFloat(getComputedStyle(palette).borderWidth)).toBeGreaterThan(0)
     button.focus()

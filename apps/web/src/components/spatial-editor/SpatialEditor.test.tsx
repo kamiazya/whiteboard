@@ -5,7 +5,7 @@
  * distinction on a mid-gesture canvas prop swap.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
@@ -33,17 +33,25 @@ afterEach(() => {
   cleanup()
 })
 
-describe('Add note button', () => {
-  it('exists as a real, accessibly-named button reachable without a selection', () => {
-    const { getByTestId } = render(
-      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+describe('Add button (creation menu)', () => {
+  it('opens the + menu whose entries create without a selection', () => {
+    const onChange = vi.fn()
+    const { getByTestId, getByRole } = render(
+      <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />,
     )
-    const button = getByTestId('add-node-button') as HTMLButtonElement
+    const button = getByTestId('add-button') as HTMLButtonElement
     expect(button.tagName).toBe('BUTTON')
     // Icon-only since the chrome iconification: the accessible name lives
     // on aria-label, which is what assistive tech (and getByRole) resolve.
-    expect(button.getAttribute('aria-label')).toBe('Add note')
-    expect(button.disabled).toBe(false)
+    expect(button.getAttribute('aria-label')).toBe('Add')
+    expect(button.getAttribute('aria-haspopup')).toBe('menu')
+
+    fireEvent.click(button)
+    const item = getByRole('menuitem', { name: 'Add note' })
+    fireEvent.click(item)
+    expect(onChange).toHaveBeenCalled()
+    const command = onChange.mock.calls[0][1] as { kind: string }
+    expect(command.kind).toBe('create-node')
   })
 })
 
@@ -171,5 +179,25 @@ describe('SpatialEditor externalVersion origin handling', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
     expect(command).toEqual({ kind: 'move-node', id: 'a', x: 50, y: 35 })
+  })
+})
+
+describe('bottom dock composition', () => {
+  it('renders paletteLeading inside the ONE tool-palette container', () => {
+    // The dock is the single layout authority for bottom chrome: host-
+    // supplied groups (undo/redo/versions) join the palette's own flex
+    // container instead of floating as an independently positioned island —
+    // independently positioned islands collide as tools grow (the phone
+    // overlap this redesign replaces).
+    const { container } = render(
+      <SpatialEditor
+        canvas={{ nodes: [], edges: [] }}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+        paletteLeading={<div data-testid="history-slot">history</div>}
+      />,
+    )
+    const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+    expect(palette.querySelector('[data-testid="history-slot"]')).not.toBeNull()
   })
 })

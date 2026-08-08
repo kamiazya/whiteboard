@@ -1,13 +1,15 @@
 /**
- * The history cluster — every Loro-timeline affordance in one floating
- * group at the canvas's bottom-left: step undo/redo, and (when the daemon
- * capability exists) the version-history panel.
+ * The history cluster — every Loro-timeline affordance in one group:
+ * step undo/redo, and (when the daemon capability exists) the
+ * version-history panel.
  *
- * Placement rationale: undo is the highest-frequency recovery action while
- * drawing, so on a phone it must sit in thumb reach — the canvas's bottom
- * corners, not the header. The bottom-center ToolPalette stays
- * creation/mode-only (the recorded OOUI palette rule), so history is its
- * own group, in the palette's visual language.
+ * This component is deliberately UNPOSITIONED: it renders as the bottom
+ * dock's leading group (SpatialEditor's `paletteLeading` slot), because
+ * independently positioned floating islands collide as tools grow — on a
+ * phone the old bottom-left cluster overlapped the widening palette. The
+ * dock is the single layout authority; this group only brings content.
+ * History stays visually separated from creation/mode tools by the dock's
+ * divider (the recorded OOUI palette rule).
  *
  * Feel: press feedback fires on pointer-down (`:active` scale, fast
  * token), touch targets grow to >=44px on coarse pointers, and a disabled
@@ -122,7 +124,7 @@ export function HistoryCluster({
       data-testid="history-cluster"
       role="toolbar"
       aria-label="History"
-      className="absolute bottom-3 left-3 z-10 flex items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
+      className="relative flex items-center gap-0.5"
     >
       <StepButton
         label="Undo"

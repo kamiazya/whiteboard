@@ -1,41 +1,57 @@
 /**
- * Bottom tool palette — the OOUI creation surface.
+ * Bottom dock — the ONE container for all bottom-anchored canvas chrome.
+ *
+ * Two layout decisions, both recorded after real collisions:
+ * - Host controls (undo/redo/version history) join this container through
+ *   the `leading` slot instead of floating as independently positioned
+ *   islands — independent islands collide as tools grow (the 2026-08-08
+ *   phone overlap).
+ * - Creation tools live in a "+" menu, not as one flat button per type
+ *   (the tldraw/FigJam shape, user decision 2026-08-08): the dock keeps a
+ *   FIXED small button set that fits any viewport in a single row, and new
+ *   node types extend the menu, never the dock's width.
  *
  * Design rule (recorded in the ooui-palette-vs-object-actions decision):
  * what does NOT exist yet comes from the palette; what already exists is
- * acted on from the object itself (selection affordances, and later a
- * context menu). So this strip carries creation and interaction-mode
- * controls only — it must never grow per-object actions like delete or
- * color, which belong on the selected object.
+ * acted on from the object itself. The "+" menu is the palette's creation
+ * surface — it must never grow per-object actions.
  *
- * Icon-only buttons (chrome carries no sentence-shaped copy): every button
- * keeps its full accessible name via aria-label — which is also what the
- * existing getByRole('button', { name: ... }) tests and screen readers
- * resolve — and a tooltip supplies the sighted-hover equivalent.
+ * Icon-only dock buttons keep their accessible names via aria-label; the
+ * "+" menu's entries show icon AND label (a menu is a reading surface,
+ * not a memorized strip).
  *
- * Marked `data-editor-overlay` so the canvas root's gesture handlers ignore
- * presses originating here (see SpatialEditor's isOverlayEvent): without
- * that, the root would capture the pointer and swallow the buttons' clicks.
+ * Marked `data-editor-overlay` so the canvas root's gesture handlers
+ * ignore presses originating here (see SpatialEditor's isOverlayEvent).
  */
-import { FileBox, Frame, Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
+import { FileBox, Frame, Link, MousePointer2, Plus, Spline, StickyNote } from 'lucide-react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type EditorTool = 'select' | 'connect'
 
 interface ToolPaletteProps {
+  /** Host-supplied controls (undo/redo/versions) docked as the leading group. */
+  readonly leading?: ReactNode
   readonly onCreateNode: () => void
   readonly onCreateLink: () => void
   readonly onCreateGroup: () => void
-  /** Absent when the host supplies no canvas listing — the button hides. */
+  /** Absent when the host supplies no canvas listing — the entry hides. */
   readonly onCreateCanvasRef?: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
 }
 
 const TOOL_BUTTON_CLASS =
-  'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
+  'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
+
+interface AddMenuEntry {
+  readonly label: string
+  readonly icon: ReactNode
+  readonly onSelect: () => void
+}
 
 export function ToolPalette({
+  leading,
   onCreateNode,
   onCreateLink,
   onCreateGroup,
@@ -43,14 +59,72 @@ export function ToolPalette({
   tool,
   onToolChange,
 }: ToolPaletteProps) {
+  const [addOpen, setAddOpen] = useState(false)
+  const dockRef = useRef<HTMLDivElement | null>(null)
+  const addMenuRef = useRef<HTMLDivElement | null>(null)
+
+  // Menu convention: opening moves focus to the first entry, so the
+  // keyboard path is + → Enter → Enter without a mouse detour.
+  useEffect(() => {
+    if (!addOpen) return
+    addMenuRef.current?.querySelector('button')?.focus()
+  }, [addOpen])
+
+  // Close the add menu on any pointerdown outside the dock — the standard
+  // menu dismissal path (Escape is handled on the menu itself).
+  useEffect(() => {
+    if (!addOpen) return
+    const onPointerDownAnywhere = (e: PointerEvent) => {
+      const dock = dockRef.current
+      if (dock !== null && e.target instanceof Node && dock.contains(e.target)) return
+      setAddOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDownAnywhere, true)
+    return () => window.removeEventListener('pointerdown', onPointerDownAnywhere, true)
+  }, [addOpen])
+
+  const entries: readonly AddMenuEntry[] = [
+    {
+      label: 'Add note',
+      icon: <StickyNote aria-hidden="true" className="size-4" />,
+      onSelect: onCreateNode,
+    },
+    {
+      label: 'Add link',
+      icon: <Link aria-hidden="true" className="size-4" />,
+      onSelect: onCreateLink,
+    },
+    {
+      label: 'Add group',
+      icon: <Frame aria-hidden="true" className="size-4" />,
+      onSelect: onCreateGroup,
+    },
+    ...(onCreateCanvasRef !== undefined
+      ? [
+          {
+            label: 'Add canvas',
+            icon: <FileBox aria-hidden="true" className="size-4" />,
+            onSelect: onCreateCanvasRef,
+          },
+        ]
+      : []),
+  ]
+
   return (
     <div
+      ref={dockRef}
       data-editor-overlay
       data-testid="tool-palette"
       role="toolbar"
       aria-label="Canvas tools"
       className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
     >
+      {leading !== undefined && (
+        <>
+          {leading}
+          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        </>
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -86,59 +160,54 @@ export function ToolPalette({
         <TooltipTrigger asChild>
           <button
             type="button"
-            data-testid="add-node-button"
-            aria-label="Add note"
-            onClick={onCreateNode}
+            data-testid="add-button"
+            aria-label="Add"
+            aria-haspopup="menu"
+            aria-expanded={addOpen}
+            onClick={() => setAddOpen((open) => !open)}
             className={TOOL_BUTTON_CLASS}
           >
-            <StickyNote aria-hidden="true" className="size-4" />
+            <Plus aria-hidden="true" className="size-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Add note</TooltipContent>
+        <TooltipContent>Add</TooltipContent>
       </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="add-link-button"
-            aria-label="Add link"
-            onClick={onCreateLink}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Link aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Add link</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="add-group-button"
-            aria-label="Add group"
-            onClick={onCreateGroup}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Frame aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Add group</TooltipContent>
-      </Tooltip>
-      {onCreateCanvasRef !== undefined && (
-        <Tooltip>
-          <TooltipTrigger asChild>
+      {addOpen && (
+        <div
+          ref={addMenuRef}
+          data-testid="add-menu"
+          role="menu"
+          aria-label="Add"
+          // Opens UPWARD from the dock, origin-aware at the bottom edge
+          // (never scale(0) — see DESIGN.md Motion). Right-anchored so the
+          // menu hugs the "+" end of the dock.
+          className="absolute right-0 bottom-[calc(100%+6px)] min-w-40 origin-bottom-right animate-in rounded-md border bg-background py-1 shadow-lg fade-in-0 zoom-in-[0.98] duration-(--motion-duration-normal) ease-(--motion-ease-out)"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setAddOpen(false)
+            }
+          }}
+        >
+          {entries.map((entry) => (
             <button
+              key={entry.label}
               type="button"
-              data-testid="add-canvas-button"
-              aria-label="Add canvas"
-              onClick={onCreateCanvasRef}
-              className={TOOL_BUTTON_CLASS}
+              role="menuitem"
+              aria-label={entry.label}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+              onClick={() => {
+                setAddOpen(false)
+                entry.onSelect()
+              }}
             >
-              <FileBox aria-hidden="true" className="size-4" />
+              <span aria-hidden="true" className="text-muted-foreground">
+                {entry.icon}
+              </span>
+              {entry.label.replace(/^Add /, '')}
             </button>
-          </TooltipTrigger>
-          <TooltipContent>Add canvas</TooltipContent>
-        </Tooltip>
+          ))}
+        </div>
       )}
     </div>
   )

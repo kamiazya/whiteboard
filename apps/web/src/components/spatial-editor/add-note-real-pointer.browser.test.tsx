@@ -35,7 +35,8 @@ it('a real pointer click on "Add note" creates a node and opens its editor', asy
   const commands: string[] = []
   const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
 
-  await userEvent.click(page.getByRole('button', { name: 'Add note' }))
+  await userEvent.click(page.getByRole('button', { name: 'Add' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Add note' }))
 
   expect(commands).toEqual(['create-node'])
   expect(container.querySelectorAll('svg rect').length).toBeGreaterThan(0)
@@ -46,7 +47,8 @@ it('committing the new note untouched keeps a visible empty node, not a blank ca
   const commands: string[] = []
   const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
 
-  await userEvent.click(page.getByRole('button', { name: 'Add note' }))
+  await userEvent.click(page.getByRole('button', { name: 'Add' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Add note' }))
   // Click empty canvas space without typing — the editor commits the (empty)
   // pending text and the node must survive as a visible box.
   await userEvent.click(container.querySelector('[data-testid="spatial-editor"]') as Element, {

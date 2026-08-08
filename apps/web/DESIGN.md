@@ -64,6 +64,23 @@ Tailwind palette colors in chrome.
   globally by the base-layer guard in `src/index.css` — component code
   must not assume an animation ran (never gate logic on motion).
 
+## Bottom chrome: one dock, fixed width
+
+All bottom-anchored canvas chrome lives in ONE flex container (the tool
+palette dock). Host controls (undo/redo/version history) join it through
+`SpatialEditor`'s `paletteLeading` slot — never as an independently
+positioned floating island, because independent islands collide as tools
+grow (the 2026-08-08 phone overlap).
+
+The dock's button set is FIXED and small ([history | select/connect | +]):
+creation tools live in the "+" menu (the tldraw/FigJam shape, user
+decision 2026-08-08), so the dock stays a single row at any viewport and
+a new node type extends the menu, never the dock's width. Wrapping and
+overflow-scrolling are both rejected: wrapping stacks rows as tools grow,
+and scrolling clips popovers anchored inside the dock (version history,
+the + menu). Opening the + menu focuses its first entry (keyboard path:
+Enter, Enter).
+
 ## Canvas theme boundary
 
 Canvas rendering (nodes/edges/selection) is themed by canvas-render's

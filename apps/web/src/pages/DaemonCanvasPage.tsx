@@ -486,22 +486,24 @@ export function DaemonCanvasPage({
                 .filter((entry) => entry.slug !== canvas?.slug)
                 .map((entry) => ({ file: entry.slug, label: entry.slug }))}
               onOpenFileRef={(file) => controller.switchCanvas(file)}
-            />
-            <HistoryCluster
-              onUndo={() => void undo()}
-              onRedo={() => void redo()}
-              canUndo={canUndo()}
-              canRedo={canRedo()}
-              versions={
-                capabilities.versions && canvas
-                  ? {
-                      workspaceId: canvas.workspaceId,
-                      slug: canvas.slug,
-                      onRestored: clearLocalUndo,
-                      refreshSignal: versionRefreshSignal,
-                      versionPanelExtra,
-                    }
-                  : undefined
+              paletteLeading={
+                <HistoryCluster
+                  onUndo={() => void undo()}
+                  onRedo={() => void redo()}
+                  canUndo={canUndo()}
+                  canRedo={canRedo()}
+                  versions={
+                    capabilities.versions && canvas
+                      ? {
+                          workspaceId: canvas.workspaceId,
+                          slug: canvas.slug,
+                          onRestored: clearLocalUndo,
+                          refreshSignal: versionRefreshSignal,
+                          versionPanelExtra,
+                        }
+                      : undefined
+                  }
+                />
               }
             />
           </div>
