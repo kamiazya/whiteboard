@@ -6,7 +6,7 @@
  * OpenCanvas-shaped surface this session now owns.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import type {
   CanvasBackend,
@@ -819,5 +819,117 @@ describe('createCanvasSyncSession', () => {
         }
       },
     )
+  })
+
+  // Batch commands (editor-completeness slice 1): one user action of N leaf
+  // commands = ONE Loro commit via canvas-workspace's withSpatialBatch, so
+  // one session.undo() reverts the whole action.
+  describe('batch commands', () => {
+    it('a batch of create+connect+delete lands as ONE update payload and ONE undo step', async () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+      const created: SpatialNode = {
+        id: 'n-new',
+        type: 'text',
+        x: 500,
+        y: 0,
+        width: 100,
+        height: 50,
+        text: 'pasted',
+      }
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: [
+          { kind: 'create-node', node: created },
+          { kind: 'connect-nodes', edgeId: 'e-new', fromNode: 'n-a', toNode: 'n-new' },
+          { kind: 'delete-node', id: 'n-b' },
+        ],
+      }
+      const next = applyCommand(twoNodeCanvas(), command)
+      session.onChange(next, command)
+      await vi.advanceTimersByTimeAsync(300)
+
+      // One flush of one batch → exactly one pushed payload.
+      expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+      expect(session.getCanvas()).toEqual(next)
+
+      // One undo step reverts the WHOLE action.
+      expect(session.undo()).toBe(true)
+      expect(session.getCanvas()).toEqual(twoNodeCanvas())
+      expect(session.canUndo()).toBe(false)
+    })
+
+    it('a batch containing an unsupported member kind falls back to a full resync — still one undo step, converged on next', async () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      const snapshotBytes = makeSnapshot(twoNodeCanvas())
+      backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: [
+          { kind: 'move-node', id: 'n-a', x: 42, y: 24 },
+          // reorder-nodes is not batch-writable → whole batch takes the
+          // full-resync path (one commit, whole-canvas granularity).
+          { kind: 'reorder-nodes', ids: ['n-a'], placement: 'front' },
+        ],
+      }
+      const next = applyCommand(twoNodeCanvas(), command)
+      session.onChange(next, command)
+      await vi.advanceTimersByTimeAsync(300)
+
+      const doc = new LoroDoc()
+      doc.import(snapshotBytes)
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+      const converged = readSpatialCanvas(doc)
+      expect(converged.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 24 })
+
+      expect(session.undo()).toBe(true)
+      expect(session.getCanvas()).toEqual(twoNodeCanvas())
+      expect(session.canUndo()).toBe(false)
+    })
+
+    it('a batched delete-edge removes exactly that edge (fine-grained, peer edits survive)', async () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      const base = applyCommand(twoNodeCanvas(), {
+        kind: 'connect-nodes',
+        edgeId: 'e-1',
+        fromNode: 'n-a',
+        toNode: 'n-b',
+      })
+      const snapshotBytes = makeSnapshot(base)
+      backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: [{ kind: 'delete-edge', id: 'e-1' }],
+      }
+      const next = applyCommand(base, command)
+      session.onChange(next, command)
+      await vi.advanceTimersByTimeAsync(300)
+
+      // Peer concurrently edits node B from the same lineage; the batched
+      // fine-grained delete must not clobber it (a full resync would).
+      const peerDoc = new LoroDoc()
+      peerDoc.import(snapshotBytes)
+      writeSpatialCanvas(peerDoc, {
+        ...base,
+        nodes: [TEXT_NODE_A, { ...TEXT_NODE_B, text: 'renamed-by-peer' }],
+      })
+      const merged = new LoroDoc()
+      merged.import(snapshotBytes)
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
+      merged.import(peerDoc.export({ mode: 'update' }))
+
+      const result = readSpatialCanvas(merged)
+      expect(result.edges).toEqual([])
+      expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ text: 'renamed-by-peer' })
+    })
   })
 })

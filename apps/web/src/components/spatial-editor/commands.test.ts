@@ -528,3 +528,38 @@ describe('applyCommand', () => {
     })
   })
 })
+
+// Compound batch command (editor-completeness slice 1): one user action
+// composed of N leaf commands applies as a pure fold. The undo guarantee
+// (one Loro commit) lives at the sync layer; here batch is just sequential
+// application with the same totality conventions as every other kind.
+describe('batch', () => {
+  it('applies member commands in order as a pure fold', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'batch',
+      commands: [
+        { kind: 'move-node', id: 'a', x: 10, y: 20 },
+        { kind: 'set-text', id: 'a', text: 'batched' },
+        { kind: 'connect-nodes', edgeId: 'e9', fromNode: 'a', toNode: 'b' },
+      ],
+    })
+    expect(next.nodes[0]).toMatchObject({ x: 10, y: 20, text: 'batched' })
+    expect(next.edges).toEqual([{ id: 'e9', fromNode: 'a', toNode: 'b' }])
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
+  it('an empty batch, or a batch of pure no-ops, returns the input canvas reference', () => {
+    const canvas = baseCanvas()
+    expect(applyCommand(canvas, { kind: 'batch', commands: [] })).toBe(canvas)
+    expect(
+      applyCommand(canvas, {
+        kind: 'batch',
+        commands: [
+          { kind: 'move-node', id: 'missing', x: 1, y: 1 },
+          { kind: 'delete-node', id: 'missing' },
+        ],
+      }),
+    ).toBe(canvas)
+  })
+})

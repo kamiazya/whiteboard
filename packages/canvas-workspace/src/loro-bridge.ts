@@ -95,6 +95,42 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
   doc.commit()
 }
 
+// Non-committing internals shared by the single committing helpers below
+// and `withSpatialBatch`'s writer, so field projection and the delete
+// cascade can never drift between the two paths.
+function writeNodeInto(doc: LoroDoc, node: SpatialNode): void {
+  doc.getMap(NODES_KEY).set(node.id, nodeToFields(node))
+}
+
+function writeEdgeInto(doc: LoroDoc, edge: CanvasEdge): void {
+  doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
+}
+
+/** Returns false (writing nothing) when the node id is absent. */
+function deleteNodeCascadeInto(doc: LoroDoc, nodeId: string): boolean {
+  const nodesMap = doc.getMap(NODES_KEY)
+  const edgesMap = doc.getMap(EDGES_KEY)
+  if (!nodesMap.keys().includes(nodeId)) return false
+
+  nodesMap.delete(nodeId)
+  for (const edgeId of edgesMap.keys()) {
+    const raw = edgesMap.get(edgeId)
+    const parsed = canvasEdgeSchema.safeParse(raw)
+    if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
+      edgesMap.delete(edgeId)
+    }
+  }
+  return true
+}
+
+/** Returns false (writing nothing) when the edge id is absent. */
+function deleteEdgeInto(doc: LoroDoc, edgeId: string): boolean {
+  const edgesMap = doc.getMap(EDGES_KEY)
+  if (!edgesMap.keys().includes(edgeId)) return false
+  edgesMap.delete(edgeId)
+  return true
+}
+
 /**
  * Writes exactly one node's LoroMap entry, leaving every other node/edge in
  * the doc untouched. This is the node-level CRDT merge granularity a full
@@ -105,7 +141,7 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
  * the full-resync encoding.
  */
 export function writeSpatialNode(doc: LoroDoc, node: SpatialNode): void {
-  doc.getMap(NODES_KEY).set(node.id, nodeToFields(node))
+  writeNodeInto(doc, node)
   doc.commit()
 }
 
@@ -113,7 +149,7 @@ export function writeSpatialNode(doc: LoroDoc, node: SpatialNode): void {
  * Edge counterpart to `writeSpatialNode` — see its doc comment.
  */
 export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
-  doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
+  writeEdgeInto(doc, edge)
   doc.commit()
 }
 
@@ -127,19 +163,7 @@ export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
  * Idempotent and a no-op (no commit) for an id absent from the doc.
  */
 export function deleteSpatialNode(doc: LoroDoc, nodeId: string): void {
-  const nodesMap = doc.getMap(NODES_KEY)
-  const edgesMap = doc.getMap(EDGES_KEY)
-  if (!nodesMap.keys().includes(nodeId)) return
-
-  nodesMap.delete(nodeId)
-  for (const edgeId of edgesMap.keys()) {
-    const raw = edgesMap.get(edgeId)
-    const parsed = canvasEdgeSchema.safeParse(raw)
-    if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
-      edgesMap.delete(edgeId)
-    }
-  }
-  doc.commit()
+  if (deleteNodeCascadeInto(doc, nodeId)) doc.commit()
 }
 
 /**
@@ -147,10 +171,59 @@ export function deleteSpatialNode(doc: LoroDoc, nodeId: string): void {
  * cascade needed since an edge has no dependents of its own.
  */
 export function deleteSpatialEdge(doc: LoroDoc, edgeId: string): void {
-  const edgesMap = doc.getMap(EDGES_KEY)
-  if (!edgesMap.keys().includes(edgeId)) return
-  edgesMap.delete(edgeId)
-  doc.commit()
+  if (deleteEdgeInto(doc, edgeId)) doc.commit()
+}
+
+/** Uncommitted spatial writes scoped to one `withSpatialBatch` call. */
+export interface SpatialBatchWriter {
+  writeNode(node: SpatialNode): void
+  writeEdge(edge: CanvasEdge): void
+  /** Same edge-cascade as `deleteSpatialNode`; absent ids write nothing. */
+  deleteNode(nodeId: string): void
+  deleteEdge(edgeId: string): void
+}
+
+/**
+ * Runs every write in `fn` inside ONE Loro commit — one `UndoManager`
+ * step, one local-update payload. N=1 is byte-identical to the
+ * corresponding single committing helper, and a batch that writes nothing
+ * (all deletes of absent ids) commits nothing, preserving the helpers'
+ * no-op semantics. (Loro's `UndoManager.groupStart()/groupEnd()` was
+ * considered and rejected: a remote import received mid-group can split
+ * the group, while a single commit is indivisible.)
+ *
+ * Error contract (matching this bridge's commit-last convention): if `fn`
+ * throws, NOTHING is committed — the error is rethrown and the partial
+ * uncommitted ops stay pending on the doc (visible to readers; commit is
+ * an undo/sync boundary, not a visibility boundary). The caller must then
+ * converge with a committing write — canvas-sync-session's documented
+ * fallback (`writeSpatialCanvas(doc, next)`) does exactly this, absorbing
+ * the pending ops into one converged commit. Never follow a thrown batch
+ * with an UNRELATED commit on the same doc: the pending ops would be
+ * silently absorbed into that step.
+ */
+export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) => void): void {
+  let wrote = false
+  const writer: SpatialBatchWriter = {
+    writeNode(node) {
+      writeNodeInto(doc, node)
+      wrote = true
+    },
+    writeEdge(edge) {
+      writeEdgeInto(doc, edge)
+      wrote = true
+    },
+    deleteNode(nodeId) {
+      if (deleteNodeCascadeInto(doc, nodeId)) wrote = true
+    },
+    deleteEdge(edgeId) {
+      if (deleteEdgeInto(doc, edgeId)) wrote = true
+    },
+  }
+  fn(writer)
+  // Success path only — a finally-commit would break the error contract
+  // above (the session fallback's own commit must stay the only one).
+  if (wrote) doc.commit()
 }
 
 export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
