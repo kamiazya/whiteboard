@@ -2,6 +2,7 @@ import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contract
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
@@ -226,15 +227,7 @@ export function DaemonCanvasPage({
   }
 
   if (controller.loading) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
-      >
-        Connecting to daemon…
-      </div>
-    )
+    return <CanvasPageSkeleton label="Connecting to daemon" />
   }
 
   if (controller.loadError) {

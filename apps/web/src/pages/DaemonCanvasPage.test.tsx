@@ -472,7 +472,7 @@ describe('DaemonCanvasPage', () => {
     expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the connecting status while workspace/canvas resolution is pending', async () => {
+  it('shows a structural skeleton while workspace/canvas resolution is pending', async () => {
     // Never resolves during this test, so the page stays in the loading state.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))
 
@@ -481,7 +481,7 @@ describe('DaemonCanvasPage', () => {
       { container: document.body },
     )
 
-    expect(screen.getByRole('status').textContent).toMatch(/connecting to daemon/i)
+    expect(screen.getByRole('status', { name: /connecting to daemon/i })).toBeTruthy()
   })
 
   it('shows a full-page alert when workspace/canvas resolution fails', async () => {

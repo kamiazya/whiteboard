@@ -22,6 +22,8 @@ interface MockRoutes {
   snapshotByCanvas?: Record<string, Uint8Array>
   onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
   onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
+  /** When set, the canvases fetch resolves only after this promise settles. */
+  delayCanvases?: Promise<void>
 }
 
 function installFetchMock(routes: MockRoutes) {
@@ -35,7 +37,9 @@ function installFetchMock(routes: MockRoutes) {
       const workspaceId = decodeURIComponent(canvasesMatch[1])
       const canvases = routes.canvasesByWorkspace[workspaceId]
       if (!canvases) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      return Promise.resolve(jsonResponse({ canvases }))
+      const respond = () => jsonResponse({ canvases })
+      if (routes.delayCanvases) return routes.delayCanvases.then(respond)
+      return Promise.resolve(respond())
     }
     if (canvasesMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(canvasesMatch[1])
@@ -620,6 +624,43 @@ describe('DaemonIndexPage', () => {
     await screen.findByText('alpha')
 
     expect(screen.getByPlaceholderText('New canvas name…')).toBeTruthy()
+  })
+
+  it('shows a loading skeleton before the first load resolves, never a false empty state', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      delayCanvases: gate,
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+
+    // While the canvases fetch is in flight: structural skeleton, and no
+    // premature "No canvases" copy.
+    expect(await screen.findByRole('status', { name: /loading canvases/i })).toBeTruthy()
+    expect(screen.queryByText(/no canvases/i)).toBeNull()
+
+    release()
+    await screen.findByText('alpha')
+    expect(screen.queryByRole('status', { name: /loading canvases/i })).toBeNull()
+  })
+
+  it('empty workspace shows one clear next action that starts canvas creation', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: { 'ws-a': [] },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+
+    expect(await screen.findByText('No canvases yet')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    // The action lands the user in the naming input, ready to type.
+    expect(document.activeElement).toBe(screen.getByLabelText('New canvas name'))
   })
 
   it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
