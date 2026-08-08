@@ -35,6 +35,15 @@ export interface ShortcutSpec {
   readonly keys?: readonly string[]
   /** Required shift state; absent = either. */
   readonly shift?: boolean
+  /**
+   * Requires the platform command modifier — Cmd (metaKey) on macOS or
+   * Ctrl (ctrlKey) elsewhere; either satisfies it. Absent = the spec never
+   * fires while meta/ctrl is held (the historic default: browser combos
+   * stay the browser's until a spec explicitly claims one).
+   */
+  readonly mod?: boolean
+  /** Requires Alt/Option held. Absent = never fires while Alt is held. */
+  readonly alt?: boolean
   /** Human-readable combo for menus and a future help sheet. */
   readonly display: string
   readonly description: string
@@ -128,19 +137,39 @@ interface KeyEventLike {
 
 /**
  * The first table-dispatched shortcut matching the event in `tool`, or
- * undefined. Never fires while typing, and never matches when a
- * meta/ctrl/alt modifier is held — those combos belong to the browser
- * until a spec explicitly claims one.
+ * undefined. Never fires while typing. Modifier policy: a held meta/ctrl
+ * suppresses every spec except one declaring `mod: true` (which requires
+ * it — Cmd or Ctrl, either platform's command chord); a held Alt likewise
+ * belongs only to specs declaring `alt: true`. Combos a spec does not
+ * claim stay the browser's.
  */
 export function findShortcut(e: KeyEventLike, tool: EditorTool): ShortcutSpec | undefined {
-  if (e.metaKey || e.ctrlKey || e.altKey) return undefined
+  return findShortcutIn(EDITOR_SHORTCUTS, e, tool)
+}
+
+/** `findShortcut` over an explicit spec list — the testable pure core. */
+export function findShortcutIn(
+  specs: readonly ShortcutSpec[],
+  e: KeyEventLike,
+  tool: EditorTool,
+): ShortcutSpec | undefined {
   if (isTextEntryEvent(e)) return undefined
-  return EDITOR_SHORTCUTS.find((spec) => {
+  const hasMod = e.metaKey || e.ctrlKey
+  return specs.find((spec) => {
     if (spec.handledInline === true) return false
     if (spec.tools !== undefined && !spec.tools.includes(tool)) return false
+    if ((spec.mod === true) !== hasMod) return false
+    if ((spec.alt === true) !== e.altKey) return false
     if (spec.shift !== undefined && spec.shift !== e.shiftKey) return false
     if (spec.codes !== undefined && !spec.codes.includes(e.code)) return false
-    if (spec.keys !== undefined && !spec.keys.includes(e.key)) return false
+    // Case-insensitive on key: shifted command chords (Cmd+Shift+C) report
+    // an uppercase key while the spec declares the plain character.
+    if (
+      spec.keys !== undefined &&
+      !spec.keys.some((key) => key.toLowerCase() === e.key.toLowerCase())
+    ) {
+      return false
+    }
     return spec.codes !== undefined || spec.keys !== undefined
   })
 }

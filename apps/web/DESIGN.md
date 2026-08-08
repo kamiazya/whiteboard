@@ -98,6 +98,13 @@ Z-order uses the tldraw combos: `]` / `[` step forward/backward,
 mutates the canvas also has a touch path (the context menu's Order row,
 here) — a shortcut is an accelerator, never the only way.
 
+Modifier policy: a spec claims the platform command chord with
+`mod: true` (Cmd on macOS or Ctrl elsewhere — either satisfies it) and
+Alt with `alt: true`; a held modifier suppresses every spec that does
+not claim it, so browser combos stay the browser's until a catalog
+entry explicitly takes one. Command chords still never fire from a
+text-entry surface.
+
 ## Canvas theme boundary
 
 Canvas rendering (nodes/edges/selection) is themed by canvas-render's
