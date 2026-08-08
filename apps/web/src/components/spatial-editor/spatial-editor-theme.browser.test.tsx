@@ -62,7 +62,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     }
   })
 
-  it('renders light-mode chrome as #737373, proving the light path is untouched', () => {
+  it('renders light-mode chrome with the light palette stroke (#737373)', () => {
     const { container } = render(
       <SpatialEditor
         canvas={twoNodeCanvasWithEdge()}

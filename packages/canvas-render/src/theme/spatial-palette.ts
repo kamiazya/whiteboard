@@ -19,16 +19,13 @@ export interface SpatialPalette {
   readonly cornerRadiusPx: number
 }
 
-// Seeded from the pre-theme export composition root's chrome (per-type
-// fill/stroke) plus the pre-theme editor's accessible `#333333` text/stroke
-// — this is what lets a single stroke/label value keep clearing the WCAG
-// floors the editor already tested for, while node fill still
-// differentiates by kind the way export's chrome did.
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
-// a mid neutral instead of near-black — chrome recedes so content reads
-// first — while still
-// clearing the WCAG 1.4.11 non-text floor (#737373 vs white = 4.74:1);
-// labels stay comfortably past the 1.4.3 text floor (#404040 = 10.4:1).
+// a mid neutral instead of near-black so chrome recedes and content reads
+// first, while clearing the WCAG 1.4.11 non-text floor (#737373 vs white =
+// 4.74:1); labels stay comfortably past the 1.4.3 text floor (#404040 =
+// 10.4:1). Node fill still differentiates by kind — a real semantic worth
+// keeping on every surface — and one stroke/label value per mode is what
+// keeps the WCAG guarantee testable as a single producer.
 export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
   node: {
     text: { fill: '#ffffff', stroke: '#737373' },
