@@ -44,6 +44,7 @@ vi.mock('../../daemon/log-rotation.js', () => ({
 const { createRuntimeRouter } = await import('./runtime.js')
 const { buildSignedPayload, createDaemonIdentity } = await import('../security/daemon-identity.js')
 const { createPairingTokenStore } = await import('../security/pairing-session.js')
+const { createOAuthTransactionStore } = await import('../security/oauth-authz-transactions.js')
 
 // Real identity in an isolated temp dir (injected — the router never touches
 // the mocked config seam for it).
@@ -229,6 +230,43 @@ describe('runtime routes', () => {
       })
       expect(res.status).toBe(401)
       expect(mockPurgeOldDaemonLogs).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('OAuth grants on runtime routes', () => {
+    it('allows GET /api/runtime/storage with a runtime:read grant', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['runtime:read'], 'hosted-client')
+      const { app } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(200)
+      expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a grant without runtime:read and the handler never runs', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['canvas:read'], 'hosted-client')
+      const { app } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/storage', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(401)
+      expect(mockComputeStorageReport).not.toHaveBeenCalled()
+    })
+
+    it('rejects a runtime:read grant on admin routes (shutdown stays daemon-token-only)', async () => {
+      const grantStore = createOAuthTransactionStore()
+      const { accessToken } = grantStore.mintAccessToken(['runtime:read'], 'hosted-client')
+      const { app, shutdown } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/shutdown', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      expect(res.status).toBe(401)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(shutdown).not.toHaveBeenCalled()
     })
   })
 
