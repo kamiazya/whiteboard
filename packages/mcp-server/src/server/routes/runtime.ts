@@ -10,7 +10,9 @@ import type { RuntimeStatus } from '../http-server.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 import { readLatestCompactedAt } from '../store/canvas-store.js'
-import { isAuthorized } from './auth.js'
+import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
+import { resolveApiRouteScope } from '../security/route-scope-registry.js'
+import { isAuthorized, isAuthorizedOAuthGrant, isAuthorizedPairingOrigin } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
 
 // /api/runtime/verify is public and does an Ed25519 sign per call, so cap
@@ -27,6 +29,11 @@ export interface RuntimeRouterOptions {
   touch: () => void
   getStatus: () => RuntimeStatus
   shutdown: () => Promise<void>
+  // Scope-limited credentials honored on the READ half of /api/runtime/*
+  // (per the route-scope registry). Admin routes (shutdown, touch, logs
+  // prune) stay daemon-token-only regardless of these.
+  grantStore?: OAuthTransactionStore
+  pairingTokens?: { validate(token: string, origin: string): boolean }
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -83,12 +90,42 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   })
 
   app.use('/api/runtime/*', async (c, next) => {
-    if (c.req.path === '/api/runtime/ping') return next()
-    if (c.req.path === '/api/runtime/verify') return next()
-    if (!isAuthorized(c.req.header('authorization'), options.token)) {
-      return c.json({ error: 'unauthorized' }, 401)
+    // The route-scope registry is the single authority on which runtime
+    // routes are public and which are read vs admin — mirroring the global
+    // /api/* middleware in app.ts. This per-router layer is defense in depth
+    // (the global daemon-mutation middleware skips /api/runtime/*), so it
+    // must accept the same credential set as the global layer for READ
+    // routes: daemon token, scope-checked OAuth grant, or an origin-bound
+    // pairing session token. Admin routes (shutdown, touch, logs prune)
+    // accept the daemon token only — a paired web origin can inspect the
+    // daemon but never stop it or delete its logs.
+    const scope = resolveApiRouteScope(c.req.method, c.req.path)
+    if (scope?.kind === 'public') return next()
+    if (isAuthorized(c.req.header('authorization'), options.token)) return next()
+    if (scope?.kind === 'scoped' && scope.scopes.includes('runtime:read')) {
+      if (
+        options.grantStore !== undefined &&
+        isAuthorizedOAuthGrant(
+          c.req.header('authorization'),
+          options.grantStore,
+          c.req.method,
+          c.req.path,
+        )
+      ) {
+        return next()
+      }
+      if (
+        options.pairingTokens !== undefined &&
+        isAuthorizedPairingOrigin(
+          c.req.header('authorization'),
+          c.req.header('origin'),
+          options.pairingTokens,
+        )
+      ) {
+        return next()
+      }
     }
-    return next()
+    return c.json({ error: 'unauthorized' }, 401)
   })
 
   app.get('/api/runtime/status', (c) => {

@@ -63,7 +63,7 @@ export function requiresDaemonAuth(path: string): boolean {
 // where "what does this route need" is declared once. An undeclared route
 // resolves to `null` there and is refused: a route added later must be given
 // a scope deliberately, never inherit one by accident.
-function isAuthorizedOAuthGrant(
+export function isAuthorizedOAuthGrant(
   authorization: string | undefined,
   grantStore: OAuthTransactionStore,
   method: string,
@@ -82,6 +82,24 @@ function isAuthorizedOAuthGrant(
   // a scope-limited grant, or that grant could escalate itself).
   if (required.kind === 'daemon-token-only') return false
   return hasRequiredScopes(grant.scopes, required.scopes)
+}
+
+// A pairing bearer is only honored WITH the browser-enforced Origin header it
+// was minted for — presenting it originless or cross-origin fails.
+export function isAuthorizedPairingOrigin(
+  authorization: string | undefined,
+  originHeader: string | undefined,
+  pairingTokens: { validate(token: string, origin: string): boolean },
+): boolean {
+  const bearer = parseBearerAuthorizationHeader(authorization)
+  if (bearer === null || originHeader === undefined) return false
+  let origin: string
+  try {
+    origin = new URL(originHeader).origin
+  } catch {
+    return false
+  }
+  return pairingTokens.validate(bearer, origin)
 }
 
 export function createDaemonAuthMiddleware(
@@ -114,20 +132,15 @@ export function createDaemonAuthMiddleware(
     ) {
       return next()
     }
-    if (pairingTokens !== undefined) {
-      const bearer = parseBearerAuthorizationHeader(c.req.header('authorization'))
-      const originHeader = c.req.header('origin')
-      if (bearer !== null && originHeader !== undefined) {
-        let origin: string | null = null
-        try {
-          origin = new URL(originHeader).origin
-        } catch {
-          origin = null
-        }
-        if (origin !== null && pairingTokens.validate(bearer, origin)) {
-          return next()
-        }
-      }
+    if (
+      pairingTokens !== undefined &&
+      isAuthorizedPairingOrigin(
+        c.req.header('authorization'),
+        c.req.header('origin'),
+        pairingTokens,
+      )
+    ) {
+      return next()
     }
     // One rejection for every way a request can fail: no credential, a wrong
     // daemon token, a forged/expired/revoked access token, and a valid access
