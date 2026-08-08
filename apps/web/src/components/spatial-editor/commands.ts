@@ -18,7 +18,12 @@
  * `toNode` referenced the removed node, so no command sequence can ever
  * produce a canvas with a dangling edge endpoint.
  */
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type {
+  CanvasColor,
+  CanvasEdge,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-canvas-model'
 
 export type EditorCommand =
   | { readonly kind: 'move-node'; readonly id: string; readonly x: number; readonly y: number }
@@ -46,6 +51,17 @@ export type EditorCommand =
       readonly id: string
       readonly fromEnd: 'none' | 'arrow'
       readonly toEnd: 'none' | 'arrow'
+    }
+  | {
+      readonly kind: 'set-node-color'
+      readonly id: string
+      // undefined returns the object to the theme default (field removed).
+      readonly color: CanvasColor | undefined
+    }
+  | {
+      readonly kind: 'set-edge-color'
+      readonly id: string
+      readonly color: CanvasColor | undefined
     }
   | {
       readonly kind: 'set-edge-side'
@@ -180,6 +196,39 @@ function setEdgeEnds(
   }
 }
 
+/** `color: undefined` removes the field — the theme default, canonically. */
+function setNodeColor(
+  canvas: SpatialCanvas,
+  id: string,
+  color: CanvasColor | undefined,
+): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id)) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) => {
+      if (node.id !== id) return node
+      const { color: _removed, ...rest } = node
+      return color === undefined ? rest : { ...rest, color }
+    }),
+  }
+}
+
+function setEdgeColor(
+  canvas: SpatialCanvas,
+  id: string,
+  color: CanvasColor | undefined,
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      const { color: _removed, ...rest } = edge
+      return color === undefined ? rest : { ...rest, color }
+    }),
+  }
+}
+
 /** `side: undefined` removes the pin so routing derives the side again. */
 function setEdgeSide(
   canvas: SpatialCanvas,
@@ -234,6 +283,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeEnds(canvas, command.id, command.fromEnd, command.toEnd)
     case 'set-edge-side':
       return setEdgeSide(canvas, command.id, command.endpoint, command.side)
+    case 'set-node-color':
+      return setNodeColor(canvas, command.id, command.color)
+    case 'set-edge-color':
+      return setEdgeColor(canvas, command.id, command.color)
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }

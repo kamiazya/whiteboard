@@ -163,6 +163,31 @@ describe('applyCommand', () => {
     expect(next).toBe(canvas)
   })
 
+  it('set-node-color applies a preset and undefined returns the node to the theme default', () => {
+    const colored = applyCommand(baseCanvas(), { kind: 'set-node-color', id: 'a', color: '4' })
+    expect(colored.nodes.find((n) => n.id === 'a')).toMatchObject({ color: '4' })
+    expect(spatialCanvasSchema.safeParse(colored).success).toBe(true)
+
+    const cleared = applyCommand(colored, { kind: 'set-node-color', id: 'a', color: undefined })
+    expect(cleared.nodes.find((n) => n.id === 'a')).not.toHaveProperty('color')
+    expect(spatialCanvasSchema.safeParse(cleared).success).toBe(true)
+  })
+
+  it('set-edge-color applies a preset and undefined removes it', () => {
+    const connected = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+    const colored = applyCommand(connected, { kind: 'set-edge-color', id: 'e1', color: '6' })
+    expect(colored.edges[0]).toMatchObject({ color: '6' })
+
+    const cleared = applyCommand(colored, { kind: 'set-edge-color', id: 'e1', color: undefined })
+    expect(cleared.edges[0]).not.toHaveProperty('color')
+    expect(spatialCanvasSchema.safeParse(cleared).success).toBe(true)
+  })
+
   it('set-edge-ends stores only non-default ends and removes fields at the spec default', () => {
     const connected = applyCommand(baseCanvas(), {
       kind: 'connect-nodes',
