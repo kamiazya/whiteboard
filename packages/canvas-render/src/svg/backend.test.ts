@@ -463,7 +463,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="30,0 20,4 20,-4" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
     )
   })
 
@@ -485,7 +485,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="0,0 10,-4 10,4" role="presentation"/><polygon points="30,0 20,4 20,-4" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="0,0 10,-4 10,4" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
     )
   })
 
