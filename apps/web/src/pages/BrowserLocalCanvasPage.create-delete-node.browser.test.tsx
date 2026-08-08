@@ -9,10 +9,9 @@
  * command shape a real create/delete gesture would report.
  */
 
-import type { ReactNode } from 'react'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
