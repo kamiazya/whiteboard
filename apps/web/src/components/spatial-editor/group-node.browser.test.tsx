@@ -72,7 +72,8 @@ it('the palette Add group button creates an empty frame at the bottom of the z-o
   const { Host, latest } = makeHost({ nodes: [], edges: [] })
   render(<Host />)
 
-  await userEvent.click(page.getByRole('button', { name: 'Add group' }))
+  await userEvent.click(page.getByRole('button', { name: 'Add' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Add group' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(latest.canvas.nodes[0]).toMatchObject({ type: 'group' })
   expect(latest.commands).toContain('create-group')
@@ -206,9 +207,14 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
   const { container } = render(<Host />)
 
   // The wall node covers the palette in the unstyled test env (no app CSS =
-  // no z-index), so Playwright refuses the click — the button itself is
-  // static, so a direct DOM click is the faithful interaction.
-  fireEvent.click(container.querySelector('[data-testid="add-group-button"]') as HTMLElement)
+  // no z-index), so Playwright refuses the click — the buttons themselves
+  // are static, so direct DOM clicks are the faithful interaction.
+  fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
+  fireEvent.click(
+    [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
+      (b) => b.getAttribute('aria-label') === 'Add group',
+    ) as HTMLElement,
+  )
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
 
   const root = rootOf(container).getBoundingClientRect()

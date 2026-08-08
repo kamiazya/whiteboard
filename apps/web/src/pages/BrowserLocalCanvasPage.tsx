@@ -481,19 +481,19 @@ export function BrowserLocalCanvasPage({
               .filter((entry) => entry.id !== canvasId)
               .map((entry) => ({ file: entry.id, label: entry.name }))}
             onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
+            paletteLeading={
+              <HistoryCluster
+                onUndo={() => void undo()}
+                onRedo={() => void redo()}
+                canUndo={canUndo()}
+                canRedo={canRedo()}
+              />
+            }
           />
         )}
         {/* Markdown canvases keep CodeMirror's own history (its keymap
-            already handles undo); the cluster drives the Loro UndoManager,
-            which only the spatial editor path routes edits through. */}
-        {canvasKind !== 'markdown' && (
-          <HistoryCluster
-            onUndo={() => void undo()}
-            onRedo={() => void redo()}
-            canUndo={canUndo()}
-            canRedo={canRedo()}
-          />
-        )}
+            already handles undo); the history group rides the spatial
+            editor's dock via paletteLeading above. */}
       </div>
       <SettingsPanel
         open={settingsOpen}

@@ -11,7 +11,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
@@ -42,10 +42,16 @@ let latestOnChange: OnChange | null = null
 let latestMountedCanvases: SpatialCanvas[] = []
 
 vi.mock('../components/spatial-editor/index.js', () => ({
-  SpatialEditor: (props: { canvas: SpatialCanvas; onChange?: OnChange }) => {
+  SpatialEditor: (props: {
+    canvas: SpatialCanvas
+    onChange?: OnChange
+    paletteLeading?: ReactNode
+  }) => {
     latestOnChange = props.onChange ?? null
     latestMountedCanvases.push(props.canvas)
-    return null
+    // The real editor docks host controls (undo/redo) via paletteLeading;
+    // the stub must render them or the page's history buttons vanish.
+    return <>{props.paletteLeading}</>
   },
 }))
 

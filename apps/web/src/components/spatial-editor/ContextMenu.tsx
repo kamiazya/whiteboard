@@ -82,9 +82,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     }
     const clamp = (value: number, max: number) =>
       Math.max(MENU_EDGE_MARGIN_PX, Math.min(value, max))
+    // Ceil the measured box: offsetWidth/Height round to integers, so a
+    // fractional menu width would overshoot the margin by a subpixel.
+    const menuRect = el.getBoundingClientRect()
     const next = {
-      x: clamp(x, parent.clientWidth - el.offsetWidth - MENU_EDGE_MARGIN_PX),
-      y: clamp(y, parent.clientHeight - el.offsetHeight - MENU_EDGE_MARGIN_PX),
+      x: clamp(x, parent.clientWidth - Math.ceil(menuRect.width) - MENU_EDGE_MARGIN_PX),
+      y: clamp(y, parent.clientHeight - Math.ceil(menuRect.height) - MENU_EDGE_MARGIN_PX),
     }
     setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
   }, [x, y])

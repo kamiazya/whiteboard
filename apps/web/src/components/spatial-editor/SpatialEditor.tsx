@@ -50,6 +50,7 @@ import {
   ExternalLink,
   FileBox,
   Frame,
+  Link,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -62,6 +63,7 @@ import {
 } from 'lucide-react'
 import {
   forwardRef,
+  type ReactNode,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -156,6 +158,11 @@ export interface SpatialEditorProps {
   readonly fileRefOptions?: readonly FileRefOption[]
   /** Follows a file node's reference (navigation). Absent → follow hides. */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
+  /**
+   * Host controls (undo/redo/version history) docked as the palette's
+   * leading group — the palette is the single bottom-chrome container.
+   */
+  readonly paletteLeading?: ReactNode
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -224,6 +231,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme = 'light',
       fileRefOptions,
       onOpenFileRef,
+      paletteLeading,
     },
     forwardedRef,
   ) {
@@ -366,11 +374,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
+    // `point` (canvas space) is present when creation came from the
+    // empty-space context menu: the user already chose WHERE, so the node
+    // lands there instead of the viewport-center free spot.
     const [linkDialog, setLinkDialog] = useState<
-      { readonly mode: 'create' } | { readonly mode: 'edit'; readonly nodeId: string } | null
+      | { readonly mode: 'create'; readonly point?: Point }
+      | { readonly mode: 'edit'; readonly nodeId: string }
+      | null
     >(null)
     const [canvasPicker, setCanvasPicker] = useState<
-      { readonly mode: 'create' } | { readonly mode: 'retarget'; readonly nodeId: string } | null
+      | { readonly mode: 'create'; readonly point?: Point }
+      | { readonly mode: 'retarget'; readonly nodeId: string }
+      | null
     >(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
@@ -1176,17 +1191,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** Link nodes are label-only chrome — a note-height box would be mostly
      * empty, so they get a shorter default. */
     const LINK_NODE_HEIGHT = 60
-    const createLinkAtViewportCenter = (url: string) => {
+    const createLinkAtViewportCenter = (url: string, at?: Point) => {
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-      )
+      const point =
+        at ?? findFreeSpot(preferred, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }, occupied)
       const id =
         createId?.() ??
         (typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -1210,17 +1222,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /** File nodes are reference cards like links — same shorter default box. */
-    const createFileRefAtViewportCenter = (file: string) => {
+    const createFileRefAtViewportCenter = (file: string, at?: Point) => {
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-      )
+      const point =
+        at ?? findFreeSpot(preferred, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }, occupied)
       const id = newId()
       const node: SpatialNode = {
         id,
@@ -1286,17 +1295,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ? crypto.randomUUID()
         : String(Math.random()))
 
-    const createGroupAtViewportCenter = () => {
+    const createGroupAtViewportCenter = (at?: Point) => {
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
-        occupied,
-      )
+      const point =
+        at ??
+        findFreeSpot(preferred, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }, occupied)
       const id = newId()
       applyResult({
         state: { kind: 'idle' },
@@ -1391,6 +1398,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
         <ToolPalette
+          leading={paletteLeading}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
@@ -1558,13 +1566,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ]
               }
               if (node === undefined) {
-                return [
+                // The same creation set as the dock's + menu, anchored at
+                // the click point — "here" is exactly the information the
+                // bottom dock cannot express.
+                const emptyItems: ContextMenuItem[] = [
                   {
                     label: 'Add note here',
                     icon: <StickyNote />,
                     onSelect: () => createNodeAt(contextMenu.point),
                   },
+                  {
+                    label: 'Add link here',
+                    icon: <Link />,
+                    onSelect: () => setLinkDialog({ mode: 'create', point: contextMenu.point }),
+                  },
+                  {
+                    label: 'Add group here',
+                    icon: <Frame />,
+                    onSelect: () => createGroupAtViewportCenter(contextMenu.point),
+                  },
                 ]
+                if (fileRefOptions !== undefined) {
+                  emptyItems.push({
+                    label: 'Add canvas here',
+                    icon: <FileBox />,
+                    onSelect: () => setCanvasPicker({ mode: 'create', point: contextMenu.point }),
+                  })
+                }
+                return emptyItems
               }
               const items: ContextMenuItem[] = []
               if (node.type === 'group') {
@@ -1677,7 +1706,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             }
             onPick={(file) => {
               if (canvasPicker.mode === 'create') {
-                createFileRefAtViewportCenter(file)
+                createFileRefAtViewportCenter(file, canvasPicker.point)
               } else {
                 applyResult({
                   state: { kind: 'idle' },
@@ -1702,7 +1731,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             }
             onSubmit={(url) => {
               if (linkDialog.mode === 'create') {
-                createLinkAtViewportCenter(url)
+                createLinkAtViewportCenter(url, linkDialog.point)
               } else {
                 applyResult({
                   state: { kind: 'idle' },

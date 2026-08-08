@@ -58,13 +58,18 @@ afterEach(() => {
 function renderCluster() {
   return render(
     <div className="relative h-[600px] w-[900px] bg-background">
-      <HistoryCluster
-        onUndo={vi.fn()}
-        onRedo={vi.fn()}
-        canUndo
-        canRedo
-        versions={{ workspaceId: 'sess_1', slug: 'design/login-flow' }}
-      />
+      {/* The cluster is unpositioned by design — the bottom dock owns its
+          placement — so the harness supplies the dock's bottom anchoring,
+          or the upward-opening version panel would sit above the viewport. */}
+      <div className="absolute bottom-3 left-3">
+        <HistoryCluster
+          onUndo={vi.fn()}
+          onRedo={vi.fn()}
+          canUndo
+          canRedo
+          versions={{ workspaceId: 'sess_1', slug: 'design/login-flow' }}
+        />
+      </div>
     </div>,
   )
 }

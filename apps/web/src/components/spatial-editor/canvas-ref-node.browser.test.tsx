@@ -65,7 +65,12 @@ it('Add canvas opens the picker and picking creates a file node with that refere
   const { Host, latest } = makeHost({ nodes: [], edges: [] })
   const { container } = render(<Host />)
 
-  fireEvent.click(container.querySelector('[data-testid="add-canvas-button"]') as HTMLElement)
+  fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
+  fireEvent.click(
+    [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
+      (b) => b.getAttribute('aria-label') === 'Add canvas',
+    ) as HTMLElement,
+  )
   await expect.element(page.getByTestId('canvas-picker-dialog')).toBeInTheDocument()
 
   const option = [
@@ -133,7 +138,14 @@ it('without host seams, neither the Add canvas button nor file follow-affordance
   }
   const { container } = render(<BareHost />)
 
-  expect(container.querySelector('[data-testid="add-canvas-button"]')).toBeNull()
+  // Without the host seam the + menu offers no canvas entry.
+  fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
+  expect(
+    [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].some(
+      (b) => b.getAttribute('aria-label') === 'Add canvas',
+    ),
+  ).toBe(false)
+  await userEvent.keyboard('{Escape}')
 
   rightClick(rootOf(container), 200, 130)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
