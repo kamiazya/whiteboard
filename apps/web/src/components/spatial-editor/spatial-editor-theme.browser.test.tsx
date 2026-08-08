@@ -42,6 +42,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     document.documentElement.classList.add('dark')
     const { container } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={twoNodeCanvasWithEdge()}
         onChange={() => {}}
         measure={fakeMeasure}
@@ -67,6 +68,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
   it('renders light-mode chrome with the light palette stroke (#737373)', () => {
     const { container } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={twoNodeCanvasWithEdge()}
         onChange={() => {}}
         measure={fakeMeasure}
@@ -83,6 +85,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
   it('sets the host element fill to the theme text color, the seam markdown body runs inherit', () => {
     const { container } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={twoNodeCanvasWithEdge()}
         onChange={() => {}}
         measure={fakeMeasure}
@@ -97,6 +100,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
   it('does not change scene geometry between themes — only color attributes differ', () => {
     const light = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={twoNodeCanvasWithEdge()}
         onChange={() => {}}
         measure={fakeMeasure}
@@ -109,6 +113,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     cleanup()
     const dark = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={twoNodeCanvasWithEdge()}
         onChange={() => {}}
         measure={fakeMeasure}

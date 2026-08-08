@@ -37,7 +37,12 @@ describe('Add button (creation menu)', () => {
   it('opens the + menu whose entries create without a selection', () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
-      <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />,
+      <SpatialEditor
+        defaultTool="select"
+        canvas={twoNodeCanvas()}
+        onChange={onChange}
+        measure={fakeMeasure}
+      />,
     )
     const button = getByTestId('add-button') as HTMLButtonElement
     expect(button.tagName).toBe('BUTTON')
@@ -67,7 +72,12 @@ describe('Add button (creation menu)', () => {
       },
     )
     const { getByTestId } = render(
-      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        defaultTool="select"
+        canvas={twoNodeCanvas()}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     const button = getByTestId('add-button') as HTMLButtonElement
     fireEvent.click(button)
@@ -85,7 +95,13 @@ describe('SpatialEditorHandle', () => {
   it('setViewport applies the given viewport to the rendered transform', () => {
     const ref = createRef<SpatialEditorHandle>()
     const { container } = render(
-      <SpatialEditor ref={ref} canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        defaultTool="select"
+        ref={ref}
+        canvas={twoNodeCanvas()}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
 
@@ -99,7 +115,13 @@ describe('SpatialEditorHandle', () => {
   it('fitToContent(nodeIds) fits the viewport to only the named nodes', () => {
     const ref = createRef<SpatialEditorHandle>()
     const { container } = render(
-      <SpatialEditor ref={ref} canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        defaultTool="select"
+        ref={ref}
+        canvas={twoNodeCanvas()}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
 
     act(() => {
@@ -114,7 +136,13 @@ describe('SpatialEditorHandle', () => {
   it('fitToContent() with no ids fits the viewport to every node', () => {
     const ref = createRef<SpatialEditorHandle>()
     const { container } = render(
-      <SpatialEditor ref={ref} canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        defaultTool="select"
+        ref={ref}
+        canvas={twoNodeCanvas()}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
 
     act(() => {
@@ -147,6 +175,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     const canvasValue = twoNodeCanvas()
     const { container, rerender } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={canvasValue}
         externalVersion={0}
         onChange={onChange}
@@ -159,6 +188,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     // Same node contents (the undo/redo shape) but externalVersion advanced.
     rerender(
       <SpatialEditor
+        defaultTool="select"
         canvas={{ ...canvasValue }}
         externalVersion={1}
         onChange={onChange}
@@ -178,6 +208,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     const canvasValue = twoNodeCanvas()
     const { container, rerender } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={canvasValue}
         externalVersion={0}
         onChange={onChange}
@@ -191,6 +222,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     // own controlled re-render after onChange, not an external replacement.
     rerender(
       <SpatialEditor
+        defaultTool="select"
         canvas={{ ...canvasValue }}
         externalVersion={0}
         onChange={onChange}
@@ -217,6 +249,7 @@ describe('bottom dock composition', () => {
     // overlap this redesign replaces).
     const { container } = render(
       <SpatialEditor
+        defaultTool="select"
         canvas={{ nodes: [], edges: [] }}
         onChange={vi.fn()}
         measure={fakeMeasure}

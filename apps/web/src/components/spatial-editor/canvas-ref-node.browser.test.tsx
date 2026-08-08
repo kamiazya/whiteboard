@@ -29,6 +29,7 @@ function makeHost(initial: SpatialCanvas, onOpen?: (file: string, subpath?: stri
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={canvas}
           onChange={(next, command) => {
             latest.commands.push(command.kind)
@@ -132,7 +133,12 @@ it('without host seams, neither the Add canvas button nor file follow-affordance
     const [canvas, setCanvas] = useState<SpatialCanvas>(bare)
     return (
       <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor canvas={canvas} onChange={(next) => setCanvas(next)} theme="light" />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
       </div>
     )
   }

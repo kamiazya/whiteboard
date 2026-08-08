@@ -26,7 +26,12 @@ function Host() {
   latest = canvas
   return (
     <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor canvas={canvas} onChange={(next) => setCanvas(next)} theme="light" />
+      <SpatialEditor
+        defaultTool="select"
+        canvas={canvas}
+        onChange={(next) => setCanvas(next)}
+        theme="light"
+      />
     </div>
   )
 }

@@ -115,6 +115,9 @@ describe('DaemonCanvasPage', () => {
     })
 
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
     // WorkspaceTopBar's canvas switcher shows the current canvas and lists
     // every entry from controller.canvases — this pins the CanvasSummary
     // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping end to end.
@@ -133,6 +136,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
     // The bar's History button is the real versions-capability affordance
     // now that WorkspaceTopBar owns it (see WorkspaceTopBar.tsx).
     expect(screen.getByRole('button', { name: /history/i })).toBeTruthy()
@@ -159,6 +165,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
       expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
@@ -187,6 +196,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
       expect(createdBackends).toHaveLength(1)
       expect(createdBackends[0]?.workspaceId).toBe('w1')
 
@@ -225,6 +237,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
       await act(async () => {
@@ -255,6 +270,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
       expect(createdBackends).toHaveLength(1)
 
       mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
@@ -294,6 +312,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByLabelText('Workspaces')).toBeNull()
       const teaser = screen.getByText('Workspaces')
@@ -309,6 +330,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     const oldBackend = createdBackends[0]!
 
@@ -331,6 +355,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
     // Healthy session: the chip reads Synced.
     expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
 
@@ -361,6 +388,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
 
@@ -394,6 +424,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -424,6 +457,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -454,6 +490,9 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -552,6 +591,9 @@ describe('DaemonCanvasPage', () => {
       'brand-new',
     )
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Hand (view-only) is the default tool; the host history cluster only
+    // docks in Select mode, so tests exercising it switch first.
+    fireEvent.click(await screen.findByTestId('select-tool-button'))
   })
 
   it('shows the createError alert in the empty-canvases state when creation fails', async () => {
@@ -626,6 +668,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -690,6 +735,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       // Dirty the doc via a remote update, exactly like the "drives
       // HeaderSaveDot dirty/clean" test does, so this test isolates the
@@ -760,6 +808,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -792,6 +843,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
     })
@@ -823,6 +877,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -897,6 +954,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
@@ -949,6 +1009,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
@@ -985,6 +1048,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const versionButton = screen.getByRole('button', { name: 'Version history' })
       // The static CapabilityTeaser renders aria-disabled; the real toggle
@@ -1040,6 +1106,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const toggle = screen.getByRole('button', { name: 'Version history' })
       await act(async () => {
@@ -1134,6 +1203,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
       await waitFor(() => {
@@ -1170,6 +1242,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByTestId('header-branch-chip')).toBeNull()
       expect(screen.getByText('Variations')).toBeTruthy()
@@ -1190,6 +1265,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
       await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
 
       const branchCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -1259,6 +1337,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const banner = await screen.findByTestId('header-branch-banner')
       expect(banner.textContent).toContain('feature-x')
@@ -1326,6 +1407,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByTestId('header-branch-banner')).toBeNull()
 
@@ -1361,6 +1445,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByTestId('merge-toast')).toBeNull()
 
@@ -1392,6 +1479,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       await act(async () => {
         dispatchMergeCommitted()
@@ -1420,6 +1510,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       await act(async () => {
         dispatchMergeCommitted({ preMergeVersionId: 'v-pre' })
@@ -1450,6 +1543,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByRole('button', { name: 'Back to canvas list' })).toBeNull()
     })
@@ -1467,6 +1563,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const button = screen.getByRole('button', { name: 'Back to canvas list' })
       fireEvent.click(button)
@@ -1539,6 +1638,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       await act(async () => {
         fireEvent.keyDown(window, { key: 's', metaKey: true })
@@ -1580,6 +1682,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByTestId('header-save-dot')).toBeNull()
 
@@ -1686,6 +1791,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       const summary = await screen.findByText('Import from this browser')
       fireEvent.click(summary)
@@ -1710,6 +1818,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
       await screen.findByText('Import from this browser')
 
       // <details> only hides collapsed content visually; the section (and its
@@ -1733,6 +1844,9 @@ describe('DaemonCanvasPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByText('Import from this browser')).toBeNull()
     })

@@ -22,6 +22,7 @@ function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
   return (
     <div style={{ width: 800, height: 600 }}>
       <SpatialEditor
+        defaultTool="select"
         canvas={canvas}
         onChange={(next, command) => {
           onCommand?.(command.kind)
@@ -96,6 +97,7 @@ it('empty space offers the full creation set, anchored at the click point', asyn
       return (
         <div style={{ width: 800, height: 600 }}>
           <SpatialEditor
+            defaultTool="select"
             canvas={canvas}
             onChange={(next, command) => {
               l.commands.push(command.kind)
@@ -158,6 +160,7 @@ function makeEdgeHost() {
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={canvas}
           onChange={(next, command) => {
             latest.commands.push(command.kind)
@@ -345,6 +348,7 @@ function makeNodeHost() {
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={canvas}
           onChange={(next, command) => {
             latest.commands.push(command.kind)

@@ -49,6 +49,7 @@ import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   ExternalLink,
   FileBox,
+  Focus,
   Frame,
   Image as ImageIcon,
   Link,
@@ -61,6 +62,8 @@ import {
   StickyNote,
   Tag,
   Trash2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import {
   forwardRef,
@@ -97,7 +100,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import { type EditorTool, ToolPalette } from './ToolPalette.js'
+import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   canvasToScreen,
@@ -152,6 +155,13 @@ export interface SpatialEditorProps {
    * `resolvedTheme` or its nodes/edges go invisible in dark mode.
    */
   readonly theme?: ResolvedTheme
+  /**
+   * The tool active on mount. Defaults to 'hand' — the product opens in
+   * navigation mode (user decision 2026-08-08): a plain drag pans and no
+   * press can select, move, or edit until the user switches to Select.
+   * Tests exercising editing flows pass 'select' explicitly.
+   */
+  readonly defaultTool?: EditorTool
   /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (browser-local canvas id,
@@ -209,6 +219,9 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  * common OS double-click interval; not user-configurable today.
  */
 const DOUBLE_PRESS_WINDOW_MS = 400
+
+/** One click of the hand-mode zoom buttons scales by this factor. */
+const ZOOM_STEP_FACTOR = 1.25
 const ZOOM_WHEEL_FACTOR = 1.1
 /** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
 const RESIZE_KEYBOARD_STEP = 8
@@ -253,6 +266,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       className,
       testId = DEFAULT_TEST_ID,
       theme = 'light',
+      defaultTool = 'hand',
       fileRefOptions,
       onOpenFileRef,
       paletteLeading,
@@ -278,11 +292,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * ~30ms on an 80-node canvas — far past a frame budget).
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
-    // OOUI interaction mode (S6/S7): Select is the default and matches the
-    // pre-tool behavior byte-for-byte; Connect arms object-first click-A,
-    // click-B edge creation. Creation is deliberately NOT a mode — the
-    // palette's Add note and double-click-anywhere both work in every mode.
-    const [tool, setTool] = useState<EditorTool>('select')
+    // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
+    // Select restores the pre-tool editing behavior byte-for-byte; Connect
+    // arms object-first click-A, click-B edge creation. Creation is
+    // deliberately NOT a mode — the palette's Add note works in every mode.
+    const [tool, setTool] = useState<EditorTool>(defaultTool)
     /** Open right-click menu: screen position (root-relative) + hit target. */
     const [contextMenu, setContextMenu] = useState<{
       x: number
@@ -766,6 +780,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       // Replace the browser menu with the object's own action menu.
       e.preventDefault()
+      // Hand mode is navigation-ONLY: a touch long-press synthesises a
+      // contextmenu, and surfacing the edit menu there made phone panning
+      // fall into editing mid-gesture (user report 2026-08-08). Switching
+      // to Select is the explicit gate into editing affordances.
+      if (tool === 'hand') return
       const root = rootRef.current
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
@@ -1263,11 +1282,47 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
-    const createNodeAtViewportCenter = () => {
+    /** Root-local screen point at the middle of the visible canvas. */
+    const viewportCenterScreen = () => {
       const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
+      return root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+    }
+
+    /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
+    const zoomAtViewportCenter = (factor: number) => {
+      setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
+    }
+
+    /**
+     * Pans so the union of all node boxes sits centered in the viewport,
+     * keeping the current zoom (the hand-mode "where did my content go"
+     * recovery). No boxes → no-op.
+     */
+    const centerContentInViewport = () => {
+      if (boxes.length === 0) return
+      let minX = Number.POSITIVE_INFINITY
+      let minY = Number.POSITIVE_INFINITY
+      let maxX = Number.NEGATIVE_INFINITY
+      let maxY = Number.NEGATIVE_INFINITY
+      for (const { box } of boxes) {
+        if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) continue
+        minX = Math.min(minX, box.x)
+        minY = Math.min(minY, box.y)
+        maxX = Math.max(maxX, box.x + box.width)
+        maxY = Math.max(maxY, box.y + box.height)
+      }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return
+      const contentCenter = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+      const center = viewportCenterScreen()
+      setViewport((vp) => ({
+        zoom: vp.zoom,
+        x: contentCenter.x - center.x / vp.zoom,
+        y: contentCenter.y - center.y / vp.zoom,
+      }))
+    }
+
+    const createNodeAtViewportCenter = () => {
+      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
       const point = findFreeSpot(
         preferred,
@@ -1563,7 +1618,54 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
         <ToolPalette
-          leading={paletteLeading}
+          // Hand mode is view-only, so the dock's leading slot shows VIEW
+          // controls (zoom in/out, 100% reset, center content) instead of
+          // the host's EDIT history cluster — undo/redo has nothing to act
+          // on in a mode where no press can change the canvas.
+          leading={
+            tool === 'hand' ? (
+              <>
+                <button
+                  type="button"
+                  data-testid="zoom-out-button"
+                  aria-label="Zoom out"
+                  onClick={() => zoomAtViewportCenter(1 / ZOOM_STEP_FACTOR)}
+                  className={TOOL_BUTTON_CLASS}
+                >
+                  <ZoomOut aria-hidden="true" className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  data-testid="zoom-reset-button"
+                  aria-label="Reset zoom to 100%"
+                  onClick={() => zoomAtViewportCenter(1 / viewport.zoom)}
+                  className={`${TOOL_BUTTON_CLASS} w-12 text-xs tabular-nums`}
+                >
+                  {Math.round(viewport.zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  data-testid="zoom-in-button"
+                  aria-label="Zoom in"
+                  onClick={() => zoomAtViewportCenter(ZOOM_STEP_FACTOR)}
+                  className={TOOL_BUTTON_CLASS}
+                >
+                  <ZoomIn aria-hidden="true" className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  data-testid="zoom-center-button"
+                  aria-label="Center content"
+                  onClick={centerContentInViewport}
+                  className={TOOL_BUTTON_CLASS}
+                >
+                  <Focus aria-hidden="true" className="size-4" />
+                </button>
+              </>
+            ) : (
+              paletteLeading
+            )
+          }
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
@@ -1579,7 +1681,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 }
           }
           tool={tool}
-          onToolChange={setTool}
+          onToolChange={(next) => {
+            setTool(next)
+            // A context menu is an edit affordance of the mode it was
+            // opened in — switching tools (especially into view-only hand
+            // mode) must not leave it floating.
+            setContextMenu(null)
+          }}
         />
         {onAddImage !== undefined && (
           <input

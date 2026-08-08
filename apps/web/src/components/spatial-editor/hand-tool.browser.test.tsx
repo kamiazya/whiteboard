@@ -31,6 +31,7 @@ function makeHost() {
             setCanvas(next)
           }}
           theme="light"
+          paletteLeading={<span data-testid="host-leading" />}
         />
       </div>
     )
@@ -63,14 +64,22 @@ function drag(root: HTMLElement, from: [number, number], to: [number, number]) {
   })
 }
 
+it('hand is the DEFAULT tool and sits leftmost in the tool group', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const hand = container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement
+  expect(hand.getAttribute('aria-pressed')).toBe('true')
+  const buttons = [...container.querySelectorAll('[data-testid$="-tool-button"]')]
+  expect(buttons[0]?.getAttribute('data-testid')).toBe('hand-tool-button')
+})
+
 it('in hand mode a plain drag pans the viewport — over empty space AND over a node', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
+  // Hand is already active by default — no tool switch needed.
   const hand = container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement
-  expect(hand).not.toBeNull()
-  fireEvent.click(hand)
   expect(hand.getAttribute('aria-pressed')).toBe('true')
 
   const before = transformOf(container)
@@ -90,12 +99,86 @@ it('in hand mode a plain drag pans the viewport — over empty space AND over a 
   expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
 })
 
-it('switching back to select restores normal behavior (drag on a node selects it)', () => {
+it('hand mode suppresses the long-press context menu — navigation only', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  // Android synthesises a contextmenu from a touch long-press; in hand
+  // mode that must not surface editing affordances.
+  fireEvent.contextMenu(root, { clientX: r.left + 150, clientY: r.top + 130 })
+  expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  fireEvent.contextMenu(root, { clientX: r.left + 150, clientY: r.top + 130 })
+  expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+})
+
+it('hand mode swaps the leading history cluster for zoom controls; select mode swaps back', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+
+  // Hand (default): view-only mode — zoom controls, no host history.
+  expect(container.querySelector('[data-testid="host-leading"]')).toBeNull()
+  for (const id of ['zoom-out-button', 'zoom-reset-button', 'zoom-in-button', 'zoom-center-button'])
+    expect(container.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
+
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  expect(container.querySelector('[data-testid="host-leading"]')).not.toBeNull()
+  expect(container.querySelector('[data-testid="zoom-in-button"]')).toBeNull()
+})
+
+it('zoom controls: in/out change the scale, reset returns to 100%, center brings content to the middle', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const vt = () =>
+    (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
+  const zoomOf = (transform: string) => Number(/scale\(([\d.]+)\)/.exec(transform)?.[1])
+
+  fireEvent.click(container.querySelector('[data-testid="zoom-in-button"]') as HTMLElement)
+  expect(zoomOf(vt())).toBeGreaterThan(1)
+  const label = container.querySelector('[data-testid="zoom-reset-button"]') as HTMLElement
+  expect(label.textContent).not.toBe('100%')
+
+  fireEvent.click(label)
+  expect(zoomOf(vt())).toBe(1)
+  expect(label.textContent).toBe('100%')
+
+  fireEvent.click(container.querySelector('[data-testid="zoom-out-button"]') as HTMLElement)
+  expect(zoomOf(vt())).toBeLessThan(1)
+
+  // Center: the lone node's box (100,100 200x80) centers on the 800x600 root.
+  fireEvent.click(container.querySelector('[data-testid="zoom-center-button"]') as HTMLElement)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  const svgRect = (
+    container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
+  ).getBoundingClientRect()
+  const cx = svgRect.x + svgRect.width / 2 - r.x
+  const cy = svgRect.y + svgRect.height / 2 - r.y
+  expect(Math.abs(cx - r.width / 2)).toBeLessThan(2)
+  expect(Math.abs(cy - r.height / 2)).toBeLessThan(2)
+})
+
+it('switching tools closes an open context menu — no edit affordance survives into hand mode', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  fireEvent.contextMenu(root, { clientX: r.left + 400, clientY: r.top + 300 })
+  expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+
+  fireEvent.click(container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
+  expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+})
+
+it('switching to select restores normal behavior (press on a node selects it)', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
-  fireEvent.click(container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
   fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
 
   const r = root.getBoundingClientRect()

@@ -27,7 +27,12 @@ function makeHost(initial: SpatialCanvas) {
     const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
     return (
       <div style={{ width: 1600, height: 600 }}>
-        <SpatialEditor canvas={canvas} onChange={(next) => setCanvas(next)} theme="light" />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
       </div>
     )
   }

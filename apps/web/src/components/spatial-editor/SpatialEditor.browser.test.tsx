@@ -50,6 +50,7 @@ function ControlledEditor({
   const [canvas, setCanvas] = useState(initial)
   return (
     <SpatialEditor
+      defaultTool="select"
       canvas={canvas}
       onChange={(next, command) => {
         setCanvas(next)
@@ -81,7 +82,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const rects = container.querySelectorAll('svg rect')
@@ -93,7 +99,12 @@ describe('SpatialEditor (browser)', () => {
     const canvasValue = twoNodeCanvas()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={canvasValue} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvasValue}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -139,7 +150,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -164,7 +180,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -220,6 +241,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
           measure={fakeMeasure}
@@ -270,7 +292,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -312,6 +339,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
           measure={fakeMeasure}
@@ -358,7 +386,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -400,7 +433,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -446,7 +484,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -507,7 +550,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -564,7 +612,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -585,7 +638,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -619,7 +677,12 @@ describe('SpatialEditor (browser)', () => {
     const releaseSpy = vi.spyOn(HTMLElement.prototype, 'releasePointerCapture')
     const { unmount } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -650,7 +713,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -719,7 +787,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -791,6 +864,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
           measure={fakeMeasure}
@@ -875,7 +949,12 @@ describe('SpatialEditor (browser)', () => {
     const measure = vi.fn(fakeMeasure)
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={measure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={measure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -954,6 +1033,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           ref={ref}
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1024,7 +1104,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1063,7 +1148,12 @@ describe('SpatialEditor (browser)', () => {
     const initial = twoNodeCanvas()
     const { rerender } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={initial} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={initial}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1095,7 +1185,12 @@ describe('SpatialEditor (browser)', () => {
     }
     rerender(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={sameTargetStillValid} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={sameTargetStillValid}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     expect(page.getByTestId('drag-preview').element()).toBeTruthy()
@@ -1171,6 +1266,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
           measure={fakeMeasure}
@@ -1197,6 +1293,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
           measure={fakeMeasure}
@@ -1223,7 +1320,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1260,7 +1362,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1291,7 +1398,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1520,7 +1632,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1545,6 +1662,7 @@ describe('SpatialEditor (browser)', () => {
       rerender(
         <div style={{ width: 600, height: 400 }}>
           <SpatialEditor
+            defaultTool="select"
             canvas={withoutA}
             onChange={onChange}
             measure={fakeMeasure}
@@ -1569,7 +1687,12 @@ describe('SpatialEditor (browser)', () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const editor = page.getByTestId('spatial-editor')
@@ -1657,7 +1780,7 @@ describe('SpatialEditor (browser) — spatial text layout defects', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 900, height: 600 }}>
-        <SpatialEditor canvas={fourDefectCanvas()} onChange={onChange} />
+        <SpatialEditor defaultTool="select" canvas={fourDefectCanvas()} onChange={onChange} />
       </div>,
     )
 
@@ -1848,7 +1971,12 @@ describe('node placement and affordances', () => {
     // name lives on aria-label (what assistive tech and tooltips read).
     render(
       <div style={{ width: 600, height: 400 }}>
-        <SpatialEditor canvas={{ nodes: [], edges: [] }} onChange={vi.fn()} measure={fakeMeasure} />
+        <SpatialEditor
+          defaultTool="select"
+          canvas={{ nodes: [], edges: [] }}
+          onChange={vi.fn()}
+          measure={fakeMeasure}
+        />
       </div>,
     )
     const button = page.getByTestId('add-button').element() as HTMLButtonElement
