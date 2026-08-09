@@ -176,6 +176,110 @@ it('reports the toggle without mutating the canvas itself (lock is not canvas co
   expect(latest.toggles).toHaveLength(1)
 })
 
+it('a lock arriving AFTER selection drops it, so keyboard edits cannot reach the node', () => {
+  const latest: { canvas: SpatialCanvas } = { canvas: initial }
+  function Host() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
+    const [locked, setLocked] = useState<ReadonlySet<string>>(new Set())
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <button
+          type="button"
+          data-testid="remote-lock"
+          onClick={() => setLocked(new Set(['free']))}
+        >
+          lock
+        </button>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+          lockedNodeIds={locked}
+          onToggleNodeLock={() => {}}
+        />
+      </div>
+    )
+  }
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  pressAt(root, 400, 80) // select the (still free) node
+  expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
+
+  // A peer — or an agent through node_lock — locks what is already selected.
+  fireEvent.click(container.querySelector('[data-testid="remote-lock"]') as HTMLElement)
+  expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
+
+  fireEvent.keyDown(root, { key: 'Delete' })
+  fireEvent.keyDown(root, { key: 'ArrowRight' })
+  expect(latest.canvas.nodes.map((n) => n.id)).toEqual(['locked', 'free'])
+  expect(latest.canvas.nodes.find((n) => n.id === 'free')).toMatchObject({ x: 320, y: 40 })
+})
+
+it('dragging a group leaves a locked member behind', () => {
+  const grouped: SpatialCanvas = {
+    nodes: [
+      { id: 'frame', type: 'group', x: 40, y: 40, width: 400, height: 300, label: 'G' },
+      { id: 'child-free', type: 'text', x: 60, y: 200, width: 100, height: 60, text: 'A' },
+      { id: 'child-locked', type: 'text', x: 200, y: 200, width: 100, height: 60, text: 'B' },
+    ],
+    edges: [],
+  }
+  const latest: { canvas: SpatialCanvas } = { canvas: grouped }
+  function Host() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(grouped)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+          lockedNodeIds={new Set(['child-locked'])}
+          onToggleNodeLock={() => {}}
+        />
+      </div>
+    )
+  }
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+
+  // Grab the frame on its own chrome (above both children) and drag it.
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 3,
+    clientX: r.left + 60,
+    clientY: r.top + 60,
+  })
+  fireEvent.pointerMove(root, { pointerId: 3, clientX: r.left + 160, clientY: r.top + 60 })
+  fireEvent.pointerUp(root, { pointerId: 3, clientX: r.left + 160, clientY: r.top + 60 })
+
+  const byId = (id: string) => latest.canvas.nodes.find((n) => n.id === id)
+  expect(byId('frame')).toMatchObject({ x: 140 })
+  expect(byId('child-free')).toMatchObject({ x: 160 })
+  expect(byId('child-locked')).toMatchObject({ x: 200, y: 200 })
+})
+
+it('the keyboard connect overlay offers no target on a locked node', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Select the free node and start a keyboard connection from its handle.
+  pressAt(root, 400, 80)
+  const handle = container.querySelector('[data-testid="connect-handle"]') as HTMLElement
+  handle.focus()
+  fireEvent.keyDown(handle, { key: 'Enter' })
+
+  // The pointer path already refuses a locked target; the Tab-reachable
+  // buttons must agree, or the keyboard path is a way around the lock.
+  expect(container.querySelector('[data-testid="connect-target-locked"]')).toBeNull()
+})
+
 it('a locked node is not offered to a marquee drag either', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

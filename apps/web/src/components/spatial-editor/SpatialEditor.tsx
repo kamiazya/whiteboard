@@ -554,6 +554,33 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
 
     /**
+     * A lock can arrive from a peer or an agent while the node is ALREADY
+     * selected or mid-drag — a case hit-test filtering cannot reach, because
+     * the selection exists before the lock does. Dropping it here closes
+     * every command path that reads the selection (nudge, delete, resize,
+     * z-order, colour, cut) at one point instead of guarding each in turn.
+     * A locked primary promotes the first surviving extra rather than
+     * clearing the whole selection, so locking one node of many is not a
+     * silent deselect-all.
+     */
+    useEffect(() => {
+      if (!lockEnabled) return
+      if (gestureState.kind === 'moving' || gestureState.kind === 'resizing') {
+        if (isLocked(gestureState.nodeId)) setGestureState(createIdleState())
+      }
+      const survivingExtras = [...extraIds].filter((id) => !isLocked(id))
+      const primaryLocked = selectedId !== null && isLocked(selectedId)
+      if (!primaryLocked) {
+        if (survivingExtras.length !== extraIds.size) setExtraIds(new Set(survivingExtras))
+        return
+      }
+      const [promoted, ...rest] = survivingExtras
+      setSelectedId(promoted ?? null)
+      setExtraIds(new Set(rest))
+      // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
+    }, [lockEnabled, lockedNodeIds, selectedId, extraIds, gestureState])
+
+    /**
      * The dragged node's own content, rendered ONCE per drag (the reducer's
      * pointermove passthrough returns the same state reference, so this memo
      * holds for the whole gesture; a single-node render costs ~0.4ms).
@@ -1099,6 +1126,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 .filter(
                   (n) =>
                     !alreadyMoving.has(n.id) &&
+                    // Containment is geometric, so a locked member would
+                    // otherwise be carried along by its frame — the one way
+                    // a lock could be moved without ever being selected.
+                    !isLocked(n.id) &&
                     n.x >= gestureState.startX &&
                     n.y >= gestureState.startY &&
                     n.x + n.width <= gestureState.startX + movedNode.width &&
@@ -2792,7 +2823,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                * targetNodeId contract exactly (invalid targets are the
                * fromNode itself, which is excluded below).
                */}
-              {boxes
+              {selectableBoxes
                 .filter((b) => b.id !== gestureState.fromNodeId)
                 .map((b) => (
                   // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to hit-test at this node's canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
