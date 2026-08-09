@@ -747,6 +747,13 @@ describe('createCanvasSyncSession', () => {
   describe('model-based: random EditorCommand sequences', () => {
     const nodeIdArb = fc.constantFrom('n-a', 'n-b', 'n-c')
     const commandArb: fc.Arbitrary<EditorCommand> = fc.oneof(
+      // A canvas-wide setting: the first command that edits the ENVELOPE
+      // rather than a node, and the shape of command this file's properties
+      // were blind to.
+      fc.record({
+        kind: fc.constant('set-edge-routing' as const),
+        style: fc.constantFrom('straight' as const, 'orthogonal' as const),
+      }),
       fc.record({
         kind: fc.constant('move-node' as const),
         id: nodeIdArb,
@@ -821,6 +828,52 @@ describe('createCanvasSyncSession', () => {
         } finally {
           vi.useRealTimers()
         }
+      },
+    )
+
+    // What the property above never asks: does the DOCUMENT end up holding
+    // what the editor produced? Counting pending commits passes happily for a
+    // command that persists nothing — and a canvas-wide setting did exactly
+    // that, reaching the screen and vanishing on the next reload.
+    //
+    // Replaying the pushed payloads over the initial snapshot is what a
+    // reloading client does, so this asks the question the way the bug asked
+    // it. Deliberately no assertion that anything WAS pushed: a command that
+    // changes nothing legitimately pushes nothing, and the replay of an empty
+    // list still has to equal the unchanged canvas.
+    fcTest.prop(
+      [fc.array(commandArb, { minLength: 1, maxLength: 12 })],
+      withDefaults({ numRuns: 30 }),
+    )(
+      'a command sequence leaves the document equal to the canvas it produced',
+      async (commands) => {
+        const backend = makeFakeBackend()
+        const session = createCanvasSyncSession(backend, makeDeps())
+        session.connect()
+        const initial = baseCanvas()
+        const snapshotBytes = makeSnapshot(initial)
+        backend._ctrl.handlers?.onSnapshot(snapshotBytes)
+
+        let canvas: SpatialCanvas = initial
+        for (const command of commands) {
+          canvas = applyCommand(canvas, command)
+          session.onChange(canvas, command)
+          await vi.advanceTimersByTimeAsync(1000)
+          await flushMicrotasks()
+        }
+        await session.dispose()
+        await flushMicrotasks()
+
+        const replay = new LoroDoc()
+        replay.import(snapshotBytes)
+        for (const bytes of backend._ctrl.pushLocalUpdateCalls) replay.import(bytes)
+        const stored = readSpatialCanvas(replay)
+
+        expect(stored['x-whiteboard']).toEqual(canvas['x-whiteboard'])
+        const byId = <T extends { id: string }>(list: readonly T[]) =>
+          [...list].sort((a, b) => a.id.localeCompare(b.id))
+        expect(byId(stored.nodes)).toEqual(byId(canvas.nodes))
+        expect(byId(stored.edges)).toEqual(byId(canvas.edges))
       },
     )
   })
