@@ -49,7 +49,10 @@ describe('DaemonDetectedBanner', () => {
         probeFn={probeFn}
       />,
     )
-    await waitFor(() => expect(probeFn).toHaveBeenCalled())
+    // Waits for the DETECTED render, not merely for the probe call: the call
+    // resolves later, so asserting on it would check the pre-detection state
+    // and pass even if the field disappeared once a daemon was found.
+    await screen.findByTestId('daemon-detected-banner')
 
     expect(screen.getByTestId('daemon-port-input')).toBeTruthy()
   })

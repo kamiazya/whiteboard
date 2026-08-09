@@ -339,11 +339,14 @@ export function DaemonDetectedBanner({
 
   /** Parses the port field, or null when it is empty. Invalid input reports. */
   function enteredBaseUrl(): string | null {
-    if (portInput.trim() === '') return null
-    const port = Number(portInput.trim())
-    // Loopback host is fixed rather than accepted from the field: a full URL
-    // would let this page be aimed at an arbitrary origin, and the daemon is
-    // always local.
+    const value = portInput.trim()
+    if (value === '') {
+      // An empty field is a valid check of the remembered daemons, so a stale
+      // complaint about a previous entry must not sit next to it.
+      setPortError(null)
+      return null
+    }
+    const port = Number(value)
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       setPortError('Enter a port between 1 and 65535.')
       return null
