@@ -30,6 +30,7 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
+import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
 import { createCanvasRouter } from './routes/canvas.js'
@@ -781,15 +782,18 @@ export function createApp(options: AppOptions) {
         // value is always a loopback origin, even when the daemon binds 0.0.0.0.
         daemonBaseUrl: `http://127.0.0.1:${daemonPort}`,
       })
-      const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
+      const nonce = createCspNonce()
+      const runtimeConfigScript = `<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const tokenScript = token
-        ? `<script>window.__WHITEBOARD_DAEMON_TOKEN__ = ${toInlineScriptJson(token)}</script>`
+        ? `<script nonce="${nonce}">window.__WHITEBOARD_DAEMON_TOKEN__ = ${toInlineScriptJson(token)}</script>`
         : ''
       const injected = `${runtimeConfigScript}${tokenScript}`
       const withRuntimeConfig = html.includes('</head>')
         ? html.replace('</head>', `${injected}</head>`)
         : `${injected}${html}`
-      return c.html(withRuntimeConfig)
+      return c.html(withRuntimeConfig, 200, {
+        'Content-Security-Policy': pairPageCsp(nonce),
+      })
     } catch {
       return c.text('Not found. Run `pnpm build` first.', 404)
     }
