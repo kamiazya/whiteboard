@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
@@ -377,6 +378,20 @@ describe('DaemonCanvasPage', () => {
     // every visit, so a daemon on 3099 would come straight back and the
     // action would read as a no-op the second time.
     const onContinueBrowserLocal = vi.fn()
+    // The state a connected browser is actually in: App.tsx stores the daemon
+    // it connected to, and that is what puts the page in daemon mode on the
+    // next load. Without seeding it the assertion below passes vacuously.
+    // Seeded through the store, not by writing JSON: a hand-built payload that
+    // fails the store's own validation is silently replaced by defaults, and
+    // every assertion below then passes without touching the real state.
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: DAEMON_BASE_URL,
+        knownDaemonBaseUrls: [DAEMON_BASE_URL],
+      },
+    }))
     await act(async () => {
       render(
         <DaemonCanvasPage
@@ -389,6 +404,10 @@ describe('DaemonCanvasPage', () => {
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
+    // Precondition, asserted rather than assumed: if the seed did not survive
+    // the store's own validation, everything below would pass vacuously.
+    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(DAEMON_BASE_URL)
+
     fireEvent.click(screen.getByTestId('connection-chip'))
     fireEvent.click(screen.getByTestId('connection-disconnect'))
 
@@ -396,6 +415,10 @@ describe('DaemonCanvasPage', () => {
     const stored = JSON.stringify(window.localStorage)
     expect(stored).toContain(DAEMON_BASE_URL)
     expect(stored).toContain('dismissedDaemonBaseUrls')
+    // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
+    // leaving it set reconnects on the next load — which makes the popover's
+    // "this browser stops using it" false the moment the user reloads.
+    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
   })
 
   it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
@@ -555,6 +578,20 @@ describe('DaemonCanvasPage', () => {
 
   it('offers the browser-local escape inside the chip popover and invokes the callback', async () => {
     const onContinueBrowserLocal = vi.fn()
+    // The state a connected browser is actually in: App.tsx stores the daemon
+    // it connected to, and that is what puts the page in daemon mode on the
+    // next load. Without seeding it the assertion below passes vacuously.
+    // Seeded through the store, not by writing JSON: a hand-built payload that
+    // fails the store's own validation is silently replaced by defaults, and
+    // every assertion below then passes without touching the real state.
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: DAEMON_BASE_URL,
+        knownDaemonBaseUrls: [DAEMON_BASE_URL],
+      },
+    }))
     await act(async () => {
       render(
         <DaemonCanvasPage
