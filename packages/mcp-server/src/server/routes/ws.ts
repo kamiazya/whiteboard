@@ -15,6 +15,12 @@ import { saveCanvas } from '../store/canvas-store.js'
 import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas.js'
+import {
+  setSyncSseHooks,
+  sseBroadcastText,
+  sseBroadcastTextToReady,
+  sseBroadcastUpdate,
+} from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
 // Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
@@ -62,6 +68,7 @@ function forEachReadyClient(workspaceId: string, slug: string, fn: (ws: WebSocke
 function broadcastTextMessage(workspaceId: string, slug: string, message: ServerTextMessage): void {
   const raw = JSON.stringify(message)
   forEachClient(workspaceId, slug, (ws) => ws.send(raw))
+  sseBroadcastText(workspaceId, slug, raw)
 }
 
 // Exported so app.ts can wire it into the branches router checkoutTo flow.
@@ -74,10 +81,22 @@ export function broadcastLoroUpdate(
   forEachClient(workspaceId, slug, (ws) => {
     if (ws !== excludeWs) ws.send(update)
   })
+  // SSE subscribers are the same audience reached by a different transport, so
+  // every producer that reaches WS clients must reach them too — otherwise an
+  // MCP tool edit would be invisible to a hosted page that has no ws:// path.
+  sseBroadcastUpdate(workspaceId, slug, update)
 }
 
 // Set the broadcastFn used by canvas.ts.
 setBroadcastFn(broadcastLoroUpdate)
+
+// The SSE transport needs the same viewport cache and pending-request resolver
+// this module owns; injected rather than imported because ws.ts -> sync-sse.ts
+// is already a one-way dependency.
+setSyncSseHooks({
+  getCachedViewportRequest: (key) => lastViewportRequestByCanvas.get(key),
+  resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
+})
 
 // Injected from canvas.ts: auto-version trigger with built-in throttling.
 // Called after WS binary messages; creates a new version and pushes it to the browser when the interval has elapsed.
@@ -159,6 +178,7 @@ export function sendViewportRequest(
   // deliver the message twice and re-trigger the pre-ready race the
   // cache was meant to fix.
   forEachReadyClient(workspaceId, slug, (ws) => ws.send(raw))
+  sseBroadcastTextToReady(workspaceId, slug, raw)
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.

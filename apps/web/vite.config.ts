@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
+import { mcpSourceAlias } from './mcp-source-alias.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
@@ -15,25 +16,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   resolve: {
     alias: {
+      ...mcpSourceAlias,
       // Standard shadcn alias rooted at apps/web/src.
       '@': resolve(__dirname, 'src'),
-      // Resolve browser-shared from source so `pnpm dev` works before `pnpm build`.
-      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/daemon-backend': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/daemon-backend.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-client': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-client.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-contracts': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-contracts/index.ts',
-      ),
       // loro-crdt's export map resolves the production browser build to its
       // `browser/` entry, which loads the WASM via a SYNCHRONOUS XHR. Sync
       // XHR bypasses the service worker, so the precached WASM is never

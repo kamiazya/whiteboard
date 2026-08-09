@@ -1,6 +1,8 @@
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
+import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
+import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -24,6 +26,7 @@ import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -98,10 +101,24 @@ export function DaemonCanvasPage({
   const createBackendRef = useRef(createBackend)
   createBackendRef.current = createBackend
   const resolvedCreateBackend = useCallback(
-    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend =>
-      createBackendRef.current?.(workspaceId, slug, daemonFetch) ??
-      new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }),
-    [daemonBaseUrl],
+    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend => {
+      const injected = createBackendRef.current?.(workspaceId, slug, daemonFetch)
+      if (injected) return injected
+      // A secure page cannot open a ws:// socket to an http daemon at all, so
+      // the transport is decided up front rather than attempted and retried.
+      const transport = selectCanvasTransport({
+        pageOrigin: window.location.origin,
+        daemonBaseUrl,
+      })
+      if (transport !== 'sse') {
+        return new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+      }
+      // Null where SharedWorker is unavailable; SseBackend then opens its own
+      // stream, which is correct but not shared across tabs.
+      const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+      return new SseBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }, shared)
+    },
+    [daemonBaseUrl, token],
   )
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })

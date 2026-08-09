@@ -91,6 +91,18 @@ describe('publish contract', () => {
         types: './src/shared/daemon-backend.ts',
         import: './dist/shared/daemon-backend.js',
       },
+      './sse-backend': {
+        types: './src/shared/sse-backend.ts',
+        import: './dist/shared/sse-backend.js',
+      },
+      './sse-stream-hub': {
+        types: './src/shared/sse-stream-hub.ts',
+        import: './dist/shared/sse-stream-hub.js',
+      },
+      './select-canvas-transport': {
+        types: './src/shared/select-canvas-transport.ts',
+        import: './dist/shared/select-canvas-transport.js',
+      },
       './api-client': {
         types: './src/shared/api-client.ts',
         import: './dist/shared/api-client.js',
@@ -126,6 +138,18 @@ describe('publish contract', () => {
       './daemon-backend': {
         types: './dist/shared/daemon-backend.d.ts',
         import: './dist/shared/daemon-backend.js',
+      },
+      './sse-backend': {
+        types: './dist/shared/sse-backend.d.ts',
+        import: './dist/shared/sse-backend.js',
+      },
+      './sse-stream-hub': {
+        types: './dist/shared/sse-stream-hub.d.ts',
+        import: './dist/shared/sse-stream-hub.js',
+      },
+      './select-canvas-transport': {
+        types: './dist/shared/select-canvas-transport.d.ts',
+        import: './dist/shared/select-canvas-transport.js',
       },
       './api-client': {
         types: './dist/shared/api-client.d.ts',
