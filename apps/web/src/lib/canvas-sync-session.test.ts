@@ -68,6 +68,9 @@ type FakeBackendControl = {
   handlers: CanvasBackendHandlers | null
   disconnectCalled: boolean
   pushLocalUpdateCalls: Uint8Array[]
+  /** Models a transport that is down: pushes are accepted and discarded,
+   *  which is what DaemonBackend does when its socket is not OPEN. */
+  transportDown: boolean
 }
 
 function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
@@ -75,6 +78,7 @@ function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
     handlers: null,
     disconnectCalled: false,
     pushLocalUpdateCalls: [],
+    transportDown: false,
   }
   return {
     _ctrl: ctrl,
@@ -87,6 +91,7 @@ function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
       ctrl.handlers = null
     },
     pushLocalUpdate(bytes) {
+      if (ctrl.transportDown) return Promise.resolve()
       ctrl.pushLocalUpdateCalls.push(bytes)
       return Promise.resolve()
     },
@@ -157,33 +162,39 @@ describe('createCanvasSyncSession', () => {
     expect(sendReadySpy).toHaveBeenCalledTimes(1)
   })
 
-  it('re-sends the whole document when the transport comes back', async () => {
-    // A backend that drops a local update while its transport is down (the
-    // WebSocket one returns early unless the socket is OPEN) loses it for
-    // good: every push carries only that commit's delta, so no later push
-    // replays it. Re-sending full state on reconnect is what makes an edit
-    // made during an outage survive, and CRDT import makes the resend
-    // idempotent for the server.
+  it('re-sends every edit made while the transport was down', async () => {
+    // A backend whose transport is down discards the delta it is handed — the
+    // WebSocket one returns early unless the socket is OPEN — and every push
+    // carries only one commit's ops, so no later push replays it. The transport
+    // here discards rather than records, or an implementation that resent just
+    // the latest delta would pass.
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    backend._ctrl.transportDown = true
+    const moveA: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const afterA = applyCommand(twoNodeCanvas(), moveA)
+    session.onChange(afterA, moveA)
     await vi.advanceTimersByTimeAsync(300)
-    backend._ctrl.pushLocalUpdateCalls.length = 0
+    const moveB: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
+    session.onChange(applyCommand(afterA, moveB), moveB)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(backend._ctrl.pushLocalUpdateCalls).toEqual([])
 
+    backend._ctrl.transportDown = false
     backend._ctrl.handlers!.onConnected()
+    await flushMicrotasks()
 
-    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
-    // The resend must carry the edit, not merely be non-empty.
+    // Rebuilt from what the server would actually have received.
     const rebuilt = new LoroDoc()
     for (const bytes of backend._ctrl.pushLocalUpdateCalls) rebuilt.import(bytes)
-    expect(readSpatialCanvas(rebuilt).nodes.find((n) => n.id === 'n-a')).toMatchObject({
-      x: 10,
-      y: 20,
-    })
+    const nodes = readSpatialCanvas(rebuilt).nodes
+    expect(nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 10, y: 20 })
+    expect(nodes.find((n) => n.id === 'n-b')).toMatchObject({ x: 30, y: 40 })
+    // The state that predates the outage has to survive the resend too.
+    expect(nodes).toHaveLength(twoNodeCanvas().nodes.length)
   })
 
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
