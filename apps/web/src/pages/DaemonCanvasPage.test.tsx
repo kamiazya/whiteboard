@@ -92,6 +92,9 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonCanvasPage', () => {
   beforeEach(() => {
+    // Settings live in localStorage and this suite seeds them, so without a
+    // reset a later test inherits whichever earlier test happened to run.
+    window.localStorage.clear()
     createdBackends.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
@@ -412,9 +415,12 @@ describe('DaemonCanvasPage', () => {
     fireEvent.click(screen.getByTestId('connection-disconnect'))
 
     expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
-    const stored = JSON.stringify(window.localStorage)
-    expect(stored).toContain(DAEMON_BASE_URL)
-    expect(stored).toContain('dismissedDaemonBaseUrls')
+    // Asserted as arrays, not as substrings of the whole store: the daemon's
+    // URL also appears under localDaemonBaseUrl, so a `toContain` on the
+    // serialized storage holds whether or not the dismissal was recorded.
+    const storage = createUserSettingsStore().load().storage
+    expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON_BASE_URL)
+    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON_BASE_URL)
     // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
     // leaving it set reconnects on the next load — which makes the popover's
     // "this browser stops using it" false the moment the user reloads.
