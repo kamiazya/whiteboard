@@ -20,36 +20,11 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * strict-export degrade rule is undecided) are deliberately out of scope
  * here and deferred to the slice that builds the strict exporter.
  */
-export const xWhiteboardSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('freehand'),
-      // Node-local coordinates. Unlike JSON Canvas's node geometry, these
-      // are not required to be integers — freehand strokes need sub-pixel
-      // precision and this field sits outside the spec's integer rule.
-      points: z.array(z.tuple([z.number(), z.number()])).min(2),
-      pressures: z.array(z.number().min(0).max(1)).optional(),
-      strokeWidth: z.number().positive().optional(),
-    })
-    .superRefine((value, ctx) => {
-      if (value.pressures !== undefined && value.pressures.length !== value.points.length) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'pressures length must match points length',
-          path: ['pressures'],
-        })
-      }
-    }),
-  z.object({
-    kind: z.literal('shape'),
-    shape: z.enum(['rectangle', 'ellipse', 'diamond']),
-  }),
-  z.object({
-    kind: z.literal('embed'),
-    canvasId: canvasIdSchema,
-    versionRef: z.string().min(1).optional(),
-  }),
-])
+export const xWhiteboardSchema = z.object({
+  kind: z.literal('embed'),
+  canvasId: canvasIdSchema,
+  versionRef: z.string().min(1).optional(),
+})
 
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
@@ -66,7 +41,12 @@ const sharedNodeFieldsSchema = z.object({
   width: sizeFieldSchema,
   height: sizeFieldSchema,
   color: canvasColorSchema.optional(),
-  'x-whiteboard': xWhiteboardSchema.optional(),
+  // `.catch` rather than a reject: an unrecognised extension payload — a
+  // variant this project has dropped, or one a future version writes — must
+  // not make the whole canvas unreadable. The node survives; only the
+  // extension is lost, which is the same outcome a strict JSON Canvas
+  // consumer already gets.
+  'x-whiteboard': xWhiteboardSchema.optional().catch(undefined),
 })
 
 const textNodeSchema = sharedNodeFieldsSchema.extend({

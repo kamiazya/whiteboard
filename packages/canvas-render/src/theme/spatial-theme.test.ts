@@ -85,19 +85,7 @@ describe('createSpatialTheme', () => {
     })
   })
 
-  it('approximates an ellipse hint radius as half the smaller dimension', () => {
-    const theme = createSpatialTheme({ mode: 'light' })
-    const { radius } = theme.resolveNode(
-      textNode({
-        width: 200,
-        height: 100,
-        'x-whiteboard': { kind: 'shape', shape: 'ellipse' },
-      }),
-    )
-    expect(radius).toBe(50)
-  })
-
-  it('uses the palette corner radius for a node with no ellipse hint', () => {
+  it('uses the palette corner radius for every node', () => {
     const theme = createSpatialTheme({ mode: 'light' })
     const { radius } = theme.resolveNode(textNode())
     expect(radius).toBe(SPATIAL_LIGHT_PALETTE.cornerRadiusPx)

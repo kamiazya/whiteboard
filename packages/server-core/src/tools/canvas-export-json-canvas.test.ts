@@ -15,7 +15,10 @@ const NODE_WITH_EXTENSION = {
   width: 100,
   height: 50,
   text: 'hi',
-  'x-whiteboard': { kind: 'shape' as const, shape: 'rectangle' as const },
+  'x-whiteboard': {
+    kind: 'embed' as const,
+    canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const,
+  },
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
@@ -50,7 +53,10 @@ describe('canvas_export_json_canvas tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
     const parsed = JSON.parse(result.json)
 
-    expect(parsed.nodes[0]['x-whiteboard']).toEqual({ kind: 'shape', shape: 'rectangle' })
+    expect(parsed.nodes[0]['x-whiteboard']).toEqual({
+      kind: 'embed',
+      canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+    })
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
