@@ -372,6 +372,32 @@ describe('DaemonCanvasPage', () => {
     expect(createdBackends[1]?.disconnectCount).toBe(0)
   })
 
+  it('records the daemon as dismissed when disconnecting, so discovery stops finding it', async () => {
+    // Forgetting alone is not enough: the default port range is rescanned on
+    // every visit, so a daemon on 3099 would come straight back and the
+    // action would read as a no-op the second time.
+    const onContinueBrowserLocal = vi.fn()
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          createBackend={makeCreateBackend()}
+          onContinueBrowserLocal={onContinueBrowserLocal}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+
+    fireEvent.click(screen.getByTestId('connection-chip'))
+    fireEvent.click(screen.getByTestId('connection-disconnect'))
+
+    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    const stored = JSON.stringify(window.localStorage)
+    expect(stored).toContain(DAEMON_BASE_URL)
+    expect(stored).toContain('dismissedDaemonBaseUrls')
+  })
+
   it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
     // A chip that reads Synced while the transport is down tells the user
     // remote edits are arriving when they are not.

@@ -103,6 +103,8 @@ export function DaemonDetectedBanner({
   // silent auto-probe on loopback mounts must not spawn failure copy the
   // user never asked for.
   const [manualCheckFailed, setManualCheckFailed] = useState(false)
+  const [portInput, setPortInput] = useState('')
+  const [portError, setPortError] = useState<string | null>(null)
   const [dismissedAt, setDismissedAt] = useState(
     () => settingsStore.load().storage.dismissedDaemonCtaAt,
   )
@@ -185,7 +187,7 @@ export function DaemonDetectedBanner({
     }
   }
 
-  function runProbe(forceRecheck?: boolean) {
+  function runProbe(forceRecheck?: boolean, explicit?: string) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -198,7 +200,12 @@ export function DaemonDetectedBanner({
     if (pageOriginScheme === 'https') {
       hintTimerRef.current = setTimeout(() => setShowLnaHint(true), LNA_HINT_DELAY_MS)
     }
-    const known = settingsStore.load().storage.knownDaemonBaseUrls ?? []
+    const stored = settingsStore.load().storage
+    const known = stored.knownDaemonBaseUrls ?? []
+    // Daemons the user disconnected from stay out of both the remembered
+    // list and the scan; naming one by hand overrides that, which is the
+    // only way back after a disconnect.
+    const dismissed = stored.dismissedDaemonBaseUrls ?? []
     // The server side binds dynamically (findAvailablePort from 3099; dev
     // worktrees use derived ports), so a single fixed-port ping misses
     // moved daemons. Remembered baseUrls are always re-checked; the wider
@@ -206,6 +213,8 @@ export function DaemonDetectedBanner({
     // auto-probe stays narrow.
     const candidates = candidateBaseUrls({
       remembered: [...known, baseUrl],
+      dismissed,
+      ...(explicit === undefined ? {} : { explicit }),
       ...(forceRecheck ? {} : { portRangeCount: 0 }),
     })
     discoverDaemons({
@@ -240,7 +249,21 @@ export function DaemonDetectedBanner({
           for (const daemon of [...nextFound].reverse()) {
             list = rememberKnownDaemon(list, daemon.baseUrl)
           }
-          return { ...current, storage: { ...current.storage, knownDaemonBaseUrls: list } }
+          // Finding a daemon clears its dismissal: it is here because the
+          // user asked for it, so leaving the flag would drop it again on
+          // the next load.
+          const foundUrls = new Set(nextFound.map((daemon) => daemon.baseUrl))
+          const stillDismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
+            (entry) => !foundUrls.has(entry),
+          )
+          return {
+            ...current,
+            storage: {
+              ...current.storage,
+              knownDaemonBaseUrls: list,
+              dismissedDaemonBaseUrls: stillDismissed,
+            },
+          }
         })
       }
     })
@@ -315,6 +338,19 @@ export function DaemonDetectedBanner({
     )
   }, [result, settingsStore, dismissedAt])
 
+  function submitPort() {
+    const port = Number(portInput.trim())
+    // Loopback host is fixed rather than accepted from the field: a full URL
+    // would let this page be aimed at an arbitrary origin, and the daemon is
+    // always local.
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      setPortError('Enter a port between 1 and 65535.')
+      return
+    }
+    setPortError(null)
+    runProbe(true, `http://127.0.0.1:${port}`)
+  }
+
   return (
     <>
       {showUnsupportedNotice && (
@@ -385,6 +421,41 @@ export function DaemonDetectedBanner({
             </>
           ) : (
             <>No local daemon found at {baseUrl}.</>
+          )}
+        </span>
+      )}
+      {result !== null && !result.detected && (
+        // Offered whenever a check concluded with nothing found, not only
+        // after a manual re-check: an auto-probe that finds nothing leaves the
+        // user with no way to name the daemon they know is running.
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <label htmlFor="daemon-port-input">Running on another port?</label>
+          <input
+            id="daemon-port-input"
+            data-testid="daemon-port-input"
+            type="text"
+            inputMode="numeric"
+            value={portInput}
+            onChange={(event) => setPortInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submitPort()
+            }}
+            placeholder="3099"
+            className="w-16 rounded border px-1 py-0.5"
+            aria-describedby={portError ? 'daemon-port-error' : undefined}
+          />
+          <button
+            type="button"
+            data-testid="daemon-port-connect"
+            onClick={submitPort}
+            className="font-medium underline"
+          >
+            Check
+          </button>
+          {portError && (
+            <span id="daemon-port-error" role="alert" className="text-amber-700">
+              {portError}
+            </span>
           )}
         </span>
       )}

@@ -35,6 +35,30 @@ describe('DaemonDetectedBanner', () => {
     cleanup()
   })
 
+  it('probes a port the user typed, including one outside the scanned range', async () => {
+    // Discovery scans ten ports from 3099 and re-checks remembered URLs, so a
+    // daemon anywhere else — a dev worktree's derived port, or a packaged
+    // daemon whose first ten candidates were taken — is otherwise unreachable.
+    const probeFn = vi.fn().mockResolvedValue(NOT_DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+    await waitFor(() => expect(probeFn).toHaveBeenCalled())
+    probeFn.mockClear()
+
+    fireEvent.change(screen.getByTestId('daemon-port-input'), { target: { value: '3419' } })
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await waitFor(() =>
+      expect(probeFn.mock.calls.some((call) => call[0] === 'http://127.0.0.1:3419')).toBe(true),
+    )
+  })
+
   it('auto-probes on mount when locationProtocol is http:', async () => {
     const probeFn = vi.fn().mockResolvedValue(NOT_DETECTED)
     render(

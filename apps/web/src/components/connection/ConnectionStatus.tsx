@@ -35,6 +35,12 @@ export interface ConnectionStatusProps {
   readonly onContinueBrowserLocal?: () => void
   /** local only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
+  /**
+   * synced only: stop using this daemon in this browser. It does NOT unpair
+   * and does NOT touch anything stored on the daemon — the copy says so,
+   * because "disconnect" reads like a destructive word.
+   */
+  readonly onDisconnect?: () => void
 }
 
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -56,6 +62,7 @@ export function ConnectionStatus({
   daemonBaseUrl,
   onRepair,
   onContinueBrowserLocal,
+  onDisconnect,
   children,
 }: ConnectionStatusProps) {
   return (
@@ -106,6 +113,22 @@ export function ConnectionStatus({
               ) : null}
               .
             </p>
+            {onDisconnect && (
+              <div className="mt-1 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  data-testid="connection-disconnect"
+                  onClick={onDisconnect}
+                  className="text-left font-medium underline"
+                >
+                  Disconnect from this daemon
+                </button>
+                <p className="text-xs text-muted-foreground">
+                  This browser stops using it and stops looking for it. Your data stays on the
+                  daemon and is not deleted; pairing is not revoked.
+                </p>
+              </div>
+            )}
           </div>
         )}
         {state === 'reconnecting' && (

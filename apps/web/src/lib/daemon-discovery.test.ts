@@ -14,6 +14,36 @@ function probeMap(map: Record<string, DaemonProbeResult>) {
 }
 
 describe('candidateBaseUrls', () => {
+  it('leaves out a daemon the user disconnected from, even inside the scanned range', () => {
+    // Disconnecting has to survive a reload, and the default scan would
+    // otherwise rediscover a daemon on 3099 the moment the page reopened —
+    // making the button a no-op the second time you look at it.
+    const candidates = candidateBaseUrls({
+      remembered: ['http://127.0.0.1:3099'],
+      dismissed: ['http://127.0.0.1:3099'],
+      portRangeCount: 3,
+    })
+
+    expect(candidates).not.toContain('http://127.0.0.1:3099')
+    expect(candidates).toContain('http://127.0.0.1:3100')
+  })
+
+  it('re-admits a dismissed daemon once it is named explicitly', () => {
+    // Entering a port by hand is an unambiguous request for that daemon, so
+    // it has to outrank an earlier dismissal or the user cannot get back.
+    // Outside the scanned range and absent from `remembered`, so `explicit`
+    // is the only thing that can put it in the list at all — a port inside
+    // the scan would lead it whether or not this argument is honoured.
+    const candidates = candidateBaseUrls({
+      remembered: [],
+      dismissed: ['http://127.0.0.1:3419'],
+      explicit: 'http://127.0.0.1:3419',
+      portRangeCount: 3,
+    })
+
+    expect(candidates[0]).toBe('http://127.0.0.1:3419')
+  })
+
   it('puts remembered daemons first, then the port range, deduplicated', () => {
     const candidates = candidateBaseUrls({
       remembered: ['http://127.0.0.1:3105', 'http://127.0.0.1:3099'],

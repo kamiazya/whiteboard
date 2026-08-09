@@ -87,6 +87,24 @@ const storageSettingsSchema = z
       // tampered array must not turn discovery into an unbounded fan-out.
       .max(5, 'must contain at most 5 daemon URLs')
       .optional(),
+    // Daemons the user explicitly disconnected from. Discovery skips these
+    // even inside its scanned port range, which is what makes a disconnect
+    // outlive the page — without it the default-port daemon reappears on the
+    // next load and the action reads as a no-op. Same http(s) constraint and
+    // same cap as the known list, for the same reasons.
+    dismissedDaemonBaseUrls: z
+      .array(
+        z.string().refine((value) => {
+          try {
+            const { protocol } = new URL(value)
+            return protocol === 'http:' || protocol === 'https:'
+          } catch {
+            return false
+          }
+        }, 'must be an http(s) URL'),
+      )
+      .max(5, 'must contain at most 5 daemon URLs')
+      .optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
     dismissedBetaBannerAt: z.string().optional(),
     dismissedDaemonCtaAt: z.string().optional(),
