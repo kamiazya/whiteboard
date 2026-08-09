@@ -37,10 +37,16 @@
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
  * value (see `commands.ts`) — it never mutates the `canvas` prop.
  *
+ * Also supported: the clipboard family — copy/cut/paste over the native
+ * clipboard events (fragment JSON in `text/plain`, foreign text degrading
+ * to a note), duplicate (Cmd/Ctrl+D), select-all, z-order moves, and
+ * viewport framing (zoom to fit / to selection). Every one has a
+ * context-menu or dock twin; every binding is declared in `shortcuts.ts`.
+ *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * grouping, undo/redo, snapping,
- * persistence, and sync. Those are later phases.
+ * snapping, alignment/distribution, persistence, and sync. Those are
+ * later phases.
  */
 import type {
   CanvasColor,
@@ -145,9 +151,8 @@ import {
 export const SPATIAL_EDITOR_UNSUPPORTED = [
   'freehand-drawing',
   'shape-tools',
-  'grouping',
-  'undo-redo',
   'snapping',
+  'align-distribute',
   'persistence',
   'sync',
 ] as const
