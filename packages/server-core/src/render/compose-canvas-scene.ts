@@ -125,7 +125,9 @@ export function composeCanvasScene(canvas: SpatialCanvas, measure: MeasureText):
   const blockNodes = canvas.nodes.flatMap((node) =>
     node.type === 'text' ? layoutTextNode(node, measure) : [placeholderFor(node)],
   )
-  const edgeNodes = canvas.edges.map((edge) => routeEdge(canvas.nodes, edge))
+  const edgeNodes = canvas.edges.map((edge) =>
+    routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style),
+  )
   return { nodes: [...blockNodes, ...edgeNodes] }
 }
 
