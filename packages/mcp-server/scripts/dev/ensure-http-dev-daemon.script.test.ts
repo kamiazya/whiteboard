@@ -65,6 +65,7 @@ function runHook(env: NodeJS.ProcessEnv): Promise<{
   exitCode: number | null
   exitedAt: number
   stderr: string
+  stdout: string
 }> {
   return new Promise((resolveRun) => {
     const child: ChildProcessWithoutNullStreams = spawn(
@@ -73,11 +74,21 @@ function runHook(env: NodeJS.ProcessEnv): Promise<{
       { cwd: REPO_ROOT, env },
     )
     let stderr = ''
+    let stdout = ''
     child.stderr.on('data', (chunk) => {
       stderr += String(chunk)
     })
-    child.once('exit', (exitCode) => {
-      resolveRun({ exitCode, exitedAt: Date.now(), stderr })
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk)
+    })
+    // 'close', not 'exit': 'exit' fires when the process terminates, while
+    // its stdio may still have buffered data to deliver. Resolving there
+    // discards whatever the hook printed on its way out — which is how a
+    // failing run once reported "exit 1" with an empty stderr, throwing away
+    // the only evidence of why it failed. 'close' fires after every stdio
+    // stream has ended, so the captured output is complete.
+    child.once('close', (exitCode) => {
+      resolveRun({ exitCode, exitedAt: Date.now(), stderr, stdout })
     })
   })
 }
@@ -260,8 +271,14 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
 
-      expect(first.exitCode, `hook 1 stderr:\n${first.stderr}`).toBe(0)
-      expect(second.exitCode, `hook 2 stderr:\n${second.stderr}`).toBe(0)
+      expect(
+        first.exitCode,
+        `hook 1 stderr:\n${first.stderr}\nhook 1 stdout:\n${first.stdout}`,
+      ).toBe(0)
+      expect(
+        second.exitCode,
+        `hook 2 stderr:\n${second.stderr}\nhook 2 stdout:\n${second.stdout}`,
+      ).toBe(0)
       // The discriminating assertion: exactly one process was ever spawned.
       // On unpatched main, both hooks observe the port free and both spawn.
       expect(countSpawns()).toBe(1)
