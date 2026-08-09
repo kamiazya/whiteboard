@@ -98,6 +98,11 @@ Z-order uses the tldraw combos: `]` / `[` step forward/backward,
 mutates the canvas also has a touch path (the context menu's Order row,
 here) — a shortcut is an accelerator, never the only way.
 
+Bindings today: `Cmd/Ctrl+A` select all, `Cmd/Ctrl+C/X/V` copy/cut/paste,
+`Cmd/Ctrl+D` duplicate, `]`/`[`/`Shift+]`/`Shift+[` z-order,
+`Shift+1`/`Shift+2` zoom to fit / to selection, plus the inline-handled
+Delete / Esc / Space-pan / arrows.
+
 Modifier policy: a spec claims the platform command chord with
 `mod: true` (Cmd on macOS or Ctrl elsewhere — either satisfies it) and
 Alt with `alt: true`; a held modifier suppresses every spec that does

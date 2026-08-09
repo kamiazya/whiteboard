@@ -15,6 +15,8 @@
 import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
+  | 'zoom-to-fit'
+  | 'zoom-to-selection'
   | 'select-all'
   | 'copy-selection'
   | 'cut-selection'
@@ -59,6 +61,22 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  // Viewport framing (tldraw combos). Live in every tool — navigation is
+  // never mode-gated.
+  {
+    id: 'zoom-to-fit',
+    codes: ['Digit1'],
+    shift: true,
+    display: 'Shift+1',
+    description: 'Zoom to fit all content',
+  },
+  {
+    id: 'zoom-to-selection',
+    codes: ['Digit2'],
+    shift: true,
+    display: 'Shift+2',
+    description: 'Zoom to the selection',
+  },
   {
     id: 'select-all',
     keys: ['a'],

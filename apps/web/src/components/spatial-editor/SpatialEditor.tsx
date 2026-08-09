@@ -118,6 +118,7 @@ import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.j
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   canvasToScreen,
+  clampZoom,
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
   type Point,
@@ -239,6 +240,9 @@ const ZOOM_STEP_FACTOR = 1.25
 
 /** Duplicated copies land offset by this much, cascading on repeat. */
 const DUPLICATE_OFFSET_PX = 16
+
+/** Breathing room kept around framed content (zoom to fit / selection). */
+const FRAME_MARGIN_PX = 24
 const ZOOM_WHEEL_FACTOR = 1.1
 /** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
 const RESIZE_KEYBOARD_STEP = 8
@@ -1221,10 +1225,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
-    /** Select every node; the first becomes primary, the rest extras. */
+    /**
+     * Select every node; the first becomes primary, the rest extras.
+     * Always returns true, INCLUDING on an empty canvas: returning false
+     * would let the chord fall through to the browser's own select-all,
+     * highlighting the whole page. A handled no-op still consumes it.
+     */
     const selectAllNodes = (): boolean => {
       const [first, ...rest] = canvasRef.current.nodes.map((node) => node.id)
-      if (first === undefined) return false
+      if (first === undefined) return true
       setSelectedId(first)
       setExtraIds(new Set(rest))
       setSelectedEdgeId(null)
@@ -1234,6 +1243,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
     const runShortcut = (id: ShortcutId): boolean => {
       switch (id) {
+        case 'zoom-to-fit':
+          return frameContent()
+        case 'zoom-to-selection':
+          return frameSelection()
         case 'select-all':
           return selectAllNodes()
         case 'copy-selection':
@@ -1347,7 +1360,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           ]
         })
         if (moves.length === 0) return
-        applyResult({ state: gestureState, commands: moves })
+        // ONE batch, not N commands: a multi-node nudge is one user action
+        // and must undo as one step (N separate commits would only group by
+        // the UndoManager's merge-timing heuristic).
+        applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
         return
       }
       if (
@@ -1509,27 +1525,63 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    const centerContentInViewport = () => {
-      if (boxes.length === 0) return
+    /** Union of the given nodes' boxes, or undefined when there is none. */
+    const contentBounds = (ids?: ReadonlySet<string>) => {
       let minX = Number.POSITIVE_INFINITY
       let minY = Number.POSITIVE_INFINITY
       let maxX = Number.NEGATIVE_INFINITY
       let maxY = Number.NEGATIVE_INFINITY
-      for (const { box } of boxes) {
+      for (const { id, box } of boxes) {
+        if (ids !== undefined && !ids.has(id)) continue
         if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) continue
         minX = Math.min(minX, box.x)
         minY = Math.min(minY, box.y)
         maxX = Math.max(maxX, box.x + box.width)
         maxY = Math.max(maxY, box.y + box.height)
       }
-      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return
-      const contentCenter = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return undefined
+      return { minX, minY, maxX, maxY }
+    }
+
+    /**
+     * Frames the given content: pans so its center sits at the viewport
+     * center, and zooms so the whole box fits with a small margin —
+     * magnifying a small selection as readily as it shrinks an oversized
+     * canvas, which is the whole point of zoom-to-selection. Never
+     * magnifies past 1:1 (a two-word note would otherwise fill the screen)
+     * and stays inside the viewport module's own [MIN_ZOOM, MAX_ZOOM].
+     */
+    const frameContent = (ids?: ReadonlySet<string>) => {
+      const bounds = contentBounds(ids)
+      if (bounds === undefined) return false
+      const root = rootRef.current
       const center = viewportCenterScreen()
-      setViewport((vp) => ({
-        zoom: vp.zoom,
-        x: contentCenter.x - center.x / vp.zoom,
-        y: contentCenter.y - center.y / vp.zoom,
-      }))
+      const contentCenter = {
+        x: (bounds.minX + bounds.maxX) / 2,
+        y: (bounds.minY + bounds.maxY) / 2,
+      }
+      const width = Math.max(1, bounds.maxX - bounds.minX)
+      const height = Math.max(1, bounds.maxY - bounds.minY)
+      setViewport((vp) => {
+        let zoom = vp.zoom
+        if (root !== null) {
+          const usableWidth = Math.max(1, root.clientWidth - FRAME_MARGIN_PX * 2)
+          const usableHeight = Math.max(1, root.clientHeight - FRAME_MARGIN_PX * 2)
+          zoom = clampZoom(Math.min(1, usableWidth / width, usableHeight / height))
+        }
+        return {
+          zoom,
+          x: contentCenter.x - center.x / zoom,
+          y: contentCenter.y - center.y / zoom,
+        }
+      })
+      return true
+    }
+
+    /** Frames the selection, or everything when nothing is selected. */
+    const frameSelection = (): boolean => {
+      if (selection === undefined) return frameContent()
+      return frameContent(new Set([selection.id, ...extraIds]))
     }
 
     const createNodeAtViewportCenter = () => {
@@ -1865,9 +1917,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 </button>
                 <button
                   type="button"
-                  data-testid="zoom-center-button"
-                  aria-label="Center content"
-                  onClick={centerContentInViewport}
+                  data-testid="zoom-fit-button"
+                  aria-label="Zoom to fit"
+                  onClick={() => {
+                    frameContent()
+                  }}
                   className={TOOL_BUTTON_CLASS}
                 >
                   <Focus aria-hidden="true" className="size-4" />
