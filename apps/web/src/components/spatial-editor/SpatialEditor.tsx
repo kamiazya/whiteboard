@@ -1225,10 +1225,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
-    /** Select every node; the first becomes primary, the rest extras. */
+    /**
+     * Select every node; the first becomes primary, the rest extras.
+     * Always returns true, INCLUDING on an empty canvas: returning false
+     * would let the chord fall through to the browser's own select-all,
+     * highlighting the whole page. A handled no-op still consumes it.
+     */
     const selectAllNodes = (): boolean => {
       const [first, ...rest] = canvasRef.current.nodes.map((node) => node.id)
-      if (first === undefined) return false
+      if (first === undefined) return true
       setSelectedId(first)
       setExtraIds(new Set(rest))
       setSelectedEdgeId(null)
@@ -1355,7 +1360,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           ]
         })
         if (moves.length === 0) return
-        applyResult({ state: gestureState, commands: moves })
+        // ONE batch, not N commands: a multi-node nudge is one user action
+        // and must undo as one step (N separate commits would only group by
+        // the UndoManager's merge-timing heuristic).
+        applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
         return
       }
       if (

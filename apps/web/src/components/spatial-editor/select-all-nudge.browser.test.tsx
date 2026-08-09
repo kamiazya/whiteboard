@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import type { EditorCommand } from './commands.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -20,7 +21,10 @@ const initial: SpatialCanvas = {
 }
 
 function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
+  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
+    canvas: initial,
+    commands: [],
+  }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
     latest.canvas = canvas
@@ -29,7 +33,10 @@ function makeHost() {
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
-          onChange={(next) => setCanvas(next)}
+          onChange={(next, command) => {
+            latest.commands.push(command)
+            setCanvas(next)
+          }}
           theme="light"
         />
       </div>
@@ -77,7 +84,11 @@ it('arrow-key nudge moves the WHOLE multi-selection by the same delta', () => {
   selectAt(root, 120, 80)
   selectAt(root, 400, 80, true)
 
+  const commandsBefore = latest.commands.length
   fireEvent.keyDown(root, { key: 'ArrowRight' })
+  // ONE batch command, not one per node: the whole nudge is one undo step.
+  expect(latest.commands.length).toBe(commandsBefore + 1)
+  expect(latest.commands.at(-1)?.kind).toBe('batch')
   const a = latest.canvas.nodes.find((n) => n.id === 'a')
   const b = latest.canvas.nodes.find((n) => n.id === 'b')
   const c = latest.canvas.nodes.find((n) => n.id === 'c')
@@ -87,7 +98,16 @@ it('arrow-key nudge moves the WHOLE multi-selection by the same delta', () => {
   expect(c).toMatchObject({ x: 40, y: 240 })
 })
 
-it('Cmd+A on an empty canvas stays inert', () => {
+it('Cmd+A always consumes the event, so the browser never runs its own select-all', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const withNodes = fireEvent.keyDown(root, { code: 'KeyA', key: 'a', metaKey: true })
+  // fireEvent returns false when preventDefault() was called.
+  expect(withNodes).toBe(false)
+})
+
+it('Cmd+A on an empty canvas selects nothing but still consumes the event', () => {
   const empty: SpatialCanvas = { nodes: [], edges: [] }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(empty)
@@ -103,6 +123,9 @@ it('Cmd+A on an empty canvas stays inert', () => {
     )
   }
   const { container } = render(<Host />)
-  fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
+  const consumed = fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
   expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
+  // Native select-all would highlight the whole page — a handled no-op
+  // still has to swallow the chord.
+  expect(consumed).toBe(false)
 })
