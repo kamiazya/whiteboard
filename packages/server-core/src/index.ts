@@ -66,6 +66,7 @@ export {
 export {
   CanvasDocNotFoundError,
   EdgeNotFoundError,
+  NodeLockedError,
   NodeNotFoundError,
   NotATextNodeError,
   PatchValidationError,
