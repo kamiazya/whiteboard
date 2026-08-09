@@ -7,46 +7,10 @@
  */
 
 import { strictDegrade } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import {
-  canvasEdgeArbitrary,
-  spatialNodeArbitrary,
-} from '@kamiazya/whiteboard-canvas-model/test-utils'
+import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseViewerScene, serializeViewerScene } from './scene.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-
-// Unique-by-id nodes, then edges restricted to reference only those ids —
-// this is what keeps every generated canvas schema-valid (the duplicate-id
-// and dangling-reference invariants live in spatialCanvasSchema itself).
-const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
-  .uniqueArray(spatialNodeArbitrary, { minLength: 0, maxLength: 5, selector: (n) => n.id })
-  .chain((nodes) => {
-    if (nodes.length === 0) return fc.constant({ nodes, edges: [] })
-    const nodeIdArb = fc.constantFrom(...nodes.map((n) => n.id))
-    return fc
-      .array(
-        canvasEdgeArbitrary.chain((edge) =>
-          fc.tuple(nodeIdArb, nodeIdArb).map(([fromNode, toNode]) => ({
-            ...edge,
-            fromNode,
-            toNode,
-          })),
-        ),
-        { maxLength: 3 },
-      )
-      .chain((edges) => {
-        // Dedup edge ids the same way node ids are deduped, so the
-        // superRefine duplicate-id check never rejects a generated sample.
-        const seen = new Set<string>()
-        const uniqueEdges = edges.filter((e) => {
-          if (seen.has(e.id)) return false
-          seen.add(e.id)
-          return true
-        })
-        return fc.constant({ nodes, edges: uniqueEdges })
-      })
-  })
 
 describe('scene parse/serialize properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
