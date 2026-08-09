@@ -6,20 +6,14 @@ import { strictDegrade } from './degrade.js'
 const baseNode = { id: 'n1', x: 0, y: 0, width: 10, height: 10 }
 
 describe('strictDegrade', () => {
-  it('drops x-whiteboard from a freehand-carrier node', () => {
+  it('drops x-whiteboard from an extension-carrier node', () => {
     const canvas: SpatialCanvas = {
       nodes: [
         {
           ...baseNode,
           type: 'text',
           text: '',
-          'x-whiteboard': {
-            kind: 'freehand',
-            points: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
+          'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
       edges: [],
@@ -37,7 +31,7 @@ describe('strictDegrade', () => {
           ...baseNode,
           type: 'text',
           text: '',
-          'x-whiteboard': { kind: 'shape', shape: 'rectangle' },
+          'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
       edges: [],
@@ -89,7 +83,7 @@ describe('strictDegrade', () => {
           ...baseNode,
           type: 'text',
           text: '',
-          'x-whiteboard': { kind: 'shape', shape: 'ellipse' },
+          'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
       edges: [],

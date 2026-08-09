@@ -10,7 +10,7 @@ const canvasWithExtension: SpatialCanvas = {
       ...baseNode,
       type: 'text',
       text: '',
-      'x-whiteboard': { kind: 'shape', shape: 'rectangle' },
+      'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     },
   ],
   edges: [],

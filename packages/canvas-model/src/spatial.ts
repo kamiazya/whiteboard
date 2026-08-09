@@ -11,52 +11,29 @@ export const canvasColorSchema = z.union([
 export type CanvasColor = z.infer<typeof canvasColorSchema>
 
 /**
- * `x-whiteboard` is a namespaced extension carried on spatial nodes to
- * preserve the original Excalidraw-derived attributes that JSON Canvas 1.0
- * has no room for. Its absence is always valid — a strict JSON Canvas 1.0
+ * `x-whiteboard` is a namespaced extension carried on spatial nodes for the
+ * one thing JSON Canvas 1.0 has no room for: a node that renders another
+ * canvas inline. Its absence is always valid — a strict JSON Canvas 1.0
  * document parses unchanged.
  *
- * Arrow-decoration attributes (they attach to edges, not nodes, and their
- * strict-export degrade rule is undecided) are deliberately out of scope
- * here and deferred to the slice that builds the strict exporter.
+ * The extension is deliberately NOT a general escape hatch for new visual
+ * primitives. A capability JSON Canvas cannot express is expressed through
+ * an existing node type (a diagram becomes a `file` node pointing at an
+ * image) rather than through a variant only this project can read.
  */
-export const xWhiteboardSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('freehand'),
-      // Node-local coordinates. Unlike JSON Canvas's node geometry, these
-      // are not required to be integers — freehand strokes need sub-pixel
-      // precision and this field sits outside the spec's integer rule.
-      points: z.array(z.tuple([z.number(), z.number()])).min(2),
-      pressures: z.array(z.number().min(0).max(1)).optional(),
-      strokeWidth: z.number().positive().optional(),
-    })
-    .superRefine((value, ctx) => {
-      if (value.pressures !== undefined && value.pressures.length !== value.points.length) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'pressures length must match points length',
-          path: ['pressures'],
-        })
-      }
-    }),
-  z.object({
-    kind: z.literal('shape'),
-    shape: z.enum(['rectangle', 'ellipse', 'diamond']),
-  }),
-  z.object({
-    kind: z.literal('embed'),
-    canvasId: canvasIdSchema,
-    versionRef: z.string().min(1).optional(),
-  }),
-])
+export const xWhiteboardSchema = z.object({
+  kind: z.literal('embed'),
+  canvasId: canvasIdSchema,
+  versionRef: z.string().min(1).optional(),
+})
 
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
 // JSON Canvas 1.0 geometry is specified in integer pixels.
 const positionFieldSchema = z.number().int()
-// Sizes reject negatives. Zero stays valid: a straight-line freehand stroke carried
-// via x-whiteboard legitimately has a zero-width or zero-height bounding box.
+// Sizes reject negatives. Zero stays valid: JSON Canvas 1.0 does not forbid a
+// degenerate box, and a node collapsed on one axis is a layout concern, not a
+// parse error.
 const sizeFieldSchema = z.number().int().nonnegative()
 
 const sharedNodeFieldsSchema = z.object({
@@ -66,7 +43,12 @@ const sharedNodeFieldsSchema = z.object({
   width: sizeFieldSchema,
   height: sizeFieldSchema,
   color: canvasColorSchema.optional(),
-  'x-whiteboard': xWhiteboardSchema.optional(),
+  // `.catch` rather than a reject: an unrecognised extension payload — a
+  // variant this project has dropped, or one a future version writes — must
+  // not make the whole canvas unreadable. The node survives; only the
+  // extension is lost, which is the same outcome a strict JSON Canvas
+  // consumer already gets.
+  'x-whiteboard': xWhiteboardSchema.optional().catch(undefined),
 })
 
 const textNodeSchema = sharedNodeFieldsSchema.extend({

@@ -140,32 +140,10 @@ export const canvasEdgeArbitrary = fc.record({
   color: fc.option(canvasColorArbitrary, { nil: undefined }),
 })
 
-const xWhiteboardFreehandArbitrary = fc.record({
-  kind: fc.constant('freehand' as const),
-  points: fc.array(
-    fc.tuple(
-      fc.float({ noNaN: true, noDefaultInfinity: true }),
-      fc.float({ noNaN: true, noDefaultInfinity: true }),
-    ),
-    { minLength: 2, maxLength: 6 },
-  ),
-})
-
-const xWhiteboardShapeArbitrary = fc.record({
-  kind: fc.constant('shape' as const),
-  shape: fc.constantFrom('rectangle' as const, 'ellipse' as const, 'diamond' as const),
-})
-
-const xWhiteboardEmbedArbitrary = fc.record({
+export const xWhiteboardArbitrary = fc.record({
   kind: fc.constant('embed' as const),
   canvasId: canonicalUlidArbitrary,
 })
-
-export const xWhiteboardArbitrary = fc.oneof(
-  xWhiteboardFreehandArbitrary,
-  xWhiteboardShapeArbitrary,
-  xWhiteboardEmbedArbitrary,
-)
 
 export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })
 

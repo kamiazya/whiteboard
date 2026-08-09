@@ -54,7 +54,7 @@ describe('spatialNodeSchema (text)', () => {
     ).toBe(false)
   })
 
-  it('accepts zero width/height (degenerate freehand bounding boxes) and negative x/y', () => {
+  it('accepts zero width/height (degenerate boxes) and negative x/y', () => {
     expect(
       spatialNodeSchema.safeParse({
         ...baseGeometry,
@@ -149,50 +149,6 @@ describe('x-whiteboard extension', () => {
     )
   })
 
-  it('accepts a freehand payload with 2+ points', () => {
-    const result = xWhiteboardSchema.safeParse({
-      kind: 'freehand',
-      points: [
-        [0, 0],
-        [1, 1],
-      ],
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects a freehand payload with a single point', () => {
-    expect(xWhiteboardSchema.safeParse({ kind: 'freehand', points: [[0, 0]] }).success).toBe(false)
-  })
-
-  it('rejects freehand pressures whose length does not match points', () => {
-    const result = xWhiteboardSchema.safeParse({
-      kind: 'freehand',
-      points: [
-        [0, 0],
-        [1, 1],
-      ],
-      pressures: [0.5],
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects a pressure outside [0, 1]', () => {
-    const result = xWhiteboardSchema.safeParse({
-      kind: 'freehand',
-      points: [
-        [0, 0],
-        [1, 1],
-      ],
-      pressures: [0.5, 1.2],
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts a shape payload with a valid shape name and rejects an unknown one', () => {
-    expect(xWhiteboardSchema.safeParse({ kind: 'shape', shape: 'ellipse' }).success).toBe(true)
-    expect(xWhiteboardSchema.safeParse({ kind: 'shape', shape: 'star' }).success).toBe(false)
-  })
-
   it('accepts an embed payload with a valid canvasId and rejects a malformed one', () => {
     expect(
       xWhiteboardSchema.safeParse({ kind: 'embed', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
@@ -208,7 +164,7 @@ describe('x-whiteboard extension', () => {
       ...baseGeometry,
       type: 'text',
       text: 'hi',
-      'x-whiteboard': { kind: 'shape', shape: 'rectangle' },
+      'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     })
     expect(result.success).toBe(true)
   })

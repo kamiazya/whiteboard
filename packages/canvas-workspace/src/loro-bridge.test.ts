@@ -145,47 +145,21 @@ describe('loro-bridge', () => {
     expect(result.nodes[0].color).toBe('3')
   })
 
-  test('round-trips node with x-whiteboard shape extension', () => {
+  test('round-trips node with x-whiteboard embed extension', () => {
     const doc = makeDoc()
     const node: SpatialNode = {
       ...TEXT_NODE,
-      'x-whiteboard': { kind: 'shape', shape: 'ellipse' },
+      'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     }
     const canvas: SpatialCanvas = { nodes: [node], edges: [] }
 
     writeSpatialCanvas(doc, canvas)
     const result = readSpatialCanvas(doc)
 
-    expect(result.nodes[0]['x-whiteboard']).toEqual({ kind: 'shape', shape: 'ellipse' })
-  })
-
-  test('round-trips node with x-whiteboard freehand extension', () => {
-    const doc = makeDoc()
-    const node: SpatialNode = {
-      id: 'freehand-1',
-      type: 'text',
-      x: 10,
-      y: 20,
-      width: 100,
-      height: 50,
-      text: '',
-      'x-whiteboard': {
-        kind: 'freehand',
-        points: [
-          [0, 0],
-          [10, 20],
-          [30, 40],
-        ],
-        pressures: [0.5, 0.8, 1.0],
-        strokeWidth: 2,
-      },
-    }
-    const canvas: SpatialCanvas = { nodes: [node], edges: [] }
-
-    writeSpatialCanvas(doc, canvas)
-    const result = readSpatialCanvas(doc)
-
-    expect(result.nodes[0]['x-whiteboard']).toEqual(node['x-whiteboard'])
+    expect(result.nodes[0]['x-whiteboard']).toEqual({
+      kind: 'embed',
+      canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+    })
   })
 
   test('overwrites existing canvas data', () => {

@@ -10,10 +10,10 @@ widget, HTML export). Private workspace package — never published to npm.
   `x-whiteboard`) to an inline SVG via canvas-render's
   `layoutSpatialCanvas` (the shared SpatialCanvas -> `Scene` builder, also
   used by mcp-server's Node export) followed by `renderSceneToSvg`. This
-  package supplies `parseMarkdownBody`, its own `VIEWER_APPEARANCE`
-  resolver (`./viewer-appearance`, deriving fill from `node.color` and
-  radius from an `x-whiteboard` ellipse hint), and no `onDegrade` callback
-  — a malformed body or unrecognized node kind still renders, silently.
+  package supplies `parseMarkdownBody`, canvas-render's shared
+  `createSpatialTheme({ mode: 'light' })` (the viewer is read-only and has
+  no theme switch of its own), and no `onDegrade` callback — a malformed
+  body or unrecognized node kind still renders, silently.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
 - `mountCanvasViewer(container, options)` — imperative mount with a

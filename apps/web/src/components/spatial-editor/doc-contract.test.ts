@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { SPATIAL_EDITOR_UNSUPPORTED } from './SpatialEditor.js'
 
 // Grouping (J4), undo/redo (the LoroDoc UndoManager behind the dock's
-// history cluster), alignment/distribution, and snapping have all shipped
-// and left this list.
-const REQUIRED_UNSUPPORTED = ['freehand-drawing', 'shape-tools', 'persistence', 'sync']
+// history cluster), alignment/distribution, and snapping all shipped and
+// left this list. Freehand and shape tools left it for the opposite reason:
+// they are out of scope, not deferred — JSON Canvas 1.0 has no node for
+// them. A list of "not yet" must not carry "never".
+const REQUIRED_UNSUPPORTED = ['persistence', 'sync']
 
 describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
   it('names exactly every parity gap this slice deliberately does not implement (both directions: nothing missing, nothing undocumented)', () => {
@@ -25,7 +27,17 @@ describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
     // The list is a promise to the reader; a stale entry is worse than no
     // list. These all ship today (J4 groups, the history cluster's
     // undo/redo, the slice-4/5 clipboard family, and drag snapping).
-    for (const shipped of ['grouping', 'undo-redo', 'clipboard', 'duplicate', 'snapping']) {
+    for (const shipped of [
+      'grouping',
+      'undo-redo',
+      'clipboard',
+      'duplicate',
+      'snapping',
+      // Not shipped — out of scope. Either way it does not belong on a
+      // list the reader reads as a promise.
+      'freehand-drawing',
+      'shape-tools',
+    ]) {
       expect(SPATIAL_EDITOR_UNSUPPORTED).not.toContain(shipped)
     }
   })

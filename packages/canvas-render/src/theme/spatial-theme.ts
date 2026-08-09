@@ -57,14 +57,6 @@ function rawHex(color: CanvasColor | undefined): string | undefined {
   return color !== undefined && color.startsWith('#') ? color : undefined
 }
 
-function shapeRadius(node: SpatialNode, palette: SpatialPalette): number {
-  const extension = node['x-whiteboard']
-  if (extension?.kind === 'shape' && extension.shape === 'ellipse') {
-    return Math.min(node.width, node.height) / 2
-  }
-  return palette.cornerRadiusPx
-}
-
 function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
   return {
     resolveNode: (node: SpatialNode) => {
@@ -81,7 +73,7 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
         accent !== null
           ? { fill: accent.fill, stroke: accent.stroke }
           : { fill: rawHex(node.color) ?? style.fill, stroke: style.stroke }
-      return { radius: shapeRadius(node, palette), appearance }
+      return { radius: palette.cornerRadiusPx, appearance }
     },
     resolveEdge: (edge: CanvasEdge) => ({
       stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
