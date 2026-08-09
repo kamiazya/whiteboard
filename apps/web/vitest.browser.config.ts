@@ -71,6 +71,9 @@ export default defineConfig({
   test: {
     name: 'web-browser',
     include: ['src/**/*.browser.test.tsx'],
+    // Every browser test renders against the app's real stylesheet — see
+    // browser-setup.ts for what silently breaks without it.
+    setupFiles: ['./src/test-utils/browser-setup.ts'],
     browser: {
       enabled: true,
       headless: true,
