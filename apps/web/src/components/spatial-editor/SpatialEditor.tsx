@@ -455,6 +455,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // the marquee/move path mid-air.
     const touchPointsRef = useRef<Map<number, Point>>(new Map())
     const pinchActiveRef = useRef(false)
+    /**
+     * Touch multi-selection, the iOS "hold one, tap the rest" gesture.
+     *
+     * `gatherAnchorRef` is the finger holding the selection open; while it is
+     * down, a second finger's tap on a node collects that node instead of
+     * starting a pinch. Long press is NOT the trigger: the browser already
+     * synthesises `contextmenu` from it, and taking it would leave touch with
+     * no route to an object's menu.
+     *
+     * A second finger otherwise means pinch, so the two are separated by
+     * STATE rather than by timing — gathering needs a finger already holding
+     * a node, which a pinch never has. Fingers listed in `gatherPointersRef`
+     * have already done their job on the press and stay inert until they lift.
+     */
+    const gatherAnchorRef = useRef<number | null>(null)
+    const gatherPointersRef = useRef<Set<number>>(new Set())
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
@@ -938,6 +954,40 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const isOverlayEvent = (e: React.SyntheticEvent) =>
       e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
 
+    /**
+     * Add or remove one node from the multi-selection, shared by shift-click
+     * and the touch gather gesture so the two can never disagree about what
+     * "already selected" means.
+     *
+     * `primaryId` is passed in rather than read from state because the gather
+     * path learns the anchor from the in-flight gesture, whose `setSelectedId`
+     * has not been applied yet when this runs.
+     */
+    const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
+      // Node and edge selection are mutually exclusive: Delete processes a
+      // selected edge FIRST, so an edge left selected here would be what a
+      // Delete on the node multi-selection actually removes.
+      setSelectedEdgeId(null)
+      if (primaryId === null) {
+        setSelectedId(hitId)
+        return
+      }
+      if (hitId === primaryId) {
+        // Deselecting the primary promotes an extra, if any.
+        const [next, ...rest] = [...extraIds]
+        setSelectedId(next ?? null)
+        setExtraIds(new Set(rest))
+        return
+      }
+      setSelectedId(primaryId)
+      setExtraIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(hitId)) next.delete(hitId)
+        else next.add(hitId)
+        return next
+      })
+    }
+
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       if (isOverlayEvent(e)) return
       const root = rootRef.current
@@ -945,6 +995,47 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (e.pointerType === 'touch') {
         touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
         if (pinchActiveRef.current) return
+        if (gatherPointersRef.current.size > 0 || gatherAnchorRef.current !== null) {
+          // Already gathering: any further finger is another tap, never a
+          // pinch participant, so it must not sit in touchPointsRef.
+          touchPointsRef.current.delete(e.pointerId)
+        }
+        if (touchPointsRef.current.size === 2 || gatherAnchorRef.current !== null) {
+          const anchorId =
+            gatherAnchorRef.current ??
+            [...touchPointsRef.current.keys()].find((id) => id !== e.pointerId) ??
+            null
+          const anchorPrimary =
+            gatherAnchorRef.current !== null
+              ? selectedId
+              : gestureState.kind === 'moving'
+                ? gestureState.nodeId
+                : null
+          const gathered =
+            anchorPrimary === null
+              ? undefined
+              : hitTest(selectableBoxes, screenToCanvas(clientPointToRootLocal(e, root), viewport))
+          if (gathered !== undefined && anchorId !== null) {
+            touchPointsRef.current.delete(e.pointerId)
+            gatherPointersRef.current.add(e.pointerId)
+            if (gatherAnchorRef.current === null) {
+              gatherAnchorRef.current = anchorId
+              // Gathering is a selection act, not a drag. Whatever the anchor
+              // had begun to move is abandoned here — carrying a half-applied
+              // delta into the new multi-selection would jump every node
+              // gathered afterwards by an offset the user never gave it.
+              if (gestureState.kind !== 'idle') {
+                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+              }
+            }
+            setMarquee(null)
+            isPanningRef.current = false
+            lastPressRef.current = null
+            doublePressRef.current = null
+            toggleSelectionMember(anchorPrimary, gathered)
+            return
+          }
+        }
         if (touchPointsRef.current.size === 2) {
           // The second finger converts whatever the first finger started
           // (marquee, node move, double-press arming) into navigation:
@@ -1002,23 +1093,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // re-renders because it compares node ids, not DOM identity.
       // Shift-click builds a multi-selection instead of starting a gesture.
       if (e.shiftKey && hitId !== undefined) {
-        // Node and edge selection are mutually exclusive: Delete processes a
-        // selected edge FIRST, so an edge left selected here would be what a
-        // Delete on the node multi-selection actually removes.
-        setSelectedEdgeId(null)
-        if (selectedId === null) {
-          setSelectedId(hitId)
-        } else if (hitId === selectedId) {
-          // Deselecting the primary promotes an extra, if any.
-          const [next, ...rest] = [...extraIds]
-          setSelectedId(next ?? null)
-          setExtraIds(new Set(rest))
-        } else {
-          const next = new Set(extraIds)
-          if (next.has(hitId)) next.delete(hitId)
-          else next.add(hitId)
-          setExtraIds(next)
-        }
+        toggleSelectionMember(selectedId, hitId)
         return
       }
       // Edge hit-test runs at the press so the double-press pairing can
@@ -1142,6 +1217,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      // A gathering finger has already acted on its press, and the anchor's
+      // own gesture was cancelled when gathering began — neither may resume
+      // dragging the canvas while the other is still down.
+      if (gatherPointersRef.current.has(e.pointerId) || gatherAnchorRef.current === e.pointerId) {
+        return
+      }
       if (e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
         const points = touchPointsRef.current
         const nextPoint = clientPointToRootLocal(e, root)
@@ -1202,6 +1283,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
+      // Gathering fingers act on the press, so their release carries no
+      // meaning — running the click/marquee logic here would re-collapse the
+      // very selection the gesture just built. The anchor lifting ends it.
+      if (gatherPointersRef.current.delete(e.pointerId)) return
+      if (gatherAnchorRef.current === e.pointerId) {
+        gatherAnchorRef.current = null
+        touchPointsRef.current.delete(e.pointerId)
+        return
+      }
       if (e.pointerType === 'touch') {
         touchPointsRef.current.delete(e.pointerId)
         if (pinchActiveRef.current) {
@@ -1372,6 +1462,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+      // Pointer ids are reused, so a gathering finger left in these refs by a
+      // cancel would silently deaden whichever later touch inherits its id.
+      gatherPointersRef.current.delete(e.pointerId)
+      if (gatherAnchorRef.current === e.pointerId) gatherAnchorRef.current = null
       if (e.pointerType === 'touch') {
         touchPointsRef.current.delete(e.pointerId)
         if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
