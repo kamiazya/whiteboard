@@ -92,3 +92,17 @@ describe('strictDegrade', () => {
     expect(strictDegrade(strictDegrade(canvas))).toEqual(strictDegrade(canvas))
   })
 })
+
+// The canvas-level key is a rendering preference, so strict JSON Canvas has
+// no room for it either. `strictDegrade` rebuilding the canvas from nodes and
+// edges alone already drops it — this pins that as the contract rather than
+// leaving it to how the object happens to be constructed.
+it('drops the canvas-level x-whiteboard as well', () => {
+  const degraded = strictDegrade({
+    nodes: [],
+    edges: [],
+    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+  })
+
+  expect(degraded).not.toHaveProperty('x-whiteboard')
+})

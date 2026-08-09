@@ -26,7 +26,11 @@ paths:
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: canvas ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - JSON Canvas geometry is integer, with no extension carve-out: `x-whiteboard` carries no geometry of its own.
-- `x-whiteboard` is the canvas-embed extension only, and is the one documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a node written by another version still parses. The reject-not-drop contract governs what others must honour; this key is our own escape hatch, and the node survives either way. Do NOT grow it into a general home for visual primitives JSON Canvas lacks (the `freehand`/`shape` variants were removed for exactly that reason) — express those through an existing node type instead.
+- There are two `x-whiteboard` keys, and the line between them is what keeps the node-level one from growing back:
+  - **On a NODE** it is the canvas-embed extension only — CONTENT that JSON Canvas cannot express. Do NOT grow it into a general home for visual primitives JSON Canvas lacks (the `freehand`/`shape` variants were removed for exactly that reason); express those through an existing node type instead.
+  - **On the CANVAS** it holds rendering PREFERENCES for things JSON Canvas already models (today: `edgeRouting.style`). A consumer that drops it still renders every edge, just with its own routing. Nothing that changes what the document MEANS belongs here.
+- Both are the documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a document written by another version still parses. The reject-not-drop contract governs what others must honour; these keys are our own escape hatch, and the document survives either way.
+- A preference meant to be overridable at a finer scope later (an edge overriding the canvas's routing style) declares its schema ONCE — `edgeRoutingSchema` — and the override reuses it rather than restating the shape.
 
 ## Tests
 

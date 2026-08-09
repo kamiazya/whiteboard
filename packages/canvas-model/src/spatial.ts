@@ -106,12 +106,47 @@ function findDuplicateId(ids: string[]): string | undefined {
   return undefined
 }
 
+/**
+ * How an edge gets from one endpoint to the other once the router has decided
+ * it must step around something.
+ *
+ * Declared on its own rather than inline, because the same choice is meant to
+ * be overridable per edge later — that override has to reuse this type, not
+ * restate it.
+ *
+ * `straight` is the default and the only shape JSON Canvas itself implies:
+ * direct segments, bending only to clear an obstacle.
+ */
+export const edgeRoutingStyleSchema = z.enum(['straight', 'orthogonal', 'curved'])
+
+export type EdgeRoutingStyle = z.infer<typeof edgeRoutingStyleSchema>
+
+export const edgeRoutingSchema = z.object({ style: edgeRoutingStyleSchema })
+
+/**
+ * `x-whiteboard` at the CANVAS level — separate from the node-level key of the
+ * same name, and holding preferences rather than content.
+ *
+ * This is not the general escape hatch the node-level key was narrowed away
+ * from being. What lives here describes how to DRAW things JSON Canvas already
+ * models; a consumer that drops it still renders every edge, just with its own
+ * routing. Nothing that changes what the document MEANS belongs here.
+ */
+export const canvasExtensionSchema = z.object({
+  edgeRouting: edgeRoutingSchema.optional(),
+})
+
+export type CanvasExtension = z.infer<typeof canvasExtensionSchema>
+
 export const spatialCanvasSchema = z
   .object({
     // JSON Canvas 1.0 declares both top-level arrays optional; a bare `{}`
     // is a valid (empty) canvas.
     nodes: z.array(spatialNodeSchema).default([]),
     edges: z.array(canvasEdgeSchema).default([]),
+    // `.catch` for the same reason the node-level key uses it: a preference
+    // written by another version must cost the preference, never the canvas.
+    'x-whiteboard': canvasExtensionSchema.optional().catch(undefined),
   })
   .superRefine((value, ctx) => {
     const duplicateNodeId = findDuplicateId(value.nodes.map((node) => node.id))
