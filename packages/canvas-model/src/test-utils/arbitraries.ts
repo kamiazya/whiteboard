@@ -67,12 +67,13 @@ export const extensionFacetsArbitrary = fc.dictionary(extensionFacetKeyArbitrary
 const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 15 })
   .filter((key) => !(RESERVED_ROOT_KEYS as readonly string[]).includes(key))
-  // `__proto__` is excluded because no object-building parser can round-trip
-  // it: assigning it writes the PROTOTYPE rather than creating an own key,
-  // so the value comes back dropped. That drop is the safe outcome (it is
-  // what stops a hostile facets payload from reaching a downstream spread as
-  // a prototype), so the property is narrowed rather than the schema
-  // changed. `facets-raw.test.ts` pins the drop as deliberate behaviour.
+  // `__proto__` is excluded because Zod deliberately skips it when building
+  // the parsed object, so it can never round-trip and the preservation
+  // property cannot hold for it. Keeping that skip matters: a consumer that
+  // merges parsed facets with `Object.assign` or a `for (k) out[k] = ...`
+  // loop invokes the `__proto__` setter and pollutes the target's prototype.
+  // So the property is narrowed rather than the schema widened to carry the
+  // key; `facets.test.ts` pins the skip as deliberate behaviour.
   .filter((key) => key !== '__proto__')
 
 export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, fc.jsonValue(), {
