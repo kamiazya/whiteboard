@@ -4,14 +4,7 @@ import { SPATIAL_EDITOR_UNSUPPORTED } from './SpatialEditor.js'
 // Grouping (J4) and undo/redo (the LoroDoc UndoManager behind the dock's
 // history cluster) both shipped and left this list; alignment/distribution
 // joined it as the next explicitly-deferred gap.
-const REQUIRED_UNSUPPORTED = [
-  'freehand-drawing',
-  'shape-tools',
-  'snapping',
-  'align-distribute',
-  'persistence',
-  'sync',
-]
+const REQUIRED_UNSUPPORTED = ['freehand-drawing', 'shape-tools', 'snapping', 'persistence', 'sync']
 
 describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
   it('names exactly every parity gap this slice deliberately does not implement (both directions: nothing missing, nothing undocumented)', () => {

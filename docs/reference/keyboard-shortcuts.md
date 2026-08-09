@@ -36,6 +36,14 @@ pinch zooms in every tool.
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Esc` | Cancel the current gesture or clear the selection |
 
+**Align and distribute** have no shortcut — they live in the right-click
+menu of a multi-node selection, as **Align** (six edges and centre lines)
+and **Distribute** (horizontal, vertical). Align appears once two nodes are
+selected; distribute once there are three, because it repositions the
+middle ones and leaves the outermost two anchoring the span. Both align to
+the selection's own bounding box, so the result does not depend on which
+node you clicked first, and each is a single undo step.
+
 A locked node or edge cannot be selected, moved, restyled, or deleted, and
 MCP tools refuse to patch it too. Right-click it and choose **Unlock** to
 release it. Nodes and edges lock independently: locking a node does not
