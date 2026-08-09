@@ -1,6 +1,8 @@
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
+import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
+import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -98,9 +100,19 @@ export function DaemonCanvasPage({
   const createBackendRef = useRef(createBackend)
   createBackendRef.current = createBackend
   const resolvedCreateBackend = useCallback(
-    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend =>
-      createBackendRef.current?.(workspaceId, slug, daemonFetch) ??
-      new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }),
+    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend => {
+      const injected = createBackendRef.current?.(workspaceId, slug, daemonFetch)
+      if (injected) return injected
+      // A secure page cannot open a ws:// socket to an http daemon at all, so
+      // the transport is decided up front rather than attempted and retried.
+      const transport = selectCanvasTransport({
+        pageOrigin: window.location.origin,
+        daemonBaseUrl,
+      })
+      return transport === 'sse'
+        ? new SseBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+        : new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+    },
     [daemonBaseUrl],
   )
 
