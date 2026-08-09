@@ -7,7 +7,9 @@ import { TOOL_PROFILES } from './tool-profiles.js'
 // client a misleading approval-policy hint for a tool that no longer exists.
 const ACTIVE_TOOL_NAMES = [
   'facet_set',
+  'node_lock',
   'node_patch',
+  'edge_lock',
   'edge_patch',
   'body_patch',
   'canvas_render_svg',

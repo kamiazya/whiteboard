@@ -32,8 +32,10 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_export_okf',
   'canvas_import_okf',
   'canvas_render_svg',
+  'edge_lock',
   'edge_patch',
   'facet_set',
+  'node_lock',
   'node_patch',
   'version_list',
   'version_restore',
@@ -46,6 +48,7 @@ export const ALL_REGISTERED_TOOLS = [
 
 export const COVERED_TOOLS = [
   'canvas_import_okf',
+  'node_lock',
   'facet_set',
   'version_save',
   'version_restore',
@@ -53,7 +56,7 @@ export const COVERED_TOOLS = [
   'wb_canvas_create',
 ] as const
 
-export const ERROR_PATH_ONLY_TOOLS = [] as const
+export const ERROR_PATH_ONLY_TOOLS = ['edge_lock'] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).

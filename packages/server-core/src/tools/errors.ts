@@ -35,6 +35,17 @@ export class NodeLockedError extends Error {
   }
 }
 
+/** Edge counterpart to `NodeLockedError` — see `edge_lock`. */
+export class EdgeLockedError extends Error {
+  constructor(
+    public readonly canvasId: string,
+    public readonly edgeId: string,
+  ) {
+    super(`edge is locked: ${edgeId} in canvas ${canvasId} (unlock it with edge_lock)`)
+    this.name = 'EdgeLockedError'
+  }
+}
+
 /** Thrown when a patch tool targets an edgeId absent from the canvas. */
 export class EdgeNotFoundError extends Error {
   constructor(

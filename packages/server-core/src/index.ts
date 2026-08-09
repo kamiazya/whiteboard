@@ -56,6 +56,12 @@ export {
   canvasRenderSvgOutputSchema,
   createCanvasRenderSvgTool,
 } from './tools/canvas-render-svg.js'
+export type { EdgeLockInput, EdgeLockOutput } from './tools/edge-lock.js'
+export {
+  createEdgeLockTool,
+  edgeLockInputSchema,
+  edgeLockOutputSchema,
+} from './tools/edge-lock.js'
 export type { EdgePatchFields, EdgePatchInput, EdgePatchOutput } from './tools/edge-patch.js'
 export {
   createEdgePatchTool,
@@ -65,6 +71,7 @@ export {
 } from './tools/edge-patch.js'
 export {
   CanvasDocNotFoundError,
+  EdgeLockedError,
   EdgeNotFoundError,
   NodeLockedError,
   NodeNotFoundError,

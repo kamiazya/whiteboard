@@ -11,9 +11,11 @@ import {
   deleteSpatialEdge,
   deleteSpatialNode,
   readCoreFacets,
+  readEdgeLocks,
   readFacets,
   readNodeLocks,
   readSpatialCanvas,
+  setEdgeLock,
   setNodeLock,
   withSpatialBatch,
   writeCoreFacets,
@@ -760,6 +762,86 @@ describe('node lock sidecar', () => {
     setNodeLock(doc, TEXT_NODE.id, true)
     expect(undoManager.canUndo()).toBe(false)
     setNodeLock(doc, 'never-locked', false)
+    expect(undoManager.canUndo()).toBe(false)
+  })
+})
+
+describe('edge lock sidecar', () => {
+  const seeded = () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    return doc
+  }
+
+  test('setEdgeLock marks and clears an edge; readEdgeLocks reports the set', () => {
+    const doc = seeded()
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+
+    setEdgeLock(doc, EDGE.id, true)
+    expect(readEdgeLocks(doc)).toEqual(new Set([EDGE.id]))
+    // Node and edge locks are independent sets, not one shared namespace.
+    expect(readNodeLocks(doc)).toEqual(new Set())
+
+    setEdgeLock(doc, EDGE.id, false)
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+  })
+
+  test('the lock never reaches the canvas value exports serialize', () => {
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    const canvas = readSpatialCanvas(doc)
+    expect(canvas.edges.map((edge) => edge.id)).toEqual([EDGE.id])
+    for (const edge of canvas.edges) {
+      expect(Object.keys(edge)).not.toContain('locked')
+    }
+  })
+
+  test('a full writeSpatialCanvas resync leaves the sidecar intact', () => {
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    expect(readEdgeLocks(doc)).toEqual(new Set([EDGE.id]))
+  })
+
+  test('a resync that OMITS a locked edge takes its lock entry with it', () => {
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [] })
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+  })
+
+  test('deleting an edge cascades its lock entry away', () => {
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    deleteSpatialEdge(doc, EDGE.id)
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+
+    // Same cascade inside a batch.
+    writeSpatialEdge(doc, EDGE)
+    setEdgeLock(doc, EDGE.id, true)
+    withSpatialBatch(doc, (w) => w.deleteEdge(EDGE.id))
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+  })
+
+  test('deleting a node takes the locks of the edges it cascades away', () => {
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    // EDGE runs node-1 -> node-2, so deleting either endpoint removes it —
+    // and an orphaned lock would be inherited by a reminted edge id.
+    deleteSpatialNode(doc, TEXT_NODE.id)
+    expect(readSpatialCanvas(doc).edges).toEqual([])
+    expect(readEdgeLocks(doc)).toEqual(new Set())
+  })
+
+  test('setEdgeLock to its current value writes nothing (no empty undo step)', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = seeded()
+    setEdgeLock(doc, EDGE.id, true)
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(undoManager.canUndo()).toBe(false)
+    setEdgeLock(doc, EDGE.id, true)
+    expect(undoManager.canUndo()).toBe(false)
+    setEdgeLock(doc, 'never-locked', false)
     expect(undoManager.canUndo()).toBe(false)
   })
 })

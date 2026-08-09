@@ -20,6 +20,17 @@ const FACETS_KEY = 'facets'
 // which is what keeps it out of every export — `readSpatialCanvas` reads
 // only NODES_KEY/EDGES_KEY, and every export path goes through it.
 const NODE_LOCKS_KEY = 'nodeLocks'
+const EDGE_LOCKS_KEY = 'edgeLocks'
+
+/**
+ * Drops a removed element's lock entry. Every node/edge removal path owes
+ * this call — an entry left behind for an id the canvas no longer has would
+ * be inherited by a later element reminted onto that id.
+ */
+function dropLockInto(doc: LoroDoc, mapKey: string, id: string): void {
+  const locksMap = doc.getMap(mapKey)
+  if (locksMap.keys().includes(id)) locksMap.delete(id)
+}
 const CORE_KEY = 'core'
 
 type Fields = Record<string, unknown>
@@ -90,19 +101,17 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
     edgesMap.set(edge.id, edgeToFields(edge))
   }
 
-  // A resync is the second node-removal path, alongside deleteSpatialNode —
-  // so it owes the same lock cascade. An entry left behind for a node the
-  // canvas no longer has would be inherited by a later node reminted onto
-  // that id.
-  const locksMap = doc.getMap(NODE_LOCKS_KEY)
-  const lockedIds = new Set<string>(locksMap.keys())
+  // A resync is the second removal path, alongside deleteSpatialNode/Edge —
+  // so it owes the same lock cascade.
   for (const id of existingNodeIds) {
     if (incomingNodeIds.has(id)) continue
     nodesMap.delete(id)
-    if (lockedIds.has(id)) locksMap.delete(id)
+    dropLockInto(doc, NODE_LOCKS_KEY, id)
   }
   for (const id of existingEdgeIds) {
-    if (!incomingEdgeIds.has(id)) edgesMap.delete(id)
+    if (incomingEdgeIds.has(id)) continue
+    edgesMap.delete(id)
+    dropLockInto(doc, EDGE_LOCKS_KEY, id)
   }
 
   doc.commit()
@@ -126,15 +135,14 @@ function deleteNodeCascadeInto(doc: LoroDoc, nodeId: string): boolean {
   if (!nodesMap.keys().includes(nodeId)) return false
 
   nodesMap.delete(nodeId)
-  // The lock is keyed by node id, so a deleted node must take its entry
-  // with it — otherwise a reminted id could inherit a stranger's lock.
-  const locksMap = doc.getMap(NODE_LOCKS_KEY)
-  if (locksMap.keys().includes(nodeId)) locksMap.delete(nodeId)
+  dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
   for (const edgeId of edgesMap.keys()) {
     const raw = edgesMap.get(edgeId)
     const parsed = canvasEdgeSchema.safeParse(raw)
     if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
       edgesMap.delete(edgeId)
+      // The cascaded edges are removals too, so their own locks go with them.
+      dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
     }
   }
   return true
@@ -145,6 +153,7 @@ function deleteEdgeInto(doc: LoroDoc, edgeId: string): boolean {
   const edgesMap = doc.getMap(EDGES_KEY)
   if (!edgesMap.keys().includes(edgeId)) return false
   edgesMap.delete(edgeId)
+  dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
   return true
 }
 
@@ -243,6 +252,23 @@ export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) 
   if (wrote) doc.commit()
 }
 
+function readLocks(doc: LoroDoc, mapKey: string): ReadonlySet<string> {
+  const locksMap = doc.getMap(mapKey)
+  const locked = new Set<string>()
+  for (const id of locksMap.keys()) {
+    if (locksMap.get(id) === true) locked.add(id)
+  }
+  return locked
+}
+
+function setLock(doc: LoroDoc, mapKey: string, id: string, locked: boolean): void {
+  const locksMap = doc.getMap(mapKey)
+  if ((locksMap.get(id) === true) === locked) return
+  if (locked) locksMap.set(id, true)
+  else locksMap.delete(id)
+  doc.commit()
+}
+
 /**
  * Node ids the user has locked. Lock is an EDITOR affordance, not canvas
  * content: it lives in its own map so it never reaches `readSpatialCanvas`
@@ -250,12 +276,7 @@ export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) 
  * file, which is what keeps the stored document spec-clean.
  */
 export function readNodeLocks(doc: LoroDoc): ReadonlySet<string> {
-  const locksMap = doc.getMap(NODE_LOCKS_KEY)
-  const locked = new Set<string>()
-  for (const nodeId of locksMap.keys()) {
-    if (locksMap.get(nodeId) === true) locked.add(nodeId)
-  }
-  return locked
+  return readLocks(doc, NODE_LOCKS_KEY)
 }
 
 /**
@@ -264,12 +285,21 @@ export function readNodeLocks(doc: LoroDoc): ReadonlySet<string> {
  * nothing-changed writes stay out of history.
  */
 export function setNodeLock(doc: LoroDoc, nodeId: string, locked: boolean): void {
-  const locksMap = doc.getMap(NODE_LOCKS_KEY)
-  const current = locksMap.get(nodeId) === true
-  if (current === locked) return
-  if (locked) locksMap.set(nodeId, true)
-  else locksMap.delete(nodeId)
-  doc.commit()
+  setLock(doc, NODE_LOCKS_KEY, nodeId, locked)
+}
+
+/**
+ * Edge ids the user has locked. A separate set from the node locks, not a
+ * property derived from the endpoints: an edge is its own object here, so
+ * locking one must not depend on what its endpoints happen to be.
+ */
+export function readEdgeLocks(doc: LoroDoc): ReadonlySet<string> {
+  return readLocks(doc, EDGE_LOCKS_KEY)
+}
+
+/** Edge counterpart to `setNodeLock` — same no-op-on-unchanged contract. */
+export function setEdgeLock(doc: LoroDoc, edgeId: string, locked: boolean): void {
+  setLock(doc, EDGE_LOCKS_KEY, edgeId, locked)
 }
 
 export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {

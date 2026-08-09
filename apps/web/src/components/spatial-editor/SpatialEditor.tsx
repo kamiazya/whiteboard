@@ -204,6 +204,15 @@ export interface SpatialEditorProps {
   /** Absent → the whole lock affordance hides and nothing is blocked. */
   readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
   /**
+   * Edge ids the user has locked — an independent set, NOT derived from
+   * `lockedNodeIds`. An edge is its own object: locking a hub node must not
+   * silently freeze every line touching it, and an edge between two free
+   * nodes must still be lockable.
+   */
+  readonly lockedEdgeIds?: ReadonlySet<string>
+  /** Absent → the edge-lock affordance hides and no edge is blocked. */
+  readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
+  /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (browser-local canvas id,
    * daemon alias path). Absent → the "Add canvas" affordance hides.
@@ -315,6 +324,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme = 'light',
       defaultTool = 'hand',
       lockedNodeIds,
+      lockedEdgeIds,
+      onToggleEdgeLock,
       onToggleNodeLock,
       fileRefOptions,
       onOpenFileRef,
@@ -552,6 +563,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
       [boxes, lockEnabled, lockedNodeIds],
     )
+    /** Same seam rule as the node lock: no callback, no enforcement. */
+    const edgeLockEnabled = onToggleEdgeLock !== undefined
+    const isEdgeLocked = (edgeId: string): boolean =>
+      edgeLockEnabled && lockedEdgeIds !== undefined && lockedEdgeIds.has(edgeId)
 
     /**
      * A lock can arrive from a peer or an agent while the node is ALREADY
@@ -563,6 +578,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * clearing the whole selection, so locking one node of many is not a
      * silent deselect-all.
      */
+    useEffect(() => {
+      if (edgeLockEnabled && selectedEdgeId !== null && isEdgeLocked(selectedEdgeId)) {
+        setSelectedEdgeId(null)
+        setEdgeLabelEditId((current) => (current === selectedEdgeId ? null : current))
+      }
+      // isEdgeLocked closes over lockedEdgeIds/edgeLockEnabled, both listed.
+    }, [edgeLockEnabled, lockedEdgeIds, selectedEdgeId])
+
     useEffect(() => {
       if (!lockEnabled) return
       if (gestureState.kind === 'moving' || gestureState.kind === 'resizing') {
@@ -814,10 +837,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // distinguish "double-click on an edge" (open its label editor) from
       // "double-click on empty space" (create a node) — both have
       // hitId === undefined.
+      // Locked edges are invisible to this hit-test, which is what keeps a
+      // locked edge out of the selection and therefore out of Delete, the
+      // label editor (double-press), and every restyle command.
       const hitEdge =
         hitId === undefined
           ? edgePaths.find(
               (edge) =>
+                !isEdgeLocked(edge.id) &&
                 distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
             )
           : undefined
@@ -1360,6 +1387,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * value — a lock is not an edit to the document.
      */
     const toggleSelectionLock = (): boolean => {
+      // An edge selection is exclusive with a node selection, so this is a
+      // dispatch, not a merge.
+      if (edgeLockEnabled && selectedEdgeId !== null) {
+        onToggleEdgeLock?.(selectedEdgeId, !isEdgeLocked(selectedEdgeId))
+        return true
+      }
       if (!lockEnabled || onToggleNodeLock === undefined || selection === undefined) return false
       const ids = [selection.id, ...extraIds]
       // The primary's current state decides the direction, so a mixed
@@ -2229,6 +2262,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ],
               })
               if (node === undefined && edge !== undefined) {
+                // A locked edge offers exactly one action. Everything else in
+                // this branch — delete, label, arrowheads, sides, colour —
+                // is a mutation the lock exists to refuse.
+                if (isEdgeLocked(edge.id)) {
+                  return [
+                    {
+                      label: 'Unlock',
+                      icon: <LockOpen />,
+                      onSelect: () => onToggleEdgeLock?.(edge.id, false),
+                    },
+                  ]
+                }
                 // Property pickers are inline option rows (one tap per
                 // choice, menu stays open) — a cycling item costs an
                 // open-tap-reopen per step. Sections group the menu:
@@ -2302,6 +2347,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   colorRow(edge.color, (color) =>
                     applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
                   ),
+                  ...(edgeLockEnabled
+                    ? [
+                        {
+                          label: 'Lock',
+                          icon: <LockIcon />,
+                          onSelect: () => {
+                            onToggleEdgeLock?.(edge.id, true)
+                            setSelectedEdgeId(null)
+                          },
+                        },
+                      ]
+                    : []),
                   { kind: 'separator' as const },
                   {
                     label: 'Delete',

@@ -74,6 +74,28 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
+    tools.nodeLock.name,
+    { inputSchema: tools.nodeLock.inputSchema.shape, outputSchema: tools.nodeLock.outputSchema },
+    async (args) => {
+      const parsed = tools.nodeLock.inputSchema.parse(args)
+      const result = await tools.nodeLock.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.edgeLock.name,
+    { inputSchema: tools.edgeLock.inputSchema.shape, outputSchema: tools.edgeLock.outputSchema },
+    async (args) => {
+      const parsed = tools.edgeLock.inputSchema.parse(args)
+      const result = await tools.edgeLock.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.edgePatch.name,
     { inputSchema: tools.edgePatch.inputSchema.shape, outputSchema: tools.edgePatch.outputSchema },
     async (args) => {

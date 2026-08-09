@@ -44,6 +44,8 @@ export interface UseCanvasSyncResult {
   /** Node ids locked in the doc's sidecar map (never part of the canvas value). */
   lockedNodeIds: ReadonlySet<string>
   setNodeLock: (nodeId: string, locked: boolean) => void
+  lockedEdgeIds: ReadonlySet<string>
+  setEdgeLock: (edgeId: string, locked: boolean) => void
   canRedo: () => boolean
   // null when the requested format is unavailable in this environment (e.g.
   // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
@@ -157,6 +159,7 @@ export function useCanvasSync(
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
+  const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
 
@@ -177,6 +180,7 @@ export function useCanvasSync(
     // be reported against whatever canvas comes next — or against nothing at
     // all, when the backend goes to null.
     setLockedNodeIds(EMPTY_LOCKED_IDS)
+    setLockedEdgeIds(EMPTY_LOCKED_IDS)
 
     if (backend === null) {
       sessionRef.current = null
@@ -213,12 +217,14 @@ export function useCanvasSync(
     // without it the editor would keep rendering a stale locked set.
     const unsubscribeLocks = session.subscribeLocks(() => {
       setLockedNodeIds(session.getNodeLocks())
+      setLockedEdgeIds(session.getEdgeLocks())
     })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
     // synchronously), and a missed notification would otherwise leave a
     // persisted lock invisible until the next toggle.
     setLockedNodeIds(session.getNodeLocks())
+    setLockedEdgeIds(session.getEdgeLocks())
     session.connect()
     session.onEditorReady()
 
@@ -245,6 +251,10 @@ export function useCanvasSync(
   // Live affordance state for undo/redo buttons. Not memoized state: every
   // publish re-renders the consumer (setCanvas above), so reading through
   // the session on each render is always current and never stale.
+  const setEdgeLock = useCallback((edgeId: string, locked: boolean) => {
+    sessionRef.current?.setEdgeLock(edgeId, locked)
+  }, [])
+
   const setNodeLock = useCallback((nodeId: string, locked: boolean) => {
     sessionRef.current?.setNodeLock(nodeId, locked)
   }, [])
@@ -324,6 +334,8 @@ export function useCanvasSync(
     canUndo,
     lockedNodeIds,
     setNodeLock,
+    lockedEdgeIds,
+    setEdgeLock,
     canRedo,
     exportScene,
   }

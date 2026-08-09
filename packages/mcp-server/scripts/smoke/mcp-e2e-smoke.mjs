@@ -94,12 +94,12 @@ async function callTool(name, args) {
   return JSON.parse(text)
 }
 
-async function expectToolError(name, args) {
+async function expectToolError(name, args, because = 'without createWorkspace') {
   const res = await rpc('tools/call', { name, arguments: args })
   if (!res?.isError) {
     throw new Error(`expected ${name} to fail, got: ${JSON.stringify(res)}`)
   }
-  console.log(`[e2e] ${name} without createWorkspace → isError (expected)`)
+  console.log(`[e2e] ${name} ${because} → isError (expected)`)
 }
 
 function cleanup(exitCode) {
@@ -126,8 +126,10 @@ const EXPECTED_TOOLS = [
   'canvas_export_okf',
   'canvas_import_okf',
   'canvas_render_svg',
+  'edge_lock',
   'edge_patch',
   'facet_set',
+  'node_lock',
   'node_patch',
   'version_list',
   'version_restore',
@@ -195,6 +197,68 @@ async function main() {
     throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
   console.log('[e2e] facet_set → seeded canvas state')
+
+  // node_lock: the sidecar lock round-trip. canvas_import_okf is the only
+  // MCP path that creates a spatial node, and it always writes one text
+  // node with this id.
+  await callTool('canvas_import_okf', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    markdown: '---\ntype: canvas\ntitle: e2e-lock\n---\n\nlockable body\n',
+  })
+
+  const nodeLocked = await callTool('node_lock', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    nodeId: 'okf-body',
+    locked: true,
+  })
+  if (
+    nodeLocked.canvasId !== canvasId ||
+    nodeLocked.nodeId !== 'okf-body' ||
+    nodeLocked.locked !== true
+  ) {
+    throw new Error(`node_lock returned unexpected shape: ${JSON.stringify(nodeLocked)}`)
+  }
+  console.log('[e2e] node_lock → okf-body locked')
+
+  // The lock binds agents, not just the pointer.
+  await expectToolError(
+    'node_patch',
+    { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'okf-body', patch: { x: 999 } },
+    'on a locked node',
+  )
+
+  // The lock is editor state, never canvas content: it must not appear in
+  // an export. This is the runtime guard for the sidecar-map contract.
+  const exportedWithLocks = await callTool('canvas_export_json_canvas', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+  })
+  const exportedCanvas = JSON.parse(exportedWithLocks.json)
+  const leaked = [...exportedCanvas.nodes, ...exportedCanvas.edges].filter(
+    (element) => 'locked' in element,
+  )
+  if (leaked.length > 0) {
+    throw new Error(`a lock leaked into the JSON Canvas export: ${JSON.stringify(leaked)}`)
+  }
+  console.log('[e2e] canvas_export_json_canvas → no lock leaked into the export')
+
+  await callTool('node_lock', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    nodeId: 'okf-body',
+    locked: false,
+  })
+
+  // edge_lock reaches its ghost-id guard only: no MCP tool creates an edge
+  // (edges come from the editor), so this is the whole of its reachable
+  // surface here. Its success path is covered by edge-lock.test.ts.
+  await expectToolError(
+    'edge_lock',
+    { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },
+    'with an id the canvas does not have',
+  )
 
   // version_save
   const saved = await callTool('version_save', {

@@ -1,0 +1,63 @@
+import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { setEdgeLock } from '@kamiazya/whiteboard-canvas-workspace'
+import { z } from 'zod'
+import type { ServerDeps } from '../server-deps.js'
+import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { EdgeNotFoundError } from './errors.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
+
+/**
+ * Edge counterpart to `node_lock`. An edge is its own object here, so its
+ * lock is its own entry rather than something derived from whether its
+ * endpoints happen to be locked — locking a hub node must not silently
+ * freeze every line touching it.
+ *
+ * Lock/unlock is the ONE mutation a locked edge still accepts, matching
+ * `node_lock`: a lock an agent cannot lift would need a human at the
+ * keyboard to undo an agent's own mistake.
+ */
+export const edgeLockInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    canvasId: canvasIdSchema,
+    // canvas-model has no distinct edgeIdSchema — see edge-patch.ts for why
+    // reusing nodeIdSchema here is deliberate.
+    edgeId: nodeIdSchema,
+    locked: z.boolean(),
+  })
+  .strict()
+export type EdgeLockInput = z.infer<typeof edgeLockInputSchema>
+
+export const edgeLockOutputSchema = z
+  .object({
+    canvasId: canvasIdSchema,
+    edgeId: nodeIdSchema,
+    locked: z.boolean(),
+  })
+  .strict()
+export type EdgeLockOutput = z.infer<typeof edgeLockOutputSchema>
+
+export function createEdgeLockTool(deps: ServerDeps) {
+  return {
+    name: 'edge_lock' as const,
+    inputSchema: edgeLockInputSchema,
+    outputSchema: edgeLockOutputSchema,
+    // No `withReindex`: a lock changes no canvas content, so no index row
+    // derived from nodes/edges/links can have moved.
+    execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+
+      // Reject a ghost id rather than storing a lock nothing can ever
+      // clear from the UI (the editor only offers unlock on a real edge).
+      if (!canvas.edges.some((edge) => edge.id === input.edgeId)) {
+        throw new EdgeNotFoundError(input.canvasId, input.edgeId)
+      }
+
+      setEdgeLock(doc, input.edgeId, input.locked)
+      await saveDocSnapshot(deps, input.canvasId, doc)
+
+      return { canvasId: input.canvasId, edgeId: input.edgeId, locked: input.locked }
+    },
+  }
+}
