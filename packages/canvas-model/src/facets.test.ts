@@ -122,6 +122,26 @@ describe('facetsRawSchema', () => {
   it('accepts an empty record', () => {
     expect(facetsRawSchema.safeParse({}).success).toBe(true)
   })
+
+  // Found by src/properties.test.ts's preservation property. `__proto__` is
+  // the one key the "preserves arbitrary non-reserved root keys" rule cannot
+  // hold for: writing it onto the result object sets the PROTOTYPE instead of
+  // creating an own key, so it comes back absent. Dropping it is the outcome
+  // we want — a hostile facets payload must not survive into a downstream
+  // spread as a prototype — so this pins the drop rather than the schema
+  // being changed to carry it.
+  it('drops a __proto__ key instead of carrying it (parse must not pollute)', () => {
+    const hostile = JSON.parse('{"__proto__": {"polluted": true}, "keep": 1}')
+    const result = facetsRawSchema.safeParse(hostile)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(Object.hasOwn(result.data, '__proto__')).toBe(false)
+      expect(result.data.keep).toBe(1)
+      // The prototype chain is untouched: nothing leaked onto Object.prototype.
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+      expect(Object.getPrototypeOf(result.data)).toBe(Object.prototype)
+    }
+  })
 })
 
 describe('canvasCoreMetaSchema', () => {
