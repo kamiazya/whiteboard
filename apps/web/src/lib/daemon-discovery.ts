@@ -1,13 +1,13 @@
 /**
- * Local-daemon discovery over a bounded candidate set.
+ * Local-daemon discovery over the daemons the user has actually named.
  *
- * The server side already binds dynamically: the packaged daemon takes the
- * first free port from 3099 upward (ensure-daemon's findAvailablePort) and
- * dev worktree daemons run on hash-derived ports. The browser cannot read
- * the daemon registry file, so discovery is limited to two channels:
- * previously remembered baseUrls (localStorage, most recent first) and a
- * small scan of the default port range. Everything is probed in parallel
- * with the same timeboxed ping used by the single-probe path.
+ * There is deliberately NO port scan. The server binds dynamically — the
+ * packaged daemon takes the first free port from 3099 upward, dev worktrees
+ * use hash-derived ports — and the browser cannot read the daemon registry,
+ * so any fixed range is a guess that is wrong in both directions: it misses
+ * every daemon outside it while firing probes at ports nobody asked about.
+ * Entering a port is the primary way in, and a remembered baseUrl is just a
+ * port the user named on an earlier visit.
  *
  * A baseUrl is a HINT, not an identity: a port can be re-bound by a
  * different daemon between visits, so results carry the ping's instanceId
@@ -17,10 +17,6 @@
 import type { DaemonProbeResult, ProbeDaemonOptions } from './daemon-probe.js'
 import { probeDaemon } from './daemon-probe.js'
 
-const DEFAULT_PORT_RANGE_START = 3099
-// findAvailablePort drift rarely goes far; a bounded scan keeps a manual
-// check under ~1s worst-case (probes run in parallel, each timeboxed).
-const DEFAULT_PORT_RANGE_COUNT = 10
 const MAX_REMEMBERED_DAEMONS = 5
 
 export interface DiscoveredDaemon {
@@ -43,8 +39,6 @@ export function candidateBaseUrls({
   remembered,
   dismissed = [],
   explicit,
-  portRangeStart = DEFAULT_PORT_RANGE_START,
-  portRangeCount = DEFAULT_PORT_RANGE_COUNT,
 }: {
   remembered: readonly string[]
   /**
@@ -63,8 +57,6 @@ export function candidateBaseUrls({
    * first ten candidates are taken lands past the scan as well.
    */
   explicit?: string
-  portRangeStart?: number
-  portRangeCount?: number
 }): string[] {
   const seen = new Set<string>()
   const candidates: string[] = []
@@ -81,7 +73,6 @@ export function candidateBaseUrls({
     push(normalized)
   }
   for (const baseUrl of remembered) push(baseUrl)
-  for (let i = 0; i < portRangeCount; i++) push(`http://127.0.0.1:${portRangeStart + i}`)
   return candidates
 }
 

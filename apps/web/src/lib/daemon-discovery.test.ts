@@ -14,55 +14,46 @@ function probeMap(map: Record<string, DaemonProbeResult>) {
 }
 
 describe('candidateBaseUrls', () => {
-  it('leaves out a daemon the user disconnected from, even inside the scanned range', () => {
-    // Disconnecting has to survive a reload, and the default scan would
-    // otherwise rediscover a daemon on 3099 the moment the page reopened —
-    // making the button a no-op the second time you look at it.
+  it('names only what the user pointed at or previously reached', () => {
+    // No port sweep. Scanning a fixed range guesses, and the guess is wrong
+    // in both directions: it misses every daemon outside it (a dev worktree's
+    // derived port, a packaged daemon whose first candidates were taken) while
+    // firing probes at ports nobody asked about. An explicit port is the
+    // primary way in; a remembered one is a port the user already named.
     const candidates = candidateBaseUrls({
-      remembered: ['http://127.0.0.1:3099'],
-      dismissed: ['http://127.0.0.1:3099'],
-      portRangeCount: 3,
+      remembered: ['http://127.0.0.1:3105'],
+      explicit: 'http://127.0.0.1:3646',
     })
 
-    expect(candidates).not.toContain('http://127.0.0.1:3099')
-    expect(candidates).toContain('http://127.0.0.1:3100')
+    expect(candidates).toEqual(['http://127.0.0.1:3646', 'http://127.0.0.1:3105'])
+  })
+
+  it('leaves out a daemon the user disconnected from', () => {
+    // Disconnecting has to survive a reload, so a dismissed daemon stays out
+    // of the remembered list's contribution.
+    const candidates = candidateBaseUrls({
+      remembered: ['http://127.0.0.1:3099', 'http://127.0.0.1:3105'],
+      dismissed: ['http://127.0.0.1:3099'],
+    })
+
+    expect(candidates).toEqual(['http://127.0.0.1:3105'])
   })
 
   it('re-admits a dismissed daemon once it is named explicitly', () => {
-    // Entering a port by hand is an unambiguous request for that daemon, so
-    // it has to outrank an earlier dismissal or the user cannot get back.
-    // Outside the scanned range and absent from `remembered`, so `explicit`
-    // is the only thing that can put it in the list at all — a port inside
-    // the scan would lead it whether or not this argument is honoured.
+    // Naming a port by hand is an unambiguous request for that daemon, and
+    // without this override a disconnect would be a one-way door.
     const candidates = candidateBaseUrls({
       remembered: [],
-      dismissed: ['http://127.0.0.1:3419'],
-      explicit: 'http://127.0.0.1:3419',
-      portRangeCount: 3,
+      dismissed: ['http://127.0.0.1:3646'],
+      explicit: 'http://127.0.0.1:3646',
     })
 
-    expect(candidates[0]).toBe('http://127.0.0.1:3419')
-  })
-
-  it('puts remembered daemons first, then the port range, deduplicated', () => {
-    const candidates = candidateBaseUrls({
-      remembered: ['http://127.0.0.1:3105', 'http://127.0.0.1:3099'],
-      portRangeStart: 3099,
-      portRangeCount: 3,
-    })
-    expect(candidates).toEqual([
-      'http://127.0.0.1:3105',
-      'http://127.0.0.1:3099',
-      'http://127.0.0.1:3100',
-      'http://127.0.0.1:3101',
-    ])
+    expect(candidates).toEqual(['http://127.0.0.1:3646'])
   })
 
   it('normalizes trailing slashes on remembered entries before deduplicating', () => {
     const candidates = candidateBaseUrls({
-      remembered: ['http://127.0.0.1:3099/'],
-      portRangeStart: 3099,
-      portRangeCount: 1,
+      remembered: ['http://127.0.0.1:3099/', 'http://127.0.0.1:3099'],
     })
     expect(candidates).toEqual(['http://127.0.0.1:3099'])
   })
@@ -75,7 +66,9 @@ describe('discoverDaemons', () => {
       'http://127.0.0.1:3101': DETECTED('b'),
     })
     const { found, failures } = await discoverDaemons({
-      candidates: candidateBaseUrls({ remembered: [], portRangeStart: 3099, portRangeCount: 4 }),
+      // Candidates listed outright: this case is about how discoverDaemons
+      // fans out over them, not about where the list comes from.
+      candidates: [3099, 3100, 3101, 3102].map((p) => `http://127.0.0.1:${p}`),
       probeFn,
       fetch: vi.fn() as unknown as typeof globalThis.fetch,
       pageOriginScheme: 'http',
@@ -103,7 +96,7 @@ describe('discoverDaemons', () => {
 
   it('returns empty when nothing responds', async () => {
     const { found } = await discoverDaemons({
-      candidates: candidateBaseUrls({ remembered: [], portRangeStart: 3099, portRangeCount: 2 }),
+      candidates: candidateBaseUrls({ remembered: ['http://127.0.0.1:3099'] }),
       probeFn: probeMap({}),
       fetch: vi.fn() as unknown as typeof globalThis.fetch,
       pageOriginScheme: 'http',

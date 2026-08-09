@@ -215,7 +215,6 @@ export function DaemonDetectedBanner({
       remembered: [...known, baseUrl],
       dismissed,
       ...(explicit === undefined ? {} : { explicit }),
-      ...(forceRecheck ? {} : { portRangeCount: 0 }),
     })
     discoverDaemons({
       candidates,
@@ -338,17 +337,27 @@ export function DaemonDetectedBanner({
     )
   }, [result, settingsStore, dismissedAt])
 
-  function submitPort() {
+  /** Parses the port field, or null when it is empty. Invalid input reports. */
+  function enteredBaseUrl(): string | null {
+    if (portInput.trim() === '') return null
     const port = Number(portInput.trim())
     // Loopback host is fixed rather than accepted from the field: a full URL
     // would let this page be aimed at an arbitrary origin, and the daemon is
     // always local.
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       setPortError('Enter a port between 1 and 65535.')
-      return
+      return null
     }
     setPortError(null)
-    runProbe(true, `http://127.0.0.1:${port}`)
+    // Loopback host fixed rather than taken from the field: a full URL would
+    // let this page be aimed at an arbitrary origin, and the daemon is local.
+    return `http://127.0.0.1:${port}`
+  }
+
+  function checkNow() {
+    const explicit = enteredBaseUrl()
+    if (explicit === null && portInput.trim() !== '') return
+    runProbe(true, explicit ?? undefined)
   }
 
   return (
@@ -372,7 +381,7 @@ export function DaemonDetectedBanner({
       {showManualAffordance && (
         <button
           type="button"
-          onClick={() => runProbe(true)}
+          onClick={checkNow}
           disabled={checking}
           aria-busy={checking}
           className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -424,10 +433,12 @@ export function DaemonDetectedBanner({
           )}
         </span>
       )}
-      {result !== null && !result.detected && (
-        // Offered whenever a check concluded with nothing found, not only
-        // after a manual re-check: an auto-probe that finds nothing leaves the
-        // user with no way to name the daemon they know is running.
+      {!showUnsupportedNotice && (
+        // Always offered, never gated on a failed check. Naming a port is the
+        // primary way in now that there is no port scan to stumble on one:
+        // gating it on "nothing found" leaves a user connected to the wrong
+        // daemon unable to name the right one, and a user whose dismissals
+        // hid every candidate unable to name anything at all.
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <label htmlFor="daemon-port-input">Running on another port?</label>
           <input
@@ -438,7 +449,7 @@ export function DaemonDetectedBanner({
             value={portInput}
             onChange={(event) => setPortInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') submitPort()
+              if (event.key === 'Enter') checkNow()
             }}
             placeholder="3099"
             className="w-16 rounded border px-1 py-0.5"
@@ -447,7 +458,7 @@ export function DaemonDetectedBanner({
           <button
             type="button"
             data-testid="daemon-port-connect"
-            onClick={submitPort}
+            onClick={checkNow}
             className="font-medium underline"
           >
             Check
