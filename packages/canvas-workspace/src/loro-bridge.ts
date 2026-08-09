@@ -15,6 +15,11 @@ import type { z } from 'zod'
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
 const FACETS_KEY = 'facets'
+// Editor state that is NOT canvas content: stored beside the canvas in the
+// same doc (so it survives reload and syncs to peers) but in its own map,
+// which is what keeps it out of every export — `readSpatialCanvas` reads
+// only NODES_KEY/EDGES_KEY, and every export path goes through it.
+const NODE_LOCKS_KEY = 'nodeLocks'
 const CORE_KEY = 'core'
 
 type Fields = Record<string, unknown>
@@ -85,8 +90,16 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
     edgesMap.set(edge.id, edgeToFields(edge))
   }
 
+  // A resync is the second node-removal path, alongside deleteSpatialNode —
+  // so it owes the same lock cascade. An entry left behind for a node the
+  // canvas no longer has would be inherited by a later node reminted onto
+  // that id.
+  const locksMap = doc.getMap(NODE_LOCKS_KEY)
+  const lockedIds = new Set<string>(locksMap.keys())
   for (const id of existingNodeIds) {
-    if (!incomingNodeIds.has(id)) nodesMap.delete(id)
+    if (incomingNodeIds.has(id)) continue
+    nodesMap.delete(id)
+    if (lockedIds.has(id)) locksMap.delete(id)
   }
   for (const id of existingEdgeIds) {
     if (!incomingEdgeIds.has(id)) edgesMap.delete(id)
@@ -113,6 +126,10 @@ function deleteNodeCascadeInto(doc: LoroDoc, nodeId: string): boolean {
   if (!nodesMap.keys().includes(nodeId)) return false
 
   nodesMap.delete(nodeId)
+  // The lock is keyed by node id, so a deleted node must take its entry
+  // with it — otherwise a reminted id could inherit a stranger's lock.
+  const locksMap = doc.getMap(NODE_LOCKS_KEY)
+  if (locksMap.keys().includes(nodeId)) locksMap.delete(nodeId)
   for (const edgeId of edgesMap.keys()) {
     const raw = edgesMap.get(edgeId)
     const parsed = canvasEdgeSchema.safeParse(raw)
@@ -224,6 +241,35 @@ export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) 
   // Success path only — a finally-commit would break the error contract
   // above (the session fallback's own commit must stay the only one).
   if (wrote) doc.commit()
+}
+
+/**
+ * Node ids the user has locked. Lock is an EDITOR affordance, not canvas
+ * content: it lives in its own map so it never reaches `readSpatialCanvas`
+ * — and therefore never reaches an export, a render, or a JSON Canvas
+ * file, which is what keeps the stored document spec-clean.
+ */
+export function readNodeLocks(doc: LoroDoc): ReadonlySet<string> {
+  const locksMap = doc.getMap(NODE_LOCKS_KEY)
+  const locked = new Set<string>()
+  for (const nodeId of locksMap.keys()) {
+    if (locksMap.get(nodeId) === true) locked.add(nodeId)
+  }
+  return locked
+}
+
+/**
+ * Locks or unlocks one node. Writing the value a node already has is a
+ * no-op (no commit, no undo step), matching this bridge's convention that
+ * nothing-changed writes stay out of history.
+ */
+export function setNodeLock(doc: LoroDoc, nodeId: string, locked: boolean): void {
+  const locksMap = doc.getMap(NODE_LOCKS_KEY)
+  const current = locksMap.get(nodeId) === true
+  if (current === locked) return
+  if (locked) locksMap.set(nodeId, true)
+  else locksMap.delete(nodeId)
+  doc.commit()
 }
 
 export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {

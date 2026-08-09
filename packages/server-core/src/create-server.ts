@@ -24,6 +24,7 @@ import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
 import { createFacetSetTool } from './tools/facet-set.js'
+import { createNodeLockTool } from './tools/node-lock.js'
 import { createNodePatchTool } from './tools/node-patch.js'
 import { createReindexTool } from './tools/reindex-tool.js'
 import { createVersionListTool } from './tools/version-list.js'
@@ -120,6 +121,7 @@ export function createServer(deps: ServerDeps) {
 
   const tools = {
     facetSet: createFacetSetTool(deps),
+    nodeLock: createNodeLockTool(deps),
     nodePatch: createNodePatchTool(deps),
     edgePatch: createEdgePatchTool(deps),
     bodyPatch: createBodyPatchTool(deps),

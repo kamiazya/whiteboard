@@ -9,7 +9,9 @@ import {
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
-import { CanvasDocNotFoundError, NodeNotFoundError } from './errors.js'
+import { loadCanvasDoc } from './canvas-doc-io.js'
+import { CanvasDocNotFoundError, NodeLockedError, NodeNotFoundError } from './errors.js'
+import { createNodeLockTool } from './node-lock.js'
 import { createNodePatchTool, nodePatchInputSchema } from './node-patch.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -188,5 +190,65 @@ describe('node_patch tool', () => {
       patch: { width: -5 },
     })
     expect(result.success).toBe(false)
+  })
+
+  test('refuses to patch a LOCKED node — the lock binds agents too, not just the pointer', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' }],
+      edges: [],
+    })
+    // Lock it the way the editor does: through the sidecar map.
+    const lockTool = createNodeLockTool(makeDeps(canvasDocStore))
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      nodeId: 'n1',
+      locked: true,
+    })
+
+    const tool = createNodePatchTool(makeDeps(canvasDocStore))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        nodeId: 'n1',
+        patch: { x: 999 },
+      }),
+    ).rejects.toBeInstanceOf(NodeLockedError)
+
+    // And nothing was written.
+    const { canvas } = await loadCanvasDoc(makeDeps(canvasDocStore), CANVAS_ID)
+    expect(canvas.nodes[0]).toMatchObject({ x: 0 })
+  })
+
+  test('patches normally once the node is unlocked', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' }],
+      edges: [],
+    })
+    const lockTool = createNodeLockTool(makeDeps(canvasDocStore))
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      nodeId: 'n1',
+      locked: true,
+    })
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      nodeId: 'n1',
+      locked: false,
+    })
+
+    const tool = createNodePatchTool(makeDeps(canvasDocStore))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      nodeId: 'n1',
+      patch: { x: 42 },
+    })
+    expect(result.node).toMatchObject({ x: 42 })
   })
 })

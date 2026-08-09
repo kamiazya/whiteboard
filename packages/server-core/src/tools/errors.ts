@@ -19,6 +19,22 @@ export class NodeNotFoundError extends Error {
   }
 }
 
+/**
+ * Thrown when a mutation targets a node the user has locked. The lock
+ * binds agents too, not just the pointer (user decision 2026-08-09) —
+ * `node_lock` is the one tool that still accepts a locked node, so an
+ * agent can lift its own mistake without a human at the keyboard.
+ */
+export class NodeLockedError extends Error {
+  constructor(
+    public readonly canvasId: string,
+    public readonly nodeId: string,
+  ) {
+    super(`node is locked: ${nodeId} in canvas ${canvasId} (unlock it with node_lock)`)
+    this.name = 'NodeLockedError'
+  }
+}
+
 /** Thrown when a patch tool targets an edgeId absent from the canvas. */
 export class EdgeNotFoundError extends Error {
   constructor(

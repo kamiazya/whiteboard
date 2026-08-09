@@ -66,6 +66,7 @@ export {
 export {
   CanvasDocNotFoundError,
   EdgeNotFoundError,
+  NodeLockedError,
   NodeNotFoundError,
   NotATextNodeError,
   PatchValidationError,
@@ -73,6 +74,12 @@ export {
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
 export { generateCanvasId } from './tools/generate-canvas-id.js'
+export type { NodeLockInput, NodeLockOutput } from './tools/node-lock.js'
+export {
+  createNodeLockTool,
+  nodeLockInputSchema,
+  nodeLockOutputSchema,
+} from './tools/node-lock.js'
 export type { NodePatchFields, NodePatchInput, NodePatchOutput } from './tools/node-patch.js'
 export {
   createNodePatchTool,
