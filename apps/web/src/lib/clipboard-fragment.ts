@@ -19,6 +19,23 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import { clipboardFragmentSchema } from '@kamiazya/whiteboard-canvas-model'
+
+/**
+ * Our fragment parsed out of clipboard TEXT, or null for anything else —
+ * non-JSON, foreign JSON (a different `type` discriminant), or a shape the
+ * schema rejects. Callers degrade a null to a plain-text note, so this must
+ * never throw.
+ */
+export function parseClipboardText(text: string): ClipboardFragment | null {
+  if (text.trim() === '') return null
+  try {
+    const parsed = clipboardFragmentSchema.safeParse(JSON.parse(text))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
 
 export function extractClipboardFragment(
   canvas: SpatialCanvas,
