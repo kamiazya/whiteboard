@@ -5,6 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+// App reaches every page through React.lazy(), so a page renders only once
+// its dynamic import resolves. The other three pages are vi.mock'd below, so
+// their imports are already trivial; PairConsentPage is the one this file
+// loads for real, and under a full-suite run the dev server served that
+// chunk slowly enough to outlast the assertion's retry budget. Importing it
+// here — before any test runs, with nothing competing — puts it in the ESM
+// cache, so lazy() settles in a microtask and the render is deterministic
+// rather than a race the assertion usually wins. Side-effect import: the
+// component is reached through App, never referenced directly.
+import './pages/PairConsentPage.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
   type ProviderState,
@@ -269,7 +279,10 @@ describe('/pair consent route', () => {
     expect(search.get('origin')).toBe('https://example.com')
     expect(search.get('challenge')).toBe('chal')
     expect(search.get('state')).toBe('st')
-    await screen.findByText(/allow this web app to use your local daemon/i)
+    // Synchronous on purpose: the page module is preloaded at the top of this
+    // file, so nothing here waits on a chunk. If that preload is ever dropped
+    // this fails immediately instead of flaking under load.
+    screen.getByText(/allow this web app to use your local daemon/i)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
 })
