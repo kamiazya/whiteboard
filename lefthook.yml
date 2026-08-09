@@ -6,6 +6,10 @@
 #    and absolute home-dir path leaks before they enter git history).
 #  - the real gate lives on pre-push, run only by the integrator who pushes — it mirrors
 #    CI so a broken build / failing test / typecheck error is caught before it leaves the machine.
+#
+# Note that a correct config here is NOT sufficient: another tool appending its own block
+# to .git/hooks/<name> makes ITS exit status the script's, silently reducing every command
+# below to advisory (verify-git-hooks.mjs exists because that had actually happened).
 
 pre-commit:
   parallel: true
@@ -21,6 +25,12 @@ pre-commit:
 pre-push:
   parallel: true
   commands:
+    # Cheap, and it answers "were the gates below actually enforced on the way
+    # here?" — a hook whose exit status was hijacked lets every pre-commit run
+    # pass silently, so this is checked at the last point before code leaves
+    # the machine.
+    git-hooks:
+      run: pnpm verify:git-hooks
     typecheck:
       run: pnpm -r typecheck
     test-node:

@@ -62,8 +62,10 @@ This is not yet enforced as a hard CI gate because the existing codebase still h
 
 [Lefthook](https://lefthook.dev) installs git hooks automatically on `pnpm install` (via the `prepare` script):
 
-- **pre-commit** (fast, non-blocking): formats the staged files with Biome and re-stages them. It deliberately does NOT run lint/typecheck/tests, so it never slows the many automated commits the dev flow makes.
-- **pre-push** (the gate): runs `pnpm -r typecheck`, `pnpm test --project mcp-node`, and `pnpm lint:noconsole` in parallel — mirroring CI so a broken build, failing test, or stray `console.*` in server code is caught before it leaves your machine.
+- **pre-commit** (fast): formats the staged files with Biome and re-stages them, then runs **secretlint**, which BLOCKS the commit on a secret or an absolute home-dir path. It deliberately does NOT run lint/typecheck/tests, so it never slows the many automated commits the dev flow makes.
+- **pre-push** (the gate): runs `pnpm -r typecheck`, `pnpm test --project mcp-node`, `pnpm lint:noconsole`, `pnpm lint`, and `pnpm verify:git-hooks` in parallel — mirroring CI so a broken build, failing test, or stray `console.*` in server code is caught before it leaves your machine.
+
+`pnpm verify:git-hooks` checks the hooks themselves rather than your code. A tool that appends its own block to `.git/hooks/<name>` — several editor and code-intelligence integrations install that way — makes *its* exit status the script's, which silently reduces every lefthook command above to advisory while still printing failures as if they blocked. Run `pnpm verify:git-hooks --fix` to move an appended block ahead of lefthook's invocation.
 
 Hooks are a local safety net, **not** a replacement for CI (the authoritative gate). Bypass a run when you must with `LEFTHOOK=0 git …` or `git push --no-verify` (e.g. a docs-only push). If the hooks didn't install, run `pnpm lefthook install`.
 
