@@ -6,10 +6,11 @@ import {
   spatialCanvasSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
+import { readEdgeLocks } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
-import { EdgeNotFoundError, PatchValidationError } from './errors.js'
+import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './errors.js'
 import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
@@ -60,6 +61,13 @@ export function createEdgePatchTool(deps: ServerDeps) {
 
       const edge = canvas.edges.find((candidate) => candidate.id === input.edgeId)
       if (edge === undefined) throw new EdgeNotFoundError(input.canvasId, input.edgeId)
+
+      // Checked before any write: the lock binds agents exactly as it binds
+      // the pointer. Only the edge's OWN lock counts — a locked endpoint
+      // does not freeze the lines touching it (see edge_lock).
+      if (readEdgeLocks(doc).has(input.edgeId)) {
+        throw new EdgeLockedError(input.canvasId, input.edgeId)
+      }
 
       const mergedRaw = { ...edge, ...input.patch }
       const candidateCanvas = {

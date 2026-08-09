@@ -9,8 +9,10 @@ import {
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import { loadCanvasDoc } from './canvas-doc-io.js'
+import { createEdgeLockTool } from './edge-lock.js'
 import { createEdgePatchTool, edgePatchFieldsSchema } from './edge-patch.js'
-import { EdgeNotFoundError, PatchValidationError } from './errors.js'
+import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -161,5 +163,80 @@ describe('edge_patch tool', () => {
         patch: { color: '1' },
       }),
     ).rejects.toThrow(CanvasNotFoundError)
+  })
+
+  test('refuses to patch a LOCKED edge — the lock binds agents too, not just the pointer', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    // Lock it the way the editor does: through the sidecar map.
+    const lockTool = createEdgeLockTool(makeDeps(canvasDocStore))
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      locked: true,
+    })
+
+    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        edgeId: 'e1',
+        patch: { label: 'rewritten' },
+      }),
+    ).rejects.toBeInstanceOf(EdgeLockedError)
+
+    const { canvas } = await loadCanvasDoc(makeDeps(canvasDocStore), CANVAS_ID)
+    expect(canvas.edges[0].label).toBeUndefined()
+  })
+
+  test('patches normally once the edge is unlocked', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const lockTool = createEdgeLockTool(makeDeps(canvasDocStore))
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      locked: true,
+    })
+    await lockTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      locked: false,
+    })
+
+    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      patch: { label: 'now editable' },
+    })
+    expect(result.edge).toMatchObject({ label: 'now editable' })
+  })
+
+  test('a locked NODE does not block patching an edge that touches it', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const { createNodeLockTool } = await import('./node-lock.js')
+    await createNodeLockTool(makeDeps(canvasDocStore)).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      nodeId: 'n1',
+      locked: true,
+    })
+
+    // Edge locks are their own set: locking a hub node must not silently
+    // freeze every line touching it.
+    const result = await createEdgePatchTool(makeDeps(canvasDocStore)).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      patch: { color: '2' },
+    })
+    expect(result.edge).toMatchObject({ color: '2' })
   })
 })

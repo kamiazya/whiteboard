@@ -21,6 +21,7 @@ import { createCanvasExportJsonCanvasTool } from './tools/canvas-export-json-can
 import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
 import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
 import { createFacetSetTool } from './tools/facet-set.js'
@@ -122,6 +123,7 @@ export function createServer(deps: ServerDeps) {
   const tools = {
     facetSet: createFacetSetTool(deps),
     nodeLock: createNodeLockTool(deps),
+    edgeLock: createEdgeLockTool(deps),
     nodePatch: createNodePatchTool(deps),
     edgePatch: createEdgePatchTool(deps),
     bodyPatch: createBodyPatchTool(deps),
