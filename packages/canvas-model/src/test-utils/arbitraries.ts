@@ -8,6 +8,7 @@ import type {
   MdastTableCell,
   MdastTableRow,
 } from '../mdast/index.js'
+import type { SpatialCanvas } from '../spatial.js'
 import { fc } from './fast-check.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -437,3 +438,34 @@ export function mdastRootArbitrary(maxDepth = 3): fc.Arbitrary<MdastRoot> {
     .array(mdastFlowContentArbitrary(maxDepth), { maxLength: 3 })
     .map((children) => ({ type: 'root', children }))
 }
+
+/**
+ * A SpatialCanvas that is valid by construction.
+ *
+ * The two invariants `spatialCanvasSchema` enforces — unique node ids, and
+ * edges whose endpoints exist — cannot be met by generating nodes and edges
+ * independently, so they are built in rather than filtered afterwards. Node ids
+ * in particular need the explicit uniqueness: `nodeIdArbitrary` has low entropy
+ * at small sizes (it shrinks to `" "`), so collisions are rare enough to pass
+ * hundreds of runs and then fail on someone else's seed.
+ *
+ * It lives here because three packages were each building this shape by hand
+ * and one of them had lost the node-id dedupe — a canvas the schema rejects,
+ * asserted to round-trip.
+ */
+export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
+  .uniqueArray(spatialNodeArbitrary, { maxLength: 4, selector: (node) => node.id })
+  .chain((nodes): fc.Arbitrary<SpatialCanvas> => {
+    const ids = nodes.map((node) => node.id)
+    if (ids.length < 2) return fc.constant({ nodes, edges: [] })
+    return fc
+      .uniqueArray(
+        fc
+          .tuple(fc.constantFrom(...ids), fc.constantFrom(...ids))
+          .chain(([fromNode, toNode]) =>
+            canvasEdgeArbitrary.map((edge) => ({ ...edge, fromNode, toNode })),
+          ),
+        { maxLength: 3, selector: (edge) => edge.id },
+      )
+      .map((edges) => ({ nodes, edges }))
+  })
