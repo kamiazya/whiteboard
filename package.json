@@ -25,6 +25,7 @@
     "test:browser:trace": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",
     "test:watch": "vitest --project mcp-node",
     "check:pr-title": "pnpm --filter @kamiazya/whiteboard-mcp check:pr-title",
+    "verify:git-hooks": "node packages/mcp-server/scripts/verify-git-hooks.mjs",
     "typecheck": "pnpm -r typecheck",
     "dev": "concurrently -k -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp dev\"",
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",

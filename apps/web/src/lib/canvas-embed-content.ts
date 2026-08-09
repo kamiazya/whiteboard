@@ -11,16 +11,16 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
+import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import { isImageRef, newImageRef } from './canvas-file-ref.js'
 import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('canvas-embed-content')
 
 /** Loads one referenced canvas's spatial content from IndexedDB. */
-export async function loadEmbeddedSpatialCanvas(
-  canvasId: string,
-): Promise<SpatialCanvas | undefined> {
+async function loadEmbeddedSpatialCanvas(canvasId: string): Promise<SpatialCanvas | undefined> {
   try {
     const result = await new LoroStore().load(canvasId)
     if (result.kind !== 'ok') return undefined
@@ -39,20 +39,13 @@ export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
   return [...new Set(canvas.nodes.flatMap((node) => (node.type === 'file' ? [node.file] : [])))]
 }
 
-/** Reference prefix distinguishing stored image assets from canvas ids. */
-const IMAGE_REF_PREFIX = 'asset:'
-
-export function isImageRef(file: string): boolean {
-  return file.startsWith(IMAGE_REF_PREFIX)
-}
-
 /**
  * Stores a picked/dropped/pasted image in the canvas file store and returns
  * the reference for the created file node, or undefined on failure.
  */
-export async function storeImageAsset(file: File): Promise<string | undefined> {
+async function storeImageAsset(file: File): Promise<string | undefined> {
   try {
-    const ref = `${IMAGE_REF_PREFIX}${crypto.randomUUID()}`
+    const ref = newImageRef(crypto.randomUUID())
     await new CanvasFileStore().put(ref, {
       mimeType: file.type,
       blob: file,
@@ -66,8 +59,21 @@ export async function storeImageAsset(file: File): Promise<string | undefined> {
 }
 
 /** Loads a stored image asset as an object URL, or undefined when missing. */
-export async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
+async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
   const blob = await new CanvasFileStore().get(ref)
   if (blob === null) return undefined
   return URL.createObjectURL(blob)
+}
+
+/**
+ * The browser-local binding of the editor's file seams. Declared here beside
+ * the four functions it wires so the page is left with no backend knowledge
+ * of its own — the daemon page supplies its own adapter over the daemon's
+ * `/api/canvas/:workspaceId/:slug/file/:fileId` endpoints.
+ */
+export const BROWSER_LOCAL_FILE_ADAPTER: CanvasFileAdapter = {
+  isImageRef,
+  loadCanvas: loadEmbeddedSpatialCanvas,
+  loadImageUrl: loadImageAssetUrl,
+  storeImage: storeImageAsset,
 }

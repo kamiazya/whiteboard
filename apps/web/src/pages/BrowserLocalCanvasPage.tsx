@@ -1,4 +1,3 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { Copy, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -21,19 +20,14 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import {
-  collectFileRefs,
-  isImageRef,
-  loadEmbeddedSpatialCanvas,
-  loadImageAssetUrl,
-  storeImageAsset,
-} from '../lib/canvas-embed-content.js'
+import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -161,23 +155,6 @@ export function BrowserLocalCanvasPage({
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
-  // Referenced-canvas content cache for inline embeds: the editor's
-  // resolveFileCanvas seam is synchronous, so referenced canvases are
-  // pre-fetched here. Entries refresh when the referenced canvas's
-  // updatedAt moves in the list (edits elsewhere show up on next refresh).
-  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, SpatialCanvas>>(new Map())
-  const embedStampsRef = useRef<Map<string, string>>(new Map())
-  // Image assets are immutable once stored, so object URLs cache forever
-  // per session and are revoked together on unmount.
-  const [imageUrls, setImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
-  const imageUrlsRef = useRef<ReadonlyMap<string, string>>(imageUrls)
-  imageUrlsRef.current = imageUrls
-  useEffect(
-    () => () => {
-      for (const url of imageUrlsRef.current.values()) URL.revokeObjectURL(url)
-    },
-    [],
-  )
   const listGenerationRef = useRef(0)
   // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
@@ -290,70 +267,17 @@ export function BrowserLocalCanvasPage({
     setEdgeLock,
   } = useCanvasSync(backend)
 
-  // Pre-fetch referenced canvases for inline embeds; refresh when the
-  // referenced canvas's updatedAt moves in the list.
-  useEffect(() => {
-    const refs = collectFileRefs(canvas).filter((ref) => !isImageRef(ref))
-    if (refs.length === 0) return
-    let cancelled = false
-    const stampOf = new Map(canvases.map((entry) => [entry.id, entry.updatedAt]))
-    const stale = refs.filter(
-      (ref) => !embedContent.has(ref) || embedStampsRef.current.get(ref) !== stampOf.get(ref),
-    )
-    if (stale.length === 0) return
-    void Promise.all(
-      stale.map(async (ref) => [ref, await loadEmbeddedSpatialCanvas(ref)] as const),
-    ).then((loaded) => {
-      if (cancelled) return
-      setEmbedContent((prev) => {
-        const next = new Map(prev)
-        for (const [ref, content] of loaded) {
-          if (content !== undefined) next.set(ref, content)
-          else next.delete(ref)
-          embedStampsRef.current.set(ref, stampOf.get(ref) ?? '')
-        }
-        return next
-      })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [canvas, canvases, embedContent])
-  const resolveFileCanvas = useCallback((file: string) => embedContent.get(file), [embedContent])
-  useEffect(() => {
-    const refs = collectFileRefs(canvas).filter((ref) => isImageRef(ref) && !imageUrls.has(ref))
-    if (refs.length === 0) return
-    let cancelled = false
-    void Promise.all(refs.map(async (ref) => [ref, await loadImageAssetUrl(ref)] as const)).then(
-      (loaded) => {
-        if (cancelled) return
-        setImageUrls((prev) => {
-          // When every load failed, keep the SAME map instance: a fresh
-          // (equal) map would re-trigger this effect and spin the failed
-          // reads forever. Failed refs retry only on the next canvas change.
-          let added = false
-          const next = new Map(prev)
-          for (const [ref, url] of loaded) {
-            if (url !== undefined) {
-              next.set(ref, url)
-              added = true
-            }
-          }
-          return added ? next : prev
-        })
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [canvas, imageUrls])
-  const resolveFileImage = useCallback(
-    (file: string) => {
-      const href = imageUrls.get(file)
-      return href === undefined ? undefined : { href }
-    },
-    [imageUrls],
-  )
+  // The seams themselves are backend-agnostic (see use-canvas-file-seams.ts);
+  // this page only supplies the browser-local binding and the staleness
+  // stamps that make an edit made elsewhere show up on the next refresh.
+  const fileSeams = useCanvasFileSeams({
+    canvas,
+    adapter: BROWSER_LOCAL_FILE_ADAPTER,
+    stampOf: useMemo(
+      () => new Map(canvases.map((entry) => [entry.id, entry.updatedAt])),
+      [canvases],
+    ),
+  })
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
@@ -583,10 +507,7 @@ export function BrowserLocalCanvasPage({
               .filter((entry) => entry.id !== canvasId)
               .map((entry) => ({ file: entry.id, label: entry.name }))}
             onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
-            resolveFileCanvas={resolveFileCanvas}
-            resolveFileImage={resolveFileImage}
-            onAddImage={storeImageAsset}
-            isImageFileRef={isImageRef}
+            {...fileSeams}
             lockedNodeIds={lockedNodeIds}
             lockedEdgeIds={lockedEdgeIds}
             onToggleNodeLock={setNodeLock}
