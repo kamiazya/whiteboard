@@ -26,6 +26,7 @@ import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -109,11 +110,22 @@ export function DaemonCanvasPage({
         pageOrigin: window.location.origin,
         daemonBaseUrl,
       })
-      return transport === 'sse'
-        ? new SseBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
-        : new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+      if (transport !== 'sse') {
+        return new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+      }
+      // Null where SharedWorker is unavailable; SseBackend then opens its own
+      // stream, which is correct but not shared across tabs.
+      const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+      return new SseBackend(
+        workspaceId,
+        slug,
+        daemonBaseUrl,
+        { fetch: daemonFetch },
+        undefined,
+        shared,
+      )
     },
-    [daemonBaseUrl],
+    [daemonBaseUrl, token],
   )
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })

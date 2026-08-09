@@ -24,6 +24,7 @@ export default defineConfig({
     'shared/browser-shared-index': 'src/shared/browser-shared-index.ts',
     'shared/daemon-backend': 'src/shared/daemon-backend.ts',
     'shared/sse-backend': 'src/shared/sse-backend.ts',
+    'shared/sse-stream-hub': 'src/shared/sse-stream-hub.ts',
     'shared/select-canvas-transport': 'src/shared/select-canvas-transport.ts',
     'shared/api-client': 'src/shared/api-client.ts',
     'shared/api-contracts/index': 'src/shared/api-contracts/index.ts',

@@ -95,6 +95,10 @@ describe('publish contract', () => {
         types: './src/shared/sse-backend.ts',
         import: './dist/shared/sse-backend.js',
       },
+      './sse-stream-hub': {
+        types: './src/shared/sse-stream-hub.ts',
+        import: './dist/shared/sse-stream-hub.js',
+      },
       './select-canvas-transport': {
         types: './src/shared/select-canvas-transport.ts',
         import: './dist/shared/select-canvas-transport.js',
@@ -138,6 +142,10 @@ describe('publish contract', () => {
       './sse-backend': {
         types: './dist/shared/sse-backend.d.ts',
         import: './dist/shared/sse-backend.js',
+      },
+      './sse-stream-hub': {
+        types: './dist/shared/sse-stream-hub.d.ts',
+        import: './dist/shared/sse-stream-hub.js',
       },
       './select-canvas-transport': {
         types: './dist/shared/select-canvas-transport.d.ts',
