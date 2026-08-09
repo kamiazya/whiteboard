@@ -11,7 +11,8 @@ import {
 } from '@kamiazya/whiteboard-canvas-workspace'
 import { createNodePatchTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { registerOpenCanvasTools } from '../mcp/opencanvas-tools.js'
 import { InMemoryCanvasDocStore } from './inmemory/in-memory-canvas-doc-store.js'
 import { _resetWorkspaceLocksForTests, withCanvasDocWriteLock } from './workspace-lock.js'
 
@@ -24,6 +25,31 @@ const CANVAS: SpatialCanvas = {
     { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
   ],
   edges: [],
+}
+
+/**
+ * Holds the first `participants` canvas loads until all of them have
+ * arrived, so "both calls loaded the same base" is constructed rather than
+ * left to the scheduler. Without this the race the test means to create
+ * might simply not happen, and the test would pass for the wrong reason.
+ */
+function barrierOnCanvasLoads(store: InMemoryCanvasDocStore, participants: number): void {
+  let arrived = 0
+  let open!: () => void
+  const gate = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  const load = store.loadSnapshot.bind(store)
+  store.loadSnapshot = async (input) => {
+    const result = await load(input)
+    if (input.docRef.kind !== 'canvas') return result
+    arrived += 1
+    if (arrived === participants) open()
+    // Loads beyond the barrier's population must not block, or a follow-up
+    // read would hang forever.
+    if (arrived <= participants) await gate
+    return result
+  }
 }
 
 async function makeDeps() {
@@ -84,10 +110,12 @@ beforeEach(() => {
 describe('withCanvasDocWriteLock', () => {
   it('THE RED CASE: two unserialized patches to one canvas lose an update', async () => {
     const deps = await makeDeps()
+    barrierOnCanvasLoads(deps.canvasDocStore, 2)
     const tool = createNodePatchTool(deps)
 
-    // Both start before either saves — the shape of an agent and a user
-    // editing the same canvas at the same moment.
+    // Both are held at the barrier until each has loaded, so they provably
+    // share a base — the shape of an agent and a user editing the same
+    // canvas at the same moment.
     await Promise.all([
       tool.execute({
         workspaceId: WORKSPACE_ID,
@@ -162,45 +190,91 @@ describe('withCanvasDocWriteLock', () => {
   })
 })
 
-// A tier-2 conformance guard: the lock only helps where it is actually
-// applied, and a new mutating tool added without it would reintroduce the
-// exact loss the tests above demonstrate. Read-only tools must stay
-// unwrapped so a render never queues behind an unrelated patch.
-describe('opencanvas-tools wiring', () => {
-  const MUTATING = [
-    'facetSet',
-    'nodePatch',
-    'nodeLock',
-    'edgeLock',
-    'edgePatch',
-    'versionSave',
-    'versionRestore',
-    'canvasImportOkf',
-  ]
-  const READ_ONLY = [
-    'canvasRenderSvg',
-    'canvasDigest',
-    'canvasExportOkf',
-    'canvasExportJsonCanvas',
-    'versionList',
-  ]
+// Wiring, verified by RUNNING the registered handlers rather than by
+// reading the source: a string check would pass on a wrapping that had
+// been syntactically kept but semantically bypassed, and would break on
+// reformatting.
+describe('registered MCP handlers', () => {
+  function registeredHandlers(deps: Awaited<ReturnType<typeof makeDeps>>) {
+    const registerTool = vi.fn()
+    registerOpenCanvasTools({ registerTool } as never, deps as never)
+    const byName = new Map<string, (args: unknown, extra: unknown) => Promise<unknown>>()
+    for (const call of registerTool.mock.calls) {
+      byName.set(call[0] as string, call[2] as never)
+    }
+    return byName
+  }
 
-  it('wraps every mutating tool, and no read-only one', async () => {
-    const { readFileSync } = await import('node:fs')
-    const source = readFileSync(new URL('../mcp/opencanvas-tools.ts', import.meta.url), 'utf8')
-    for (const name of MUTATING) {
-      expect(
-        source.includes(
-          `withCanvasDocWriteLock(parsed.canvasId, () =>\n        tools.${name}.execute(parsed),`,
-        ),
-        `${name} must run inside withCanvasDocWriteLock`,
-      ).toBe(true)
+  it('serializes two mutating handlers on the same canvas', async () => {
+    const deps = await makeDeps()
+    // A barrier cannot be used here: once the calls ARE serialized the
+    // second one never loads until the first finishes, so waiting for both
+    // to arrive deadlocks. Record the store traffic instead and assert the
+    // shape directly — interleaved load/load/save/save is the lost update,
+    // load/save/load/save is the fix.
+    const events: string[] = []
+    const load = deps.canvasDocStore.loadSnapshot.bind(deps.canvasDocStore)
+    const save = deps.canvasDocStore.saveSnapshot.bind(deps.canvasDocStore)
+    deps.canvasDocStore.loadSnapshot = async (input) => {
+      if (input.docRef.kind === 'canvas') events.push('load')
+      return load(input)
     }
-    for (const name of READ_ONLY) {
-      expect(
-        source.includes(`const result = await tools.${name}.execute(parsed)`),
-        `${name} is read-only and must NOT be serialized behind writes`,
-      ).toBe(true)
+    deps.canvasDocStore.saveSnapshot = async (input) => {
+      if (input.docRef.kind === 'canvas') events.push('save')
+      return save(input)
     }
+
+    const handlers = registeredHandlers(deps)
+    const nodePatch = handlers.get('node_patch')!
+    await Promise.all([
+      nodePatch(
+        { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
+        {},
+      ),
+      nodePatch(
+        { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n2', patch: { x: 22 } },
+        {},
+      ),
+    ])
+
+    // The exact event count is an implementation detail (reindex adds its
+    // own traffic); the property is that the second call never reads a base
+    // the first had not yet written.
+    const firstSave = events.indexOf('save')
+    const secondLoad = events.indexOf('load', events.indexOf('load') + 1)
+    expect(firstSave, `store traffic was ${events.join(',')}`).toBeGreaterThan(-1)
+    expect(secondLoad, `store traffic was ${events.join(',')}`).toBeGreaterThan(firstSave)
+    expect(await storedPositions(deps)).toEqual({ n1: 11, n2: 22 })
+  })
+
+  it('does not queue a READ-ONLY handler behind a held write', async () => {
+    const deps = await makeDeps()
+    const handlers = registeredHandlers(deps)
+
+    // Hold the write inside its critical section, then check a read still
+    // completes. Serializing reads behind writes would make a render wait
+    // on an unrelated patch for no correctness gain.
+    let releaseWrite!: () => void
+    const writeHeld = new Promise<void>((resolve) => {
+      releaseWrite = resolve
+    })
+    const save = deps.canvasDocStore.saveSnapshot.bind(deps.canvasDocStore)
+    deps.canvasDocStore.saveSnapshot = async (input) => {
+      if (input.docRef.kind === 'canvas') await writeHeld
+      return save(input)
+    }
+
+    const writing = handlers.get('node_patch')!(
+      { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
+      {},
+    )
+    const read = await handlers.get('canvas_digest')!(
+      { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID },
+      {},
+    )
+    expect(read).toBeDefined()
+
+    releaseWrite()
+    await writing
   })
 })
