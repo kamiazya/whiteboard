@@ -76,6 +76,10 @@ export function TextNodeEditor({
         height: box.height,
         resize: 'none',
         boxSizing: 'border-box',
+        // Explicit, because the canvas root turns selection OFF and this
+        // inherits from it — without this the caret cannot select the text it
+        // is editing.
+        userSelect: 'text',
       }}
       onChange={(e) => {
         setValue(e.target.value)
