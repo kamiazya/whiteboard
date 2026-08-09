@@ -44,9 +44,13 @@
  * fit / to selection). Every one has a context-menu or dock twin; every
  * binding is declared in `shortcuts.ts`.
  *
+ * Dragging a node also SNAPS it to nearby neighbour edges/centres and to a
+ * background grid, drawing the guide that justifies each snap; Cmd/Ctrl
+ * suspends it for one gesture (`snap.ts` holds the geometry).
+ *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * snapping, persistence, and sync. Those are later phases.
+ * persistence, and sync. Those are later phases.
  */
 import type {
   CanvasColor,
@@ -140,6 +144,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
+import { type SnapBox, snapBox } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
@@ -163,10 +168,25 @@ import {
 export const SPATIAL_EDITOR_UNSUPPORTED = [
   'freehand-drawing',
   'shape-tools',
-  'snapping',
   'persistence',
   'sync',
 ] as const
+
+/**
+ * Attraction radius in SCREEN pixels, converted to canvas units per gesture
+ * so the pull feels the same at every zoom — a fixed canvas threshold would
+ * be imperceptible zoomed out and violent zoomed in.
+ */
+const SNAP_THRESHOLD_SCREEN_PX = 6
+/**
+ * Grid pitch in canvas units. Deliberately wider than
+ * `2 * SNAP_THRESHOLD_SCREEN_PX`: a pitch at or below that makes every
+ * lattice line reachable from everywhere, which is silent rounding rather
+ * than snapping, and it would out-pull the neighbour edges the user aimed
+ * at. At 20 the grid attracts near a line and leaves the rest of the plane
+ * alone.
+ */
+const SNAP_GRID_CANVAS_PX = 20
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -361,6 +381,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * ~30ms on an 80-node canvas — far past a frame budget).
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
+    /**
+     * Canvas-space lines justifying the current snap, cleared with the
+     * gesture. Same rationale as `livePoint`: a per-frame value that drives
+     * only an overlay, never the document.
+     */
+    const [snapGuides, setSnapGuides] = useState<{
+      readonly x: readonly number[]
+      readonly y: readonly number[]
+    } | null>(null)
     // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
     // Select restores the pre-tool editing behavior byte-for-byte; Connect
     // arms object-first click-A, click-B edge creation. Creation is
@@ -452,7 +481,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // cancelled. Uses the SAME predicate applyResult's own clearing check
       // below does, so there is exactly one definition of "no longer in
       // flight" rather than two clearing rules that could drift apart.
-      if (!isInFlightGesture(result.state)) setLivePoint(null)
+      if (!isInFlightGesture(result.state)) {
+        setLivePoint(null)
+        // The guides justify an in-flight snap; outliving the gesture would
+        // leave stray lines on the canvas.
+        setSnapGuides(null)
+      }
       // gestureState intentionally omitted: this effect only reacts to a new
       // canvas identity, not every gestureState transition (that would create
       // an infinite render loop feeding the reducer's own output back in).
@@ -672,6 +706,83 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
 
     /**
+     * How far a snap guide extends, in canvas space: across all content plus
+     * a margin. Spanning the content rather than the window keeps the line a
+     * function of the document alone, so it renders identically at any zoom
+     * or scroll position and needs no measured element size.
+     */
+    const guideSpan = useMemo(() => {
+      const GUIDE_MARGIN_PX = 40
+      if (boxes.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
+      const xs = boxes.flatMap((entry) => [entry.box.x, entry.box.x + entry.box.width])
+      const ys = boxes.flatMap((entry) => [entry.box.y, entry.box.y + entry.box.height])
+      return {
+        minX: Math.min(...xs) - GUIDE_MARGIN_PX,
+        maxX: Math.max(...xs) + GUIDE_MARGIN_PX,
+        minY: Math.min(...ys) - GUIDE_MARGIN_PX,
+        maxY: Math.max(...ys) + GUIDE_MARGIN_PX,
+      }
+    }, [boxes])
+
+    /**
+     * Nudges the POINTER, not the emitted command, so preview and commit see
+     * the same value: the reducer derives both from `point`, and adjusting
+     * only one of them would let the box render in one place and land in
+     * another.
+     *
+     * Move only. A resize would have to snap the dragged EDGE rather than the
+     * origin, which is a different candidate set — deferred rather than
+     * approximated, since an approximate resize snap fights the handle.
+     */
+    const snapMovePoint = (
+      raw: Point,
+      suspended: boolean,
+    ): { point: Point; guides: { x: readonly number[]; y: readonly number[] } } => {
+      const unchanged = { point: raw, guides: { x: [], y: [] } }
+      if (suspended || gestureState.kind !== 'moving') return unchanged
+      const moving = boxes.find((entry) => entry.id === gestureState.nodeId)
+      if (moving === undefined) return unchanged
+
+      const candidate: SnapBox = {
+        x: gestureState.startX + (raw.x - gestureState.startPoint.x),
+        y: gestureState.startY + (raw.y - gestureState.startPoint.y),
+        width: moving.box.width,
+        height: moving.box.height,
+      }
+      // Everything travelling WITH the drag is excluded: a multi-selection
+      // member, or a frame's geometrically contained members (same rule the
+      // commit uses). Left in, a carried node would attract its own carrier
+      // and peg the gesture at a fixed offset.
+      const movingNode = canvas.nodes.find((n) => n.id === gestureState.nodeId)
+      const carried = new Set<string>([gestureState.nodeId, ...extraIds])
+      if (movingNode?.type === 'group') {
+        for (const n of canvas.nodes) {
+          if (
+            n.x >= gestureState.startX &&
+            n.y >= gestureState.startY &&
+            n.x + n.width <= gestureState.startX + movingNode.width &&
+            n.y + n.height <= gestureState.startY + movingNode.height
+          ) {
+            carried.add(n.id)
+          }
+        }
+      }
+
+      const result = snapBox(
+        candidate,
+        boxes.filter((entry) => !carried.has(entry.id)).map((entry) => entry.box),
+        {
+          thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / viewport.zoom,
+          gridSize: SNAP_GRID_CANVAS_PX,
+        },
+      )
+      return {
+        point: { x: raw.x + (result.x - candidate.x), y: raw.y + (result.y - candidate.y) },
+        guides: { x: result.guidesX, y: result.guidesY },
+      }
+    }
+
+    /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
      * from `canvasRef.current`, never re-read from the ref between steps) so
      * a multi-command result — e.g. a pending-text commit ordered ahead of a
@@ -684,7 +795,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // Any gesture that leaves an in-flight state retires the preview: the
       // committed canvas is about to draw the real thing. Same predicate the
       // canvas-replaced effect above uses, so both agree on one definition.
-      if (!isInFlightGesture(result.state)) setLivePoint(null)
+      if (!isInFlightGesture(result.state)) {
+        setLivePoint(null)
+        // The guides justify an in-flight snap; outliving the gesture would
+        // leave stray lines on the canvas.
+        setSnapGuides(null)
+      }
       setGestureState(result.state)
       if (result.selectedId !== undefined) setSelectedId(result.selectedId)
       let running = canvasRef.current
@@ -1010,9 +1126,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return
       }
       if (gestureState.kind === 'idle') return
-      const point = screenToCanvas(screenPoint, viewport)
-      setLivePoint(point)
-      applyResult(reduceGesture(gestureState, canvas, { type: 'pointermove', point }))
+      const snapped = snapMovePoint(screenToCanvas(screenPoint, viewport), e.metaKey || e.ctrlKey)
+      setSnapGuides(snapped.guides)
+      setLivePoint(snapped.point)
+      applyResult(
+        reduceGesture(gestureState, canvas, { type: 'pointermove', point: snapped.point }),
+      )
     }
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1083,7 +1202,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
-      const point = screenToCanvas(screenPoint, viewport)
+      // Snapped with the same helper the preview used, so the box commits
+      // exactly where the last frame drew it.
+      const point = snapMovePoint(
+        screenToCanvas(screenPoint, viewport),
+        e.metaKey || e.ctrlKey,
+      ).point
       const targetNodeId =
         gestureState.kind === 'connecting' ? hitTest(selectableBoxes, point) : undefined
       const result = reduceGesture(
@@ -2810,6 +2934,44 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 strokeWidth={1 / viewport.zoom}
                 strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
               />
+            </svg>
+          )}
+          {snapGuides !== null && snapGuides.x.length + snapGuides.y.length > 0 && (
+            <svg
+              data-testid="snap-guides"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              {snapGuides.x.map((x) => (
+                <line
+                  key={`x${x}`}
+                  data-axis="x"
+                  x1={x}
+                  x2={x}
+                  y1={guideSpan.minY}
+                  y2={guideSpan.maxY}
+                  stroke="#e11d48"
+                  strokeWidth={1 / viewport.zoom}
+                />
+              ))}
+              {snapGuides.y.map((y) => (
+                <line
+                  key={`y${y}`}
+                  data-axis="y"
+                  x1={guideSpan.minX}
+                  x2={guideSpan.maxX}
+                  y1={y}
+                  y2={y}
+                  stroke="#e11d48"
+                  strokeWidth={1 / viewport.zoom}
+                />
+              ))}
             </svg>
           )}
           {extraIds.size > 0 && (
