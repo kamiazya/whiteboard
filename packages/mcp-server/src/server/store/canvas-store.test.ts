@@ -90,6 +90,33 @@ describe('saveCanvas / loadCanvas', () => {
     expect(elements[0].x).toBe(100)
   })
 
+  // Daemon mode persists a canvas through THIS path, not through
+  // canvasDocStore — a separate implementation, so the sidecar-map contract
+  // node/edge lock relies on has to be pinned here too. It holds because
+  // saveCanvas writes doc.export({ mode: 'snapshot' }) verbatim rather than
+  // re-serializing through readSpatialCanvas, which would drop everything
+  // outside the canvas value.
+  it('round-trips node and edge locks, which live outside the canvas value', async () => {
+    const { setEdgeLock, setNodeLock, readEdgeLocks, readNodeLocks, writeSpatialCanvas } =
+      await import('@kamiazya/whiteboard-canvas-workspace')
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
+        { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    setNodeLock(doc, 'n1', true)
+    setEdgeLock(doc, 'e1', true)
+
+    await saveCanvas('session1', 'locked', doc)
+    const loaded = await loadCanvas('session1', 'locked')
+
+    expect(readNodeLocks(loaded)).toEqual(new Set(['n1']))
+    expect(readEdgeLocks(loaded)).toEqual(new Set(['e1']))
+  })
+
   it('returns an empty LoroDoc for a missing canvas', async () => {
     const doc = await loadCanvas('session1', 'nonexistent')
     expect(doc.getMovableList('elements').length).toBe(0)
