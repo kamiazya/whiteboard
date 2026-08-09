@@ -368,10 +368,16 @@ export function DaemonCanvasPage({
             const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
               (entry) => entry !== daemonBaseUrl,
             )
+            // Clearing the stored target is what makes this outlive the page:
+            // App.tsx reads localDaemonBaseUrl to decide a load is
+            // daemon-backed, so leaving it set reconnects on the next visit
+            // and the popover's "this browser stops using it" becomes false.
+            const { localDaemonBaseUrl, ...storage } = current.storage
             return {
               ...current,
               storage: {
-                ...current.storage,
+                ...storage,
+                ...(localDaemonBaseUrl === daemonBaseUrl ? {} : { localDaemonBaseUrl }),
                 knownDaemonBaseUrls: known,
                 dismissedDaemonBaseUrls: [daemonBaseUrl, ...dismissed].slice(0, 5),
               },
