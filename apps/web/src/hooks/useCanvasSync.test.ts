@@ -219,6 +219,24 @@ describe('useCanvasSync', () => {
     expect(result.current.canvas).toEqual(otherCanvas)
   })
 
+  it('clears the locked set when the backend goes away', async () => {
+    const backend = makeFakeBackend()
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: backend as CanvasBackend | null },
+    })
+
+    await hydrate(backend, TEXT_CANVAS)
+    act(() => {
+      result.current.setNodeLock(TEXT_NODE.id, true)
+    })
+    expect([...result.current.lockedNodeIds]).toEqual([TEXT_NODE.id])
+
+    // Disconnecting leaves no session to own this state; reporting the
+    // disposed canvas's locks would lock nodes of whatever comes next.
+    rerender({ backend: null })
+    expect([...result.current.lockedNodeIds]).toEqual([])
+  })
+
   it('does not connect when backend is null, and onChange is a safe no-op', () => {
     const { result } = renderHook(({ backend }) => useCanvasSync(backend), {
       initialProps: { backend: null as CanvasBackend | null },

@@ -173,6 +173,10 @@ export function useCanvasSync(
     setRestoreInProgress(false)
     setRestoreLabel(null)
     setCanvas(EMPTY_CANVAS)
+    // Locks belong to the session being torn down. Left standing they would
+    // be reported against whatever canvas comes next — or against nothing at
+    // all, when the backend goes to null.
+    setLockedNodeIds(EMPTY_LOCKED_IDS)
 
     if (backend === null) {
       sessionRef.current = null
