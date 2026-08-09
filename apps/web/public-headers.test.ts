@@ -51,6 +51,17 @@ describe('public/_headers', () => {
     expect(csp).toContain("worker-src 'self'")
   })
 
+  it('permits blob: img-src so daemon-fetched images are not blocked by our own CSP', () => {
+    // Images that need an auth header (canvas thumbnails, version
+    // thumbnails, embedded canvas files) cannot be loaded by pointing
+    // `<img src>` at the daemon — the browser sends no Authorization on a
+    // subresource load. They are fetched, turned into a Blob, and rendered
+    // through `URL.createObjectURL`, so every one of them is a `blob:` URL.
+    const globalHeaders = blocks.get('/*')
+    const csp = globalHeaders?.get('Content-Security-Policy') ?? ''
+    expect(csp).toMatch(/img-src[^;]*\bblob:/)
+  })
+
   it('permits https frame-src so link-node iframe embeds are not blocked by our own CSP', () => {
     // Without an explicit frame-src, child iframes fall back to
     // default-src 'self' and every external embed renders as Chrome's
