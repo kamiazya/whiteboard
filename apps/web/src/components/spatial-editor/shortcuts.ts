@@ -15,6 +15,7 @@
 import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
+  | 'toggle-lock'
   | 'zoom-to-fit'
   | 'zoom-to-selection'
   | 'select-all'
@@ -61,6 +62,15 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  {
+    id: 'toggle-lock',
+    keys: ['l'],
+    mod: true,
+    shift: true,
+    display: 'Cmd+Shift+L',
+    description: 'Lock or unlock the selection',
+    tools: ['select'],
+  },
   // Viewport framing (tldraw combos). Live in every tool — navigation is
   // never mode-gated.
   {

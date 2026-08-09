@@ -7,7 +7,11 @@
  */
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  readSpatialCanvas,
+  setNodeLock,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
@@ -930,6 +934,54 @@ describe('createCanvasSyncSession', () => {
       const result = readSpatialCanvas(merged)
       expect(result.edges).toEqual([])
       expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ text: 'renamed-by-peer' })
+    })
+  })
+
+  // Node lock lives in the doc's sidecar map, so it must survive the same
+  // reload path a canvas does — and the CONSUMER only learns about it
+  // through subscribeLocks, which is why hydration has to notify.
+  describe('node lock', () => {
+    it('hydration reports the persisted lock set, not an empty one (reload regression)', () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+
+      // Bytes that already carry a lock, exactly as a reload would deliver.
+      const doc = new LoroDoc()
+      writeSpatialCanvas(doc, twoNodeCanvas())
+      setNodeLock(doc, 'n-a', true)
+      const listener = vi.fn()
+      session.subscribeLocks(listener)
+
+      backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+      expect(session.getNodeLocks()).toEqual(new Set(['n-a']))
+      // Without the hydration notification the consumer would keep an
+      // empty set and the lock would look lost.
+      expect(listener).toHaveBeenCalled()
+    })
+
+    it('setNodeLock pushes the change to peers and notifies, without publishing a canvas', async () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+      const before = backend._ctrl.pushLocalUpdateCalls.length
+
+      const canvasListener = vi.fn()
+      session.subscribe(canvasListener)
+      const lockListener = vi.fn()
+      session.subscribeLocks(lockListener)
+
+      session.setNodeLock('n-b', true)
+      await vi.advanceTimersByTimeAsync(300)
+
+      expect(session.getNodeLocks()).toEqual(new Set(['n-b']))
+      expect(lockListener).toHaveBeenCalled()
+      // The lock reaches peers...
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(before)
+      // ...but it is not canvas content, so no canvas publish fires.
+      expect(canvasListener).not.toHaveBeenCalled()
     })
   })
 })

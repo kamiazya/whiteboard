@@ -1,9 +1,11 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
+  readNodeLocks,
   readSpatialCanvas,
   type SpatialBatchWriter,
   withSpatialBatch,
+  setNodeLock as workspaceSetNodeLock,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
@@ -32,6 +34,9 @@ const log = getAppLogger('canvas-sync')
 // wait for the flush-triggered commit's pushLocalUpdate invocation so a
 // stuck commitChain cannot leave a disconnect() call pending forever.
 const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
+
+/** Stable empty set so a lock read before the first snapshot is referentially stable. */
+const EMPTY_LOCKS: ReadonlySet<string> = new Set()
 
 /**
  * Stable key identifying the single node/edge a command targets, so a
@@ -132,6 +137,12 @@ export interface CanvasSyncSession {
   // since pushes happen on COMMIT, after the canvas publish that triggered
   // the consumer's last render.
   subscribeHistory(listener: () => void): () => void
+  // Node lock lives in the doc's sidecar map (canvas-workspace's
+  // readNodeLocks/setNodeLock): durable and peer-synced, yet never part of
+  // the canvas value, so it never reaches an export.
+  getNodeLocks(): ReadonlySet<string>
+  setNodeLock(nodeId: string, locked: boolean): void
+  subscribeLocks(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -303,6 +314,7 @@ export function createCanvasSyncSession(
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
   const historyListeners = new Set<() => void>()
+  const lockListeners = new Set<() => void>()
   // Microtask defer: onPush fires inside Loro's commit, and a listener that
   // synchronously setStates mid-commit would re-enter React from a doc
   // mutation path.
@@ -522,10 +534,15 @@ export function createCanvasSyncSession(
           deps.dispatchIdentityEvent(CANVAS_SYNC_DOC_CHANGED_EVENT, deps.getOptions().identity)
           if (e.by === 'import') {
             publishCanvasFromDoc(newDoc)
+            // A remote peer may have locked or unlocked something.
+            notifyLocksChanged()
           }
         })
 
         publishCanvasFromDoc(newDoc)
+        // Hydration decides the lock set for this session — without this,
+        // a persisted lock reads as absent until the next toggle.
+        notifyLocksChanged()
       },
 
       onRemoteUpdate(bytes) {
@@ -717,6 +734,31 @@ export function createCanvasSyncSession(
     }
   }
 
+  function getNodeLocks(): ReadonlySet<string> {
+    return doc === null ? EMPTY_LOCKS : readNodeLocks(doc)
+  }
+
+  function notifyLocksChanged(): void {
+    for (const listener of lockListeners) listener()
+  }
+
+  function setNodeLock(nodeId: string, locked: boolean): void {
+    if (doc === null) return
+    // The commit inside setNodeLock reaches peers through the doc's own
+    // subscribeLocalUpdates push, like every other local change. The canvas
+    // VALUE is unchanged, so subscribers get a lock notification rather
+    // than a canvas publish.
+    workspaceSetNodeLock(doc, nodeId, locked)
+    notifyLocksChanged()
+  }
+
+  function subscribeLocks(listener: () => void): () => void {
+    lockListeners.add(listener)
+    return () => {
+      lockListeners.delete(listener)
+    }
+  }
+
   return {
     connect,
     dispose,
@@ -730,5 +772,8 @@ export function createCanvasSyncSession(
     getCanvas,
     subscribe,
     subscribeHistory,
+    getNodeLocks,
+    setNodeLock,
+    subscribeLocks,
   }
 }

@@ -163,6 +163,8 @@ export function DaemonCanvasPage({
     canUndo,
     canRedo,
     exportScene,
+    lockedNodeIds,
+    setNodeLock,
   } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
@@ -486,6 +488,8 @@ export function DaemonCanvasPage({
                 .filter((entry) => entry.slug !== canvas?.slug)
                 .map((entry) => ({ file: entry.slug, label: entry.slug }))}
               onOpenFileRef={(file) => controller.switchCanvas(file)}
+              lockedNodeIds={lockedNodeIds}
+              onToggleNodeLock={setNodeLock}
               paletteLeading={
                 <HistoryCluster
                   onUndo={() => void undo()}

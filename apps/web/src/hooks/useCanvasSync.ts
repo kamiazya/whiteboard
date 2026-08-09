@@ -41,12 +41,18 @@ export interface UseCanvasSyncResult {
   undo: () => boolean
   redo: () => boolean
   canUndo: () => boolean
+  /** Node ids locked in the doc's sidecar map (never part of the canvas value). */
+  lockedNodeIds: ReadonlySet<string>
+  setNodeLock: (nodeId: string, locked: boolean) => void
   canRedo: () => boolean
   // null when the requested format is unavailable in this environment (e.g.
   // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
   // that the same as "export unavailable right now" rather than throwing.
   exportScene: (format: SceneExportFormat) => Promise<Blob | null>
 }
+
+/** Stable identity so an unlocked canvas never re-renders the editor. */
+const EMPTY_LOCKED_IDS: ReadonlySet<string> = new Set()
 
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
@@ -150,6 +156,7 @@ export function useCanvasSync(
   const [externalVersion, setExternalVersion] = useState(0)
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
+  const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
 
@@ -198,12 +205,23 @@ export function useCanvasSync(
     // the consumer's last render — bump a version so canUndo/canRedo reads
     // re-run when the stack changes shape.
     const unsubscribeHistory = session.subscribeHistory(() => setHistoryVersion((v) => v + 1))
+    // A lock changes no canvas value, so it has its own notification —
+    // without it the editor would keep rendering a stale locked set.
+    const unsubscribeLocks = session.subscribeLocks(() => {
+      setLockedNodeIds(session.getNodeLocks())
+    })
+    // Seed from the session as well as subscribing: hydration can complete
+    // BEFORE this effect runs (the backend may deliver a snapshot
+    // synchronously), and a missed notification would otherwise leave a
+    // persisted lock invisible until the next toggle.
+    setLockedNodeIds(session.getNodeLocks())
     session.connect()
     session.onEditorReady()
 
     return () => {
       unsubscribe()
       unsubscribeHistory()
+      unsubscribeLocks()
       session.dispose()
     }
   }, [backend])
@@ -223,6 +241,10 @@ export function useCanvasSync(
   // Live affordance state for undo/redo buttons. Not memoized state: every
   // publish re-renders the consumer (setCanvas above), so reading through
   // the session on each render is always current and never stale.
+  const setNodeLock = useCallback((nodeId: string, locked: boolean) => {
+    sessionRef.current?.setNodeLock(nodeId, locked)
+  }, [])
+
   const canUndo = useCallback(() => {
     return sessionRef.current?.canUndo() ?? false
   }, [])
@@ -296,6 +318,8 @@ export function useCanvasSync(
     undo: loroUndo,
     redo: loroRedo,
     canUndo,
+    lockedNodeIds,
+    setNodeLock,
     canRedo,
     exportScene,
   }

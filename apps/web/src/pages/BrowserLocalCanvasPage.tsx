@@ -275,8 +275,18 @@ export function BrowserLocalCanvasPage({
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { canvas, onChange, externalVersion, exportScene, undo, redo, canUndo, canRedo } =
-    useCanvasSync(backend)
+  const {
+    canvas,
+    onChange,
+    externalVersion,
+    exportScene,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    lockedNodeIds,
+    setNodeLock,
+  } = useCanvasSync(backend)
 
   // Pre-fetch referenced canvases for inline embeds; refresh when the
   // referenced canvas's updatedAt moves in the list.
@@ -575,6 +585,8 @@ export function BrowserLocalCanvasPage({
             resolveFileImage={resolveFileImage}
             onAddImage={storeImageAsset}
             isImageFileRef={isImageRef}
+            lockedNodeIds={lockedNodeIds}
+            onToggleNodeLock={setNodeLock}
             paletteLeading={
               <HistoryCluster
                 onUndo={() => void undo()}

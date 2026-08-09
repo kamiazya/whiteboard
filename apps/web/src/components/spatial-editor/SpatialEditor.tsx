@@ -69,6 +69,8 @@ import {
   Frame,
   Image as ImageIcon,
   Link,
+  Lock as LockIcon,
+  LockOpen,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -192,6 +194,16 @@ export interface SpatialEditorProps {
    */
   readonly defaultTool?: EditorTool
   /**
+   * Node ids the user has locked. Lock is HOST state — it lives in the
+   * Loro doc's sidecar map, not in the canvas value — so it arrives as a
+   * prop and toggles are reported back through `onToggleNodeLock`.
+   * A locked node cannot be selected, moved, resized, or deleted here;
+   * unlock is the one action its menu still offers.
+   */
+  readonly lockedNodeIds?: ReadonlySet<string>
+  /** Absent → the whole lock affordance hides and nothing is blocked. */
+  readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
+  /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (browser-local canvas id,
    * daemon alias path). Absent → the "Add canvas" affordance hides.
@@ -302,6 +314,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       testId = DEFAULT_TEST_ID,
       theme = 'light',
       defaultTool = 'hand',
+      lockedNodeIds,
+      onToggleNodeLock,
       fileRefOptions,
       onOpenFileRef,
       paletteLeading,
@@ -524,6 +538,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       | null
     >(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
+    /**
+     * Lock only binds when the host wired the seam — an editor mounted
+     * without `onToggleNodeLock` has no way to unlock, so blocking there
+     * would strand the node.
+     */
+    const lockEnabled = onToggleNodeLock !== undefined
+    const isLocked = (nodeId: string): boolean =>
+      lockEnabled && lockedNodeIds !== undefined && lockedNodeIds.has(nodeId)
+    /** Boxes a pointer or marquee may target: locked nodes are invisible to both. */
+    const selectableBoxes = useMemo(
+      () => (lockEnabled ? boxes.filter((entry) => !isLocked(entry.id)) : boxes),
+      // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
+      [boxes, lockEnabled, lockedNodeIds],
+    )
 
     /**
      * The dragged node's own content, rendered ONCE per drag (the reducer's
@@ -725,7 +753,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // exception (beginOverlayGesture) — they want capture immediately.
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
-      const hitId = hitTest(boxes, point)
+      const hitId = hitTest(selectableBoxes, point)
 
       // Double-press detection is OURS, not the browser's `dblclick`: the
       // first press selects the node, which re-renders the DOM under the
@@ -824,11 +852,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
+      // The MENU hit-tests every node, locked included — a locked node has
+      // to stay right-clickable or Unlock would be unreachable. Only the
+      // selection side effect below is skipped for it.
       const hitId = hitTest(boxes, point)
       // Node and edge selection stay mutually exclusive here too (see the
       // pointerdown path): Delete acts on a selected edge FIRST, so leaving
       // the other object type selected makes Delete remove the wrong thing.
-      if (hitId !== undefined) {
+      if (hitId !== undefined && !isLocked(hitId)) {
         // Right-clicking a member of an existing multi-selection must not
         // shrink it: promote the target to primary and keep the old primary
         // in the extras, or "Group selection" silently loses a node.
@@ -966,7 +997,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           w: Math.abs(marquee.current.x - marquee.start.x),
           h: Math.abs(marquee.current.y - marquee.start.y),
         }
-        const hitIds = boxes
+        const hitIds = selectableBoxes
           .filter(
             (entry) =>
               entry.box.x < rect.x + rect.w &&
@@ -990,7 +1021,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
-      const targetNodeId = gestureState.kind === 'connecting' ? hitTest(boxes, point) : undefined
+      const targetNodeId =
+        gestureState.kind === 'connecting' ? hitTest(selectableBoxes, point) : undefined
       const result = reduceGesture(
         gestureState,
         canvas,
@@ -1281,7 +1313,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * highlighting the whole page. A handled no-op still consumes it.
      */
     const selectAllNodes = (): boolean => {
-      const [first, ...rest] = canvasRef.current.nodes.map((node) => node.id)
+      const [first, ...rest] = canvasRef.current.nodes
+        .map((node) => node.id)
+        .filter((id) => !isLocked(id))
       if (first === undefined) return true
       setSelectedId(first)
       setExtraIds(new Set(rest))
@@ -1289,9 +1323,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
+    /**
+     * Toggle the lock on the current selection. Lock is host state, so
+     * this reports through the callback and never touches the canvas
+     * value — a lock is not an edit to the document.
+     */
+    const toggleSelectionLock = (): boolean => {
+      if (!lockEnabled || onToggleNodeLock === undefined || selection === undefined) return false
+      const ids = [selection.id, ...extraIds]
+      // The primary's current state decides the direction, so a mixed
+      // selection lands on ONE state instead of flipping each node.
+      const next = !isLocked(selection.id)
+      for (const id of ids) onToggleNodeLock(id, next)
+      if (next) {
+        setSelectedId(null)
+        setExtraIds(new Set())
+      }
+      return true
+    }
+
     /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
     const runShortcut = (id: ShortcutId): boolean => {
       switch (id) {
+        case 'toggle-lock':
+          return toggleSelectionLock()
         case 'zoom-to-fit':
           return frameContent()
         case 'zoom-to-selection':
@@ -2357,6 +2412,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
               // right-click already made this node the primary selection,
               // so the shared handler clones the full multi-selection.
+              // A locked node's menu offers exactly one action: unlock.
+              // Showing Delete/Edit next to a lock the user deliberately
+              // set would make the lock read as decorative.
+              if (isLocked(node.id)) {
+                return [
+                  {
+                    label: 'Unlock',
+                    icon: <LockOpen />,
+                    onSelect: () => onToggleNodeLock?.(node.id, false),
+                  },
+                ]
+              }
               items.push({
                 label: 'Copy',
                 icon: <CopyIcon />,
@@ -2424,6 +2491,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   },
                 ],
               })
+              if (lockEnabled) {
+                items.push({
+                  label: 'Lock',
+                  icon: <LockIcon />,
+                  onSelect: () => onToggleNodeLock?.(node.id, true),
+                })
+              }
               items.push({ kind: 'separator' })
               items.push({
                 label: 'Delete',

@@ -6,10 +6,11 @@ import {
   spatialNodeSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
+import { readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
-import { NodeNotFoundError, PatchValidationError } from './errors.js'
+import { NodeLockedError, NodeNotFoundError, PatchValidationError } from './errors.js'
 import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
@@ -64,6 +65,11 @@ export function createNodePatchTool(deps: ServerDeps) {
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
       if (node === undefined) throw new NodeNotFoundError(input.canvasId, input.nodeId)
+      // The lock binds agents too — refuse BEFORE any write so a rejected
+      // patch leaves the doc byte-identical.
+      if (readNodeLocks(doc).has(input.nodeId)) {
+        throw new NodeLockedError(input.canvasId, input.nodeId)
+      }
 
       const mergedRaw = { ...node, ...input.patch }
       const candidateCanvas = {

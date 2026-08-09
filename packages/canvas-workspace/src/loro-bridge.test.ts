@@ -12,7 +12,9 @@ import {
   deleteSpatialNode,
   readCoreFacets,
   readFacets,
+  readNodeLocks,
   readSpatialCanvas,
+  setNodeLock,
   withSpatialBatch,
   writeCoreFacets,
   writeFacets,
@@ -678,4 +680,99 @@ describe('withSpatialBatch', () => {
     undoManager.undo()
     expect(undoManager.canUndo()).toBe(false)
   })
+})
+
+// Node lock (user decisions 2026-08-09): an EDITOR affordance stored in a
+// Loro sidecar map so it survives reload and syncs to peers, while never
+// reaching an export — `readSpatialCanvas` reads only nodes/edges, so the
+// canvas value every export path serializes cannot carry it.
+describe('node lock sidecar', () => {
+  const seeded = () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    return doc
+  }
+
+  test('setNodeLock marks and clears a node; readNodeLocks reports the set', () => {
+    const doc = seeded()
+    expect(readNodeLocks(doc)).toEqual(new Set())
+
+    setNodeLock(doc, TEXT_NODE.id, true)
+    expect(readNodeLocks(doc)).toEqual(new Set([TEXT_NODE.id]))
+
+    setNodeLock(doc, FILE_NODE.id, true)
+    expect(readNodeLocks(doc)).toEqual(new Set([TEXT_NODE.id, FILE_NODE.id]))
+
+    setNodeLock(doc, TEXT_NODE.id, false)
+    expect(readNodeLocks(doc)).toEqual(new Set([FILE_NODE.id]))
+  })
+
+  test('the lock never reaches the canvas value exports serialize', () => {
+    const doc = seeded()
+    setNodeLock(doc, TEXT_NODE.id, true)
+    const canvas = readSpatialCanvas(doc)
+    // Same node set, and not one node object carries a lock field.
+    expect(canvas.nodes.map((node) => node.id).sort()).toEqual([FILE_NODE.id, TEXT_NODE.id].sort())
+    for (const node of canvas.nodes) {
+      expect(Object.keys(node)).not.toContain('locked')
+    }
+  })
+
+  test('a full writeSpatialCanvas resync leaves the sidecar intact', () => {
+    const doc = seeded()
+    setNodeLock(doc, TEXT_NODE.id, true)
+    // The resync path every fallback commit takes must not wipe editor state.
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    expect(readNodeLocks(doc)).toEqual(new Set([TEXT_NODE.id]))
+  })
+
+  test('deleting a node cascades its lock entry away (no orphan accumulation)', () => {
+    const doc = seeded()
+    setNodeLock(doc, TEXT_NODE.id, true)
+    setNodeLock(doc, FILE_NODE.id, true)
+
+    deleteSpatialNode(doc, TEXT_NODE.id)
+    expect(readNodeLocks(doc)).toEqual(new Set([FILE_NODE.id]))
+
+    // Same cascade inside a batch.
+    withSpatialBatch(doc, (w) => w.deleteNode(FILE_NODE.id))
+    expect(readNodeLocks(doc)).toEqual(new Set())
+  })
+
+  test('setNodeLock to its current value writes nothing (no empty undo step)', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = seeded()
+    setNodeLock(doc, TEXT_NODE.id, true)
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(undoManager.canUndo()).toBe(false)
+    setNodeLock(doc, TEXT_NODE.id, true)
+    expect(undoManager.canUndo()).toBe(false)
+    setNodeLock(doc, 'never-locked', false)
+    expect(undoManager.canUndo()).toBe(false)
+  })
+})
+
+// The reload path in the browser-local app is: snapshot bytes, then a
+// REPLAY of incremental update bytes. A lock written after the snapshot
+// travels only in those updates, so it has to survive that exact route.
+test('a lock written after the snapshot survives snapshot + update replay', () => {
+  const origin = makeDoc()
+  writeSpatialCanvas(origin, { nodes: [TEXT_NODE, FILE_NODE], edges: [] })
+  const snapshot = origin.export({ mode: 'snapshot' })
+  const beforeLock = origin.oplogVersion()
+
+  setNodeLock(origin, TEXT_NODE.id, true)
+  const updateAfterLock = origin.export({ mode: 'update', from: beforeLock })
+
+  const reloaded = new LoroDoc()
+  reloaded.import(snapshot)
+  expect(readNodeLocks(reloaded)).toEqual(new Set())
+  reloaded.import(updateAfterLock)
+  expect(readNodeLocks(reloaded)).toEqual(new Set([TEXT_NODE.id]))
+  // And the canvas itself is unchanged by the lock round-trip.
+  expect(
+    readSpatialCanvas(reloaded)
+      .nodes.map((n) => n.id)
+      .sort(),
+  ).toEqual([FILE_NODE.id, TEXT_NODE.id].sort())
 })
