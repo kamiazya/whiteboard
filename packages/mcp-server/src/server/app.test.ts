@@ -196,11 +196,60 @@ describe('createApp daemon mutation auth', () => {
     const res = await app.request('/pair')
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
     expect(res.headers.get('X-Frame-Options')).toBe('DENY')
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
     expect(res.headers.get('Referrer-Policy')).toBe('no-referrer')
     expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin')
+  })
+
+  // /pair is the pairing consent trust anchor and the only real page this
+  // daemon serves, so it carries a full page policy rather than the
+  // frame-ancestors-only floor that suits an API JSON response.
+  it('serves /pair under a full page CSP, not the frame-ancestors-only floor', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('/pair')
+
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    expect(csp).toContain("default-src 'self'")
+    expect(csp).toContain("base-uri 'none'")
+    expect(csp).toContain("object-src 'none'")
+    expect(csp).toContain("frame-ancestors 'none'")
+    // A consent page embeds nothing, so it does not inherit the hosted app's
+    // `frame-src https:` — pinned so a later policy edit cannot quietly let
+    // this trust anchor frame remote content.
+    expect(csp).toContain("frame-src 'none'")
+    // The daemon-fetched thumbnails this app renders are blob: URLs.
+    expect(csp).toMatch(/img-src[^;]*\bblob:/)
+  })
+
+  it('authorizes the two injected inline scripts on /pair with a per-response nonce', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('/pair')
+
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    const nonce = /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(csp)?.[1]
+    expect(nonce).toBeDefined()
+    // Without the nonce on the tags, `script-src 'self'` would block the
+    // runtime-config and token scripts and the pairing page would boot blind.
+    const html = await res.text()
+    expect(html).toContain(`<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__`)
+    expect(html).toContain(`<script nonce="${nonce}">window.__WHITEBOARD_DAEMON_TOKEN__`)
+    const scriptSrc = /script-src ([^;]*)/.exec(csp)?.[1] ?? ''
+    expect(scriptSrc).not.toContain("'unsafe-inline'")
+  })
+
+  it('issues a fresh nonce per /pair response', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const first = await app.request('/pair')
+    const second = await app.request('/pair')
+
+    const nonceOf = (res: Response) =>
+      /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(res.headers.get('Content-Security-Policy') ?? '')?.[1]
+    expect(nonceOf(first)).toBeDefined()
+    expect(nonceOf(first)).not.toBe(nonceOf(second))
   })
 
   it('adds the same baseline security headers to API responses', async () => {

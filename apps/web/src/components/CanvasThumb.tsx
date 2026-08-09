@@ -57,6 +57,14 @@ export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }:
         }
         const blob = await res.blob()
         if (cancelled) return
+        // "No thumbnail yet" arrives as 204 No Content — a success status, so
+        // the `res.ok` check above lets it through. An object URL built from
+        // that empty body renders as a broken image rather than degrading to
+        // the placeholder, because a blob-backed <img> has no src to fail on.
+        if (blob.size === 0) {
+          setFailed(true)
+          return
+        }
         createdUrl = URL.createObjectURL(blob)
         setObjectUrl(createdUrl)
       } catch {

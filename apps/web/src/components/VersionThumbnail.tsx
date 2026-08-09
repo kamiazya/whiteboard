@@ -59,6 +59,13 @@ export function VersionThumbnail({
         }
         const blob = await res.blob()
         if (cancelled) return
+        // 204 No Content ("no thumbnail yet") is a success status, so it slips
+        // past the `res.ok` check above. An object URL built from an empty
+        // body renders as a broken image instead of the placeholder.
+        if (blob.size === 0) {
+          setFailed(true)
+          return
+        }
         createdUrl = URL.createObjectURL(blob)
         setObjectUrl(createdUrl)
       } catch {

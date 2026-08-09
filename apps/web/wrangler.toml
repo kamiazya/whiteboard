@@ -1,2 +1,10 @@
 name = "kamiazya-whiteboard"
 pages_build_output_dir = "dist"
+
+# Pin the compatibility date. Left unset, wrangler defaults it to *today*,
+# so `wrangler pages dev` demands a runtime newer than the workerd bundled
+# with the installed wrangler and refuses to start — a local-only failure
+# that arrives on its own the first day the pinned wrangler falls behind
+# the calendar, with nothing in the repo having changed.
+# Raise this together with the wrangler devDependency, never ahead of it.
+compatibility_date = "2026-07-02"

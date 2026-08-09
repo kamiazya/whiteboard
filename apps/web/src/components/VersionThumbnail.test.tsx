@@ -136,6 +136,30 @@ describe('VersionThumbnail', () => {
     expect(screen.getByTestId('version-thumbnail-placeholder')).toBeTruthy()
   })
 
+  // 204 is a success status, so `res.ok` is true and the empty body would
+  // become a zero-byte object URL that renders as a broken image rather than
+  // reaching the placeholder.
+  it('204 response falls back to the placeholder without creating an objectURL', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+
+    await act(async () => {
+      renderInDaemonMode(fetchMock as unknown as typeof fetch)
+    })
+    // The placeholder is also what renders while the fetch is in flight, so
+    // wait for the response and flush the blob -> setState chain before
+    // asserting — otherwise every assertion below passes on the loading state
+    // and the test would stay green with the zero-byte guard removed.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(screen.getByTestId('version-thumbnail-placeholder')).toBeTruthy()
+  })
+
   it('a rejected fetch falls back to the placeholder without an unhandled rejection', async () => {
     const fetchMock = vi.fn(async () => {
       throw new Error('network down')

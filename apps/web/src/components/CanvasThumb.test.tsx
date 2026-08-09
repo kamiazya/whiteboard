@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
@@ -97,6 +97,45 @@ describe('CanvasThumb', () => {
     )
     await vi.waitFor(() => expect(container.querySelector('svg')).not.toBeNull())
     expect(container.querySelector('img')).toBeNull()
+  })
+
+  // "No thumbnail yet" is a 204, not an error status, so `res.ok` is true and
+  // the empty body would become a zero-byte object URL. A plain <img src>
+  // degrades on its own there (the empty body trips onError), but the blob
+  // path has to recognize it: an <img> pointed at a blob that decodes to
+  // nothing renders as a broken image, never firing the fallback.
+  // The placeholder also shows while the fetch is still in flight, so this
+  // asserts only AFTER the response has been consumed — otherwise it passes
+  // on the loading state and guards nothing.
+  async function renderEmptyThumbnailResponse(response: Response) {
+    const daemonFetch = vi.fn().mockResolvedValue(response)
+    const createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL: vi.fn() })
+    const { container } = render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <CanvasThumb workspaceId="ws-1" slug="a" />
+      </DaemonApiContext.Provider>,
+    )
+    await vi.waitFor(() => expect(daemonFetch).toHaveBeenCalled())
+    // Let the response -> blob -> setState chain settle before asserting.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    return { container, createObjectURL }
+  }
+
+  it('renders the fallback icon when the daemon reports no thumbnail yet (204)', async () => {
+    try {
+      const { container, createObjectURL } = await renderEmptyThumbnailResponse(
+        new Response(null, { status: 204 }),
+      )
+      expect(container.querySelector('img')).toBeNull()
+      expect(container.querySelector('svg')).not.toBeNull()
+      expect(createObjectURL).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('revokes the previous object URL when the slug identity changes', async () => {
