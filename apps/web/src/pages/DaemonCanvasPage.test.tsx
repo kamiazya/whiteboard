@@ -128,6 +128,31 @@ describe('DaemonCanvasPage', () => {
     expect(createdBackends[0]?.connectCount).toBe(1)
   })
 
+  it('keeps one live connection when the parent re-renders with a fresh createBackend', async () => {
+    // A parent that writes `createBackend={(w, s) => …}` inline — the
+    // natural thing to write — hands this page a new function identity on
+    // every render. The connection is defined by (workspace, slug, daemon),
+    // not by that function's identity, so the session must survive it:
+    // rebuilding tears down the WebSocket, re-hydrates, and drops the undo
+    // history for a canvas the user never left.
+    const { rerender } = render(
+      <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      { container: document.body },
+    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    expect(createdBackends).toHaveLength(1)
+
+    await act(async () => {
+      rerender(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+
+    expect(createdBackends).toHaveLength(1)
+    expect(createdBackends[0]?.disconnectCount).toBe(0)
+    expect(createdBackends[0]?.connectCount).toBe(1)
+  })
+
   it('renders capability badges from LOCAL_DAEMON_CAPABILITIES', async () => {
     await act(async () => {
       render(

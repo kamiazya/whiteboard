@@ -81,10 +81,11 @@ describe('BrowserLocalCanvasPage create/delete-node reload persistence (browser 
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const created = textNodeCanvas('undo-probe-node', 20, 20)
-    // Retried like the neighboring tests: right after hydrate the page can
-    // swap backend identity (fresh canvas creation), so the first captured
-    // onChange may belong to a torn-down session. Re-sending an identical
-    // canvas is a no-op on the doc, so retries never stack extra undo steps.
+    // Retried like the neighboring tests: the editor renders as soon as the
+    // canvas metadata loads, which is before the session has hydrated, so an
+    // early onChange lands on a doc that is not ready to commit it.
+    // Re-sending an identical canvas is a no-op on the doc, so retries never
+    // stack extra undo steps.
     const undoButton = screen.getByRole('button', { name: 'Undo' })
     await waitFor(
       () => {
