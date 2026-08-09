@@ -14,6 +14,11 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
+import type {
+  SyncMessageEvent,
+  SyncReadyEvent,
+  SyncUpdateEvent,
+} from '../../shared/sync-sse-contract.js'
 import { clientTextMessageSchema } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 
@@ -29,19 +34,6 @@ export const syncSubscribeRequestSchema = z
   .strict()
 
 export type SyncSubscribeRequest = z.infer<typeof syncSubscribeRequestSchema>
-
-export const syncUpdateEventSchema = z
-  .object({
-    doc: z.string().min(1),
-    // SSE frames are text, so Loro update bytes travel base64-encoded. Only
-    // incremental updates go through here — the initial snapshot is served as
-    // binary by GET /api/canvas/:workspaceId/:slug/snapshot, so the largest
-    // payload never pays the base64 inflation.
-    update: z.string(),
-  })
-  .strict()
-
-export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 
 export const syncClientMessageRequestSchema = z
   .object({
@@ -119,7 +111,8 @@ export function sseBroadcastUpdate(workspaceId: string, slug: string, update: Ui
  */
 export function sseBroadcastText(workspaceId: string, slug: string, raw: string): void {
   const key = docKey(workspaceId, slug)
-  const frame = JSON.stringify({ doc: key, raw })
+  const payload: SyncMessageEvent = { doc: key, raw }
+  const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {
     if (!stream.docs.has(key)) continue
     stream.send('message', frame)
@@ -129,16 +122,13 @@ export function sseBroadcastText(workspaceId: string, slug: string, raw: string)
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, slug: string, raw: string): void {
   const key = docKey(workspaceId, slug)
-  const frame = JSON.stringify({ doc: key, raw })
+  const payload: SyncMessageEvent = { doc: key, raw }
+  const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {
     if (!stream.ready.has(key)) continue
     stream.send('message', frame)
   }
 }
-
-export const syncMessageEventSchema = z.object({ doc: z.string().min(1), raw: z.string() }).strict()
-
-export type SyncMessageEvent = z.infer<typeof syncMessageEventSchema>
 
 // Test-only: the module-level registry outlives a single app instance, so a
 // test that opens a stream would otherwise leak a subscriber into the next one.
@@ -166,7 +156,8 @@ export function createSyncSseRouter() {
         },
       }
       streams.set(streamId, entry)
-      await stream.writeSSE({ event: 'ready', data: JSON.stringify({ streamId }) })
+      const ready: SyncReadyEvent = { streamId }
+      await stream.writeSSE({ event: 'ready', data: JSON.stringify(ready) })
       log.info({ streamId }, 'sync stream opened')
 
       stream.onAbort(() => {

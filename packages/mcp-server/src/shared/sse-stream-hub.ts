@@ -11,6 +11,13 @@
  * verbatim inside a SharedWorker, which is what makes the sharing span tabs
  * rather than just the canvases within one tab.
  */
+import type { z } from 'zod'
+import {
+  syncMessageEventSchema,
+  syncReadyEventSchema,
+  syncUpdateEventSchema,
+} from './sync-sse-contract.js'
+
 interface SseEvent {
   event: string
   data: string
@@ -80,6 +87,23 @@ export interface DocListener {
   onMessage: (raw: string) => void
 }
 
+/**
+ * Parse one frame's `data` against its contract. A malformed frame is dropped
+ * rather than thrown on: the daemon is the only producer, so a mismatch is a
+ * version skew, and losing one frame is recoverable where aborting the whole
+ * stream would stop every document sharing it.
+ */
+function parseFrame<T extends z.ZodTypeAny>(schema: T, data: string): z.infer<T> | null {
+  let json: unknown
+  try {
+    json = JSON.parse(data)
+  } catch {
+    return null
+  }
+  const parsed = schema.safeParse(json)
+  return parsed.success ? parsed.data : null
+}
+
 function isClientReady(message: unknown): boolean {
   return (
     typeof message === 'object' &&
@@ -107,6 +131,7 @@ export class SseStreamHub implements SseStreamSource {
   private started = false
   private closed = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryResolve: (() => void) | null = null
   /** Documents that have signalled readiness, so the signal can be repeated
    *  against a stream the daemon opened after a reconnect. */
   private readonly readyDocs = new Set<string>()
@@ -136,6 +161,9 @@ export class SseStreamHub implements SseStreamSource {
       current.delete(listener)
       if (current.size > 0) return
       this.listeners.delete(doc)
+      // Readiness is replayed on every reconnect, so a document left here would
+      // keep declaring the new stream ready for a canvas nobody is watching.
+      this.readyDocs.delete(doc)
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -209,7 +237,12 @@ export class SseStreamHub implements SseStreamSource {
     } catch {
       return false
     }
-    if (!res.ok || !res.body) return false
+    if (!res.ok || !res.body) {
+      // An unconsumed body holds the connection open under undici, and the
+      // reconnect loop would repeat that on every failed attempt.
+      void res.body?.cancel().catch(() => {})
+      return false
+    }
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -237,13 +270,8 @@ export class SseStreamHub implements SseStreamSource {
    * be repeated.
    */
   private onStreamReady(data: string): void {
-    let payload: { streamId?: unknown }
-    try {
-      payload = JSON.parse(data)
-    } catch {
-      return
-    }
-    if (typeof payload.streamId !== 'string' || payload.streamId.length === 0) return
+    const payload = parseFrame(syncReadyEventSchema, data)
+    if (!payload) return
     this.streamId = payload.streamId
 
     const docs = [...this.listeners.keys()]
@@ -259,6 +287,10 @@ export class SseStreamHub implements SseStreamSource {
 
   private wait(ms: number): Promise<void> {
     return new Promise((resolve) => {
+      // Held so close() can settle it. Clearing the timer alone would leave
+      // this promise pending forever, and with it the start() frame that
+      // awaits it — keeping the whole hub reachable.
+      this.retryResolve = resolve
       this.retryTimer = setTimeout(resolve, ms)
     })
   }
@@ -269,13 +301,8 @@ export class SseStreamHub implements SseStreamSource {
       return
     }
     if (evt.event === 'update') {
-      let payload: { doc?: unknown; update?: unknown }
-      try {
-        payload = JSON.parse(evt.data)
-      } catch {
-        return
-      }
-      if (typeof payload.doc !== 'string' || typeof payload.update !== 'string') return
+      const payload = parseFrame(syncUpdateEventSchema, evt.data)
+      if (!payload) return
       const set = this.listeners.get(payload.doc)
       if (!set) return
       const bytes = fromBase64(payload.update)
@@ -284,13 +311,8 @@ export class SseStreamHub implements SseStreamSource {
     }
     // Text frames are addressed too, so a version_created for one canvas never
     // reaches another canvas sharing this stream.
-    let envelope: { doc?: unknown; raw?: unknown }
-    try {
-      envelope = JSON.parse(evt.data)
-    } catch {
-      return
-    }
-    if (typeof envelope.doc !== 'string' || typeof envelope.raw !== 'string') return
+    const envelope = parseFrame(syncMessageEventSchema, evt.data)
+    if (!envelope) return
     const set = this.listeners.get(envelope.doc)
     if (!set) return
     for (const l of set) l.onMessage(envelope.raw)
@@ -302,6 +324,9 @@ export class SseStreamHub implements SseStreamSource {
     this.abort = null
     if (this.retryTimer !== null) clearTimeout(this.retryTimer)
     this.retryTimer = null
+    // Settle a wait in flight: the loop awaiting it checks `closed` and exits.
+    this.retryResolve?.()
+    this.retryResolve = null
     this.listeners.clear()
     this.readyDocs.clear()
     this.started = false

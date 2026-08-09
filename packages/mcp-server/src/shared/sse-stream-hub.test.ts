@@ -187,6 +187,31 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
+  it('stops replaying client_ready for a document it no longer watches', async () => {
+    // Readiness is replayed on reconnect, so a document that was left behind
+    // would keep declaring this stream ready for it — and the daemon would keep
+    // routing viewport requests nobody is listening for.
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      retryDelayMs: noDelay,
+    })
+    const off = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+    hub.sendMessage('w/a', { type: 'client_ready' })
+    await vi.waitFor(() => expect(fake.messageBodies().length).toBe(1))
+
+    off()
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {} })
+    fake.endStream()
+
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(2))
+    await flush()
+    expect(fake.messageBodies().filter((b) => b.includes('w/a'))).toHaveLength(1)
+    hub.close()
+  })
+
   it('stops reconnecting once closed', async () => {
     const fake = createFake()
     const hub = new SseStreamHub({
