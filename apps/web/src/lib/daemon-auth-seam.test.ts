@@ -19,7 +19,7 @@ const sourceModules = import.meta.glob('../**/*.{ts,tsx}', {
   import: 'default',
 }) as Record<string, string>
 
-const ALLOWED_SETTER = './daemon-api-client.ts'
+const ALLOWED_SETTER = './daemon-auth-fetch.ts'
 
 /**
  * Deliberately broad: a header name is case-insensitive (Fetch spec) and can
@@ -97,6 +97,6 @@ describe('daemon Authorization header single-seam guard', () => {
     const contents = sourceModules[ALLOWED_SETTER]
     expect(contents).toBeDefined()
     const matches = AUTHORIZATION_HEADER_PATTERNS.some((pattern) => pattern.test(contents ?? ''))
-    expect(matches, 'expected daemon-api-client.ts to still set Authorization').toBe(true)
+    expect(matches, 'expected daemon-auth-fetch.ts to still set Authorization').toBe(true)
   })
 })

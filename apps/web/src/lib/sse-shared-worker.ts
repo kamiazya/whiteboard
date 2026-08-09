@@ -11,7 +11,7 @@
  * `worker-src 'self'`, which rejects a blob: worker.
  */
 import { SseStreamHub } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
-import { createDaemonFetch } from './daemon-api-client.js'
+import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
 interface PortState {
@@ -89,8 +89,12 @@ function handle(port: MessagePort, raw: unknown): void {
 interface SharedWorkerConnectScope {
   onconnect: ((event: { ports: readonly MessagePort[] }) => void) | null
 }
-
-;(globalThis as unknown as SharedWorkerConnectScope).onconnect = (event) => {
+// `self`, not `globalThis`: a shared worker's connect handler belongs to the
+// worker's own scope object. A host that runs the module with an injected
+// scope — Vitest's worker polyfill, for one — sees an assignment on globalThis
+// land somewhere else entirely, and the worker then silently never receives a
+// connection.
+;(self as unknown as SharedWorkerConnectScope).onconnect = (event) => {
   const port = event.ports[0]
   if (!port) return
   port.onmessage = (e: MessageEvent) => handle(port, e.data)

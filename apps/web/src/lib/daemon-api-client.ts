@@ -16,81 +16,12 @@ import {
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { z } from 'zod'
+// Re-exported so existing callers keep one import site; the implementation
+// lives in its own module so a SharedWorker can use it without this file's
+// schema graph.
+import { createDaemonFetch } from './daemon-auth-fetch.js'
 
-/**
- * Resolves an input (string/URL/Request) against `daemonBaseUrl` and returns
- * its final URL object. Relative string/URL inputs resolve against
- * daemonBaseUrl; absolute inputs and Request objects keep their own origin
- * untouched (mirrors how `fetch()` itself treats a Request's url).
- */
-function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string): URL {
-  if (input instanceof Request) {
-    return new URL(input.url)
-  }
-  return new URL(input, daemonBaseUrl)
-}
-
-/**
- * Cross-origin fetch wrapper for a paired daemon. Resolves relative
- * `/api/...` paths against `daemonBaseUrl` and attaches an `Authorization:
- * Bearer` header — but ONLY when the fully-resolved request URL's origin
- * equals the daemon's own origin. This mirrors apiFetch's same-origin-only
- * rule (packages/mcp-server/src/shared/api-client.ts): the daemon bearer
- * token must never leak to an absolute external URL or a foreign-origin
- * Request object that happens to pass through this wrapper (e.g. an
- * Excalidraw asset fetch).
- *
- * This is the SOLE place in apps/web allowed to set an Authorization header
- * toward the daemon (enforced by daemon-auth-seam.test.ts's source scan).
- * Keeping the token's attachment in one seam, rather than at each call site,
- * is what lets a browser-extension proxy replace this single function instead
- * of requiring an audit of every fetch in the app. That matters because an
- * extension is the only place a persisted daemon credential can live safely:
- * extension storage is scoped to the extension ID, not to a web origin that
- * another process can take over by claiming the port.
- */
-export function createDaemonFetch(daemonBaseUrl: string, token?: string): typeof globalThis.fetch {
-  const daemonOrigin = new URL(daemonBaseUrl).origin
-
-  return async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
-    const resolvedUrl = resolveRequestUrl(input, daemonBaseUrl)
-    const isDaemonOrigin = resolvedUrl.origin === daemonOrigin
-
-    const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
-    )
-    if (token && isDaemonOrigin) {
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-
-    if (input instanceof Request) {
-      const body =
-        init?.body ?? (input.method === 'GET' || input.method === 'HEAD' ? undefined : input.body)
-      return fetch(resolvedUrl, {
-        method: input.method,
-        body,
-        // Carry the Request's own semantics through the rebuild — losing
-        // `signal` in particular would break abort-on-unmount for callers
-        // that pass a preconstructed Request. `mode` is deliberately NOT
-        // copied: a Request can carry mode 'navigate', which is invalid as a
-        // fetch init value and throws.
-        signal: input.signal,
-        credentials: input.credentials,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        integrity: input.integrity,
-        keepalive: input.keepalive,
-        // Fetch spec: a ReadableStream body requires `duplex: 'half'` or the
-        // call throws (browsers/undici enforce this at runtime).
-        ...(body ? { duplex: 'half' as const } : {}),
-        ...init,
-        headers,
-      })
-    }
-
-    return fetch(resolvedUrl, { ...init, headers })
-  }
-}
+export { createDaemonFetch }
 
 async function parseProblemDetails(res: Response): Promise<string> {
   try {
@@ -244,19 +175,20 @@ const createPairingGrantResponseSchema = z
 export type CreatePairingGrantResponse = z.infer<typeof createPairingGrantResponseSchema>
 
 /** Same-origin call from the daemon-served /pair page; the daemon token is
- *  the R3-injected one. Kept here because this module is the single seam
- *  allowed to set an Authorization header (daemon-auth-seam guard). */
+ *  the R3-injected one. The credential goes through createDaemonFetch rather
+ *  than an inline header so the seam stays a single function, not a whole
+ *  module — a SharedWorker can then reuse it without importing this file. */
 export async function createPairingGrant(
   fetchFn: typeof globalThis.fetch,
   daemonToken: string,
   input: { origin: string; codeChallenge: string },
 ): Promise<CreatePairingGrantResponse> {
-  const res = await fetchFn('/api/pairing/grants', {
+  // Same-origin by construction: this page is served by the daemon, so its own
+  // origin IS the daemon origin and createDaemonFetch's origin check passes.
+  const authed = createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn)
+  const res = await authed('/api/pairing/grants', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${daemonToken}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
   if (!res.ok) {

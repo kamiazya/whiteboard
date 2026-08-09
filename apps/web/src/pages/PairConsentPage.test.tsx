@@ -40,14 +40,17 @@ describe('PairConsentPage', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
     expect(navigate.mock.calls[0]?.[0]).toBe(`${HOSTED}/#wb-grant=the-code&state=st-1`)
-    // The page also pings its own origin for the identity fingerprint;
-    // find the grant call by URL rather than by index.
-    const grantCall = fetchFn.mock.calls.find(
-      (call) => (call as unknown as [string])[0] === '/api/pairing/grants',
-    ) as unknown as [string, RequestInit]
+    // The page also pings its own origin for the identity fingerprint; find the
+    // grant call by URL rather than by index. The credential is attached by
+    // createDaemonFetch, which resolves the path against the daemon origin and
+    // normalises headers — so match on the resolved URL and read the header off
+    // a Headers instance rather than assuming the literal call shape.
+    const grantCall = fetchFn.mock.calls.find((call) =>
+      String((call as unknown as [string | URL])[0]).endsWith('/api/pairing/grants'),
+    ) as unknown as [string | URL, RequestInit]
     expect(grantCall).toBeDefined()
     const [, init] = grantCall
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer daemon-secret')
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer daemon-secret')
     expect(JSON.parse(String(init.body))).toEqual({ origin: HOSTED, codeChallenge: 'chal' })
   })
 
