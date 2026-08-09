@@ -122,8 +122,12 @@ describe('sse-shared-worker', () => {
 
   it('forwards only the subscribed document, not every frame on the stream', async () => {
     const port = connect()
+    // Status events are liveness, not document frames; this case is about
+    // which documents' frames are forwarded.
     const seen: unknown[] = []
-    port.onmessage = (e) => seen.push(e.data)
+    port.onmessage = (e) => {
+      if ((e.data as { type?: string }).type !== 'status') seen.push(e.data)
+    }
     const doc = nextDoc()
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
     port.postMessage({ type: 'subscribe', doc })

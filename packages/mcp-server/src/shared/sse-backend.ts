@@ -95,8 +95,18 @@ export class SseBackend implements CanvasBackend {
     this.unsubscribe = source.subscribe(this.docKey, {
       onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
       onMessage: (raw) => this.dispatchText(raw, handlers),
+      // The stream belongs to the source, so its liveness is the only signal
+      // this backend has that updates are still arriving.
+      onConnectionChange: (connected) => {
+        if (this.cancelled) return
+        if (connected) handlers.onConnected()
+        else handlers.onDisconnected?.()
+      },
     })
-    handlers.onConnected()
+    // No unconditional report here: the source announces its state at
+    // subscribe time and on every change, so anything added on top would
+    // either overwrite an accurate "not connected yet" or double-report a
+    // connection — and the session sends client_ready per report.
   }
 
   /**

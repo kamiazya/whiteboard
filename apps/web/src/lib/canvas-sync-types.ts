@@ -17,7 +17,13 @@ export interface DirtyEventDetail {
   slug: string
 }
 
-export type SyncStatus = 'idle' | 'connected' | 'error'
+/**
+ * `reconnecting` is a live transport that has dropped and is being retried.
+ * Distinct from `error`, which is terminal for this session, and from `idle`,
+ * which is "not started" — a caller that conflated them would either alarm the
+ * user over a blip or stay silent while nothing arrives.
+ */
+export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 
 // Named constants for the window-event contract dispatched by
 // dispatchIdentityEvent below. The literal values are pinned — several other

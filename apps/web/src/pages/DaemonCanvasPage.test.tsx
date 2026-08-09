@@ -372,6 +372,31 @@ describe('DaemonCanvasPage', () => {
     expect(createdBackends[1]?.disconnectCount).toBe(0)
   })
 
+  it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
+    // A chip that reads Synced while the transport is down tells the user
+    // remote edits are arriving when they are not.
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+
+    const backend = createdBackends[0]!
+    await act(async () => {
+      backend.handlers?.onDisconnected?.()
+    })
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/reconnecting/i)
+
+    // …and back, so a recovered stream clears it rather than latching.
+    await act(async () => {
+      backend.handlers?.onConnected()
+    })
+    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+  })
+
   it('flips the connection chip to "Sync off" on WS auth failure (close 1008 -> onAuthError)', async () => {
     await act(async () => {
       render(

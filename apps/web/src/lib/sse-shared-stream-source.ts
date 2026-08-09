@@ -50,6 +50,10 @@ export function createSharedSseStreamSource(
       for (const l of set) l.onUpdate(bytes)
       return
     }
+    if (evt.type === 'status') {
+      for (const l of set) l.onConnectionChange?.(evt.connected)
+      return
+    }
     for (const l of set) l.onMessage(evt.raw)
   }
   port.start()

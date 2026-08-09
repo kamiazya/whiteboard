@@ -237,6 +237,36 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 
+  it('waits for the stream before reporting the connection', async () => {
+    // The source reports its state at subscribe time. Reporting connected
+    // regardless would overwrite it, so a backend whose stream has not opened
+    // yet — every one, for the moment before the ready frame — would claim a
+    // connection it does not have.
+    const fake = createFakeTransport([])
+    const calls: string[] = []
+    const handlers = {
+      onSnapshot: () => {},
+      onRemoteUpdate: () => {},
+      onConnected: () => calls.push('connected'),
+      onDisconnected: () => calls.push('disconnected'),
+      onVersionCreated: () => {},
+      onRestoreStarted: () => {},
+      onRestoreComplete: () => {},
+      onHeadChanged: () => {},
+      onViewportRequest: () => {},
+      onExportRequest: () => {},
+    } satisfies CanvasBackendHandlers
+    const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
+
+    backend.connect(handlers)
+
+    // The first thing reported is the state at subscribe time: no stream yet.
+    await vi.waitFor(() => expect(calls[0]).toBe('disconnected'))
+    await vi.waitFor(() => expect(calls).toContain('connected'))
+    expect(calls.filter((c) => c === 'connected')).toHaveLength(1)
+    backend.disconnect()
+  })
+
   it('routes control messages through an injected stream source', async () => {
     // The shipped configuration injects the SharedWorker-backed source, so the
     // stream — and therefore the streamId the daemon knows — belongs to the

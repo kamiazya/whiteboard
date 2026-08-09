@@ -488,6 +488,11 @@ export function createCanvasSyncSession(
         backend.sendClientReady()
       },
 
+      onDisconnected() {
+        if (isStale()) return
+        deps.onStatusChange('reconnecting')
+      },
+
       onSnapshot(bytes) {
         if (isStale()) return
         // Persisted "snapshot" bytes are whatever pushLocalUpdate's first

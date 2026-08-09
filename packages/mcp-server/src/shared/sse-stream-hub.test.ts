@@ -212,6 +212,58 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
+  it('tells its subscribers when the stream drops and when it comes back', async () => {
+    // Without this a caller cannot distinguish "nothing has changed" from
+    // "nothing is arriving", and the UI reports a connection that is gone.
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      retryDelayMs: noDelay,
+    })
+    const states: boolean[] = []
+    hub.subscribe('w/a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (connected) => states.push(connected),
+    })
+
+    // The first entry is the state at subscribe time — no stream yet.
+    await vi.waitFor(() => expect(states).toEqual([false, true]))
+    fake.endStream()
+
+    await vi.waitFor(() => expect(states).toEqual([false, true, false, true]))
+    hub.close()
+  })
+
+  it('tells a late subscriber the state of the stream it just joined', async () => {
+    // Liveness announced only on transitions leaves anyone who subscribes to an
+    // already-open stream with no idea whether it is live — a second canvas
+    // opened in the same tab would show an unknown connection forever.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    // Wait on the first subscriber actually observing the open stream, not on
+    // the fetch call: the ready frame is parsed later, and a second subscriber
+    // registered in that window would be told by the transition itself.
+    const first: boolean[] = []
+    hub.subscribe('w/a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (c) => first.push(c),
+    })
+    await vi.waitFor(() => expect(first).toEqual([false, true]))
+
+    const states: boolean[] = []
+    hub.subscribe('w/b', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (connected) => states.push(connected),
+    })
+
+    await vi.waitFor(() => expect(states).toEqual([true]))
+    hub.close()
+  })
+
   it('stops reconnecting once closed', async () => {
     const fake = createFake()
     const hub = new SseStreamHub({

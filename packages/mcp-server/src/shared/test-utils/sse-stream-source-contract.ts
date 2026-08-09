@@ -39,6 +39,8 @@ export interface SseStreamSourceHarness {
   openedStreamIds(): string[]
   /** Wait until the daemon has an open stream ready to receive frames. */
   ready(): Promise<void>
+  /** End the current stream the way a dropped connection does. */
+  dropStream(): void
   cleanup(): void
 }
 
@@ -155,6 +157,30 @@ export function sseStreamSourceContract(
     const sent = h.controlMessages().find((m) => m.doc === doc)
     expect(sent?.message).toEqual({ type: 'client_ready' })
     expect(h.openedStreamIds()).toContain(sent?.streamId)
+    h.cleanup()
+  })
+
+  it('tells its subscribers when the stream drops', async () => {
+    // A subscriber told only about frames cannot tell "nothing has changed"
+    // from "nothing is arriving", so a dropped stream looks exactly like a
+    // quiet one and the UI keeps reporting a connection that is gone.
+    const h = await create()
+    const doc = nextDoc()
+    const states: boolean[] = []
+    h.source.subscribe(doc, {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (connected) => states.push(connected),
+    })
+    await until(() => states.includes(true))
+    // Measured from here on: subscribing already records the state at join
+    // time, which on a fresh source is `false`. Asserting `includes(false)`
+    // over the whole array would pass without the drop emitting anything.
+    const before = states.length
+
+    h.dropStream()
+
+    await until(() => states.slice(before).includes(false))
     h.cleanup()
   })
 

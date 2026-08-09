@@ -195,6 +195,7 @@ export function DaemonCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    syncStatus,
   } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
@@ -338,7 +339,12 @@ export function DaemonCanvasPage({
   // consent page, the same trust anchor first-time pairing uses.
   const connectionStatus = (
     <ConnectionStatus
-      state={authError ? 'sync-off' : 'synced'}
+      // Synced is claimed only while the session is actually connected. An
+      // auth rejection outranks everything else because re-pairing is the only
+      // way out of it; `idle` (not started yet) and `error` are folded in with
+      // `reconnecting`, whose copy makes no claim about recovery timing —
+      // reporting them as Synced is what this whole change exists to stop.
+      state={authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting'}
       daemonBaseUrl={daemonBaseUrl}
       onRepair={() => {
         void beginPairingGrant({

@@ -9,6 +9,19 @@ import { ConnectionStatus } from './ConnectionStatus.js'
 afterEach(cleanup)
 
 describe('ConnectionStatus chip', () => {
+  it('explains the reconnecting state instead of opening an empty popover', () => {
+    // The chip can reach this state, so the popover must have something to
+    // say; a state with no branch renders an empty box on click.
+    render(<ConnectionStatus state="reconnecting" />, { container: document.body })
+    fireEvent.click(screen.getByTestId('connection-chip'))
+
+    const popover = screen.getByTestId('connection-popover')
+    expect(popover.textContent).toMatch(/not running/i)
+    // No replay promise: DaemonBackend drops local updates while its socket is
+    // not OPEN, so telling the user they are sent on recovery would be false.
+    expect(popover.textContent).not.toMatch(/will be sent|are sent when/i)
+  })
+
   it('synced state shows a quiet chip and explains where data lives in the popover', async () => {
     render(<ConnectionStatus state="synced" daemonBaseUrl="http://127.0.0.1:3099" />)
 
