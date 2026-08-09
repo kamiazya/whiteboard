@@ -286,6 +286,8 @@ export function BrowserLocalCanvasPage({
     canRedo,
     lockedNodeIds,
     setNodeLock,
+    lockedEdgeIds,
+    setEdgeLock,
   } = useCanvasSync(backend)
 
   // Pre-fetch referenced canvases for inline embeds; refresh when the
@@ -586,7 +588,9 @@ export function BrowserLocalCanvasPage({
             onAddImage={storeImageAsset}
             isImageFileRef={isImageRef}
             lockedNodeIds={lockedNodeIds}
+            lockedEdgeIds={lockedEdgeIds}
             onToggleNodeLock={setNodeLock}
+            onToggleEdgeLock={setEdgeLock}
             paletteLeading={
               <HistoryCluster
                 onUndo={() => void undo()}

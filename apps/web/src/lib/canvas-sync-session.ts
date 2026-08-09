@@ -1,10 +1,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
+  readEdgeLocks,
   readNodeLocks,
   readSpatialCanvas,
   type SpatialBatchWriter,
   withSpatialBatch,
+  setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
   writeSpatialCanvas,
   writeSpatialEdge,
@@ -142,6 +144,10 @@ export interface CanvasSyncSession {
   // the canvas value, so it never reaches an export.
   getNodeLocks(): ReadonlySet<string>
   setNodeLock(nodeId: string, locked: boolean): void
+  // Edges lock independently of their endpoints — an edge is its own
+  // object, so locking a hub node must not freeze every line touching it.
+  getEdgeLocks(): ReadonlySet<string>
+  setEdgeLock(edgeId: string, locked: boolean): void
   subscribeLocks(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
@@ -752,6 +758,16 @@ export function createCanvasSyncSession(
     notifyLocksChanged()
   }
 
+  function getEdgeLocks(): ReadonlySet<string> {
+    return doc === null ? EMPTY_LOCKS : readEdgeLocks(doc)
+  }
+
+  function setEdgeLock(edgeId: string, locked: boolean): void {
+    if (doc === null) return
+    workspaceSetEdgeLock(doc, edgeId, locked)
+    notifyLocksChanged()
+  }
+
   function subscribeLocks(listener: () => void): () => void {
     lockListeners.add(listener)
     return () => {
@@ -774,6 +790,8 @@ export function createCanvasSyncSession(
     subscribeHistory,
     getNodeLocks,
     setNodeLock,
+    getEdgeLocks,
+    setEdgeLock,
     subscribeLocks,
   }
 }

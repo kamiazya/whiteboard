@@ -33,7 +33,15 @@ pinch zooms in every tool.
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
 | Double-click | Edit a node's text, an edge's label, or a group's label |
+| `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Esc` | Cancel the current gesture or clear the selection |
+
+A locked node or edge cannot be selected, moved, restyled, or deleted, and
+MCP tools refuse to patch it too. Right-click it and choose **Unlock** to
+release it. Nodes and edges lock independently: locking a node does not
+lock the edges attached to it, and an edge between two locked nodes stays
+editable until you lock the edge itself. The lock is editor state — it is
+stored alongside the canvas but never appears in an export.
 
 ## Clipboard
 
