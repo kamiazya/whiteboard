@@ -15,6 +15,9 @@
 import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
+  | 'copy-selection'
+  | 'cut-selection'
+  | 'paste-clipboard'
   | 'duplicate-selection'
   | 'reorder-forward'
   | 'reorder-backward'
@@ -55,6 +58,33 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  // Clipboard family. With nothing to act on the handlers return false and
+  // the event falls through, so the browser keeps its own copy/paste for
+  // text selections.
+  {
+    id: 'copy-selection',
+    keys: ['c'],
+    mod: true,
+    display: 'Cmd+C',
+    description: 'Copy the selection',
+    tools: ['select'],
+  },
+  {
+    id: 'cut-selection',
+    keys: ['x'],
+    mod: true,
+    display: 'Cmd+X',
+    description: 'Cut the selection',
+    tools: ['select'],
+  },
+  {
+    id: 'paste-clipboard',
+    keys: ['v'],
+    mod: true,
+    display: 'Cmd+V',
+    description: 'Paste the copied nodes',
+    tools: ['select'],
+  },
   {
     id: 'duplicate-selection',
     keys: ['d'],

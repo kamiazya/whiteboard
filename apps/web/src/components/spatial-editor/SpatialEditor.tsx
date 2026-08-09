@@ -50,6 +50,7 @@ import {
   BringToFront,
   ChevronDown,
   ChevronUp,
+  ClipboardPaste,
   Copy as CopyIcon,
   ExternalLink,
   FileBox,
@@ -62,6 +63,7 @@ import {
   PanelRight,
   PanelTop,
   Pencil,
+  Scissors,
   SendToBack,
   SquareDashed,
   StickyNote,
@@ -82,6 +84,11 @@ import {
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, remintClipboardFragment } from '../../lib/clipboard-fragment.js'
+import {
+  hasClipboardFragment,
+  readClipboardFragment,
+  writeClipboardFragment,
+} from '../../lib/clipboard-store.js'
 import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
@@ -1135,9 +1142,94 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
+    /** Copy the selection into the in-app clipboard slot. No mutation. */
+    const copySelection = (): boolean => {
+      if (selection === undefined) return false
+      const fragment = extractClipboardFragment(
+        canvasRef.current,
+        new Set([selection.id, ...extraIds]),
+      )
+      if (fragment.nodes.length === 0) return false
+      writeClipboardFragment(fragment)
+      return true
+    }
+
+    /** Copy, then remove the selection as ONE batch (one undo step). */
+    const cutSelection = (): boolean => {
+      if (!copySelection() || selection === undefined) return false
+      const ids = [selection.id, ...extraIds]
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: ids.map((id) => ({ kind: 'delete-node', id }) as const),
+      }
+      const running = applyCommand(canvasRef.current, command)
+      if (running !== canvasRef.current) onChange(running, command)
+      setSelectedId(null)
+      setExtraIds(new Set())
+      setSelectedEdgeId(null)
+      return true
+    }
+
+    /**
+     * Paste the stored fragment as ONE batch: reminted ids, edges remapped.
+     * With an anchor point (the empty-space menu's "Paste here") the
+     * fragment's bounding box centers on it; without one (Cmd+V) copies
+     * land +16px from their source coordinates, cascading like duplicate.
+     */
+    const pasteClipboard = (at?: Point): boolean => {
+      const fragment = readClipboardFragment()
+      if (fragment === null || fragment.nodes.length === 0) return false
+      const current = canvasRef.current
+      const existingIds = new Set([
+        ...current.nodes.map((node) => node.id),
+        ...current.edges.map((edge) => edge.id),
+      ])
+      const reminted = remintClipboardFragment(
+        fragment,
+        () => createId?.() ?? crypto.randomUUID(),
+        existingIds,
+      )
+      let dx = DUPLICATE_OFFSET_PX
+      let dy = DUPLICATE_OFFSET_PX
+      if (at !== undefined) {
+        const minX = Math.min(...reminted.nodes.map((node) => node.x))
+        const minY = Math.min(...reminted.nodes.map((node) => node.y))
+        const maxX = Math.max(...reminted.nodes.map((node) => node.x + node.width))
+        const maxY = Math.max(...reminted.nodes.map((node) => node.y + node.height))
+        dx = Math.round(at.x - (minX + maxX) / 2)
+        dy = Math.round(at.y - (minY + maxY) / 2)
+      }
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: [
+          ...reminted.nodes.map(
+            (node) =>
+              ({ kind: 'create-node', node: { ...node, x: node.x + dx, y: node.y + dy } }) as const,
+          ),
+          ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
+        ],
+      }
+      const running = applyCommand(current, command)
+      if (running === current) return false
+      onChange(running, command)
+      const [first, ...rest] = reminted.nodes.map((node) => node.id)
+      if (first !== undefined) {
+        setSelectedId(first)
+        setExtraIds(new Set(rest))
+        setSelectedEdgeId(null)
+      }
+      return true
+    }
+
     /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
     const runShortcut = (id: ShortcutId): boolean => {
       switch (id) {
+        case 'copy-selection':
+          return copySelection()
+        case 'cut-selection':
+          return cutSelection()
+        case 'paste-clipboard':
+          return pasteClipboard()
         case 'duplicate-selection':
           return duplicateSelection()
         case 'reorder-forward':
@@ -1990,6 +2082,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // the click point — "here" is exactly the information the
                 // bottom dock cannot express.
                 const emptyItems: ContextMenuItem[] = [
+                  ...(hasClipboardFragment()
+                    ? [
+                        {
+                          label: 'Paste here',
+                          icon: <ClipboardPaste />,
+                          onSelect: () => {
+                            pasteClipboard(contextMenu.point)
+                          },
+                        },
+                        { kind: 'separator' } as const,
+                      ]
+                    : []),
                   {
                     label: 'Add note here',
                     icon: <StickyNote />,
@@ -2099,6 +2203,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
               // right-click already made this node the primary selection,
               // so the shared handler clones the full multi-selection.
+              items.push({
+                label: 'Copy',
+                icon: <CopyIcon />,
+                onSelect: () => {
+                  copySelection()
+                },
+              })
+              items.push({
+                label: 'Cut',
+                icon: <Scissors />,
+                onSelect: () => {
+                  cutSelection()
+                },
+              })
               items.push({
                 label: 'Duplicate',
                 icon: <CopyIcon />,
