@@ -20,6 +20,24 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 - Use the harness `Monitor` tool for anything that must be watched across turns (CI checks, PR states, deploys). A background subagent's polling loop dies with its turn — a subagent told to "keep polling" will silently stop.
 - If an executor agent is needed, pair it with a Monitor: the monitor detects the event, the main session wakes the agent for one action.
 
+## Verifying on a Preview deployment
+
+`apps/web` registers a Workbox service worker, so **what the server deploys and what the browser executes are two different questions**. A preview URL you have opened before is controlled by a service worker serving its precache, and it will keep running the bundle from an earlier visit however many times you reload.
+
+This is worth naming because it fakes the most misleading result there is: a fix that is deployed, correct, and covered by tests, behaving in the browser exactly as if it had never been written. Checking the deploy history does not rule it out — that answers what the server returns, not what the page runs.
+
+Before treating a preview observation as evidence about the code:
+
+```js
+// In the page console. `controlled: true` means you may be running an old bundle.
+await navigator.serviceWorker.getRegistrations()
+// Clear it, then reload:
+for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister()
+for (const k of await caches.keys()) await caches.delete(k)
+```
+
+When a preview contradicts a green test, suspect the cache before suspecting the layer under test. The cheapest discriminator is a **control action**: exercise some other feature that writes through the same path (adding a node, say). If the control persists and the feature under test does not, the transport and the server are fine and the difference is in the code the browser is actually running.
+
 ## CI flakes
 
 - A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running.
