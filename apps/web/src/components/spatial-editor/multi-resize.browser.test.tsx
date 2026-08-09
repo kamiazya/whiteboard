@@ -176,3 +176,21 @@ it('accumulates repeated keypresses even when the parent has not re-rendered', (
   expect(first).toBeGreaterThan(100)
   expect(second).toBeGreaterThan(first as number)
 })
+
+// The union outline says "this region is selected"; it says nothing about
+// WHICH nodes are in it. Before this, only the extras were outlined, so the
+// primary — one of the selected nodes — looked untouched, and Select All on
+// three nodes appeared to skip one.
+it('outlines every selected node, the primary included', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectBoth(root)
+
+  const outlined = [...container.querySelectorAll('[data-testid="member-outlines"] rect')].map(
+    (rect) => Math.round(rect.getBoundingClientRect().x - root.getBoundingClientRect().x),
+  )
+
+  expect(outlined).toHaveLength(2)
+  expect(outlined.sort((a, b) => a - b)).toEqual([0, 200])
+})

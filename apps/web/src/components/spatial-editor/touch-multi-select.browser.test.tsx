@@ -54,8 +54,8 @@ function makeHost() {
 }
 
 const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-const extraOutlines = (c: HTMLElement) =>
-  c.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length
+const memberOutlines = (c: HTMLElement) =>
+  c.querySelectorAll('[data-testid="member-outlines"] rect').length
 const nodeAt = (canvas: SpatialCanvas, id: string) => canvas.nodes.find((n) => n.id === id)
 
 type Pt = { x: number; y: number }
@@ -77,14 +77,14 @@ it('gathers a node tapped by a second finger while the first holds one', () => {
   const root = rootOf(container)
 
   down(root, A, 1)
-  expect(extraOutlines(container)).toBe(0)
+  expect(memberOutlines(container)).toBe(0)
 
   down(root, B, 2)
   up(root, B, 2)
-  expect(extraOutlines(container)).toBe(1)
+  expect(memberOutlines(container)).toBe(2)
 
   up(root, A, 1)
-  expect(extraOutlines(container)).toBe(1)
+  expect(memberOutlines(container)).toBe(2)
 })
 
 it('keeps gathering after the first tap, while the anchor finger stays down', () => {
@@ -98,7 +98,7 @@ it('keeps gathering after the first tap, while the anchor finger stays down', ()
   down(root, C, 3)
   up(root, C, 3)
 
-  expect(extraOutlines(container)).toBe(2)
+  expect(memberOutlines(container)).toBe(3)
   up(root, A, 1)
 })
 
@@ -110,11 +110,11 @@ it('drops a gathered node when it is tapped again', () => {
   down(root, A, 1)
   down(root, B, 2)
   up(root, B, 2)
-  expect(extraOutlines(container)).toBe(1)
+  expect(memberOutlines(container)).toBe(2)
 
   down(root, B, 3)
   up(root, B, 3)
-  expect(extraOutlines(container)).toBe(0)
+  expect(memberOutlines(container)).toBe(0)
 
   up(root, A, 1)
 })
@@ -152,7 +152,7 @@ it('still pinches when the second finger lands on empty space', () => {
   down(root, EMPTY, 2)
   move(root, { x: EMPTY.x + 200, y: EMPTY.y + 200 }, 2)
 
-  expect(extraOutlines(container)).toBe(0)
+  expect(memberOutlines(container)).toBe(0)
   expect(transform()).not.toBe(before)
 
   up(root, { x: EMPTY.x + 200, y: EMPTY.y + 200 }, 2)
@@ -169,6 +169,6 @@ it('does not gather for a mouse pointer', () => {
   down(root, B, 2, 'mouse')
   up(root, B, 2, 'mouse')
 
-  expect(extraOutlines(container)).toBe(0)
+  expect(memberOutlines(container)).toBe(0)
   up(root, A, 1, 'mouse')
 })
