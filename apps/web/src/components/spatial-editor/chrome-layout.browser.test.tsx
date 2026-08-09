@@ -115,6 +115,30 @@ function overlaps(a: DOMRect, b: DOMRect): boolean {
   return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)
 }
 
+/**
+ * A centred element in an odd-width container legitimately lands on a half
+ * pixel, so containment is judged to within one. Anything larger is a real
+ * overflow — this is a tolerance for layout arithmetic, not a fudge factor for
+ * chrome that genuinely sticks out.
+ */
+const SUBPIXEL_TOLERANCE_PX = 1
+
+/**
+ * The dock is unconditional, so its absence means the collection broke rather
+ * than that the layout changed — and every check in this file is written as
+ * "no pair overlaps" / "every overlay fits", both of which an empty collection
+ * satisfies. Without this the grid would go green the moment it stopped
+ * looking at anything.
+ */
+function collectChromeOrFail(root: HTMLElement, at: string): Chrome[] {
+  const chrome = collectChrome(root)
+  expect(
+    chrome.map((entry) => entry.name),
+    `no dock found at ${at}; every geometry check below would be vacuous`,
+  ).toContain('tool-palette')
+  return chrome
+}
+
 const describeRect = (r: DOMRect) =>
   `[${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}]`
 
@@ -126,12 +150,12 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
     const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
     const bounds = root.getBoundingClientRect()
 
-    for (const { name, rect } of collectChrome(root)) {
+    for (const { name, rect } of collectChromeOrFail(root, `${width}x${height}`)) {
       expect(
-        Math.round(rect.left) >= Math.round(bounds.left) &&
-          Math.round(rect.right) <= Math.round(bounds.right) &&
-          Math.round(rect.top) >= Math.round(bounds.top) &&
-          Math.round(rect.bottom) <= Math.round(bounds.bottom),
+        rect.left >= bounds.left - SUBPIXEL_TOLERANCE_PX &&
+          rect.right <= bounds.right + SUBPIXEL_TOLERANCE_PX &&
+          rect.top >= bounds.top - SUBPIXEL_TOLERANCE_PX &&
+          rect.bottom <= bounds.bottom + SUBPIXEL_TOLERANCE_PX,
         `${name} ${describeRect(rect)} escapes the editor ${describeRect(bounds)}`,
       ).toBe(true)
     }
@@ -142,7 +166,7 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
     const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
     const controlCount = root.querySelectorAll('[data-testid="tool-palette"] button').length
 
-    const chrome = collectChrome(root).map((entry) =>
+    const chrome = collectChromeOrFail(root, `${width}x${height}`).map((entry) =>
       entry.name === 'tool-palette'
         ? { ...entry, rect: asTouchDock(entry.rect, controlCount) }
         : entry,
