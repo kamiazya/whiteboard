@@ -21,6 +21,9 @@
       // type-checker only; vitest.config.ts carries the matching alias.
       "@kamiazya/whiteboard-mcp/sse-stream-source-contract": [
         "../../packages/mcp-server/src/shared/test-utils/sse-stream-source-contract.ts"
+      ],
+      "@kamiazya/whiteboard-mcp/canvas-backend-contract-suite": [
+        "../../packages/mcp-server/src/shared/test-utils/canvas-backend-contract.ts"
       ]
     }
   },

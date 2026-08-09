@@ -29,6 +29,10 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/test-utils/sse-stream-source-contract.ts',
       ),
+      '@kamiazya/whiteboard-mcp/canvas-backend-contract-suite': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/test-utils/canvas-backend-contract.ts',
+      ),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
