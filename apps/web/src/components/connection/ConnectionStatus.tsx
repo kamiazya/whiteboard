@@ -8,6 +8,9 @@
  * - `local`    — browser-local page; data exists only in this browser.
  *                `children` hosts page-supplied extras (daemon detection,
  *                capability hint) inside the popover.
+ * - `reconnecting` — the transport dropped and is being retried. Edits stay
+ *                in this browser and are sent when it comes back, so this is
+ *                informational, not an error.
  * - `sync-off` — daemon-backed page whose session was rejected. The chip
  *                turns attention-colored and the popover carries the two
  *                ways forward (re-pair / continue browser-local). A polite
@@ -18,7 +21,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
-export type ConnectionState = 'synced' | 'local' | 'sync-off'
+export type ConnectionState = 'synced' | 'local' | 'reconnecting' | 'sync-off'
 
 export interface ConnectionStatusProps {
   readonly state: ConnectionState
@@ -35,12 +38,14 @@ export interface ConnectionStatusProps {
 const CHIP_LABEL: Record<ConnectionState, string> = {
   synced: 'Synced',
   local: 'Local',
+  reconnecting: 'Reconnecting',
   'sync-off': 'Sync off',
 }
 
 const DOT_CLASS: Record<ConnectionState, string> = {
   synced: 'bg-emerald-500',
   local: 'bg-muted-foreground/60',
+  reconnecting: 'bg-amber-500',
   'sync-off': 'bg-amber-500',
 }
 

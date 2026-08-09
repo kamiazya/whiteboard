@@ -195,6 +195,7 @@ export function DaemonCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    syncStatus,
   } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
@@ -338,7 +339,9 @@ export function DaemonCanvasPage({
   // consent page, the same trust anchor first-time pairing uses.
   const connectionStatus = (
     <ConnectionStatus
-      state={authError ? 'sync-off' : 'synced'}
+      // An auth rejection outranks a dropped transport: re-pairing is the way
+      // out of it, while reconnecting resolves itself.
+      state={authError ? 'sync-off' : syncStatus === 'reconnecting' ? 'reconnecting' : 'synced'}
       daemonBaseUrl={daemonBaseUrl}
       onRepair={() => {
         void beginPairingGrant({

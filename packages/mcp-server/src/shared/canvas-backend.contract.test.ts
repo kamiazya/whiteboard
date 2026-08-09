@@ -11,6 +11,8 @@ import { canvasBackendContract } from './test-utils/canvas-backend-contract.js'
 const BASE = 'http://127.0.0.1:3099'
 
 /** Records what a backend POSTs upstream and serves the routes it reads. */
+let endStream: (() => void) | null = null
+
 function createFetch(sent: Uint8Array[]) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -29,6 +31,7 @@ function createFetch(sent: Uint8Array[]) {
                 `event: ready\ndata: ${JSON.stringify({ streamId: 'contract-stream' })}\n\n`,
               ),
             )
+            endStream = () => controller.close()
           },
         }),
         { status: 200 },
@@ -44,7 +47,12 @@ describe('CanvasBackend contract: SseBackend', () => {
   canvasBackendContract((): CanvasBackendHarness => {
     const sent: Uint8Array[] = []
     const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: createFetch(sent) })
-    return { backend, sentUpdates: () => sent, cleanup: () => backend.disconnect() }
+    return {
+      backend,
+      sentUpdates: () => sent,
+      dropTransport: () => endStream?.(),
+      cleanup: () => backend.disconnect(),
+    }
   })
 })
 
@@ -60,7 +68,7 @@ class FakeWebSocket {
   readyState = 1
   onopen: (() => void) | null = null
   onmessage: ((e: { data: unknown }) => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event: { code: number; reason: string }) => void) | null = null
   onerror: (() => void) | null = null
   binaryType = 'arraybuffer'
   readonly sent: unknown[] = []
@@ -85,7 +93,10 @@ class FakeWebSocket {
 
   close(): void {
     this.readyState = 3
-    this.onclose?.()
+    // A real close handler reads event.code; passing nothing would throw
+    // inside the backend and be mistaken for a missing behaviour. 1006 is
+    // what a browser reports for an abnormal close.
+    this.onclose?.({ code: 1006, reason: '' })
   }
 }
 
@@ -103,6 +114,9 @@ describe('CanvasBackend contract: DaemonBackend', () => {
         FakeWebSocket.instances.flatMap((ws) =>
           ws.sent.filter((d): d is Uint8Array => d instanceof Uint8Array),
         ),
+      dropTransport: () => {
+        for (const ws of FakeWebSocket.instances) ws.close()
+      },
       cleanup: () => {
         backend.disconnect()
         ;(globalThis as { WebSocket: unknown }).WebSocket = realWs

@@ -27,6 +27,13 @@ export interface CanvasBackendHarness {
   backend: CanvasBackend
   /** Bytes the backend has pushed upstream, however it does that. */
   sentUpdates(): Uint8Array[]
+  /**
+   * Drop this backend's transport, if it has one. Omitted by an
+   * implementation with nothing to drop (the browser-local backend reads a
+   * store, so it is never disconnected) — the case below then skips rather
+   * than asserting a behaviour that cannot exist.
+   */
+  dropTransport?(): void
   cleanup(): void
 }
 
@@ -43,6 +50,7 @@ function recorder(): Recorded {
       onSnapshot: () => calls.push('snapshot'),
       onRemoteUpdate: () => calls.push('update'),
       onConnected: () => calls.push('connected'),
+      onDisconnected: () => calls.push('disconnected'),
       onVersionCreated: () => calls.push('version'),
       onRestoreStarted: () => calls.push('restoreStarted'),
       onRestoreComplete: () => calls.push('restoreComplete'),
@@ -96,6 +104,27 @@ export function canvasBackendContract(
     await settle()
 
     expect(rec.calls).toEqual(atDisconnect)
+    h.cleanup()
+  })
+
+  it('reports a disconnect when its transport drops', async () => {
+    // Without it the caller cannot tell a quiet connection from a dead one,
+    // and the UI keeps reporting sync that is not happening.
+    const h = await create()
+    if (!h.dropTransport) {
+      h.cleanup()
+      return
+    }
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await settle()
+    expect(rec.calls).toContain('connected')
+
+    h.dropTransport()
+    await settle()
+
+    expect(rec.calls).toContain('disconnected')
+    h.backend.disconnect()
     h.cleanup()
   })
 

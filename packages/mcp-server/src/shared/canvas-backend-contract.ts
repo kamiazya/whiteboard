@@ -78,6 +78,13 @@ export interface CanvasBackendHandlers {
    */
   onConnected: () => void
   /**
+   * The transport dropped and the backend is retrying. Optional because a
+   * backend with no transport (browser-local) has nothing to report; a backend
+   * that HAS one must call it, or its caller cannot tell a quiet connection
+   * from a dead one.
+   */
+  onDisconnected?: () => void
+  /**
    * Optional: called when the server closes the WebSocket with code 1008
    * (Policy Violation / auth failure). The backend will NOT retry — the caller
    * should surface an error state so the user can re-authenticate.

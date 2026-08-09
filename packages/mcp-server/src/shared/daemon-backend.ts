@@ -181,6 +181,9 @@ export class DaemonBackend implements CanvasBackend {
 
     ws.onclose = (event: CloseEvent) => {
       if (this.cancelled) return
+      // Reported before the terminal branches below so a caller learns the
+      // socket is gone even when the backend gives up on reconnecting.
+      handlers.onDisconnected?.()
       // 1008 = Policy Violation: server rejected the connection due to auth failure.
       // 1003 = Unsupported Data: the server could not decode a binary frame we
       // sent (see routes/ws.ts). Both are terminal from the client's
