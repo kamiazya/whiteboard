@@ -112,6 +112,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { DOCK_WIDE_BUTTON_CLASS } from '@/components/ui/dock-button'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {
   extractClipboardFragment,
@@ -149,7 +150,6 @@ import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
-import { DOCK_WIDE_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
