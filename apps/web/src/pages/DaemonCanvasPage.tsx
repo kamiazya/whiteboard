@@ -210,6 +210,10 @@ export function DaemonCanvasPage({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
+  // PNG, because the daemon's thumbnail endpoint validates a PNG signature
+  // on upload and rejects anything else.
+  const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
+
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
     setSavingVersion(true)
@@ -349,6 +353,10 @@ export function DaemonCanvasPage({
               branchRefreshSignal={branchRefreshSignal}
               onNavigateBack={onNavigateBack}
               onExport={exportScene}
+              // Version thumbnails come from the same PNG export path the
+              // user can trigger by hand. Without this the save flow skips
+              // the upload entirely and latest-thumbnail stays 204 forever.
+              getThumbnailBlob={getThumbnailBlob}
               onOpenSettings={handleOpenSettings}
             />
           )}
