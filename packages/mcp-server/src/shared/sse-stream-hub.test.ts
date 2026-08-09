@@ -5,6 +5,7 @@ import { SseStreamHub } from './sse-stream-hub.js'
 function createFake() {
   const calls: { url: string; body?: string }[] = []
   let push: ((frame: string) => void) | null = null
+  let endStream: (() => void) | null = null
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     calls.push({ url, body: init?.body ? String(init.body) : undefined })
@@ -14,6 +15,7 @@ function createFake() {
           start(controller) {
             const enc = new TextEncoder()
             push = (f) => controller.enqueue(enc.encode(f))
+            endStream = () => controller.close()
           },
         }),
         { status: 200 },
@@ -25,10 +27,18 @@ function createFake() {
     fetch: fetch as unknown as typeof globalThis.fetch,
     calls,
     push: (f: string) => push?.(f),
+    /** Ends the stream the way a daemon restart or a dropped connection does. */
+    endStream: () => endStream?.(),
+    streamOpens: () => calls.filter((c) => c.url.includes('/api/sync/stream')).length,
     subscribeBodies: () =>
       calls.filter((c) => c.url.includes('/api/sync/subscribe')).map((c) => c.body ?? ''),
+    messageBodies: () =>
+      calls.filter((c) => c.url.includes('/api/sync/message')).map((c) => c.body ?? ''),
   }
 }
+
+/** Retries run immediately so a reconnect test asserts behavior, not timing. */
+const noDelay = () => 0
 
 const flush = async () => {
   for (let i = 0; i < 30; i++) await Promise.resolve()
@@ -99,5 +109,91 @@ describe('SseStreamHub', () => {
     expect(b).toEqual([])
     expect(a[0]).toBe('{"x":1}')
     hub.close()
+  })
+
+  it('reopens the stream after it drops and re-announces every subscription', async () => {
+    // Without this a disconnected client keeps its listeners registered and
+    // silently stops receiving updates — the worst failure mode available,
+    // because the canvas still looks connected while it diverges.
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      streamId: 's',
+      retryDelayMs: noDelay,
+    })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+
+    fake.endStream()
+
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(2))
+    // The daemon forgets a stream when it drops, so the subscriptions have to
+    // be announced again against the reopened one.
+    const afterReopen = fake.subscribeBodies().slice(-1)[0] ?? ''
+    expect(afterReopen).toContain('w/a')
+    expect(afterReopen).toContain('w/b')
+    hub.close()
+  })
+
+  it('re-announces client_ready after a reconnect', async () => {
+    // Viewport requests only reach a stream that has signalled readiness, so a
+    // reconnected client that never repeats it goes silently unserved.
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      streamId: 's',
+      retryDelayMs: noDelay,
+    })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+    hub.sendMessage('w/a', { type: 'client_ready' })
+    await vi.waitFor(() => expect(fake.messageBodies().length).toBe(1))
+
+    fake.endStream()
+
+    await vi.waitFor(() => expect(fake.messageBodies().length).toBe(2))
+    expect(fake.messageBodies()[1]).toContain('client_ready')
+    hub.close()
+  })
+
+  it('stops reconnecting once closed', async () => {
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      streamId: 's',
+      retryDelayMs: noDelay,
+    })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+
+    hub.close()
+    fake.endStream()
+    await flush()
+
+    expect(fake.streamOpens()).toBe(1)
+  })
+
+  it('stays closed even if something subscribes afterwards', async () => {
+    // Distinct from the case above, which holds because close() drops the
+    // listeners: this pins that a closed hub does not quietly revive.
+    const fake = createFake()
+    const hub = new SseStreamHub({
+      fetch: fake.fetch,
+      baseUrl: 'http://d',
+      streamId: 's',
+      retryDelayMs: noDelay,
+    })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+    hub.close()
+
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await flush()
+
+    expect(fake.streamOpens()).toBe(1)
   })
 })

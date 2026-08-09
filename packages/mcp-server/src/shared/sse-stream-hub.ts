@@ -63,11 +63,30 @@ export interface SseStreamHubOptions {
   /** Daemon origin, no trailing slash. */
   baseUrl: string
   streamId: string
+  /**
+   * Delay before the nth consecutive reconnect attempt. Injected so a
+   * reconnect test asserts the behavior rather than waiting out the backoff.
+   */
+  retryDelayMs?: (attempt: number) => number
+}
+
+/** Exponential with a ceiling: a daemon that is down should be retried until
+ *  it returns, without turning into a busy loop against loopback. */
+function defaultRetryDelayMs(attempt: number): number {
+  return Math.min(30_000, 500 * 2 ** Math.min(attempt, 6))
 }
 
 export interface DocListener {
   onUpdate: (bytes: Uint8Array) => void
   onMessage: (raw: string) => void
+}
+
+function isClientReady(message: unknown): boolean {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    (message as { type?: unknown }).type === 'client_ready'
+  )
 }
 
 function fromBase64(value: string): Uint8Array {
@@ -82,6 +101,11 @@ export class SseStreamHub implements SseStreamSource {
   private readonly listeners = new Map<string, Set<DocListener>>()
   private abort: AbortController | null = null
   private started = false
+  private closed = false
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  /** Documents that have signalled readiness, so the signal can be repeated
+   *  against a stream the daemon opened after a reconnect. */
+  private readonly readyDocs = new Set<string>()
 
   constructor(options: SseStreamHubOptions) {
     this.options = { ...options, baseUrl: options.baseUrl.replace(/\/$/, '') }
@@ -113,6 +137,10 @@ export class SseStreamHub implements SseStreamSource {
   }
 
   sendMessage(doc: string, message: unknown): void {
+    // Readiness is stream state, not a one-off event: the daemon only routes
+    // viewport requests to streams that declared it, and a reconnect gives us
+    // a stream that never has.
+    if (isClientReady(message)) this.readyDocs.add(doc)
     void this.post('/api/sync/message', { streamId: this.options.streamId, doc, message })
   }
 
@@ -133,9 +161,32 @@ export class SseStreamHub implements SseStreamSource {
     await this.post('/api/sync/subscribe', { streamId: this.options.streamId, ...body })
   }
 
+  /**
+   * Keep a stream open for as long as anything is subscribed.
+   *
+   * A stream that ends is not a terminal condition — the daemon restarts, a
+   * laptop sleeps, a proxy times the connection out — and a client that does
+   * not come back keeps its listeners registered while silently receiving
+   * nothing, so the canvas looks connected while it diverges.
+   */
   private async start(): Promise<void> {
-    if (this.started) return
+    if (this.started || this.closed) return
     this.started = true
+    const delayFor = this.options.retryDelayMs ?? defaultRetryDelayMs
+
+    let attempt = 0
+    while (!this.closed && this.listeners.size > 0) {
+      const connected = await this.readStreamOnce()
+      if (this.closed || this.listeners.size === 0) break
+      attempt = connected ? 0 : attempt + 1
+      await this.wait(delayFor(attempt))
+    }
+    this.started = false
+  }
+
+  /** Opens the stream and reads it to its end. Resolves to whether it opened,
+   *  which is what decides between resetting and growing the backoff. */
+  private async readStreamOnce(): Promise<boolean> {
     const abort = new AbortController()
     this.abort = abort
 
@@ -146,19 +197,23 @@ export class SseStreamHub implements SseStreamSource {
         { signal: abort.signal },
       )
     } catch {
-      this.started = false
-      return
+      return false
     }
-    if (!res.ok || !res.body) {
-      this.started = false
-      return
-    }
+    if (!res.ok || !res.body) return false
 
-    // The stream is opened lazily by the first subscriber, so subscriptions
-    // registered before it existed were answered 404 by the daemon. Re-send
-    // them now that there is a stream to attach them to.
-    const pending = [...this.listeners.keys()]
-    if (pending.length > 0) void this.send({ subscribe: pending })
+    // The daemon knows nothing about a stream until it opens, and forgets it
+    // when it drops — so every open re-announces the full state, both the
+    // subscriptions registered before this stream existed and the readiness
+    // declared against the previous one.
+    const docs = [...this.listeners.keys()]
+    if (docs.length > 0) void this.send({ subscribe: docs })
+    for (const doc of this.readyDocs) {
+      void this.post('/api/sync/message', {
+        streamId: this.options.streamId,
+        doc,
+        message: { type: 'client_ready' },
+      })
+    }
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -172,7 +227,13 @@ export class SseStreamHub implements SseStreamSource {
     } catch {
       // An aborted read is the normal shutdown path.
     }
-    this.started = false
+    return true
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.retryTimer = setTimeout(resolve, ms)
+    })
   }
 
   private dispatch(evt: { event: string; data: string }): void {
@@ -205,9 +266,13 @@ export class SseStreamHub implements SseStreamSource {
   }
 
   close(): void {
+    this.closed = true
     this.abort?.abort()
     this.abort = null
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer)
+    this.retryTimer = null
     this.listeners.clear()
+    this.readyDocs.clear()
     this.started = false
   }
 }
