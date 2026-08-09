@@ -94,13 +94,12 @@ it('does not move the viewport on a bare hover', () => {
   expect(transformOf(container)).toBe(before)
 })
 
-// It sits over the canvas, so a drag that started elsewhere must not run
-// into it.
-it('gets out of the way while a gesture is in flight, and comes back after', () => {
+// It stays up during a drag now: data-editor-overlay stops a press on it
+// reaching the canvas, so hiding bought nothing and flickered every gesture.
+it('stays visible while a gesture is in flight', () => {
   const { container } = render(<Host canvas0={spread} />)
   const editor = editorOf(container)
   const r = editor.getBoundingClientRect()
-  expect(minimapOf(container)).toBeTruthy()
 
   fireEvent.pointerDown(editor, {
     button: 0,
@@ -109,25 +108,28 @@ it('gets out of the way while a gesture is in flight, and comes back after', () 
     clientY: r.top + 30,
   })
   fireEvent.pointerMove(editor, { pointerId: 1, clientX: r.left + 300, clientY: r.top + 200 })
-  expect(minimapOf(container)).toBeNull()
+  expect(minimapOf(container)).toBeTruthy()
 
   fireEvent.pointerUp(editor, { pointerId: 1, clientX: r.left + 300, clientY: r.top + 200 })
   expect(minimapOf(container)).toBeTruthy()
 })
 
-// The reason this uses a ResizeObserver and not a window `resize` listener:
-// the container can change size without the window doing so, and a marker
-// that lags that is wrong about where you are.
-it('tracks a container resize that the window never sees', async () => {
+// The editor root treats a press outside an opted-in overlay as canvas, so
+// without data-editor-overlay a minimap press ALSO starts a marquee (Select)
+// or a pan (Hand) underneath the navigation.
+it('navigates without starting a canvas gesture underneath', () => {
   const { container } = render(<Host canvas0={spread} />)
-  const host = container.firstElementChild as HTMLElement
-  const markerWidth = () =>
-    (container.querySelector('[data-testid="minimap-viewport"]') as HTMLElement).style.width
+  const minimap = minimapOf(container)!
+  const rect = minimap.getBoundingClientRect()
 
-  const before = markerWidth()
-  host.style.width = '400px'
-
-  await vi.waitFor(() => {
-    expect(markerWidth()).not.toBe(before)
+  fireEvent.pointerDown(minimap, {
+    button: 0,
+    pointerId: 9,
+    clientX: rect.left + 20,
+    clientY: rect.top + 20,
   })
+
+  // A marquee would have started a gesture, which hides the minimap.
+  expect(minimapOf(container)).toBeTruthy()
+  expect(container.querySelector('[data-testid="marquee-rect"]')).toBeNull()
 })

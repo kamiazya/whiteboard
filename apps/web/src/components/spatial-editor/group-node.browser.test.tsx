@@ -128,7 +128,7 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
   expect(editor.value).toBe('cluster')
 
   await userEvent.fill(editor, 'phase 1')
-  await userEvent.click(root, { position: { x: 700, y: 500 } })
+  await userEvent.click(root, { position: { x: 700, y: 300 } })
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).toMatchObject({ label: 'phase 1' }))
   expect(latest.commands).toContain('set-group-label')
 
@@ -143,7 +143,7 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
     '[data-testid="group-label-editor"]',
   ) as HTMLTextAreaElement
   await userEvent.fill(reopened, '')
-  await userEvent.click(root, { position: { x: 700, y: 500 } })
+  await userEvent.click(root, { position: { x: 700, y: 300 } })
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).not.toHaveProperty('label'))
 })
 

@@ -90,7 +90,7 @@ it('double-click creation survives while the Connect tool is armed (S6-2)', asyn
   const { container } = render(<Host />)
 
   await userEvent.click(connectToolButton(container))
-  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 480 } })
+  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 300 } })
 
   await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
   expect(latest.canvas.nodes.length).toBe(3)

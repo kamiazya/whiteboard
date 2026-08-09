@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitMinimap, type MinimapBox, projectBox } from './minimap.js'
+import { fitMinimap, type MinimapBox, projectBox, unprojectPoint } from './minimap.js'
 
 const box = (x: number, y: number, width: number, height: number): MinimapBox => ({
   x,
@@ -88,5 +88,31 @@ describe('fitMinimap', () => {
       expect(fit.scale).toBeGreaterThan(0)
       expect(Number.isFinite(fit.scale)).toBe(true)
     })
+  })
+})
+
+describe('fitMinimap — derived spans that overflow', () => {
+  // Every field below is finite; the DERIVED edge or span is not. Without a
+  // check on the span itself, scale reaches 0 and unprojectPoint divides by
+  // zero — so a press on the minimap would navigate to Infinity.
+  it('survives a box whose far edge overflows to Infinity', () => {
+    const overflowing = { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 }
+    const fit = fitMinimap([overflowing], box(0, 0, 10, 10), SIZE, 0)
+    expect(Number.isFinite(fit.scale)).toBe(true)
+    expect(fit.scale).toBeGreaterThan(0)
+  })
+
+  it('survives two boxes at opposite numeric extremes', () => {
+    const fit = fitMinimap(
+      [box(-Number.MAX_VALUE, 0, 1, 1), box(Number.MAX_VALUE, 0, 1, 1)],
+      box(0, 0, 10, 10),
+      SIZE,
+      0,
+    )
+    expect(Number.isFinite(fit.scale)).toBe(true)
+    expect(fit.scale).toBeGreaterThan(0)
+    const point = unprojectPoint({ x: 50, y: 50 }, fit)
+    expect(Number.isFinite(point.x)).toBe(true)
+    expect(Number.isFinite(point.y)).toBe(true)
   })
 })

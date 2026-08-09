@@ -48,6 +48,11 @@ export function MinimapOverlay({
     // control whose activation point no keypress can express. Hidden from
     // assistive tech for the same reason — it duplicates the canvas.
     <div
+      // The editor root treats a press anywhere outside an opted-in overlay
+      // as canvas: without this, pressing the minimap ALSO starts a marquee
+      // in Select mode or a pan in Hand mode, underneath the navigation it
+      // was meant to perform.
+      data-editor-overlay
       data-testid="minimap"
       aria-hidden="true"
       style={{ width, height }}

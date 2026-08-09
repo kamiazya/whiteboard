@@ -25,6 +25,11 @@ export interface MinimapFit {
 /** Fallback extent for a canvas with no area, so `scale` is never 0 or NaN. */
 const MIN_EXTENT = 1
 
+/** Clamps a derived span to something a finite affine transform can use. */
+function finiteSpan(span: number): number {
+  return Number.isFinite(span) ? Math.max(MIN_EXTENT, span) : MIN_EXTENT
+}
+
 function finite(box: MinimapBox): boolean {
   return (
     Number.isFinite(box.x) &&
@@ -79,8 +84,12 @@ export function fitMinimap(
     maxX = Math.max(maxX, box.x + box.width)
     maxY = Math.max(maxY, box.y + box.height)
   }
-  const spanX = Math.max(MIN_EXTENT, maxX - minX)
-  const spanY = Math.max(MIN_EXTENT, maxY - minY)
+  // A box with finite fields can still have a non-finite EDGE (x + width can
+  // overflow), and two boxes near opposite limits make the span itself
+  // infinite. Either would drive `scale` to 0 and make `unprojectPoint`
+  // divide by zero, so the span — not just the input — has to be checked.
+  const spanX = finiteSpan(maxX - minX)
+  const spanY = finiteSpan(maxY - minY)
 
   const scale = Math.min(1, drawable.width / spanX, drawable.height / spanY)
   // Centre the leftover slack, so a canvas that is wide-but-short sits in the

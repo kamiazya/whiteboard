@@ -135,7 +135,7 @@ it('Escape and empty-space clicks clear the edge selection without deleting', as
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
-  await userEvent.click(rootOf(container), { position: { x: 650, y: 500 } })
+  await userEvent.click(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
   )

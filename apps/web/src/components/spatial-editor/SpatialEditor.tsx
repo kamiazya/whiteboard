@@ -2325,33 +2325,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       >
         {/* Screen space, outside the pan/zoom transform — an overview that
           panned with the canvas would defeat its purpose.
-          Hidden while a gesture is in flight: it sits over the canvas, so
-          leaving it up would put a pointer trap under a drag that started
-          somewhere else. Also hidden on an empty canvas, where an overview
-          of nothing is chrome with no job. */}
-        {boxes.length > 0 &&
-          rootSize.width > 0 &&
-          !isInFlightGesture(gestureState) &&
-          marquee === null && (
-            <MinimapOverlay
-              boxes={boxes.map((entry) => entry.box)}
-              viewportRect={{
-                x: viewport.x,
-                y: viewport.y,
-                width: rootSize.width / viewport.zoom,
-                height: rootSize.height / viewport.zoom,
-              }}
-              width={MINIMAP_WIDTH_PX}
-              height={MINIMAP_HEIGHT_PX}
-              onNavigate={(point: { x: number; y: number }) =>
-                setViewport((vp) => ({
-                  ...vp,
-                  x: point.x - rootSize.width / vp.zoom / 2,
-                  y: point.y - rootSize.height / vp.zoom / 2,
-                }))
-              }
-            />
-          )}
+          It stays up during a drag: `data-editor-overlay` already stops a
+          press on it reaching the canvas, so hiding bought nothing and cost
+          a flicker on every gesture. Hidden only on an empty canvas, where
+          an overview of nothing is chrome with no job. */}
+        {boxes.length > 0 && rootSize.width > 0 && (
+          <MinimapOverlay
+            boxes={boxes.map((entry) => entry.box)}
+            viewportRect={{
+              x: viewport.x,
+              y: viewport.y,
+              width: rootSize.width / viewport.zoom,
+              height: rootSize.height / viewport.zoom,
+            }}
+            width={MINIMAP_WIDTH_PX}
+            height={MINIMAP_HEIGHT_PX}
+            onNavigate={(point: { x: number; y: number }) =>
+              setViewport((vp) => ({
+                ...vp,
+                x: point.x - rootSize.width / vp.zoom / 2,
+                y: point.y - rootSize.height / vp.zoom / 2,
+              }))
+            }
+          />
+        )}
         {/* The OOUI creation surface: every canvas is empty until a node
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
