@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
+import { mcpSourceAlias } from './mcp-source-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -11,24 +12,8 @@ export default defineConfig({
   plugins: [react(), wasm(), topLevelAwait()],
   resolve: {
     alias: {
+      ...mcpSourceAlias,
       '@': resolve(__dirname, 'src'),
-      // Resolve browser-shared from source so tests run before `pnpm build`.
-      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/daemon-backend': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/daemon-backend.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-client': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-client.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-contracts': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-contracts/index.ts',
-      ),
       // Declared test/internal-only subpath (not in mcp-server's published
       // npm exports) used by daemon-probe.schema-drift.test.ts to import the
       // server's runtime schema through a contract surface instead of a
