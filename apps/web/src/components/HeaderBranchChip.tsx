@@ -224,9 +224,21 @@ export function HeaderBranchChip({
   // focus-driven open request after a close so it doesn't fight Radix's own
   // return-focus behavior; real hover-driven opens are unaffected.
   const suppressNextTooltipOpenRef = useRef(false)
-  // Only needed to detect, after a close, whether focus actually landed
-  // back on this trigger (see the safety-net check below).
+  // Radix's own return-focus (react-focus-scope) runs from a `setTimeout(…, 0)`
+  // scheduled when the menu's FocusScope unmounts, not synchronously with our
+  // onOpenChange. Racing that with a timer of our own to decide "did focus
+  // come back yet?" is inherently non-deterministic — under load, two
+  // setTimeout callbacks queued around the same moment have no guaranteed
+  // relative order, so our safety-net could fire and clear the suppression
+  // flag before Radix's delayed focus() call actually lands, letting the
+  // tooltip reopen. Listening for the real `focusin` event sidesteps the
+  // race entirely: whenever focus settles — however long that takes — we
+  // clear the flag only if it landed somewhere other than this trigger.
+  const pendingFocusInCleanupRef = useRef<(() => void) | null>(null)
+  // Only needed to detect, once focus settles, whether it landed back on
+  // this trigger (see the listener registered below).
   const chipButtonRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => () => pendingFocusInCleanupRef.current?.(), [])
 
   // Radix marks background content inert/aria-hidden while a dropdown or
   // dialog is open, so an error raised inside one of those flows must render
@@ -276,15 +288,20 @@ export function HeaderBranchChip({
             // itself caused by interacting with a DIFFERENT focusable
             // element (e.g. the kebab trigger), focus never returns here at
             // all, and nothing would ever consume the flag — permanently
-            // suppressing the next unrelated, genuine hover. Radix's own
-            // focus-return (if any) lands before this macrotask runs, so
-            // checking activeElement here reliably distinguishes the two
-            // cases instead of racing a blind timer against it.
-            setTimeout(() => {
-              if (document.activeElement !== chipButtonRef.current) {
+            // suppressing the next unrelated, genuine hover. Watch for focus
+            // actually settling somewhere else (rather than guessing with a
+            // timer) to clear the flag in that case.
+            pendingFocusInCleanupRef.current?.()
+            const handleFocusIn = (event: FocusEvent) => {
+              if (event.target !== chipButtonRef.current) {
                 suppressNextTooltipOpenRef.current = false
               }
-            }, 50)
+              pendingFocusInCleanupRef.current = null
+            }
+            document.addEventListener('focusin', handleFocusIn, { once: true })
+            pendingFocusInCleanupRef.current = () => {
+              document.removeEventListener('focusin', handleFocusIn)
+            }
           }
         }}
       >
