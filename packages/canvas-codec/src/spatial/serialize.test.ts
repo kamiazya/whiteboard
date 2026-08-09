@@ -1,5 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it, vi } from 'vitest'
+import { parseSpatial } from './parse.js'
 import { serializeSpatial } from './serialize.js'
 
 const baseNode = { id: 'n1', x: 0, y: 0, width: 10, height: 10 } as const
@@ -51,4 +52,16 @@ describe('serializeSpatial', () => {
     vi.doUnmock('./degrade.js')
     vi.resetModules()
   })
+})
+
+it('extended mode keeps the canvas-level x-whiteboard through a round trip', () => {
+  const canvas: SpatialCanvas = {
+    nodes: [],
+    edges: [],
+    'x-whiteboard': { edgeRouting: { style: 'curved' } },
+  }
+  const result = parseSpatial(serializeSpatial(canvas, 'extended'))
+
+  expect(result.ok).toBe(true)
+  expect(result.ok && result.value['x-whiteboard']).toEqual({ edgeRouting: { style: 'curved' } })
 })

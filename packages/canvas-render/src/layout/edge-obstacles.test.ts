@@ -126,3 +126,41 @@ describe('routing properties', () => {
     }
   })
 })
+
+describe('orthogonal routing style', () => {
+  const isAxisAligned = (path: readonly { x: number; y: number }[]) =>
+    path.every((point, i) => {
+      if (i === 0) return true
+      const prev = path[i - 1] as typeof point
+      return point.x === prev.x || point.y === prev.y
+    })
+
+  it('bends into right angles even when the direct path is clear', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 200)]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'orthogonal')
+
+    expect(routed.path.length).toBeGreaterThan(2)
+    expect(isAxisAligned(routed.path)).toBe(true)
+  })
+
+  it('leaves a straight-style edge diagonal, so the setting is what decides', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 200)]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'straight')
+
+    expect(routed.path).toHaveLength(2)
+  })
+
+  it('stays axis-aligned while stepping around an obstacle', () => {
+    const blocker = node('mid', 200, 0)
+    const nodes = [node('a', 0, 0), blocker, node('b', 400, 0)]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'orthogonal')
+
+    expect(isAxisAligned(routed.path)).toBe(true)
+    expect(pathCrosses(routed.path, blocker)).toBe(false)
+  })
+
+  it('defaults to straight when no style is given', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 200)]
+    expect(routeEdge(nodes, edge('a', 'b')).path).toHaveLength(2)
+  })
+})

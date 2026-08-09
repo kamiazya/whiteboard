@@ -444,3 +444,31 @@ describe('layoutSpatialCanvas', () => {
     expect(degenerate).toEqual(baseline)
   })
 })
+
+// The routing style rides on the canvas this function already receives, so
+// honouring it needs no plumbing through the editor, export or viewer. These
+// pin that it is READ — a router supporting a style nothing passes to it is
+// not a feature.
+describe('edge routing style from the canvas', () => {
+  const twoNodes = [textNode({ id: 'a', x: 0, y: 0 }), textNode({ id: 'b', x: 400, y: 200 })]
+  const link: SpatialCanvas['edges'] = [{ id: 'e1', fromNode: 'a', toNode: 'b' }]
+
+  const edgePathOf = (canvasValue: SpatialCanvas) => {
+    const scene = layoutSpatialCanvas(canvasValue, baseOptions())
+    const found = scene.nodes.find((n) => n.kind === 'edge')
+    if (found === undefined || found.kind !== 'edge') throw new Error('no edge in scene')
+    return found.path
+  }
+
+  it('bends the edge when the canvas asks for orthogonal', () => {
+    const path = edgePathOf({
+      ...canvas(twoNodes, link),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    })
+    expect(path.length).toBeGreaterThan(2)
+  })
+
+  it('leaves it direct when the canvas says nothing', () => {
+    expect(edgePathOf(canvas(twoNodes, link))).toHaveLength(2)
+  })
+})
