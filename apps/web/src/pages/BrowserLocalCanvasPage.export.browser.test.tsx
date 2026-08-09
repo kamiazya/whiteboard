@@ -82,6 +82,19 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
   return item
 }
 
+/**
+ * Budget for an export to reach the download anchor. This is NOT papering
+ * over a race: the wait is already on the terminal signal (the anchor
+ * click), and the work in between is irreducibly asynchronous — lay out the
+ * scene, serialise SVG, and for PNG additionally decode it through a real
+ * <img> and encode a bitmap via canvas.toBlob. testing-library's default
+ * 1000ms was simply too small a budget for that on a loaded CI runner, and
+ * the PNG case (the heaviest of the two) is what failed there on
+ * 2026-08-09. The rest of this file already uses explicit budgets for the
+ * same reason.
+ */
+const EXPORT_TIMEOUT_MS = 15_000
+
 describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Excalidraw)', () => {
   beforeEach(async () => {
     await clearDb()
@@ -100,7 +113,7 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     const svgItem = await openExportMenuItem('Export as SVG')
     fireEvent.pointerUp(svgItem)
 
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
     expect(blobs).toHaveLength(1)
     const blob = blobs[0]
     expect(blob.type).toBe('image/svg+xml')
@@ -116,7 +129,7 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     const pngItem = await openExportMenuItem('Export as PNG')
     fireEvent.pointerUp(pngItem)
 
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
     // rasterizeSvgToPng creates its own intermediate object URL (the
     // rendered SVG fed into a real <img>) ahead of the final downloaded
     // blob, so the last captured blob is the one under test here.
