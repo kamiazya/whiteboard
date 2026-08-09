@@ -81,6 +81,32 @@ export async function withWorkspaceWriteLock<T>(
   }
 }
 
+/**
+ * Serializes mutations to ONE canvas document, on the same queue machinery
+ * as the workspace lock above (and with the same single-process caveat).
+ *
+ * Every mutating MCP tool is a load-modify-save against `canvasDocStore`,
+ * and `saveSnapshot` writes unconditionally — it carries the new frontier
+ * but nothing compares it against the stored one. So two tool calls that
+ * load the same base before either saves silently drop one of the two
+ * changes, whichever finishes first. That is not hypothetical for a canvas
+ * an agent and a user are both touching, and node_lock racing node_patch
+ * can even erase a lock the user just set.
+ *
+ * The key is namespaced because workspace ids and canvas ids are separate
+ * spaces: an unlucky collision would make two unrelated writers share a
+ * queue. Correct, but confusing to debug.
+ *
+ * A per-process queue is the right size for today's single daemon. A
+ * multi-instance deployment (the Cloudflare direction) cannot rely on it
+ * and needs a compare-and-swap in the CanvasDocStore contract instead —
+ * `saveSnapshot` would take the frontier the caller loaded and reject a
+ * stale write, with the shared tool path retrying.
+ */
+export function withCanvasDocWriteLock<T>(canvasId: string, fn: () => Promise<T>): Promise<T> {
+  return withWorkspaceWriteLock(`canvas-doc:${canvasId}`, fn)
+}
+
 // Test-only helper.
 export function _resetWorkspaceLocksForTests(): void {
   queues.clear()

@@ -18,6 +18,7 @@ import {
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
+import { withCanvasDocWriteLock } from '../store/workspace-lock.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
 // server-core is a shared layer and cannot depend on this composition
@@ -42,6 +43,18 @@ setServerCoreLogSink((record) => {
 export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): void {
   const { tools } = createServer(deps)
 
+  // Every MUTATING tool below runs inside withCanvasDocWriteLock, keyed on
+  // the canvas it targets. Each is a load-modify-save against
+  // canvasDocStore, whose saveSnapshot writes unconditionally, so two calls
+  // that load the same base before either saves silently drop one of the
+  // changes (see canvas-doc-write-lock.test.ts, which demonstrates the loss
+  // on the real tools). Read-only tools are deliberately NOT wrapped:
+  // serializing reads behind writes would make a render or digest wait on
+  // an unrelated patch for no correctness gain.
+  //
+  // The lock wraps the execute() call rather than the registration, so the
+  // concrete outputSchema/O binding described below is untouched.
+
   // Each call below is a direct registerToolWithAnnotations invocation (not
   // routed through a shared generic wrapper) so outputSchema and O are
   // concrete at every call site: TypeScript checks this handler's
@@ -56,7 +69,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     { inputSchema: tools.facetSet.inputSchema.shape, outputSchema: tools.facetSet.outputSchema },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await tools.facetSet.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.facetSet.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -67,7 +82,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     { inputSchema: tools.nodePatch.inputSchema.shape, outputSchema: tools.nodePatch.outputSchema },
     async (args) => {
       const parsed = tools.nodePatch.inputSchema.parse(args)
-      const result = await tools.nodePatch.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.nodePatch.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -78,7 +95,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     { inputSchema: tools.nodeLock.inputSchema.shape, outputSchema: tools.nodeLock.outputSchema },
     async (args) => {
       const parsed = tools.nodeLock.inputSchema.parse(args)
-      const result = await tools.nodeLock.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.nodeLock.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -89,7 +108,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     { inputSchema: tools.edgeLock.inputSchema.shape, outputSchema: tools.edgeLock.outputSchema },
     async (args) => {
       const parsed = tools.edgeLock.inputSchema.parse(args)
-      const result = await tools.edgeLock.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.edgeLock.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -100,7 +121,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     { inputSchema: tools.edgePatch.inputSchema.shape, outputSchema: tools.edgePatch.outputSchema },
     async (args) => {
       const parsed = tools.edgePatch.inputSchema.parse(args)
-      const result = await tools.edgePatch.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.edgePatch.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -170,7 +193,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      const result = await tools.versionSave.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.versionSave.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -198,7 +223,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.versionRestore.inputSchema.parse(args)
-      const result = await tools.versionRestore.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.versionRestore.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -228,7 +255,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.canvasImportOkf.inputSchema.parse(args)
-      const result = await tools.canvasImportOkf.execute(parsed)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.canvasImportOkf.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )
