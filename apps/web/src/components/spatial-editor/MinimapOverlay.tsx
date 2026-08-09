@@ -63,7 +63,10 @@ export function MinimapOverlay({
       data-testid="minimap"
       aria-hidden="true"
       style={{ width, height }}
-      className="absolute bottom-4 right-4 overflow-hidden rounded-md border bg-background/80 shadow-sm"
+      // z-10 matches the dock. Without a stacking context of its own the
+      // scene paints over the overview — it is later in the DOM and its
+      // nodes are positioned, so document order wins.
+      className="absolute bottom-4 right-4 z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm"
       onPointerDown={navigateTo}
       onPointerMove={(event) => {
         // Only while the button is held — a pointer merely passing over the

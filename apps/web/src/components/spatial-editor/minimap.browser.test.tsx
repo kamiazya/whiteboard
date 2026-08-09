@@ -183,3 +183,10 @@ it('paints an authored preset colour, and leaves an unstyled node muted', () => 
   expect(blocks[1]?.style.background).toBe('')
   expect(blocks[2]?.style.background).toBe('rgb(18, 52, 86)')
 })
+
+// Without a stacking context the scene paints over the overview: it is
+// later in the DOM and its nodes are positioned, so document order wins.
+it('sits above the canvas scene', () => {
+  const { container } = render(<Host canvas0={spread} />)
+  expect(getComputedStyle(minimapOf(container)!).zIndex).not.toBe('auto')
+})
