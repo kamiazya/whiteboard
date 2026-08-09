@@ -168,6 +168,62 @@ export function resizeBoxByDelta(
   }
 }
 
+/** The smallest box covering all of `boxes`; `undefined` for an empty selection. */
+export function unionBox(boxes: readonly Box[]): Box | undefined {
+  if (boxes.length === 0) return undefined
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const box of boxes) {
+    minX = Math.min(minX, box.x)
+    minY = Math.min(minY, box.y)
+    maxX = Math.max(maxX, box.x + box.width)
+    maxY = Math.max(maxY, box.y + box.height)
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+/** A node scaled to nothing can never be grabbed to grow again. */
+const MIN_SCALED_EXTENT_PX = 1
+
+/**
+ * Floors a scaled extent at one pixel — but only if there was an extent to
+ * begin with. A zero-width node is legal in JSON Canvas, and resizing the
+ * selection AROUND it is no reason to silently give it a width it never had.
+ */
+function scaleExtent(extent: number, scale: number): number {
+  if (extent <= 0) return extent
+  return Math.max(MIN_SCALED_EXTENT_PX, Math.round(extent * scale))
+}
+
+/**
+ * Re-places one member of a multi-selection after its enclosing box has been
+ * resized, preserving where the member sat inside that box and how much of it
+ * it filled.
+ *
+ * This is what makes resize handles around a whole selection mean the same
+ * thing as handles around one node: the group is treated as a single object,
+ * so the arrangement inside it survives the drag.
+ *
+ * Totality matters here — it runs on whatever the pointer produced, and a
+ * NaN coordinate would reach the canvas schema. A collapsed axis on the
+ * enclosing box has no ratio to preserve, so that axis passes through
+ * unscaled rather than dividing by zero; results are rounded because JSON
+ * Canvas geometry is integer, and floored at one pixel because rounding a
+ * heavy shrink otherwise lands on zero.
+ */
+export function scaleBoxWithin(startEnclosing: Box, nextEnclosing: Box, box: Box): Box {
+  const scaleX = startEnclosing.width > 0 ? nextEnclosing.width / startEnclosing.width : 1
+  const scaleY = startEnclosing.height > 0 ? nextEnclosing.height / startEnclosing.height : 1
+  return {
+    x: Math.round(nextEnclosing.x + (box.x - startEnclosing.x) * scaleX),
+    y: Math.round(nextEnclosing.y + (box.y - startEnclosing.y) * scaleY),
+    width: scaleExtent(box.width, scaleX),
+    height: scaleExtent(box.height, scaleY),
+  }
+}
+
 /**
  * Minimum distance from a point to a polyline (canvas coordinates). Used to
  * hit-test edges, which have no area of their own — the caller compares the

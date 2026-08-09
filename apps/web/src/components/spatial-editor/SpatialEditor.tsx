@@ -142,6 +142,8 @@ import {
   indexNodeBoxes,
   polylineMidpoint,
   resizeBoxByDelta,
+  scaleBoxWithin,
+  unionBox,
 } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
@@ -731,6 +733,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       selectedId !== null && selectedBox !== undefined
         ? { id: selectedId, box: selectedBox }
         : undefined
+
+    /**
+     * Every selected node with the box it currently occupies, primary first.
+     *
+     * The resize handles surround the UNION of these rather than the primary
+     * alone: handles drawn around a group have to act on the group, or a
+     * three-node selection offers one node's handles and resizes that node
+     * while the other two watch.
+     */
+    const selectionMembers = useMemo(() => {
+      if (selectedId === null) return []
+      return [selectedId, ...extraIds].flatMap((id) => {
+        const entry = boxes.find((candidate) => candidate.id === id)
+        return entry === undefined ? [] : [{ id, box: entry.box }]
+      })
+    }, [selectedId, extraIds, boxes])
+    const selectionBox = useMemo(
+      () => unionBox(selectionMembers.map((member) => member.box)),
+      [selectionMembers],
+    )
+    const isMultiSelection = selectionMembers.length > 1
 
     /**
      * The in-flight preview geometry, derived per frame from the gesture's own
@@ -1884,11 +1907,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       _handleBox: Box,
       e: React.KeyboardEvent,
     ) => {
-      if (selection === undefined) return
-      // The resize anchor is the NODE's box, not the handle's own tiny
-      // hit-box `_handleBox` describes — same reasoning as
-      // onHandlePointerDown's `box: selection.box` below.
-      const box = selection.box
+      if (selection === undefined || selectionBox === undefined) return
+      // The resize anchor is the box the HANDLES surround, not the handle's
+      // own tiny hit-box `_handleBox` describes — same reasoning as
+      // onHandlePointerDown's `box: selectionBox` below.
+      const box = selectionBox
       const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
       const delta = ARROW_KEY_DELTA[e.key]
       if (delta === undefined) return
@@ -1902,15 +1925,38 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         return
       }
-      const command: EditorCommand = {
-        kind: 'resize-node',
-        id: selection.id,
-        x: nextBox.x,
-        y: nextBox.y,
-        width: nextBox.width,
-        height: nextBox.height,
+      // Same handles, same meaning as the pointer drag: a lone node takes the
+      // dragged box verbatim, a selection has each member re-placed inside it.
+      const commands: readonly EditorCommand[] = isMultiSelection
+        ? selectionMembers.map((member) => {
+            const scaled = scaleBoxWithin(box, nextBox, member.box)
+            return {
+              kind: 'resize-node',
+              id: member.id,
+              x: scaled.x,
+              y: scaled.y,
+              width: scaled.width,
+              height: scaled.height,
+            }
+          })
+        : [
+            {
+              kind: 'resize-node',
+              id: selection.id,
+              x: nextBox.x,
+              y: nextBox.y,
+              width: nextBox.width,
+              height: nextBox.height,
+            },
+          ]
+      // Threaded through a running canvas, not re-applied to `canvasRef`
+      // each time: the ref does not advance within this tick, so a second
+      // command built on it would discard the first.
+      let running = canvasRef.current
+      for (const command of commands) {
+        running = applyCommand(running, command)
+        onChange(running, command)
       }
-      onChange(applyCommand(canvasRef.current, command), command)
     }
 
     const handleConnectKeyDown = () => {
@@ -3239,9 +3285,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               })}
             </svg>
           )}
-          {selection !== undefined && (
+          {selection !== undefined && selectionBox !== undefined && (
             <SelectionOverlay
-              box={selection.box}
+              box={selectionBox}
               zoom={viewport.zoom}
               onHandlePointerDown={(handle, _handleBox, e) => {
                 const root = beginOverlayGesture(e)
@@ -3253,28 +3299,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     nodeId: selection.id,
                     handle,
                     point,
-                    // The resize anchor is the NODE's box, not the handle's own
-                    // tiny hit-box `_handleBox` describes — using the handle
-                    // box here would seed `reducePointerUpResizing`'s
-                    // anchor-preserving math from an 8px square instead of the
-                    // node, growing/shrinking from the wrong origin.
-                    box: selection.box,
+                    // The resize anchor is the box the HANDLES surround, not
+                    // the handle's own tiny hit-box `_handleBox` describes —
+                    // using the handle box here would seed
+                    // `reducePointerUpResizing`'s anchor-preserving math from
+                    // an 8px square instead, growing/shrinking from the wrong
+                    // origin.
+                    box: selectionBox,
+                    // Omitted for a lone node, which keeps the original
+                    // single-command path — including its collapse-to-zero
+                    // behavior, which group members deliberately do not share.
+                    ...(isMultiSelection ? { members: selectionMembers } : {}),
                   }),
                 )
               }}
-              onConnectPointerDown={(e) => {
-                if (beginOverlayGesture(e) === null) return
-                applyResult(
-                  reduceGesture(gestureState, canvas, {
-                    type: 'pointerdown-connect',
-                    nodeId: selection.id,
-                  }),
-                )
-              }}
+              // Connecting and editing act on ONE node; from handles that
+              // surround a group they would claim to apply to all of them.
+              onConnectPointerDown={
+                isMultiSelection
+                  ? undefined
+                  : (e) => {
+                      if (beginOverlayGesture(e) === null) return
+                      applyResult(
+                        reduceGesture(gestureState, canvas, {
+                          type: 'pointerdown-connect',
+                          nodeId: selection.id,
+                        }),
+                      )
+                    }
+              }
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
               onEditRequest={
-                selectedNode?.type === 'text'
+                !isMultiSelection && selectedNode?.type === 'text'
                   ? () => {
                       applyResult(
                         reduceGesture(gestureState, canvas, {

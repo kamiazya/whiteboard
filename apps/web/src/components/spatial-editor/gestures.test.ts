@@ -542,3 +542,72 @@ describe('delete-selection', () => {
     expect(result.selectedId).toBeUndefined()
   })
 })
+
+// Handles drawn around a whole selection have to mean what handles around one
+// node mean: the group resizes as a single object and the arrangement inside
+// it survives.
+describe('multi-selection resize', () => {
+  function pair(): SpatialCanvas {
+    return {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'a' },
+        { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 100, text: 'b' },
+      ],
+      edges: [],
+    }
+  }
+  const ENCLOSING = { x: 0, y: 0, width: 300, height: 100 }
+  const MEMBERS = [
+    { id: 'a', box: { x: 0, y: 0, width: 100, height: 100 } },
+    { id: 'b', box: { x: 200, y: 0, width: 100, height: 100 } },
+  ]
+
+  function dragSouthEastBy(dx: number, dy: number) {
+    const c = pair()
+    const down = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'se',
+      point: { x: 300, y: 100 },
+      box: ENCLOSING,
+      members: MEMBERS,
+    })
+    return reduceGesture(down.state, c, {
+      type: 'pointerup',
+      point: { x: 300 + dx, y: 100 + dy },
+    })
+  }
+
+  it('commits one resize per member, scaled by the same factors', () => {
+    // 300 -> 600 wide, height unchanged.
+    expect(dragSouthEastBy(300, 0).commands).toEqual([
+      { kind: 'resize-node', id: 'a', x: 0, y: 0, width: 200, height: 100 },
+      { kind: 'resize-node', id: 'b', x: 400, y: 0, width: 200, height: 100 },
+    ])
+  })
+
+  it('keeps the gap between members proportional, not constant', () => {
+    // The 100px gap doubles with everything else; a constant gap would leave
+    // b at 300 and the group would no longer fill its own handles.
+    expect(dragSouthEastBy(300, 0).commands[1]).toMatchObject({ id: 'b', x: 400 })
+  })
+
+  it('still commits a single resize when the selection is one node', () => {
+    const c = pair()
+    const down = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'se',
+      point: { x: 100, y: 100 },
+      box: { x: 0, y: 0, width: 100, height: 100 },
+    })
+    const up = reduceGesture(down.state, c, { type: 'pointerup', point: { x: 150, y: 100 } })
+    expect(up.commands).toEqual([
+      { kind: 'resize-node', id: 'a', x: 0, y: 0, width: 150, height: 100 },
+    ])
+  })
+
+  it('emits nothing when the drag ended where it began', () => {
+    expect(dragSouthEastBy(0, 0).commands).toEqual([])
+  })
+})
