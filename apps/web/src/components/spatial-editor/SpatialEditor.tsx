@@ -1894,18 +1894,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /**
      * The editor's own pixel size, for the minimap's visible-area marker.
      *
-     * Re-read on every viewport change and on window resize rather than
-     * through a ResizeObserver: those two cover every way the visible rect
-     * actually moves in this app, and they need no new platform seam (and no
-     * jsdom stub). The gap is a container that resizes WITHOUT a window
-     * resize — a side panel opening, say. The marker then lags until the next
-     * pan or zoom, which is a stale overlay, not a wrong canvas.
+     * A ResizeObserver rather than a window `resize` listener, because the
+     * container resizes without the window doing so — a side panel opening,
+     * the browser chrome changing height on mobile — and a marker that lags
+     * those is wrong about where you are.
+     *
+     * Guarded because jsdom has no ResizeObserver: without the guard every
+     * jsdom test that mounts this editor would throw. There it measures once
+     * and stays there, which is correct for a layout that never changes.
      */
     const [rootSize, setRootSize] = useState({ width: 0, height: 0 })
     useLayoutEffect(() => {
+      const root = rootRef.current
+      if (root === null) return
       const measure = () => {
-        const root = rootRef.current
-        if (root === null) return
         setRootSize((prev) =>
           prev.width === root.clientWidth && prev.height === root.clientHeight
             ? prev
@@ -1913,9 +1915,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )
       }
       measure()
-      window.addEventListener('resize', measure)
-      return () => window.removeEventListener('resize', measure)
-    }, [viewport])
+      if (typeof ResizeObserver === 'undefined') return
+      const observer = new ResizeObserver(measure)
+      observer.observe(root)
+      return () => observer.disconnect()
+    }, [])
 
     /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
     const zoomAtViewportCenter = (factor: number) => {
