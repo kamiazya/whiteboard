@@ -38,8 +38,6 @@ function hubFor(baseUrl: string): SseStreamHub {
   const hub = new SseStreamHub({
     fetch: createDaemonFetch(baseUrl, () => tokens.get(baseUrl)),
     baseUrl,
-    // One stream id per origin per worker: every tab shares this one stream.
-    streamId: `shared-${globalThis.crypto.randomUUID()}`,
   })
   hubs.set(baseUrl, hub)
   return hub

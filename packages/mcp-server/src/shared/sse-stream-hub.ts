@@ -62,7 +62,6 @@ export interface SseStreamHubOptions {
   fetch: typeof globalThis.fetch
   /** Daemon origin, no trailing slash. */
   baseUrl: string
-  streamId: string
   /**
    * Delay before the nth consecutive reconnect attempt. Injected so a
    * reconnect test asserts the behavior rather than waiting out the backoff.
@@ -100,6 +99,9 @@ export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
   private readonly listeners = new Map<string, Set<DocListener>>()
   private abort: AbortController | null = null
+  /** Minted by the daemon and delivered on the stream itself, so it exists only
+   *  between a stream opening and that stream ending. */
+  private streamId: string | null = null
   private started = false
   private closed = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -141,7 +143,11 @@ export class SseStreamHub implements SseStreamSource {
     // viewport requests to streams that declared it, and a reconnect gives us
     // a stream that never has.
     if (isClientReady(message)) this.readyDocs.add(doc)
-    void this.post('/api/sync/message', { streamId: this.options.streamId, doc, message })
+    // Before a stream exists there is nothing to address, and the daemon would
+    // have nowhere to apply it. Readiness is replayed once one opens; the other
+    // control messages are inert server-side, so dropping them costs nothing.
+    if (this.streamId === null) return
+    void this.post('/api/sync/message', { streamId: this.streamId, doc, message })
   }
 
   private async post(path: string, body: unknown): Promise<void> {
@@ -157,8 +163,11 @@ export class SseStreamHub implements SseStreamSource {
   }
 
   private async send(body: { subscribe?: string[]; unsubscribe?: string[] }): Promise<void> {
+    // Same as sendMessage: with no stream there is nothing to address. The full
+    // set is announced when one opens, so an early subscribe is not lost.
+    if (this.streamId === null) return
     // Best effort: a dropped subscribe is re-sent when the stream reconnects.
-    await this.post('/api/sync/subscribe', { streamId: this.options.streamId, ...body })
+    await this.post('/api/sync/subscribe', { streamId: this.streamId, ...body })
   }
 
   /**
@@ -192,28 +201,13 @@ export class SseStreamHub implements SseStreamSource {
 
     let res: Response
     try {
-      res = await this.options.fetch(
-        `${this.options.baseUrl}/api/sync/stream?streamId=${encodeURIComponent(this.options.streamId)}`,
-        { signal: abort.signal },
-      )
+      res = await this.options.fetch(`${this.options.baseUrl}/api/sync/stream`, {
+        signal: abort.signal,
+      })
     } catch {
       return false
     }
     if (!res.ok || !res.body) return false
-
-    // The daemon knows nothing about a stream until it opens, and forgets it
-    // when it drops — so every open re-announces the full state, both the
-    // subscriptions registered before this stream existed and the readiness
-    // declared against the previous one.
-    const docs = [...this.listeners.keys()]
-    if (docs.length > 0) void this.send({ subscribe: docs })
-    for (const doc of this.readyDocs) {
-      void this.post('/api/sync/message', {
-        streamId: this.options.streamId,
-        doc,
-        message: { type: 'client_ready' },
-      })
-    }
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -227,7 +221,38 @@ export class SseStreamHub implements SseStreamSource {
     } catch {
       // An aborted read is the normal shutdown path.
     }
+    // The id belongs to the stream that just ended; nothing may be addressed
+    // to it until the next one announces its own.
+    this.streamId = null
     return true
+  }
+
+  /**
+   * Adopt the id the daemon minted for this stream and announce the full state
+   * against it — the daemon knows nothing about a stream until it opens, and
+   * forgets it when it drops, so both the subscriptions registered before this
+   * stream existed and the readiness declared against the previous one have to
+   * be repeated.
+   */
+  private onStreamReady(data: string): void {
+    let payload: { streamId?: unknown }
+    try {
+      payload = JSON.parse(data)
+    } catch {
+      return
+    }
+    if (typeof payload.streamId !== 'string' || payload.streamId.length === 0) return
+    this.streamId = payload.streamId
+
+    const docs = [...this.listeners.keys()]
+    if (docs.length > 0) void this.send({ subscribe: docs })
+    for (const doc of this.readyDocs) {
+      void this.post('/api/sync/message', {
+        streamId: payload.streamId,
+        doc,
+        message: { type: 'client_ready' },
+      })
+    }
   }
 
   private wait(ms: number): Promise<void> {
@@ -237,6 +262,10 @@ export class SseStreamHub implements SseStreamSource {
   }
 
   private dispatch(evt: { event: string; data: string }): void {
+    if (evt.event === 'ready') {
+      this.onStreamReady(evt.data)
+      return
+    }
     if (evt.event === 'update') {
       let payload: { doc?: unknown; update?: unknown }
       try {

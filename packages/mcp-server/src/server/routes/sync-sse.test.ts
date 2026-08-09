@@ -58,11 +58,47 @@ async function readEvents(res: Response, count: number, timeoutMs = 2000): Promi
   return frames
 }
 
+/**
+ * Opens a stream and returns it together with the id the daemon minted for it.
+ * The id is not the caller's to choose — it arrives on the stream itself, and
+ * holding it is what proves the stream is yours.
+ */
+async function openStream(
+  app: ReturnType<typeof createApp>,
+): Promise<{ res: Response; streamId: string }> {
+  const res = await app.request('/api/sync/stream', { headers: auth })
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('no stream body')
+  const { value } = await reader.read()
+  reader.releaseLock()
+  const frame = new TextDecoder().decode(value)
+  const data = frame
+    .split('\n')
+    .find((l) => l.startsWith('data:'))
+    ?.slice(5)
+  return { res, streamId: JSON.parse(data ?? '{}').streamId }
+}
+
 describe('SSE sync transport', () => {
+  it('mints the stream id itself instead of taking one from the caller', async () => {
+    // A client-chosen key into a server-side registry lets one client name
+    // another's stream — displacing it on open, or adding and removing that
+    // client's subscriptions behind its back.
+    const app = createApp(createRuntimeOptions())
+
+    const a = await openStream(app)
+    const b = await openStream(app)
+
+    expect(a.streamId).toBeTruthy()
+    expect(b.streamId).not.toBe(a.streamId)
+    await a.res.body?.cancel().catch(() => {})
+    await b.res.body?.cancel().catch(() => {})
+  })
+
   it('opens an event stream with the SSE content type', async () => {
     const app = createApp(createRuntimeOptions())
 
-    const res = await app.request('/api/sync/stream?streamId=s1', { headers: auth })
+    const { res } = await openStream(app)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/event-stream/)
@@ -74,20 +110,20 @@ describe('SSE sync transport', () => {
   it('requires auth like every other /api route', async () => {
     const app = createApp(createRuntimeOptions())
 
-    const res = await app.request('/api/sync/stream?streamId=s1')
+    const res = await app.request('/api/sync/stream')
 
     expect(res.status).toBe(401)
   })
 
   it('delivers a broadcast update to a stream subscribed to that doc', async () => {
     const app = createApp(createRuntimeOptions())
-    const res = await app.request('/api/sync/stream?streamId=s2', { headers: auth })
+    const { res, streamId } = await openStream(app)
     expect(res.status).toBe(200)
 
     const subscribed = await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId: 's2', subscribe: ['ws-1/canvas-a'] }),
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/canvas-a'] }),
     })
     expect(subscribed.status).toBe(200)
 
@@ -103,11 +139,11 @@ describe('SSE sync transport', () => {
 
   it('does not deliver a doc the stream never subscribed to', async () => {
     const app = createApp(createRuntimeOptions())
-    const res = await app.request('/api/sync/stream?streamId=s3', { headers: auth })
+    const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId: 's3', subscribe: ['ws-1/subscribed'] }),
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/subscribed'] }),
     })
 
     broadcastLoroUpdate('ws-1', 'not-subscribed', new Uint8Array([9]))
@@ -122,11 +158,11 @@ describe('SSE sync transport', () => {
   // or receiving it twice.
   it('withholds a viewport request from a stream that has not signalled client_ready', async () => {
     const app = createApp(createRuntimeOptions())
-    const res = await app.request('/api/sync/stream?streamId=vp1', { headers: auth })
+    const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId: 'vp1', subscribe: ['ws-1/vp-canvas'] }),
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-canvas'] }),
     })
 
     sendViewportRequest('ws-1', 'vp-canvas', 'req-1', { mode: 'fit' })
@@ -137,11 +173,11 @@ describe('SSE sync transport', () => {
 
   it('replays the cached viewport request when the stream signals client_ready', async () => {
     const app = createApp(createRuntimeOptions())
-    const res = await app.request('/api/sync/stream?streamId=vp2', { headers: auth })
+    const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId: 'vp2', subscribe: ['ws-1/vp-late'] }),
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-late'] }),
     })
 
     sendViewportRequest('ws-1', 'vp-late', 'req-2', { mode: 'fit' })
@@ -150,7 +186,7 @@ describe('SSE sync transport', () => {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        streamId: 'vp2',
+        streamId,
         doc: 'ws-1/vp-late',
         message: { type: 'client_ready' },
       }),
@@ -163,7 +199,7 @@ describe('SSE sync transport', () => {
 
   it('resolves a pending viewport request from a viewport_response', async () => {
     const app = createApp(createRuntimeOptions())
-    await app.request('/api/sync/stream?streamId=vp3', { headers: auth })
+    const { streamId } = await openStream(app)
     const resolved: string[] = []
     setResolveViewportFn((requestId) => resolved.push(requestId))
 
@@ -171,7 +207,7 @@ describe('SSE sync transport', () => {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        streamId: 'vp3',
+        streamId,
         doc: 'ws-1/vp-canvas',
         message: { type: 'viewport_response', requestId: 'req-3' },
       }),
@@ -186,11 +222,11 @@ describe('SSE sync transport', () => {
   // whichever canvas happened to be listening.
   it('addresses a text message to the document it belongs to', async () => {
     const app = createApp(createRuntimeOptions())
-    const res = await app.request('/api/sync/stream?streamId=txt1', { headers: auth })
+    const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId: 'txt1', subscribe: ['ws-1/a', 'ws-1/b'] }),
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/a', 'ws-1/b'] }),
     })
 
     sendHeadChanged('ws-1', 'b', 'head-xyz')

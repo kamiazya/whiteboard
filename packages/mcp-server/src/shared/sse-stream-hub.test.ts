@@ -6,14 +6,22 @@ function createFake() {
   const calls: { url: string; body?: string }[] = []
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
+  let streamSeq = 0
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     calls.push({ url, body: init?.body ? String(init.body) : undefined })
     if (url.includes('/api/sync/stream')) {
+      streamSeq += 1
+      const id = `server-${streamSeq}`
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
             const enc = new TextEncoder()
+            // The daemon mints the id and announces it on the stream itself;
+            // nothing can be addressed to a stream before this frame.
+            controller.enqueue(
+              enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
+            )
             push = (f) => controller.enqueue(enc.encode(f))
             endStream = () => controller.close()
           },
@@ -49,7 +57,7 @@ describe('SseStreamHub', () => {
     // The whole point: six HTTP/1.1 connections per origin is the budget, and a
     // stream per canvas would spend it on sync alone.
     const fake = createFake()
-    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', streamId: 's' })
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
 
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
     hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {} })
@@ -61,7 +69,7 @@ describe('SseStreamHub', () => {
 
   it('tells the daemon to stop routing a document once its last listener leaves', async () => {
     const fake = createFake()
-    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', streamId: 's' })
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
     const off1 = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
     const off2 = hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
     await flush()
@@ -79,7 +87,7 @@ describe('SseStreamHub', () => {
 
   it('routes an update only to the listeners of that document', async () => {
     const fake = createFake()
-    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', streamId: 's' })
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
     const a: Uint8Array[] = []
     const b: Uint8Array[] = []
     hub.subscribe('w/a', { onUpdate: (u) => a.push(u), onMessage: () => {} })
@@ -96,7 +104,7 @@ describe('SseStreamHub', () => {
 
   it('routes a text message only to the listeners of that document', async () => {
     const fake = createFake()
-    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', streamId: 's' })
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
     const a: string[] = []
     const b: string[] = []
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: (m) => a.push(m) })
@@ -119,7 +127,6 @@ describe('SseStreamHub', () => {
     const hub = new SseStreamHub({
       fetch: fake.fetch,
       baseUrl: 'http://d',
-      streamId: 's',
       retryDelayMs: noDelay,
     })
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
@@ -144,7 +151,6 @@ describe('SseStreamHub', () => {
     const hub = new SseStreamHub({
       fetch: fake.fetch,
       baseUrl: 'http://d',
-      streamId: 's',
       retryDelayMs: noDelay,
     })
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
@@ -164,7 +170,6 @@ describe('SseStreamHub', () => {
     const hub = new SseStreamHub({
       fetch: fake.fetch,
       baseUrl: 'http://d',
-      streamId: 's',
       retryDelayMs: noDelay,
     })
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
@@ -184,7 +189,6 @@ describe('SseStreamHub', () => {
     const hub = new SseStreamHub({
       fetch: fake.fetch,
       baseUrl: 'http://d',
-      streamId: 's',
       retryDelayMs: noDelay,
     })
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })

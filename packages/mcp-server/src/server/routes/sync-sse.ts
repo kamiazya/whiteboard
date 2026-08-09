@@ -150,8 +150,12 @@ export function createSyncSseRouter() {
   const app = new Hono()
 
   app.get('/api/sync/stream', (c) => {
-    const streamId = c.req.query('streamId')
-    if (!streamId) return c.json({ error: 'streamId required' }, 400)
+    // The id is minted here and never accepted from the caller. A client-chosen
+    // key into a server-side registry lets one client name another's stream —
+    // displacing it on open, or adding and removing that client's
+    // subscriptions behind its back. Delivered as the first frame, so holding
+    // it is what proves the stream is yours.
+    const streamId = globalThis.crypto.randomUUID()
 
     return streamSSE(c, async (stream) => {
       const entry: SyncStream = {
@@ -161,9 +165,8 @@ export function createSyncSseRouter() {
           void stream.writeSSE({ event, data })
         },
       }
-      // Last writer wins: a reconnect reusing its streamId replaces the dead
-      // entry rather than accumulating a second one that can never be reached.
       streams.set(streamId, entry)
+      await stream.writeSSE({ event: 'ready', data: JSON.stringify({ streamId }) })
       log.info({ streamId }, 'sync stream opened')
 
       stream.onAbort(() => {

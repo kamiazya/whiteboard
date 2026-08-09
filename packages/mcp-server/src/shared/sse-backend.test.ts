@@ -23,6 +23,11 @@ function createFakeTransport(streamFrames: string[]) {
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
           const encoder = new TextEncoder()
+          // The daemon mints the stream id and announces it before anything
+          // else; the client cannot address a stream until it arrives.
+          controller.enqueue(
+            encoder.encode(`event: ready\ndata: ${JSON.stringify({ streamId: 'server-1' })}\n\n`),
+          )
           for (const frame of streamFrames) controller.enqueue(encoder.encode(frame))
           pushFrame = (frame) => controller.enqueue(encoder.encode(frame))
           closeStream = () => controller.close()
@@ -249,7 +254,6 @@ describe('SseBackend', () => {
       'canvas-a',
       'http://127.0.0.1:3099',
       fake.transport,
-      undefined,
       source,
     )
 

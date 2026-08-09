@@ -32,13 +32,18 @@ let openedStreamIds: string[] = []
 let pushFrame: ((frame: string) => void) | null = null
 
 const server = setupServer(
-  http.get(`${BASE}/api/sync/stream`, ({ request }) => {
+  http.get(`${BASE}/api/sync/stream`, () => {
     streamOpens += 1
-    const id = new URL(request.url).searchParams.get('streamId')
-    if (id) openedStreamIds.push(id)
+    // The daemon mints the id and announces it on the stream; a client cannot
+    // choose one, which is what keeps it from naming another client's stream.
+    const id = `server-${streamOpens}`
+    openedStreamIds.push(id)
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const enc = new TextEncoder()
+        controller.enqueue(
+          enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
+        )
         pushFrame = (f) => controller.enqueue(enc.encode(f))
       },
     })

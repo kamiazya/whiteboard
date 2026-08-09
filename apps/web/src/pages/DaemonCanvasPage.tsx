@@ -116,14 +116,7 @@ export function DaemonCanvasPage({
       // Null where SharedWorker is unavailable; SseBackend then opens its own
       // stream, which is correct but not shared across tabs.
       const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-      return new SseBackend(
-        workspaceId,
-        slug,
-        daemonBaseUrl,
-        { fetch: daemonFetch },
-        undefined,
-        shared,
-      )
+      return new SseBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }, shared)
     },
     [daemonBaseUrl, token],
   )

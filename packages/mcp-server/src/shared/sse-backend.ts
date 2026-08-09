@@ -33,7 +33,6 @@ export class SseBackend implements CanvasBackend {
   private readonly slug: string
   private readonly baseUrl: string
   private readonly transport: SseTransport | undefined
-  private readonly streamId: string
   private readonly docKey: string
 
   private readonly streamSource: SseStreamSource | undefined
@@ -46,7 +45,6 @@ export class SseBackend implements CanvasBackend {
     slug: string,
     baseUrl: string,
     transport?: SseTransport,
-    streamId?: string,
     streamSource?: SseStreamSource,
   ) {
     this.workspaceId = workspaceId
@@ -55,10 +53,6 @@ export class SseBackend implements CanvasBackend {
     this.transport = transport
     this.streamSource = streamSource
     this.docKey = `${workspaceId}/${slug}`
-    this.streamId =
-      streamId ??
-      globalThis.crypto?.randomUUID?.() ??
-      `s-${Math.random().toString(36).slice(2)}-fallback`
   }
 
   private get fetchFn(): typeof globalThis.fetch {
@@ -112,11 +106,7 @@ export class SseBackend implements CanvasBackend {
    */
   private resolveSource(): SseStreamSource {
     if (this.streamSource) return this.streamSource
-    this.ownedHub ??= new SseStreamHub({
-      fetch: this.fetchFn,
-      baseUrl: this.baseUrl,
-      streamId: this.streamId,
-    })
+    this.ownedHub ??= new SseStreamHub({ fetch: this.fetchFn, baseUrl: this.baseUrl })
     return this.ownedHub
   }
 
