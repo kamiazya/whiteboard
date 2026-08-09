@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type SnapBox, snapBox } from './snap.js'
+import { type SnapBox, snapBox, snapEdge } from './snap.js'
 
 const box = (x: number, y: number, width = 100, height = 60): SnapBox => ({ x, y, width, height })
 
@@ -119,5 +119,57 @@ describe('snapBox — totality', () => {
       guidesX: [],
       guidesY: [],
     })
+  })
+})
+
+describe('snapEdge — one dragged edge, not a whole box', () => {
+  // A resize moves an EDGE, so its only line is the edge itself. Reusing the
+  // move candidates would let the box's centre or far edge pull the handle,
+  // which reads as the handle fighting the pointer.
+  const other = box(100, 100, 100, 60) // x: 100 / 150 / 200, y: 100 / 130 / 160
+
+  it('pulls a near-miss edge onto a neighbour leading edge', () => {
+    expect(snapEdge(103, [other], NODE_ONLY, 'x')).toEqual({ position: 100, guide: 100 })
+  })
+
+  it('snaps to a neighbour trailing edge', () => {
+    expect(snapEdge(197, [other], NODE_ONLY, 'x')).toEqual({ position: 200, guide: 200 })
+  })
+
+  it('snaps to a neighbour centre', () => {
+    expect(snapEdge(148, [other], NODE_ONLY, 'x')).toEqual({ position: 150, guide: 150 })
+  })
+
+  it('projects the other axis when asked for y', () => {
+    expect(snapEdge(133, [other], NODE_ONLY, 'y')).toEqual({ position: 130, guide: 130 })
+    // The x lines must not leak into a y snap.
+    expect(snapEdge(203, [other], NODE_ONLY, 'y')).toEqual({ position: 203, guide: undefined })
+  })
+
+  it('falls back to the grid, which draws no guide', () => {
+    expect(snapEdge(503, [], WITH_GRID, 'x')).toEqual({ position: 500, guide: undefined })
+  })
+
+  it('prefers a neighbour over the grid at equal distance', () => {
+    expect(snapEdge(102, [box(104, 500)], WITH_GRID, 'x')).toEqual({ position: 104, guide: 104 })
+  })
+
+  it('leaves an edge alone when nothing is in range', () => {
+    expect(snapEdge(500, [other], NODE_ONLY, 'x')).toEqual({ position: 500, guide: undefined })
+  })
+
+  it('is total on degenerate input', () => {
+    expect(snapEdge(Number.NaN, [other], NODE_ONLY, 'x')).toEqual({
+      position: Number.NaN,
+      guide: undefined,
+    })
+    expect(snapEdge(103, [other], { thresholdCanvasPx: -1, gridSize: 10 }, 'x')).toEqual({
+      position: 103,
+      guide: undefined,
+    })
+    // A non-finite neighbour is skipped, not fatal.
+    expect(
+      snapEdge(103, [{ x: Number.NaN, y: 0, width: 1, height: 1 }, other], NODE_ONLY, 'x'),
+    ).toEqual({ position: 100, guide: 100 })
   })
 })

@@ -67,17 +67,12 @@ function finiteBox(box: SnapBox): boolean {
  */
 function candidatesForAxis(
   start: number,
-  extent: number,
+  movingOffsets: readonly number[],
   others: readonly SnapBox[],
   options: SnapOptions,
   pick: (box: SnapBox) => { start: number; extent: number },
 ): Candidate[] {
   const candidates: Candidate[] = []
-
-  // The moving box offers three lines of its own: leading edge, centre and
-  // trailing edge. Matching centre-to-centre and edge-to-edge is what makes
-  // differently-sized boxes line up the way they look aligned.
-  const movingOffsets = [0, extent / 2, extent]
 
   for (const other of others) {
     if (!finiteBox(other)) continue
@@ -147,15 +142,18 @@ export function snapBox(
   if (!finiteBox(moving)) return noSnap
   if (!Number.isFinite(options.thresholdCanvasPx) || options.thresholdCanvasPx < 0) return noSnap
 
+  // A moving box offers three lines of its own — leading edge, centre and
+  // trailing edge. Matching centre-to-centre and edge-to-edge is what makes
+  // differently-sized boxes line up the way they look aligned.
   const xWinner = best(
-    candidatesForAxis(moving.x, moving.width, others, options, (box) => ({
+    candidatesForAxis(moving.x, [0, moving.width / 2, moving.width], others, options, (box) => ({
       start: box.x,
       extent: box.width,
     })),
     options.thresholdCanvasPx,
   )
   const yWinner = best(
-    candidatesForAxis(moving.y, moving.height, others, options, (box) => ({
+    candidatesForAxis(moving.y, [0, moving.height / 2, moving.height], others, options, (box) => ({
       start: box.y,
       extent: box.height,
     })),
@@ -168,4 +166,36 @@ export function snapBox(
     guidesX: xWinner?.guide === undefined ? [] : [xWinner.guide],
     guidesY: yWinner?.guide === undefined ? [] : [yWinner.guide],
   }
+}
+
+/**
+ * Snaps ONE dragged edge, for a resize.
+ *
+ * A resize moves an edge, not a whole box, so the edge is the only line the
+ * gesture offers — passing the move candidates here would let the box's own
+ * centre or far edge pull the handle, which reads as the handle fighting the
+ * pointer. That difference is why this is a separate entry point rather than
+ * `snapBox` with a zero-size box.
+ *
+ * The candidates it can land on are the same as for a move (a neighbour's
+ * leading edge, centre, or trailing edge, plus the grid), so a resized edge
+ * lines up with content the same way a moved one does.
+ */
+export function snapEdge(
+  position: number,
+  others: readonly SnapBox[],
+  options: SnapOptions,
+  axis: 'x' | 'y',
+): { position: number; guide: number | undefined } {
+  const unchanged = { position, guide: undefined }
+  if (!Number.isFinite(position)) return unchanged
+  if (!Number.isFinite(options.thresholdCanvasPx) || options.thresholdCanvasPx < 0) return unchanged
+
+  const winner = best(
+    candidatesForAxis(position, [0], others, options, (box) =>
+      axis === 'x' ? { start: box.x, extent: box.width } : { start: box.y, extent: box.height },
+    ),
+    options.thresholdCanvasPx,
+  )
+  return winner === undefined ? unchanged : { position: winner.origin, guide: winner.guide }
 }
