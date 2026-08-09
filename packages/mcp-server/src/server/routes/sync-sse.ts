@@ -196,7 +196,21 @@ export function createSyncSseRouter() {
     }
     // One delete takes the readiness with it.
     for (const key of parsed.data.unsubscribe ?? []) stream.docs.delete(key)
-    return c.json({ ok: true, docs: [...stream.docs.keys()].sort() })
+    const docs = [...stream.docs.keys()].sort()
+    // A stream that reaches zero documents is the state worth seeing: the
+    // client stops reconnecting there, so a gap between "the last tab
+    // unsubscribed" and "a tab subscribed again" is a window with no stream
+    // at all. Without this the two are indistinguishable from the outside.
+    log.info(
+      {
+        streamId: parsed.data.streamId,
+        subscribed: parsed.data.subscribe ?? [],
+        unsubscribed: parsed.data.unsubscribe ?? [],
+        docCount: docs.length,
+      },
+      'sync subscriptions changed',
+    )
+    return c.json({ ok: true, docs })
   })
 
   // The client->server half of the sync protocol. A WebSocket carries these as
