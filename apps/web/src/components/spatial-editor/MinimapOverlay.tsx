@@ -16,9 +16,16 @@ import { fitMinimap, type MinimapBox, projectBox, unprojectPoint } from './minim
 
 const PADDING_PX = 6
 
+/** A node in the overview: its box plus an already-resolved CSS colour. */
+export type MinimapNode = MinimapBox & { readonly color?: string }
+
 export interface MinimapOverlayProps {
-  /** Every node's canvas-space box. */
-  readonly boxes: readonly MinimapBox[]
+  /**
+   * Every node's canvas-space box. Colour is resolved by the caller, not
+   * here: this component knows nothing about palettes or theme mode, the
+   * same way the fitting geometry knows nothing about the DOM.
+   */
+  readonly boxes: readonly MinimapNode[]
   /** The canvas-space rect currently visible in the editor. */
   readonly viewportRect: MinimapBox
   readonly width: number
@@ -71,8 +78,12 @@ export function MinimapOverlay({
             // Boxes arrive in document order and carry no id of their own
             // here; position disambiguates within one render.
             key={`${index}:${box.x},${box.y}`}
-            className="absolute bg-muted-foreground/40"
+            // An authored colour is the fastest way to find a node in an
+            // overview too small to read labels in; an unstyled node keeps
+            // the muted default rather than inventing an accent for it.
+            className={box.color === undefined ? 'absolute bg-muted-foreground/40' : 'absolute'}
             style={{
+              background: box.color,
               left: projected.x,
               top: projected.y,
               // A node thinner than a pixel at this scale still has to be

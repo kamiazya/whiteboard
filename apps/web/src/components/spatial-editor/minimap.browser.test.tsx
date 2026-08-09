@@ -150,3 +150,36 @@ it('tracks a container resize that the window never sees', async () => {
     expect(markerWidth()).not.toBe(before)
   })
 })
+
+// An overview too small to read labels in needs colour to be findable at
+// all, and it has to be the SAME accent the scene uses or it points at the
+// wrong node.
+it('paints an authored preset colour, and leaves an unstyled node muted', () => {
+  const coloured: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'A', color: '1' },
+      { id: 'b', type: 'text', x: 400, y: 400, width: 100, height: 60, text: 'B' },
+      {
+        id: 'c',
+        type: 'text',
+        x: 800,
+        y: 800,
+        width: 100,
+        height: 60,
+        text: 'C',
+        color: '#123456',
+      },
+    ],
+    edges: [],
+  }
+  const { container } = render(<Host canvas0={coloured} />)
+  const blocks = [...minimapOf(container)!.querySelectorAll('div')].filter(
+    (el) => el.getAttribute('data-testid') !== 'minimap-viewport',
+  )
+
+  // Preset '1' is the light palette's red accent; the hex passes through;
+  // the unstyled node paints nothing of its own.
+  expect(blocks[0]?.style.background).toBe('rgb(220, 38, 38)')
+  expect(blocks[1]?.style.background).toBe('')
+  expect(blocks[2]?.style.background).toBe('rgb(18, 52, 86)')
+})

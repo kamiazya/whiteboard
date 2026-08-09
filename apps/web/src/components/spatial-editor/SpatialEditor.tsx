@@ -1921,6 +1921,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return () => observer.disconnect()
     }, [])
 
+    /**
+     * Node boxes for the overview, with each authored colour resolved to the
+     * accent the scene already uses for it. A preset key resolves through the
+     * current mode's palette; a hex passes through; an unstyled node carries
+     * no colour and the overview falls back to its muted default.
+     */
+    const minimapNodes = useMemo(() => {
+      const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+      const colorOf = (id: string): string | undefined => {
+        const color = canvas.nodes.find((n) => n.id === id)?.color
+        if (color === undefined) return undefined
+        if (color.startsWith('#')) return color
+        return palette.presets[color as SpatialPresetKey]?.stroke
+      }
+      return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
+    }, [boxes, canvas, theme])
+
     /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
     const zoomAtViewportCenter = (factor: number) => {
       setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
@@ -2331,7 +2348,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           an overview of nothing is chrome with no job. */}
         {boxes.length > 0 && rootSize.width > 0 && (
           <MinimapOverlay
-            boxes={boxes.map((entry) => entry.box)}
+            boxes={minimapNodes}
             viewportRect={{
               x: viewport.x,
               y: viewport.y,
