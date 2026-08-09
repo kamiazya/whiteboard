@@ -19,50 +19,13 @@ import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from './canvas-backend-contract.js'
+import type { SseStreamSource } from './sse-stream-hub.js'
+import { SseStreamHub } from './sse-stream-hub.js'
 import { uploadFiles } from './upload-files.js'
 import { parseServerTextMessage } from './ws-text-message.js'
 
 export interface SseTransport {
   fetch: typeof globalThis.fetch
-}
-
-function fromBase64(value: string): Uint8Array {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-interface SseEvent {
-  event: string
-  data: string
-}
-
-/**
- * Split a raw SSE byte stream into events. Kept separate from the backend so a
- * frame arriving split across chunk boundaries — the normal case on a real
- * network — is a testable concern rather than an emergent one.
- */
-export function createSseFrameParser(): (chunk: string) => SseEvent[] {
-  let buffer = ''
-  return (chunk: string) => {
-    buffer += chunk
-    const events: SseEvent[] = []
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-    for (const part of parts) {
-      let event = 'message'
-      const dataLines: string[] = []
-      for (const line of part.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim()
-        // Per the SSE grammar a single event may carry several data: lines,
-        // which concatenate with newlines.
-        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
-      }
-      if (dataLines.length > 0) events.push({ event, data: dataLines.join('\n') })
-    }
-    return events
-  }
 }
 
 export class SseBackend implements CanvasBackend {
@@ -73,8 +36,10 @@ export class SseBackend implements CanvasBackend {
   private readonly streamId: string
   private readonly docKey: string
 
+  private readonly streamSource: SseStreamSource | undefined
   private cancelled = false
-  private abort: AbortController | null = null
+  private ownedHub: SseStreamHub | null = null
+  private unsubscribe: (() => void) | null = null
 
   constructor(
     workspaceId: string,
@@ -82,11 +47,13 @@ export class SseBackend implements CanvasBackend {
     baseUrl: string,
     transport?: SseTransport,
     streamId?: string,
+    streamSource?: SseStreamSource,
   ) {
     this.workspaceId = workspaceId
     this.slug = slug
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.transport = transport
+    this.streamSource = streamSource
     this.docKey = `${workspaceId}/${slug}`
     this.streamId =
       streamId ??
@@ -126,71 +93,25 @@ export class SseBackend implements CanvasBackend {
     }
     if (this.cancelled) return
 
-    const abort = new AbortController()
-    this.abort = abort
-    let streamRes: Response
-    try {
-      streamRes = await this.fetchFn(
-        this.url(`/api/sync/stream?streamId=${encodeURIComponent(this.streamId)}`),
-        { signal: abort.signal },
-      )
-    } catch {
-      if (!this.cancelled) handlers.onAuthError?.()
-      return
-    }
-    if (this.cancelled) return
-    if (!streamRes.ok || !streamRes.body) {
-      handlers.onAuthError?.()
-      return
-    }
-
-    // Subscribe only once the stream exists — the daemon answers 404 for a
-    // stream it does not know, so subscribing first would race the open.
-    await this.post('/api/sync/subscribe', { streamId: this.streamId, subscribe: [this.docKey] })
+    // The stream itself belongs to the hub, which addresses frames per
+    // document and refcounts subscriptions. An injected source is the
+    // SharedWorker-backed one, so the stream is shared across tabs rather than
+    // opened once per backend.
+    const source =
+      this.streamSource ??
+      new SseStreamHub({ fetch: this.fetchFn, baseUrl: this.baseUrl, streamId: this.streamId })
+    this.ownedHub = this.streamSource ? null : (source as SseStreamHub)
+    this.unsubscribe = source.subscribe(this.docKey, {
+      onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
+      onMessage: (raw) => this.dispatchText(raw, handlers),
+    })
     handlers.onConnected()
-
-    const reader = streamRes.body.getReader()
-    const decoder = new TextDecoder()
-    const parse = createSseFrameParser()
-    try {
-      while (!this.cancelled) {
-        const { value, done } = await reader.read()
-        if (done) break
-        for (const evt of parse(decoder.decode(value, { stream: true }))) {
-          this.dispatch(evt, handlers)
-        }
-      }
-    } catch {
-      // An aborted read is the normal disconnect path.
-    }
   }
 
-  private dispatch(evt: SseEvent, handlers: CanvasBackendHandlers): void {
-    if (evt.event === 'update') {
-      let payload: { doc?: unknown; update?: unknown }
-      try {
-        payload = JSON.parse(evt.data)
-      } catch {
-        return
-      }
-      // One stream serves many documents, so a frame for another canvas is
-      // expected traffic, not an error.
-      if (payload.doc !== this.docKey || typeof payload.update !== 'string') return
-      handlers.onRemoteUpdate(fromBase64(payload.update))
-      return
-    }
-    // A text frame is addressed too: one stream serves many canvases, so an
-    // unaddressed message would be applied to whichever one is listening.
-    let envelope: { doc?: unknown; raw?: unknown }
-    try {
-      envelope = JSON.parse(evt.data)
-    } catch {
-      return
-    }
-    if (envelope.doc !== this.docKey || typeof envelope.raw !== 'string') return
-    // The payload itself reuses the WebSocket parser so both transports agree
-    // on the shape and on what an unknown message does.
-    const message = parseServerTextMessage(envelope.raw)
+  private dispatchText(raw: string, handlers: CanvasBackendHandlers): void {
+    // The payload reuses the WebSocket parser so both transports agree on the
+    // shape and on what an unknown message does.
+    const message = parseServerTextMessage(raw)
     if (message === null) return
     if (message.type === 'version_created') handlers.onVersionCreated(message.version)
     else if (message.type === 'restore_started') handlers.onRestoreStarted(message)
@@ -215,8 +136,12 @@ export class SseBackend implements CanvasBackend {
 
   disconnect(): void {
     this.cancelled = true
-    this.abort?.abort()
-    this.abort = null
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    // Only a hub this backend created is closed here — a shared one outlives
+    // any single canvas and is owned by whoever injected it.
+    this.ownedHub?.close()
+    this.ownedHub = null
   }
 
   pushLocalUpdate(bytes: Uint8Array): void {

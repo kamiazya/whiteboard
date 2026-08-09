@@ -11,7 +11,43 @@
  * verbatim inside a SharedWorker, which is what makes the sharing span tabs
  * rather than just the canvases within one tab.
  */
-import { createSseFrameParser } from './sse-backend.js'
+interface SseEvent {
+  event: string
+  data: string
+}
+
+/**
+ * Split a raw SSE byte stream into events. Separate from the reader loop so a
+ * frame arriving split across chunk boundaries — the normal case on a real
+ * network — is a testable concern rather than an emergent one.
+ */
+function createSseFrameParser(): (chunk: string) => SseEvent[] {
+  let buffer = ''
+  return (chunk: string) => {
+    buffer += chunk
+    const events: SseEvent[] = []
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+    for (const part of parts) {
+      let event = 'message'
+      const dataLines: string[] = []
+      for (const line of part.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        // Per the SSE grammar a single event may carry several data: lines,
+        // which concatenate with newlines.
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+      }
+      if (dataLines.length > 0) events.push({ event, data: dataLines.join('\n') })
+    }
+    return events
+  }
+}
+
+/** A source of per-document sync frames. Implemented by SseStreamHub directly,
+ *  and by a SharedWorker-backed proxy so the sharing spans tabs. */
+export interface SseStreamSource {
+  subscribe(doc: string, listener: DocListener): () => void
+}
 
 export interface SseStreamHubOptions {
   fetch: typeof globalThis.fetch
@@ -32,7 +68,7 @@ function fromBase64(value: string): Uint8Array {
   return bytes
 }
 
-export class SseStreamHub {
+export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
   private readonly listeners = new Map<string, Set<DocListener>>()
   private abort: AbortController | null = null
