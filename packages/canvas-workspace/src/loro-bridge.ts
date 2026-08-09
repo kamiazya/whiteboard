@@ -90,8 +90,16 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
     edgesMap.set(edge.id, edgeToFields(edge))
   }
 
+  // A resync is the second node-removal path, alongside deleteSpatialNode —
+  // so it owes the same lock cascade. An entry left behind for a node the
+  // canvas no longer has would be inherited by a later node reminted onto
+  // that id.
+  const locksMap = doc.getMap(NODE_LOCKS_KEY)
+  const lockedIds = new Set<string>(locksMap.keys())
   for (const id of existingNodeIds) {
-    if (!incomingNodeIds.has(id)) nodesMap.delete(id)
+    if (incomingNodeIds.has(id)) continue
+    nodesMap.delete(id)
+    if (lockedIds.has(id)) locksMap.delete(id)
   }
   for (const id of existingEdgeIds) {
     if (!incomingEdgeIds.has(id)) edgesMap.delete(id)

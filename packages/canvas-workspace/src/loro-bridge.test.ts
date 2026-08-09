@@ -726,6 +726,18 @@ describe('node lock sidecar', () => {
     expect(readNodeLocks(doc)).toEqual(new Set([TEXT_NODE.id]))
   })
 
+  test('a resync that OMITS a locked node takes its lock entry with it', () => {
+    const doc = seeded()
+    setNodeLock(doc, TEXT_NODE.id, true)
+    setNodeLock(doc, FILE_NODE.id, true)
+
+    // The resync is the other node-removal path (the editor's fallback
+    // commit). Leaving the entry behind would let a reminted id inherit a
+    // stranger's lock — the same hazard deleteSpatialNode guards against.
+    writeSpatialCanvas(doc, { nodes: [FILE_NODE], edges: [] })
+    expect(readNodeLocks(doc)).toEqual(new Set([FILE_NODE.id]))
+  })
+
   test('deleting a node cascades its lock entry away (no orphan accumulation)', () => {
     const doc = seeded()
     setNodeLock(doc, TEXT_NODE.id, true)
