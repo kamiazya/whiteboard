@@ -278,3 +278,39 @@ describe('spatialCanvasSchema', () => {
     expect(missingTo.success).toBe(false)
   })
 })
+
+// Route SHAPE is a canvas-wide preference, not per-node decoration: an edge
+// routed one way and its neighbour another reads as a bug, not a choice.
+describe('canvas-level x-whiteboard', () => {
+  const canvasWith = (extension: unknown) => ({
+    nodes: [],
+    edges: [],
+    'x-whiteboard': extension,
+  })
+
+  it('accepts a routing style', () => {
+    const parsed = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { style: 'orthogonal' } }))
+    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+  })
+
+  it('is absent-by-default, so a strict JSON Canvas document parses unchanged', () => {
+    expect(spatialCanvasSchema.parse({ nodes: [], edges: [] })['x-whiteboard']).toBeUndefined()
+  })
+
+  // Same escape-hatch rule the node-level key follows: a payload this version
+  // cannot read costs the setting, never the document.
+  it('silently drops an unreadable payload rather than failing the canvas', () => {
+    const parsed = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { style: 'spiral' } }))
+    expect(parsed['x-whiteboard']).toBeUndefined()
+    expect(parsed.nodes).toEqual([])
+  })
+
+  it('rejects nothing about the canvas itself when the extension is unreadable', () => {
+    const parsed = spatialCanvasSchema.parse({
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+      edges: [],
+      'x-whiteboard': 'not an object',
+    })
+    expect(parsed.nodes).toHaveLength(1)
+  })
+})
