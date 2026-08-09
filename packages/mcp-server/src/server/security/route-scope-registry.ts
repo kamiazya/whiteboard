@@ -76,6 +76,15 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
   }
 
+  // SSE sync transport. Both routes are canvas:read even though subscribe is
+  // a POST: it mutates only which documents this stream is told about, and
+  // receiving a document's updates is exactly the access canvas:read already
+  // grants. Scoping it to canvas:write by the method rule would leave a
+  // read-only grant able to fetch a canvas but never observe it change.
+  if (path.startsWith('/api/sync/')) {
+    return { kind: 'scoped', scopes: ['canvas:read'] }
+  }
+
   // Version history, thumbnails, restore, compact — version-control
   // operations scoped to a single canvas.
   if (

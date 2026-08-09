@@ -45,6 +45,7 @@ import {
 import { createPairingRouter } from './routes/pairing.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
+import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
 import { broadcastLoroUpdate, sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
@@ -421,6 +422,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
   app.route('/', createExportRouter())
   app.route('/', createViewportRouter())
+  app.route('/', createSyncSseRouter())
   app.route('/', createDebugRouter({ token }))
   app.route('/', createStatusRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
