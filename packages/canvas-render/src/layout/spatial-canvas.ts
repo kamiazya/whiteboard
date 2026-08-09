@@ -407,7 +407,11 @@ function composeEdge(
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
-  const routed = routeEdge(canvas.nodes, edge)
+  //
+  // The routing style rides on the canvas, which this function already has,
+  // so honouring it costs no new plumbing through the consumers: editor,
+  // export and viewer all pass the canvas and get the same routes from it.
+  const routed = routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style)
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
 }
