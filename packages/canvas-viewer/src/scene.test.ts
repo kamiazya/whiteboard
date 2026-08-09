@@ -32,7 +32,7 @@ describe('parseViewerScene', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('accepts an x-whiteboard freehand/shape node', () => {
+  it('accepts a node carrying the x-whiteboard embed extension', () => {
     const canvas = {
       nodes: [
         {

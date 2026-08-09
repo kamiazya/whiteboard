@@ -54,7 +54,7 @@ describe('spatialNodeSchema (text)', () => {
     ).toBe(false)
   })
 
-  it('accepts zero width/height (degenerate freehand bounding boxes) and negative x/y', () => {
+  it('accepts zero width/height (degenerate boxes) and negative x/y', () => {
     expect(
       spatialNodeSchema.safeParse({
         ...baseGeometry,

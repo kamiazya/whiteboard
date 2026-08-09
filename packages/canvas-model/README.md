@@ -14,7 +14,7 @@ rendering or serialization. Private; not published to npm.
   unrecognized root frontmatter keys. The schema layer enforces that a key
   can never legally live in more than one of these buckets.
 - `spatial.ts` — JSON Canvas 1.0-aligned node/edge schemas plus the
-  `x-whiteboard` namespaced extension (freehand strokes, shapes, embeds).
+  `x-whiteboard` namespaced extension (canvas embeds only).
 - `markdown.ts` — the markdown-format canvas envelope (plain-text body).
 - `workspace-tree.ts` — the payload carried by each node of the workspace's
   Loro movable-tree, plus workspace-level metadata.

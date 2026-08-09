@@ -11,14 +11,15 @@ export const canvasColorSchema = z.union([
 export type CanvasColor = z.infer<typeof canvasColorSchema>
 
 /**
- * `x-whiteboard` is a namespaced extension carried on spatial nodes to
- * preserve the original Excalidraw-derived attributes that JSON Canvas 1.0
- * has no room for. Its absence is always valid — a strict JSON Canvas 1.0
+ * `x-whiteboard` is a namespaced extension carried on spatial nodes for the
+ * one thing JSON Canvas 1.0 has no room for: a node that renders another
+ * canvas inline. Its absence is always valid — a strict JSON Canvas 1.0
  * document parses unchanged.
  *
- * Arrow-decoration attributes (they attach to edges, not nodes, and their
- * strict-export degrade rule is undecided) are deliberately out of scope
- * here and deferred to the slice that builds the strict exporter.
+ * The extension is deliberately NOT a general escape hatch for new visual
+ * primitives. A capability JSON Canvas cannot express is expressed through
+ * an existing node type (a diagram becomes a `file` node pointing at an
+ * image) rather than through a variant only this project can read.
  */
 export const xWhiteboardSchema = z.object({
   kind: z.literal('embed'),
@@ -30,8 +31,9 @@ export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
 // JSON Canvas 1.0 geometry is specified in integer pixels.
 const positionFieldSchema = z.number().int()
-// Sizes reject negatives. Zero stays valid: a straight-line freehand stroke carried
-// via x-whiteboard legitimately has a zero-width or zero-height bounding box.
+// Sizes reject negatives. Zero stays valid: JSON Canvas 1.0 does not forbid a
+// degenerate box, and a node collapsed on one axis is a layout concern, not a
+// parse error.
 const sizeFieldSchema = z.number().int().nonnegative()
 
 const sharedNodeFieldsSchema = z.object({

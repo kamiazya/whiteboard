@@ -25,7 +25,8 @@ paths:
 - Facet buckets are disjoint by construction: extension facets live only under the reserved `facets` key (`{domain}/{version}` keys; malformed keys are rejected, not dropped). Unknown ROOT-level frontmatter keys belong to `facetsRaw`, never to extension facets.
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: canvas ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
-- JSON Canvas geometry is integer; extension (`x-whiteboard`) coordinates may be non-integer (outside the spec's rule, documented in-source).
+- JSON Canvas geometry is integer, with no extension carve-out: `x-whiteboard` carries no geometry of its own.
+- `x-whiteboard` is the canvas-embed extension only, and is the one documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a node written by another version still parses. The reject-not-drop contract governs what others must honour; this key is our own escape hatch, and the node survives either way. Do NOT grow it into a general home for visual primitives JSON Canvas lacks (the `freehand`/`shape` variants were removed for exactly that reason) — express those through an existing node type instead.
 
 ## Tests
 
