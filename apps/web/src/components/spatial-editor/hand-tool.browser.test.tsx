@@ -121,7 +121,7 @@ it('hand mode swaps the leading history cluster for zoom controls; select mode s
 
   // Hand (default): view-only mode — zoom controls, no host history.
   expect(container.querySelector('[data-testid="host-leading"]')).toBeNull()
-  for (const id of ['zoom-out-button', 'zoom-reset-button', 'zoom-in-button', 'zoom-center-button'])
+  for (const id of ['zoom-out-button', 'zoom-reset-button', 'zoom-in-button', 'zoom-fit-button'])
     expect(container.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
 
   fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
@@ -129,7 +129,7 @@ it('hand mode swaps the leading history cluster for zoom controls; select mode s
   expect(container.querySelector('[data-testid="zoom-in-button"]')).toBeNull()
 })
 
-it('zoom controls: in/out change the scale, reset returns to 100%, center brings content to the middle', () => {
+it('zoom controls: in/out change the scale, reset returns to 100%, zoom-to-fit frames content in the middle', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   const vt = () =>
@@ -149,7 +149,7 @@ it('zoom controls: in/out change the scale, reset returns to 100%, center brings
   expect(zoomOf(vt())).toBeLessThan(1)
 
   // Center: the lone node's box (100,100 200x80) centers on the 800x600 root.
-  fireEvent.click(container.querySelector('[data-testid="zoom-center-button"]') as HTMLElement)
+  fireEvent.click(container.querySelector('[data-testid="zoom-fit-button"]') as HTMLElement)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
   const svgRect = (
