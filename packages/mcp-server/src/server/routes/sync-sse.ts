@@ -108,23 +108,37 @@ export function sseBroadcastUpdate(workspaceId: string, slug: string, update: Ui
   }
 }
 
-/** Fan a server text message (version_created, head_changed, …) out to SSE subscribers. */
+/**
+ * Fan a server text message (version_created, head_changed, …) out to SSE
+ * subscribers, wrapped with the document it belongs to.
+ *
+ * A WebSocket is per-canvas, so its text frames need no addressing. One SSE
+ * stream serves many canvases, so an unaddressed frame would be applied to
+ * whichever canvas happened to be listening — a head_changed for one canvas
+ * landing on another.
+ */
 export function sseBroadcastText(workspaceId: string, slug: string, raw: string): void {
   const key = docKey(workspaceId, slug)
+  const frame = JSON.stringify({ doc: key, raw })
   for (const stream of streams.values()) {
     if (!stream.docs.has(key)) continue
-    stream.send('message', raw)
+    stream.send('message', frame)
   }
 }
 
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, slug: string, raw: string): void {
   const key = docKey(workspaceId, slug)
+  const frame = JSON.stringify({ doc: key, raw })
   for (const stream of streams.values()) {
     if (!stream.ready.has(key)) continue
-    stream.send('message', raw)
+    stream.send('message', frame)
   }
 }
+
+export const syncMessageEventSchema = z.object({ doc: z.string().min(1), raw: z.string() }).strict()
+
+export type SyncMessageEvent = z.infer<typeof syncMessageEventSchema>
 
 // Test-only: the module-level registry outlives a single app instance, so a
 // test that opens a stream would otherwise leak a subscriber into the next one.
@@ -200,7 +214,7 @@ export function createSyncSseRouter() {
       // Replay the latest viewport request so a stream that connected after
       // the request was issued still inherits the same fit/scroll/zoom intent.
       const cached = getCachedViewportRequest(doc)
-      if (cached !== undefined) stream.send('message', cached)
+      if (cached !== undefined) stream.send('message', JSON.stringify({ doc, raw: cached }))
       return c.json({ ok: true })
     }
     if (message.type === 'viewport_response') {

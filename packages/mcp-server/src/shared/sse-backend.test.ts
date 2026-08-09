@@ -134,6 +134,37 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 
+  it('ignores a text message addressed to a different document', async () => {
+    // The misrouting this addressing exists to prevent: a head_changed for a
+    // sibling canvas sharing the stream must not be applied here.
+    const fake = createFakeTransport([])
+    const heads: unknown[] = []
+    const handlers = {
+      onSnapshot: () => {},
+      onRemoteUpdate: () => {},
+      onConnected: () => {},
+      onVersionCreated: () => {},
+      onRestoreStarted: () => {},
+      onRestoreComplete: () => {},
+      onHeadChanged: (h: unknown) => heads.push(h),
+      onViewportRequest: () => {},
+      onExportRequest: () => {},
+    } as never
+    const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
+
+    backend.connect(handlers)
+    await flush()
+    const headChanged = JSON.stringify({ type: 'head_changed', head: 'other-head' })
+    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/other', raw: headChanged })))
+    await flush()
+    expect(heads).toEqual([])
+
+    // …while the same message for this document is applied.
+    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/canvas-a', raw: headChanged })))
+    await vi.waitFor(() => expect(heads.length).toBe(1))
+    backend.disconnect()
+  })
+
   it('sends a local update to the existing canvas update route', async () => {
     const fake = createFakeTransport([])
     const { handlers } = createHandlers()

@@ -9,7 +9,12 @@
 // would only add base64 inflation. This stream carries incremental updates.
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
-import { broadcastLoroUpdate, sendViewportRequest, setResolveViewportFn } from './ws.js'
+import {
+  broadcastLoroUpdate,
+  sendHeadChanged,
+  sendViewportRequest,
+  setResolveViewportFn,
+} from './ws.js'
 
 const TOKEN = 'sse-sync-test-token'
 
@@ -174,6 +179,33 @@ describe('SSE sync transport', () => {
 
     expect(res.status).toBe(200)
     expect(resolved).toContain('req-3')
+  })
+
+  // A WebSocket is per-canvas so its text frames need no addressing. One SSE
+  // stream serves many canvases, so an unaddressed frame would be applied to
+  // whichever canvas happened to be listening.
+  it('addresses a text message to the document it belongs to', async () => {
+    const app = createApp(createRuntimeOptions())
+    const res = await app.request('/api/sync/stream?streamId=txt1', { headers: auth })
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: 'txt1', subscribe: ['ws-1/a', 'ws-1/b'] }),
+    })
+
+    sendHeadChanged('ws-1', 'b', 'head-xyz')
+
+    const frames = await readEvents(res, 1)
+    const frame = frames.find((f) => f.includes('head_changed'))
+    expect(frame).toBeDefined()
+    const data = JSON.parse(
+      frame
+        ?.split('\n')
+        .find((l) => l.startsWith('data:'))
+        ?.slice(5) ?? '{}',
+    )
+    expect(data.doc).toBe('ws-1/b')
+    expect(JSON.parse(data.raw).head).toBe('head-xyz')
   })
 
   it('rejects a subscribe for an unknown stream instead of silently succeeding', async () => {

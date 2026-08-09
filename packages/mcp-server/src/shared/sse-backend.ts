@@ -179,9 +179,18 @@ export class SseBackend implements CanvasBackend {
       handlers.onRemoteUpdate(fromBase64(payload.update))
       return
     }
-    // Text messages reuse the WebSocket parser so both transports agree on the
-    // shape and on what an unknown message does.
-    const message = parseServerTextMessage(evt.data)
+    // A text frame is addressed too: one stream serves many canvases, so an
+    // unaddressed message would be applied to whichever one is listening.
+    let envelope: { doc?: unknown; raw?: unknown }
+    try {
+      envelope = JSON.parse(evt.data)
+    } catch {
+      return
+    }
+    if (envelope.doc !== this.docKey || typeof envelope.raw !== 'string') return
+    // The payload itself reuses the WebSocket parser so both transports agree
+    // on the shape and on what an unknown message does.
+    const message = parseServerTextMessage(envelope.raw)
     if (message === null) return
     if (message.type === 'version_created') handlers.onVersionCreated(message.version)
     else if (message.type === 'restore_started') handlers.onRestoreStarted(message)
