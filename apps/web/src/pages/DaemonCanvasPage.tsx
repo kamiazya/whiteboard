@@ -85,12 +85,21 @@ export function DaemonCanvasPage({
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
   // web app paired to a loopback daemon must not open the socket against its
   // own page origin.
-  const resolvedCreateBackend = useMemo(
-    () =>
-      createBackend ??
-      ((workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend =>
-        new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })),
-    [createBackend, daemonBaseUrl],
+  // The injected factory is held in a ref rather than carried in the backend
+  // memo's dependencies: it customises HOW a connection is built, it does not
+  // say WHICH connection this is. A parent writing the natural
+  // `createBackend={(w, s) => …}` hands this page a new function identity on
+  // every one of its own renders, and anything the backend memo depends on
+  // becomes the session's lifetime — so that alone would tear down the
+  // socket, re-hydrate, and drop the undo history for a canvas the user
+  // never left. Only values that define the connection belong in those deps.
+  const createBackendRef = useRef(createBackend)
+  createBackendRef.current = createBackend
+  const resolvedCreateBackend = useCallback(
+    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend =>
+      createBackendRef.current?.(workspaceId, slug, daemonFetch) ??
+      new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }),
+    [daemonBaseUrl],
   )
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })
