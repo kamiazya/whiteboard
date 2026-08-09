@@ -62,7 +62,17 @@ if (process.env.FAKE_PNPM_NEVER_BIND === '1') {
   await new Promise(() => {})
 }
 
-await startFakeMcpResponder({ port, token })
+try {
+  await startFakeMcpResponder({ port, token })
+} catch (err) {
+  // Without this the rejection is unhandled: the process dies with exit 1
+  // and NOTHING on stderr, so the hook can only report "spawned process
+  // exited with code 1" and the log it points at is empty. Say why.
+  process.stderr.write(
+    `[fake-pnpm-shim] failed to bind ${port}: ${err?.code ?? ''} ${err?.message ?? err}\n`,
+  )
+  process.exit(1)
+}
 
 const markerJson = process.env.FAKE_PNPM_MARKER_JSON
 const dataDir = process.env.WHITEBOARD_DATA_DIR
