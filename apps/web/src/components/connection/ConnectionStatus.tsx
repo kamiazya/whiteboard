@@ -9,10 +9,10 @@
  *                `children` hosts page-supplied extras (daemon detection,
  *                capability hint) inside the popover.
  * - `reconnecting` — live sync is not running: the transport has not come up
- *                yet, dropped, or failed. Deliberately makes NO promise about
- *                edits made meanwhile — DaemonBackend.pushLocalUpdate drops
- *                bytes while the socket is not OPEN, so claiming they are sent
- *                on recovery would be false.
+ *                yet, dropped, or failed. Edits made meanwhile are not lost:
+ *                the session re-sends the whole document when the transport
+ *                returns, which is what makes that claim true — a backend
+ *                whose socket is closed drops the delta it was handed.
  * - `sync-off` — daemon-backed page whose session was rejected. The chip
  *                turns attention-colored and the popover carries the two
  *                ways forward (re-pair / continue browser-local). A polite
@@ -112,8 +112,8 @@ export function ConnectionStatus({
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
-              This canvas is not receiving changes from your local daemon right now, and edits made
-              here may not reach it. Reload the page if it does not recover.
+              This canvas is not receiving changes from your local daemon right now. Your edits are
+              kept and sent when the connection returns. Reload the page if it does not recover.
             </p>
           </div>
         )}

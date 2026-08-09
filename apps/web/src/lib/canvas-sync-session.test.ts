@@ -157,6 +157,35 @@ describe('createCanvasSyncSession', () => {
     expect(sendReadySpy).toHaveBeenCalledTimes(1)
   })
 
+  it('re-sends the whole document when the transport comes back', async () => {
+    // A backend that drops a local update while its transport is down (the
+    // WebSocket one returns early unless the socket is OPEN) loses it for
+    // good: every push carries only that commit's delta, so no later push
+    // replays it. Re-sending full state on reconnect is what makes an edit
+    // made during an outage survive, and CRDT import makes the resend
+    // idempotent for the server.
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+    backend._ctrl.pushLocalUpdateCalls.length = 0
+
+    backend._ctrl.handlers!.onConnected()
+
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
+    // The resend must carry the edit, not merely be non-empty.
+    const rebuilt = new LoroDoc()
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) rebuilt.import(bytes)
+    expect(readSpatialCanvas(rebuilt).nodes.find((n) => n.id === 'n-a')).toMatchObject({
+      x: 10,
+      y: 20,
+    })
+  })
+
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())

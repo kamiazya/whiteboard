@@ -486,6 +486,17 @@ export function createCanvasSyncSession(
         if (isStale()) return
         deps.onStatusChange('connected')
         backend.sendClientReady()
+        // Re-send everything this document holds. A backend whose transport
+        // was down dropped the deltas made meanwhile — each push carries only
+        // one commit's ops, so no later push replays them — and the server
+        // would never learn about those edits. Loro's import is idempotent,
+        // so a server that already has them merges a no-op.
+        //
+        // Full state rather than a delta since the last acknowledged version:
+        // nothing acknowledges a push today, so there is no such version to
+        // send from, and inventing one that is wrong would lose edits
+        // silently again.
+        if (doc !== null) void backend.pushLocalUpdate(doc.export({ mode: 'update' }))
       },
 
       onDisconnected() {
