@@ -3271,9 +3271,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               ))}
             </svg>
           )}
-          {extraIds.size > 0 && (
+          {/* Which nodes are in the selection. The overlay above outlines the
+            region the handles act on, which says nothing about membership —
+            outlining only the extras left the primary looking untouched, so a
+            Select All over three nodes read as though it had skipped one. */}
+          {isMultiSelection && (
             <svg
-              data-testid="extra-selection-outlines"
+              data-testid="member-outlines"
               aria-hidden="true"
               style={{
                 position: 'absolute',
@@ -3283,24 +3287,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 pointerEvents: 'none',
               }}
             >
-              {[...extraIds].flatMap((id) => {
-                const b = boxes.find((entry) => entry.id === id)
-                return b === undefined ? (
-                  []
-                ) : (
-                  <rect
-                    key={id}
-                    x={b.box.x}
-                    y={b.box.y}
-                    width={b.box.width}
-                    height={b.box.height}
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth={1.5 / viewport.zoom}
-                    opacity={0.7}
-                  />
-                )
-              })}
+              {selectionMembers.map(({ id, box }) => (
+                <rect
+                  key={id}
+                  x={box.x}
+                  y={box.y}
+                  width={box.width}
+                  height={box.height}
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth={1.5 / viewport.zoom}
+                  opacity={0.7}
+                />
+              ))}
             </svg>
           )}
           {selection !== undefined && selectionBox !== undefined && (

@@ -163,12 +163,10 @@ it('Group selection from a multi-selected node frames the selection with padding
   fireEvent.pointerDown(root, { pointerId: 1, clientX: 60, clientY: 60, buttons: 1 })
   fireEvent.pointerMove(root, { pointerId: 1, clientX: 500, clientY: 400, buttons: 1 })
   fireEvent.pointerUp(root, { pointerId: 1, clientX: 500, clientY: 400 })
-  // Primary selection renders the overlay; the second node is an extra
-  // outline (same split marquee.browser.test.tsx asserts).
+  // The overlay outlines the region the handles act on; membership is marked
+  // per node, primary included (same split marquee.browser.test.tsx asserts).
   await vi.waitFor(() =>
-    expect(container.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length).toBe(
-      1,
-    ),
+    expect(container.querySelectorAll('[data-testid="member-outlines"] rect').length).toBe(2),
   )
 
   rightClick(root, 180, 150)
@@ -254,8 +252,8 @@ it('Group selection can frame a selection that includes a group frame', async ()
   fireEvent.pointerUp(root, { pointerId: 1, clientX: 600, clientY: 400 })
   await vi.waitFor(() =>
     expect(
-      container.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length,
-    ).toBeGreaterThanOrEqual(1),
+      container.querySelectorAll('[data-testid="member-outlines"] rect').length,
+    ).toBeGreaterThanOrEqual(2),
   )
 
   rightClick(root, 450, 150)

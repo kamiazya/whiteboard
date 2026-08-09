@@ -76,11 +76,9 @@ it('plain drag on empty space marquee-selects the intersecting nodes', async () 
 
   await vi.waitFor(() => {
     expect(container.querySelector('[data-testid="marquee-rect"]')).toBeNull()
-    // a is primary (selection overlay), b is an extra outline.
+    // One overlay for the region the handles act on, one outline per member.
     expect(container.querySelectorAll('[data-testid="selection-overlay"]').length).toBe(1)
-    expect(container.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length).toBe(
-      1,
-    )
+    expect(container.querySelectorAll('[data-testid="member-outlines"] rect').length).toBe(2)
   })
 })
 

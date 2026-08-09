@@ -66,14 +66,12 @@ it('shift-click adds members; outlines mark them; shift-click again removes', as
   await frame()
 
   await vi.waitFor(() => {
-    expect(container.querySelectorAll('[data-testid="extra-selection-outlines"] rect').length).toBe(
-      1,
-    )
+    expect(container.querySelectorAll('[data-testid="member-outlines"] rect').length).toBe(2)
   })
 
   press(root, 350, 130, { shift: true })
   await vi.waitFor(() => {
-    expect(container.querySelector('[data-testid="extra-selection-outlines"]')).toBeNull()
+    expect(container.querySelector('[data-testid="member-outlines"]')).toBeNull()
   })
 })
 
