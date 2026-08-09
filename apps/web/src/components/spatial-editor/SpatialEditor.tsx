@@ -1907,11 +1907,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       _handleBox: Box,
       e: React.KeyboardEvent,
     ) => {
-      if (selection === undefined || selectionBox === undefined) return
+      if (selection === undefined) return
+      // Geometry comes from `canvasRef`, not from the render snapshot the
+      // pointer path can afford to use. Key repeat delivers the next press
+      // before React has re-rendered, and a parent that applies `onChange`
+      // asynchronously lags further still — reading the stale snapshot would
+      // make every press compute the same coordinates, so holding the key
+      // would resize once and then appear to stick.
+      const members = [selection.id, ...extraIds].flatMap((id) => {
+        const node = canvasRef.current.nodes.find((candidate) => candidate.id === id)
+        return node === undefined
+          ? []
+          : [{ id, box: { x: node.x, y: node.y, width: node.width, height: node.height } }]
+      })
       // The resize anchor is the box the HANDLES surround, not the handle's
       // own tiny hit-box `_handleBox` describes — same reasoning as
       // onHandlePointerDown's `box: selectionBox` below.
-      const box = selectionBox
+      const box = unionBox(members.map((member) => member.box))
+      if (box === undefined) return
       const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
       const delta = ARROW_KEY_DELTA[e.key]
       if (delta === undefined) return
@@ -1927,28 +1940,29 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       // Same handles, same meaning as the pointer drag: a lone node takes the
       // dragged box verbatim, a selection has each member re-placed inside it.
-      const commands: readonly EditorCommand[] = isMultiSelection
-        ? selectionMembers.map((member) => {
-            const scaled = scaleBoxWithin(box, nextBox, member.box)
-            return {
-              kind: 'resize-node',
-              id: member.id,
-              x: scaled.x,
-              y: scaled.y,
-              width: scaled.width,
-              height: scaled.height,
-            }
-          })
-        : [
-            {
-              kind: 'resize-node',
-              id: selection.id,
-              x: nextBox.x,
-              y: nextBox.y,
-              width: nextBox.width,
-              height: nextBox.height,
-            },
-          ]
+      const commands: readonly EditorCommand[] =
+        members.length > 1
+          ? members.map((member) => {
+              const scaled = scaleBoxWithin(box, nextBox, member.box)
+              return {
+                kind: 'resize-node',
+                id: member.id,
+                x: scaled.x,
+                y: scaled.y,
+                width: scaled.width,
+                height: scaled.height,
+              }
+            })
+          : [
+              {
+                kind: 'resize-node',
+                id: selection.id,
+                x: nextBox.x,
+                y: nextBox.y,
+                width: nextBox.width,
+                height: nextBox.height,
+              },
+            ]
       // Threaded through a running canvas, not re-applied to `canvasRef`
       // each time: the ref does not advance within this tick, so a second
       // command built on it would discard the first.
@@ -1957,6 +1971,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         running = applyCommand(running, command)
         onChange(running, command)
       }
+      // Same write-back the gesture path does (see applyResult): without it
+      // the ref keeps describing the pre-keypress canvas until the parent's
+      // re-render lands.
+      canvasRef.current = running
     }
 
     const handleConnectKeyDown = () => {

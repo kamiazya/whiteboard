@@ -138,3 +138,41 @@ it('scales every selected node from an arrow key on a focused handle', () => {
   expect(b?.width).toBeGreaterThan(100)
   expect(b?.x).toBeGreaterThan(200)
 })
+
+// Key repeat, and any parent that applies onChange asynchronously, both send a
+// second keypress before the render snapshot has caught up. Reading the
+// selection from that stale snapshot makes every press compute the same
+// coordinates, so holding the key resizes once and then stops.
+it('accumulates repeated keypresses even when the parent has not re-rendered', () => {
+  const commands: { id: string; width: number }[] = []
+  function LaggingHost() {
+    // Deliberately does NOT apply the change: stands in for a parent whose
+    // update lands a tick later.
+    return (
+      <div style={{ width: 900, height: 700 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={initial}
+          onChange={(_next, command) => {
+            if (command?.kind === 'resize-node') {
+              commands.push({ id: command.id, width: command.width })
+            }
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<LaggingHost />)
+  const root = rootOf(container)
+  selectBoth(root)
+
+  const handle = container.querySelector('[data-testid="resize-handle-e"]') as SVGRectElement
+  fireEvent.keyDown(handle, { key: 'ArrowRight', shiftKey: true })
+  const first = commands.filter((c) => c.id === 'a').at(-1)?.width
+  fireEvent.keyDown(handle, { key: 'ArrowRight', shiftKey: true })
+  const second = commands.filter((c) => c.id === 'a').at(-1)?.width
+
+  expect(first).toBeGreaterThan(100)
+  expect(second).toBeGreaterThan(first as number)
+})
