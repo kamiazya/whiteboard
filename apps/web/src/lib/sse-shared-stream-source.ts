@@ -75,6 +75,9 @@ export function createSharedSseStreamSource(
         port.postMessage({ type: 'unsubscribe', doc })
       }
     },
+    sendMessage(doc, message) {
+      port.postMessage({ type: 'control', doc, message })
+    },
   }
 
   // A port has no close event, so a navigating-away tab has to hand its claims

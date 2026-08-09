@@ -47,6 +47,15 @@ function createSseFrameParser(): (chunk: string) => SseEvent[] {
  *  and by a SharedWorker-backed proxy so the sharing spans tabs. */
 export interface SseStreamSource {
   subscribe(doc: string, listener: DocListener): () => void
+  /**
+   * Send a client->server control message for a document.
+   *
+   * It belongs here rather than on the caller because the daemon addresses a
+   * control message by the stream it applies to, and only the source knows
+   * which stream that is — with the SharedWorker-backed source the stream is
+   * the worker's, not the caller's.
+   */
+  sendMessage(doc: string, message: unknown): void
 }
 
 export interface SseStreamHubOptions {
@@ -103,16 +112,25 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  private async send(body: { subscribe?: string[]; unsubscribe?: string[] }): Promise<void> {
+  sendMessage(doc: string, message: unknown): void {
+    void this.post('/api/sync/message', { streamId: this.options.streamId, doc, message })
+  }
+
+  private async post(path: string, body: unknown): Promise<void> {
     try {
-      await this.options.fetch(`${this.options.baseUrl}/api/sync/subscribe`, {
+      await this.options.fetch(`${this.options.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ streamId: this.options.streamId, ...body }),
+        body: JSON.stringify(body),
       })
     } catch {
-      // Best effort: a dropped subscribe is re-sent when the stream reconnects.
+      // Best effort: a dropped control message is recovered by the next one.
     }
+  }
+
+  private async send(body: { subscribe?: string[]; unsubscribe?: string[] }): Promise<void> {
+    // Best effort: a dropped subscribe is re-sent when the stream reconnects.
+    await this.post('/api/sync/subscribe', { streamId: this.options.streamId, ...body })
   }
 
   private async start(): Promise<void> {

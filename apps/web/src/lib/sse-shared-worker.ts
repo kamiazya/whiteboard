@@ -63,6 +63,11 @@ function handle(port: MessagePort, raw: unknown): void {
   const hub = hubs.get(state.baseUrl)
   if (!hub) return
 
+  if (msg.type === 'control') {
+    hub.sendMessage(msg.doc, msg.message)
+    return
+  }
+
   if (msg.type === 'subscribe') {
     if (state.subscriptions.has(msg.doc)) return
     const off = hub.subscribe(msg.doc, {

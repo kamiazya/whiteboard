@@ -199,4 +199,42 @@ describe('SseBackend', () => {
     })
     backend.disconnect()
   })
+
+  it('routes control messages through an injected stream source', async () => {
+    // The shipped configuration injects the SharedWorker-backed source, so the
+    // stream — and therefore the streamId the daemon knows — belongs to the
+    // worker. A control message addressed with this backend's own id would
+    // reach the daemon as an unknown stream and be dropped, taking viewport
+    // and export delivery with it.
+    const fake = createFakeTransport([])
+    const { handlers } = createHandlers()
+    const sent: { doc: string; message: unknown }[] = []
+    const source = {
+      subscribe: () => () => {},
+      sendMessage: (doc: string, message: unknown) => sent.push({ doc, message }),
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      fake.transport,
+      undefined,
+      source,
+    )
+
+    backend.connect(handlers)
+    await flush()
+    backend.sendClientReady()
+    backend.sendExportResponse('req-1', 'data:image/png;base64,AAA')
+
+    await vi.waitFor(() => expect(sent.length).toBe(2))
+    expect(sent[0]).toEqual({ doc: 'ws-1/canvas-a', message: { type: 'client_ready' } })
+    expect(sent[1]?.message).toEqual({
+      type: 'export_response',
+      requestId: 'req-1',
+      data: 'data:image/png;base64,AAA',
+    })
+    expect(fake.calls.some((c) => c.url.includes('/api/sync/message'))).toBe(false)
+    backend.disconnect()
+  })
 })

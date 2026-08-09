@@ -26,11 +26,15 @@ const BASE = 'http://127.0.0.1:3099'
 
 let streamOpens = 0
 let subscribeBodies: string[] = []
+let messageBodies: string[] = []
+let openedStreamIds: string[] = []
 let pushFrame: ((frame: string) => void) | null = null
 
 const server = setupServer(
-  http.get(`${BASE}/api/sync/stream`, () => {
+  http.get(`${BASE}/api/sync/stream`, ({ request }) => {
     streamOpens += 1
+    const id = new URL(request.url).searchParams.get('streamId')
+    if (id) openedStreamIds.push(id)
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const enc = new TextEncoder()
@@ -46,6 +50,10 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
+  http.post(`${BASE}/api/sync/message`, async ({ request }) => {
+    messageBodies.push(await request.text())
+    return HttpResponse.json({ ok: true })
+  }),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -53,6 +61,8 @@ afterAll(() => server.close())
 beforeEach(() => {
   streamOpens = 0
   subscribeBodies = []
+  messageBodies = []
+  openedStreamIds = []
   pushFrame = null
 })
 afterEach(() => server.resetHandlers())
@@ -108,6 +118,24 @@ describe('sse-shared-worker', () => {
     await idle()
 
     expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
+  })
+
+  it('sends a control message under the stream id the worker actually opened', async () => {
+    // The daemon addresses a control message by stream. A tab sending its own
+    // id would name a stream the daemon has never seen, so client_ready would
+    // be dropped and viewport requests would never arrive.
+    const port = connect()
+    const doc = nextDoc()
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => openedStreamIds.length >= 1)
+
+    port.postMessage({ type: 'control', doc, message: { type: 'client_ready' } })
+
+    await until(() => messageBodies.some((b) => b.includes(doc)))
+    const body = JSON.parse(messageBodies.find((b) => b.includes(doc)) as string)
+    expect(body.streamId).toBe(openedStreamIds[0])
+    expect(body.message).toEqual({ type: 'client_ready' })
   })
 
   it('takes a document back off the stream once it is unsubscribed', async () => {

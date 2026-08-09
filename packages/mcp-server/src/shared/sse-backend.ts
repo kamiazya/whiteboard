@@ -93,19 +93,27 @@ export class SseBackend implements CanvasBackend {
     }
     if (this.cancelled) return
 
-    // The stream itself belongs to the hub, which addresses frames per
-    // document and refcounts subscriptions. An injected source is the
-    // SharedWorker-backed one, so the stream is shared across tabs rather than
-    // opened once per backend.
-    const source =
-      this.streamSource ??
-      new SseStreamHub({ fetch: this.fetchFn, baseUrl: this.baseUrl, streamId: this.streamId })
-    this.ownedHub = this.streamSource ? null : (source as SseStreamHub)
+    const source = this.resolveSource()
     this.unsubscribe = source.subscribe(this.docKey, {
       onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
       onMessage: (raw) => this.dispatchText(raw, handlers),
     })
     handlers.onConnected()
+  }
+
+  /**
+   * The stream this backend talks through. An injected source is the
+   * SharedWorker-backed one, shared across tabs; otherwise this backend owns a
+   * hub of its own and is responsible for closing it.
+   */
+  private resolveSource(): SseStreamSource {
+    if (this.streamSource) return this.streamSource
+    this.ownedHub ??= new SseStreamHub({
+      fetch: this.fetchFn,
+      baseUrl: this.baseUrl,
+      streamId: this.streamId,
+    })
+    return this.ownedHub
   }
 
   private dispatchText(raw: string, handlers: CanvasBackendHandlers): void {
@@ -119,19 +127,6 @@ export class SseBackend implements CanvasBackend {
     else if (message.type === 'head_changed') handlers.onHeadChanged(message)
     else if (message.type === 'viewport_request') handlers.onViewportRequest(message)
     else if (message.type === 'export_request') handlers.onExportRequest(message)
-  }
-
-  private async post(path: string, body: unknown): Promise<void> {
-    try {
-      await this.fetchFn(this.url(path), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-    } catch {
-      // Best effort: a dropped control message is recovered by the next one
-      // (subscribe is re-sent on reconnect, client_ready on the next ready).
-    }
   }
 
   disconnect(): void {
@@ -183,18 +178,10 @@ export class SseBackend implements CanvasBackend {
   }
 
   sendClientReady(): void {
-    void this.post('/api/sync/message', {
-      streamId: this.streamId,
-      doc: this.docKey,
-      message: { type: 'client_ready' },
-    })
+    this.resolveSource().sendMessage(this.docKey, { type: 'client_ready' })
   }
 
   sendExportResponse(requestId: string, data: string): void {
-    void this.post('/api/sync/message', {
-      streamId: this.streamId,
-      doc: this.docKey,
-      message: { type: 'export_response', requestId, data },
-    })
+    this.resolveSource().sendMessage(this.docKey, { type: 'export_response', requestId, data })
   }
 }
