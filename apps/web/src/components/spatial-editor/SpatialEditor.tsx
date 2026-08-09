@@ -39,14 +39,14 @@
  *
  * Also supported: the clipboard family — copy/cut/paste over the native
  * clipboard events (fragment JSON in `text/plain`, foreign text degrading
- * to a note), duplicate (Cmd/Ctrl+D), select-all, z-order moves, and
- * viewport framing (zoom to fit / to selection). Every one has a
- * context-menu or dock twin; every binding is declared in `shortcuts.ts`.
+ * to a note), duplicate (Cmd/Ctrl+D), select-all, z-order moves,
+ * align/distribute over a multi-selection, and viewport framing (zoom to
+ * fit / to selection). Every one has a context-menu or dock twin; every
+ * binding is declared in `shortcuts.ts`.
  *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * snapping, alignment/distribution, persistence, and sync. Those are
- * later phases.
+ * snapping, persistence, and sync. Those are later phases.
  */
 import type {
   CanvasColor,
@@ -58,6 +58,14 @@ import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
   BringToFront,
   ChevronDown,
   ChevronUp,
@@ -106,6 +114,8 @@ import {
   readClipboardFragment,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
+import type { AlignableBox, BoxMove } from './align.js'
+import { alignBoxes, distributeBoxes } from './align.js'
 import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
@@ -154,7 +164,6 @@ export const SPATIAL_EDITOR_UNSUPPORTED = [
   'freehand-drawing',
   'shape-tools',
   'snapping',
-  'align-distribute',
   'persistence',
   'sync',
 ] as const
@@ -1197,6 +1206,37 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas produced by applyCommand, never a hand-built object.
       const running = applyCommand(canvasRef.current, command)
       // Total command: extremes return the input — emit no empty history step.
+      if (running !== canvasRef.current) onChange(running, command)
+      return true
+    }
+
+    /**
+     * The selected nodes as align/distribute inputs, read from canvasRef so
+     * a menu action never computes against a stale render closure. Locked
+     * nodes cannot be in a selection (see the pruning effect above), so they
+     * are absent here too — neither moved nor counted toward the bounds.
+     */
+    const selectedAlignableBoxes = (): AlignableBox[] => {
+      if (selection === undefined) return []
+      const ids = new Set([selection.id, ...extraIds])
+      return canvasRef.current.nodes
+        .filter((node) => ids.has(node.id))
+        .map(({ id, x, y, width, height }) => ({ id, x, y, width, height }))
+    }
+
+    /**
+     * Applies a set of moves as ONE batch command — an align is one user
+     * action and must undo as one step. An empty move list (already aligned)
+     * emits nothing rather than an empty history entry, matching
+     * `reorderSelection`'s totality contract.
+     */
+    const applyBoxMoves = (moves: readonly BoxMove[]): boolean => {
+      if (moves.length === 0) return true
+      const command: EditorCommand = {
+        kind: 'batch',
+        commands: moves.map((move) => ({ kind: 'move-node' as const, ...move })),
+      }
+      const running = applyCommand(canvasRef.current, command)
       if (running !== canvasRef.current) onChange(running, command)
       return true
     }
@@ -2579,6 +2619,58 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   },
                 ],
               })
+              // Align needs a second box to align TO, and distribute needs a
+              // middle one to place — so each row appears only once its
+              // action means something, rather than sitting there inert.
+              const alignableCount = extraIds.size + 1
+              if (alignableCount >= 2) {
+                items.push({
+                  kind: 'options',
+                  label: 'Align',
+                  options: (
+                    [
+                      ['left', 'Align left', <AlignStartVertical key="l" />],
+                      ['center-x', 'Align centre horizontally', <AlignCenterVertical key="cx" />],
+                      ['right', 'Align right', <AlignEndVertical key="r" />],
+                      ['top', 'Align top', <AlignStartHorizontal key="t" />],
+                      ['center-y', 'Align centre vertically', <AlignCenterHorizontal key="cy" />],
+                      ['bottom', 'Align bottom', <AlignEndHorizontal key="b" />],
+                    ] as const
+                  ).map(([mode, ariaLabel, icon]) => ({
+                    label: mode,
+                    ariaLabel,
+                    icon,
+                    selected: false,
+                    onSelect: () => applyBoxMoves(alignBoxes(selectedAlignableBoxes(), mode)),
+                  })),
+                })
+              }
+              if (alignableCount >= 3) {
+                items.push({
+                  kind: 'options',
+                  label: 'Distribute',
+                  options: (
+                    [
+                      [
+                        'horizontal',
+                        'Distribute horizontally',
+                        <AlignHorizontalDistributeCenter key="h" />,
+                      ],
+                      [
+                        'vertical',
+                        'Distribute vertically',
+                        <AlignVerticalDistributeCenter key="v" />,
+                      ],
+                    ] as const
+                  ).map(([axis, ariaLabel, icon]) => ({
+                    label: axis,
+                    ariaLabel,
+                    icon,
+                    selected: false,
+                    onSelect: () => applyBoxMoves(distributeBoxes(selectedAlignableBoxes(), axis)),
+                  })),
+                })
+              }
               if (lockEnabled) {
                 items.push({
                   label: 'Lock',
