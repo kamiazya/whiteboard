@@ -17,10 +17,10 @@ const spread: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ canvas0 }: { canvas0: SpatialCanvas }) {
+function Host({ canvas0, width = 800 }: { canvas0: SpatialCanvas; width?: number }) {
   const [canvas, setCanvas] = useState(canvas0)
   return (
-    <div style={{ width: 800, height: 600 }}>
+    <div style={{ width, height: 600 }}>
       <SpatialEditor
         defaultTool="select"
         canvas={canvas}
@@ -42,6 +42,28 @@ it('shows an overview once the canvas has content', () => {
   const { container } = render(<Host canvas0={spread} />)
   expect(minimapOf(container)).toBeTruthy()
   expect(container.querySelector('[data-testid="minimap-viewport"]')).toBeTruthy()
+})
+
+// Both the overview and the dock are bottom-anchored inside the SAME
+// container, and the dock is centred and grows to ~380px on touch. Below
+// roughly 730px of container they overlap. The predicate is the container's
+// width, not the viewport's: a narrow editor column on a wide screen collides
+// exactly the same way, and a media query would miss it.
+it('stays away when the editor is too narrow to hold it beside the dock', () => {
+  const { container } = render(<Host canvas0={spread} width={390} />)
+  expect(minimapOf(container)).toBeNull()
+})
+
+it('comes back when the editor is widened past that point', async () => {
+  const { container } = render(<Host canvas0={spread} width={390} />)
+  const host = container.firstElementChild as HTMLElement
+  expect(minimapOf(container)).toBeNull()
+
+  host.style.width = '1000px'
+
+  await vi.waitFor(() => {
+    expect(minimapOf(container)).toBeTruthy()
+  })
 })
 
 it('stays away on an empty canvas, where an overview has no job', () => {
@@ -144,7 +166,9 @@ it('tracks a container resize that the window never sees', async () => {
     (container.querySelector('[data-testid="minimap-viewport"]') as HTMLElement).style.width
 
   const before = markerWidth()
-  host.style.width = '400px'
+  // Stays above the width at which the overview yields to the dock — this
+  // test is about tracking a resize, not about the yield threshold.
+  host.style.width = '1200px'
 
   await vi.waitFor(() => {
     expect(markerWidth()).not.toBe(before)

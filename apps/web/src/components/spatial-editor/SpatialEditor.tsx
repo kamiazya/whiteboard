@@ -195,6 +195,21 @@ const SNAP_GRID_CANVAS_PX = 20
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
 
+/**
+ * Below this container width the overview and the dock fight for the bottom
+ * edge, so the overview yields.
+ *
+ * Both are bottom-anchored in the same container. The dock is centred and, on
+ * a coarse pointer, runs about 380px; the overview claims 160px plus a 16px
+ * inset on the right. They start touching once
+ * `(W + 380) / 2 > W - 176`, i.e. below ~732px. 768 rounds that up so the two
+ * never sit shoulder to shoulder with no gap.
+ *
+ * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
+ * screen collides in exactly the same way, and a media query cannot see it.
+ */
+const MINIMAP_MIN_ROOT_WIDTH_PX = 768
+
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
   readonly onChange: (next: SpatialCanvas, command: EditorCommand) => void
@@ -2347,7 +2362,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           press on it reaching the canvas, so hiding bought nothing and cost
           a flicker on every gesture. Hidden only on an empty canvas, where
           an overview of nothing is chrome with no job. */}
-        {boxes.length > 0 && rootSize.width > 0 && (
+        {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
           <MinimapOverlay
             boxes={minimapNodes}
             viewportRect={{
