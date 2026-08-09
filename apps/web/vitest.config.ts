@@ -22,6 +22,13 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/runtime.ts',
       ),
+      // Also test-only: the SseStreamSource behavioural contract, declared once
+      // in the package that owns the port and run here against the
+      // SharedWorker-backed implementation this app ships.
+      '@kamiazya/whiteboard-mcp/sse-stream-source-contract': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/test-utils/sse-stream-source-contract.ts',
+      ),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
