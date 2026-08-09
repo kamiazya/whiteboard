@@ -14,6 +14,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
+import { clientTextMessageSchema } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('sync-sse')
@@ -42,8 +43,40 @@ export const syncUpdateEventSchema = z
 
 export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 
+export const syncClientMessageRequestSchema = z
+  .object({
+    streamId: z.string().min(1),
+    doc: z.string().min(1),
+    // Reuses the WebSocket client-message union so both transports validate
+    // against one declaration instead of drifting apart.
+    message: clientTextMessageSchema,
+  })
+  .strict()
+
+export type SyncClientMessageRequest = z.infer<typeof syncClientMessageRequestSchema>
+
+// Injected by ws.ts, which owns the viewport cache and the pending-request
+// resolver. ws.ts already imports this module for the broadcast fan-out, so
+// importing it back would close a cycle — this mirrors the setBroadcastFn /
+// setResolveViewportFn idiom already used between these modules.
+let getCachedViewportRequest: (docKey: string) => string | undefined = () => undefined
+let resolveViewportRequest: (requestId: string) => void = () => {}
+
+export function setSyncSseHooks(hooks: {
+  getCachedViewportRequest: (docKey: string) => string | undefined
+  resolveViewportRequest: (requestId: string) => void
+}): void {
+  getCachedViewportRequest = hooks.getCachedViewportRequest
+  resolveViewportRequest = hooks.resolveViewportRequest
+}
+
 interface SyncStream {
   docs: Set<string>
+  // Docs this stream has signalled `client_ready` for. A viewport request is
+  // withheld until then and replayed from cache on ready, matching the
+  // WebSocket path — a pre-ready client cannot apply a viewport, and sending
+  // it both now and on replay would deliver it twice.
+  ready: Set<string>
   send: (event: string, data: string) => void
 }
 
@@ -84,6 +117,15 @@ export function sseBroadcastText(workspaceId: string, slug: string, raw: string)
   }
 }
 
+/** Like sseBroadcastText, but only to streams that have signalled client_ready. */
+export function sseBroadcastTextToReady(workspaceId: string, slug: string, raw: string): void {
+  const key = docKey(workspaceId, slug)
+  for (const stream of streams.values()) {
+    if (!stream.ready.has(key)) continue
+    stream.send('message', raw)
+  }
+}
+
 // Test-only: the module-level registry outlives a single app instance, so a
 // test that opens a stream would otherwise leak a subscriber into the next one.
 export function resetSyncStreamsForTests(): void {
@@ -100,6 +142,7 @@ export function createSyncSseRouter() {
     return streamSSE(c, async (stream) => {
       const entry: SyncStream = {
         docs: new Set(),
+        ready: new Set(),
         send: (event, data) => {
           void stream.writeSSE({ event, data })
         },
@@ -133,8 +176,42 @@ export function createSyncSseRouter() {
     if (!stream) return c.json({ error: 'unknown_stream' }, 404)
 
     for (const key of parsed.data.subscribe ?? []) stream.docs.add(key)
-    for (const key of parsed.data.unsubscribe ?? []) stream.docs.delete(key)
+    for (const key of parsed.data.unsubscribe ?? []) {
+      stream.docs.delete(key)
+      stream.ready.delete(key)
+    }
     return c.json({ ok: true, docs: [...stream.docs].sort() })
+  })
+
+  // The client->server half of the sync protocol. A WebSocket carries these as
+  // text frames; an SSE client has no upstream channel of its own, so they
+  // arrive here instead. The payload reuses clientTextMessageSchema so both
+  // transports validate against the same declaration rather than drifting.
+  app.post('/api/sync/message', async (c) => {
+    const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+    const stream = streams.get(parsed.data.streamId)
+    if (!stream) return c.json({ error: 'unknown_stream' }, 404)
+
+    const { doc, message } = parsed.data
+    if (message.type === 'client_ready') {
+      stream.ready.add(doc)
+      // Replay the latest viewport request so a stream that connected after
+      // the request was issued still inherits the same fit/scroll/zoom intent.
+      const cached = getCachedViewportRequest(doc)
+      if (cached !== undefined) stream.send('message', cached)
+      return c.json({ ok: true })
+    }
+    if (message.type === 'viewport_response') {
+      resolveViewportRequest(message.requestId)
+      return c.json({ ok: true })
+    }
+    // `export_response` is inert on the WebSocket path too — the daemon stopped
+    // sending export_request once export became headless — and `ws_trace`
+    // carries a trace context that only the WebSocket's binary-frame pairing
+    // can consume. Accepted and ignored, so a client need not special-case them.
+    return c.json({ ok: true })
   })
 
   return app

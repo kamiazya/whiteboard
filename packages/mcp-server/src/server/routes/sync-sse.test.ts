@@ -9,7 +9,7 @@
 // would only add base64 inflation. This stream carries incremental updates.
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
-import { broadcastLoroUpdate } from './ws.js'
+import { broadcastLoroUpdate, sendViewportRequest, setResolveViewportFn } from './ws.js'
 
 const TOKEN = 'sse-sync-test-token'
 
@@ -109,6 +109,71 @@ describe('SSE sync transport', () => {
 
     const frames = await readEvents(res, 1, 300)
     expect(frames.filter((f) => f.includes('event: update'))).toEqual([])
+  })
+
+  // A viewport request goes only to clients that have signalled client_ready,
+  // and is replayed from cache when a late client becomes ready. Mirroring
+  // both halves is what keeps an SSE client from either missing the request
+  // or receiving it twice.
+  it('withholds a viewport request from a stream that has not signalled client_ready', async () => {
+    const app = createApp(createRuntimeOptions())
+    const res = await app.request('/api/sync/stream?streamId=vp1', { headers: auth })
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: 'vp1', subscribe: ['ws-1/vp-canvas'] }),
+    })
+
+    sendViewportRequest('ws-1', 'vp-canvas', 'req-1', { mode: 'fit' })
+
+    const frames = await readEvents(res, 1, 300)
+    expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])
+  })
+
+  it('replays the cached viewport request when the stream signals client_ready', async () => {
+    const app = createApp(createRuntimeOptions())
+    const res = await app.request('/api/sync/stream?streamId=vp2', { headers: auth })
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: 'vp2', subscribe: ['ws-1/vp-late'] }),
+    })
+
+    sendViewportRequest('ws-1', 'vp-late', 'req-2', { mode: 'fit' })
+
+    const ready = await app.request('/api/sync/message', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        streamId: 'vp2',
+        doc: 'ws-1/vp-late',
+        message: { type: 'client_ready' },
+      }),
+    })
+    expect(ready.status).toBe(200)
+
+    const frames = await readEvents(res, 1)
+    expect(frames.some((f) => f.includes('viewport_request') && f.includes('req-2'))).toBe(true)
+  })
+
+  it('resolves a pending viewport request from a viewport_response', async () => {
+    const app = createApp(createRuntimeOptions())
+    await app.request('/api/sync/stream?streamId=vp3', { headers: auth })
+    const resolved: string[] = []
+    setResolveViewportFn((requestId) => resolved.push(requestId))
+
+    const res = await app.request('/api/sync/message', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        streamId: 'vp3',
+        doc: 'ws-1/vp-canvas',
+        message: { type: 'viewport_response', requestId: 'req-3' },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(resolved).toContain('req-3')
   })
 
   it('rejects a subscribe for an unknown stream instead of silently succeeding', async () => {
