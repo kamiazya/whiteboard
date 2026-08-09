@@ -17,9 +17,10 @@ describe('ConnectionStatus chip', () => {
 
     const popover = screen.getByTestId('connection-popover')
     expect(popover.textContent).toMatch(/not running/i)
-    // No replay promise: DaemonBackend drops local updates while its socket is
-    // not OPEN, so telling the user they are sent on recovery would be false.
-    expect(popover.textContent).not.toMatch(/will be sent|are sent when/i)
+    // The recovery promise is only sound because the session re-sends the whole
+    // document on reconnect; a backend hands a closed socket one delta and it
+    // is gone. If that resend is ever removed, this sentence becomes a lie.
+    expect(popover.textContent).toMatch(/sent when the connection returns/i)
   })
 
   it('synced state shows a quiet chip and explains where data lives in the popover', async () => {
