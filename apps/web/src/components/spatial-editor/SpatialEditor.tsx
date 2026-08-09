@@ -2415,7 +2415,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       <div
         ref={rootRef}
         data-testid={testId}
-        className={className}
+        // The canvas is a drawing surface, not prose: a drag means marquee or
+        // pan, and Select All means every NODE. Leaving it text-selectable let
+        // the browser paint its own selection across the chrome — reported
+        // after a Select All. Text stays selectable where text is edited (see
+        // TextNodeEditor).
+        className={`select-none ${className ?? ''}`.trimEnd()}
         // A canvas editor's interaction surface has no static-content semantics
         // HTML/ARIA can describe more precisely than "application" — this is
         // the same documented tradeoff drawing/whiteboard editors commonly
