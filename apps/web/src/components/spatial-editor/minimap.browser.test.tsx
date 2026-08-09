@@ -133,3 +133,20 @@ it('navigates without starting a canvas gesture underneath', () => {
   expect(minimapOf(container)).toBeTruthy()
   expect(container.querySelector('[data-testid="marquee-rect"]')).toBeNull()
 })
+
+// The reason the size comes from a ResizeObserver and not a window `resize`
+// listener: the container can change size without the window doing so, and a
+// marker that lags that is wrong about where you are.
+it('tracks a container resize that the window never sees', async () => {
+  const { container } = render(<Host canvas0={spread} />)
+  const host = container.firstElementChild as HTMLElement
+  const markerWidth = () =>
+    (container.querySelector('[data-testid="minimap-viewport"]') as HTMLElement).style.width
+
+  const before = markerWidth()
+  host.style.width = '400px'
+
+  await vi.waitFor(() => {
+    expect(markerWidth()).not.toBe(before)
+  })
+})
