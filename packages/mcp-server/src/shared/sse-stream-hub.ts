@@ -85,6 +85,15 @@ function defaultRetryDelayMs(attempt: number): number {
 export interface DocListener {
   onUpdate: (bytes: Uint8Array) => void
   onMessage: (raw: string) => void
+  /**
+   * Whether a stream is currently carrying this document.
+   *
+   * A subscriber that is only told about frames cannot distinguish "nothing
+   * has changed" from "nothing is arriving", so a dropped stream looks exactly
+   * like a quiet one and the UI keeps reporting a connection that is gone.
+   * Optional because a caller that only applies updates has no use for it.
+   */
+  onConnectionChange?: (connected: boolean) => void
 }
 
 /**
@@ -155,6 +164,10 @@ export class SseStreamHub implements SseStreamSource {
       void this.send({ subscribe: [doc] })
     }
     entry.listeners.add(listener)
+    // Announced on transitions alone, liveness would never reach anyone who
+    // joins a stream that is already open — a second canvas in the same tab
+    // would show an unknown connection for as long as nothing went wrong.
+    listener.onConnectionChange?.(this.streamId !== null)
     void this.start()
 
     return () => {
@@ -262,6 +275,7 @@ export class SseStreamHub implements SseStreamSource {
     // The id belongs to the stream that just ended; nothing may be addressed
     // to it until the next one announces its own.
     this.streamId = null
+    this.announceConnection(false)
     return true
   }
 
@@ -276,6 +290,7 @@ export class SseStreamHub implements SseStreamSource {
     const payload = parseFrame(syncReadyEventSchema, data)
     if (!payload) return
     this.streamId = payload.streamId
+    this.announceConnection(true)
 
     const docs = [...this.docs.keys()]
     if (docs.length > 0) void this.send({ subscribe: docs })
@@ -286,6 +301,19 @@ export class SseStreamHub implements SseStreamSource {
         doc,
         message: { type: 'client_ready' },
       })
+    }
+  }
+
+  /** A subscriber that throws must not stop the others from being told. */
+  private announceConnection(connected: boolean): void {
+    for (const entry of this.docs.values()) {
+      for (const listener of entry.listeners) {
+        try {
+          listener.onConnectionChange?.(connected)
+        } catch {
+          // A listener's own failure is not this hub's to propagate.
+        }
+      }
     }
   }
 

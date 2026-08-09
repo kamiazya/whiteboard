@@ -20,6 +20,7 @@ function createHarness(): SseStreamSourceHarness {
   const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
   const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
   let push: ((frame: string) => void) | null = null
+  let endStream: (() => void) | null = null
 
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -35,6 +36,7 @@ function createHarness(): SseStreamSourceHarness {
               enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
             )
             push = (f) => controller.enqueue(enc.encode(f))
+            endStream = () => controller.close()
           },
         }),
         { status: 200 },
@@ -68,6 +70,7 @@ function createHarness(): SseStreamSourceHarness {
         if (push === null) throw new Error('stream not open')
       })
     },
+    dropStream: () => endStream?.(),
     cleanup: () => hub.close(),
   }
 }

@@ -27,6 +27,7 @@ const openedStreamIds: string[] = []
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
+let endStream: (() => void) | null = null
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
@@ -41,6 +42,7 @@ const server = setupServer(
             enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
           )
           pushFrame = (f) => controller.enqueue(enc.encode(f))
+          endStream = () => controller.close()
         },
       }),
       { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
@@ -89,6 +91,7 @@ function createHarness(): SseStreamSourceHarness {
     // A SharedWorker cannot be terminated and this source is cached per origin,
     // so teardown is a no-op; the contract's per-case document keys are what
     // keep one case's traffic from being read as another's.
+    dropStream: () => endStream?.(),
     cleanup: () => {},
   }
 }

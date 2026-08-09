@@ -34,4 +34,8 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // decode lives in exactly one place.
   z.object({ type: z.literal('update'), doc: z.string(), update: z.string() }),
   z.object({ type: z.literal('message'), doc: z.string(), raw: z.string() }),
+  // Whether a stream is currently carrying this document. Addressed like the
+  // others so a tab watching several canvases routes it the same way; the
+  // worker owns the stream, so this is the only way a tab can know.
+  z.object({ type: z.literal('status'), doc: z.string(), connected: z.boolean() }),
 ])

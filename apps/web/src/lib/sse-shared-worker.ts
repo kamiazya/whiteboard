@@ -90,6 +90,9 @@ function handle(port: MessagePort, raw: unknown): void {
       onMessage: (text) => {
         port.postMessage({ type: 'message', doc: msg.doc, raw: text })
       },
+      onConnectionChange: (connected) => {
+        port.postMessage({ type: 'status', doc: msg.doc, connected })
+      },
     })
     state.subscriptions.set(msg.doc, off)
     return
