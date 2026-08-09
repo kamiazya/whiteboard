@@ -15,6 +15,7 @@
 import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
+  | 'select-all'
   | 'copy-selection'
   | 'cut-selection'
   | 'paste-clipboard'
@@ -58,6 +59,14 @@ export interface ShortcutSpec {
 }
 
 export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
+  {
+    id: 'select-all',
+    keys: ['a'],
+    mod: true,
+    display: 'Cmd+A',
+    description: 'Select every node',
+    tools: ['select'],
+  },
   // Clipboard family. With nothing to act on the handlers return false and
   // the event falls through, so the browser keeps its own copy/paste for
   // text selections.

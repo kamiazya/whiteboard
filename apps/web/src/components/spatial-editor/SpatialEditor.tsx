@@ -1221,9 +1221,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
+    /** Select every node; the first becomes primary, the rest extras. */
+    const selectAllNodes = (): boolean => {
+      const [first, ...rest] = canvasRef.current.nodes.map((node) => node.id)
+      if (first === undefined) return false
+      setSelectedId(first)
+      setExtraIds(new Set(rest))
+      setSelectedEdgeId(null)
+      return true
+    }
+
     /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
     const runShortcut = (id: ShortcutId): boolean => {
       switch (id) {
+        case 'select-all':
+          return selectAllNodes()
         case 'copy-selection':
           return copySelection()
         case 'cut-selection':
@@ -1316,22 +1328,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         e.preventDefault()
         const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
-        // Read the node's position from canvasRef, not the render closure:
-        // key auto-repeat delivers keydowns faster than commits re-render,
-        // and a stale base makes each repeat clobber the previous nudge.
-        const current = canvasRef.current.nodes.find((n) => n.id === selectedNode.id)
-        if (current === undefined) return
-        applyResult({
-          state: gestureState,
-          commands: [
+        // Nudge the WHOLE selection, not just the primary: a multi-selection
+        // that tore apart under the arrow keys was a latent bug select-all
+        // makes trivial to hit. Positions are read from canvasRef, not the
+        // render closure — key auto-repeat delivers keydowns faster than
+        // commits re-render, and a stale base clobbers the previous nudge.
+        const ids = [selectedNode.id, ...extraIds]
+        const moves = ids.flatMap((id) => {
+          const current = canvasRef.current.nodes.find((n) => n.id === id)
+          if (current === undefined) return []
+          return [
             {
-              kind: 'move-node',
+              kind: 'move-node' as const,
               id: current.id,
               x: current.x + nudge.dx * step,
               y: current.y + nudge.dy * step,
             },
-          ],
+          ]
         })
+        if (moves.length === 0) return
+        applyResult({ state: gestureState, commands: moves })
         return
       }
       if (
