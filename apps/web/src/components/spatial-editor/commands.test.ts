@@ -604,3 +604,45 @@ describe('create-edge', () => {
     ).toBe(canvas)
   })
 })
+
+// The routing style belongs to the canvas, so the command that sets it names
+// no node. It is the first command that edits the canvas ENVELOPE rather than
+// its contents.
+describe('set-edge-routing', () => {
+  const empty: SpatialCanvas = { nodes: [], edges: [] }
+
+  it('records the style on the canvas', () => {
+    const next = applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' })
+    expect(next['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+  })
+
+  it('leaves nodes and edges untouched', () => {
+    const canvas = {
+      nodes: [{ id: 'a', type: 'text' as const, x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'a' }],
+    }
+    const next = applyCommand(canvas, { kind: 'set-edge-routing', style: 'orthogonal' })
+
+    expect(next.nodes).toEqual(canvas.nodes)
+    expect(next.edges).toEqual(canvas.edges)
+  })
+
+  // Returning to the default should leave no trace, so a canvas that never
+  // chose a style and one that chose and reverted serialize identically.
+  it('removes the setting when the style goes back to straight', () => {
+    const set = applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' })
+    const reverted = applyCommand(set, { kind: 'set-edge-routing', style: 'straight' })
+
+    expect(reverted).not.toHaveProperty('x-whiteboard')
+  })
+
+  it('keeps any other canvas-level extension it does not own', () => {
+    const withOther: SpatialCanvas = {
+      ...empty,
+      'x-whiteboard': { edgeRouting: { style: 'curved' } },
+    }
+    const next = applyCommand(withOther, { kind: 'set-edge-routing', style: 'orthogonal' })
+
+    expect(next['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+  })
+})

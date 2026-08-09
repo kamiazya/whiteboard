@@ -21,6 +21,7 @@
 import type {
   CanvasColor,
   CanvasEdge,
+  EdgeRoutingStyle,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -78,6 +79,13 @@ export type EditorLeafCommand =
       readonly id: string
       // undefined returns the object to the theme default (field removed).
       readonly color: CanvasColor | undefined
+    }
+  | {
+      // The one command that edits the canvas ENVELOPE rather than its
+      // contents, so it names no node: routing style is a property of the
+      // canvas, and per-edge overrides are a later, separate command.
+      readonly kind: 'set-edge-routing'
+      readonly style: EdgeRoutingStyle
     }
   | {
       readonly kind: 'set-edge-color'
@@ -257,6 +265,21 @@ function setEdgeEnds(
 }
 
 /** `color: undefined` removes the field — the theme default, canonically. */
+/**
+ * `straight` is the default, so choosing it REMOVES the setting rather than
+ * recording it. A canvas that never chose a style and one that chose and
+ * changed its mind then serialize identically — otherwise every canvas anyone
+ * opened the menu on would carry a redundant extension forever.
+ */
+function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
+  const { 'x-whiteboard': extension, ...rest } = canvas
+  if (style === 'straight') {
+    const { edgeRouting: _removed, ...others } = extension ?? {}
+    return Object.keys(others).length === 0 ? rest : { ...rest, 'x-whiteboard': others }
+  }
+  return { ...rest, 'x-whiteboard': { ...extension, edgeRouting: { style } } }
+}
+
 function setNodeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -387,6 +410,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeSide(canvas, command.id, command.endpoint, command.side)
     case 'set-node-color':
       return setNodeColor(canvas, command.id, command.color)
+    case 'set-edge-routing':
+      return setEdgeRouting(canvas, command.style)
     case 'set-edge-color':
       return setEdgeColor(canvas, command.id, command.color)
     case 'set-node-url':
