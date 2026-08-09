@@ -119,20 +119,23 @@ describe('SpatialEditor (browser)', () => {
         button: 0,
       }),
     )
+    // +29/+29 lands "a" at (49,49): 9 from the nearest grid line and well
+    // clear of every line node "b" offers, so this stays a plain drag on the
+    // default path rather than a snap (snap.browser.test.tsx covers those).
     await editor
       .element()
       .dispatchEvent(
-        new PointerEvent('pointermove', { bubbles: true, clientX: 70, clientY: 55, pointerId: 1 }),
+        new PointerEvent('pointermove', { bubbles: true, clientX: 69, clientY: 69, pointerId: 1 }),
       )
     await editor
       .element()
       .dispatchEvent(
-        new PointerEvent('pointerup', { bubbles: true, clientX: 70, clientY: 55, pointerId: 1 }),
+        new PointerEvent('pointerup', { bubbles: true, clientX: 69, clientY: 69, pointerId: 1 }),
       )
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
-    expect(command).toEqual({ kind: 'move-node', id: 'a', x: 50, y: 35 })
+    expect(command).toEqual({ kind: 'move-node', id: 'a', x: 49, y: 49 })
     expect(next.nodes[1]).toEqual(canvasValue.nodes[1])
     // input untouched
     expect(canvasValue.nodes[0]).toEqual({
@@ -739,12 +742,17 @@ describe('SpatialEditor (browser)', () => {
     let previousRectX: number | undefined
     let previousRectY: number | undefined
     for (const delta of deltas) {
+      // Cmd suspends snapping for the gesture, which is what makes "tracks
+      // the pointer" a meaningful claim here: with snapping live the preview
+      // is SUPPOSED to leave the pointer for a nearby line, and that
+      // behaviour has its own test file.
       await editor.element().dispatchEvent(
         new PointerEvent('pointermove', {
           bubbles: true,
           clientX: 40 + delta.x,
           clientY: 40 + delta.y,
           pointerId: 200,
+          metaKey: true,
         }),
       )
       const expectedX = 20 + delta.x

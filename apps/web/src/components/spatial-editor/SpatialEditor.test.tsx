@@ -165,10 +165,14 @@ describe('SpatialEditor externalVersion origin handling', () => {
         button: 0,
       }),
     )
+    // +29/+29 keeps "a" clear of every snap candidate (see the same choice
+    // in SpatialEditor.browser.test.tsx), so these tests stay about
+    // externalVersion rather than about snapping arithmetic.
     root.dispatchEvent(
-      new PointerEvent('pointermove', { bubbles: true, clientX: 70, clientY: 55, pointerId: 1 }),
+      new PointerEvent('pointermove', { bubbles: true, clientX: 69, clientY: 69, pointerId: 1 }),
     )
   }
+  const DRAG_DROP = { clientX: 69, clientY: 69 }
 
   it('bumping externalVersion alongside a canvas prop swap cancels an in-flight drag', () => {
     const onChange = vi.fn()
@@ -196,9 +200,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
       />,
     )
 
-    root.dispatchEvent(
-      new PointerEvent('pointerup', { bubbles: true, clientX: 70, clientY: 55, pointerId: 1 }),
-    )
+    root.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, ...DRAG_DROP, pointerId: 1 }))
 
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -230,13 +232,11 @@ describe('SpatialEditor externalVersion origin handling', () => {
       />,
     )
 
-    root.dispatchEvent(
-      new PointerEvent('pointerup', { bubbles: true, clientX: 70, clientY: 55, pointerId: 1 }),
-    )
+    root.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, ...DRAG_DROP, pointerId: 1 }))
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
-    expect(command).toEqual({ kind: 'move-node', id: 'a', x: 50, y: 35 })
+    expect(command).toEqual({ kind: 'move-node', id: 'a', x: 49, y: 49 })
   })
 })
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_EDITOR_UNSUPPORTED } from './SpatialEditor.js'
 
-// Grouping (J4) and undo/redo (the LoroDoc UndoManager behind the dock's
-// history cluster) both shipped and left this list; alignment/distribution
-// joined it as the next explicitly-deferred gap.
-const REQUIRED_UNSUPPORTED = ['freehand-drawing', 'shape-tools', 'snapping', 'persistence', 'sync']
+// Grouping (J4), undo/redo (the LoroDoc UndoManager behind the dock's
+// history cluster), alignment/distribution, and snapping have all shipped
+// and left this list.
+const REQUIRED_UNSUPPORTED = ['freehand-drawing', 'shape-tools', 'persistence', 'sync']
 
 describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
   it('names exactly every parity gap this slice deliberately does not implement (both directions: nothing missing, nothing undocumented)', () => {
@@ -23,9 +23,9 @@ describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
 
   it('never lists a capability the editor actually ships', async () => {
     // The list is a promise to the reader; a stale entry is worse than no
-    // list. These four all ship today (J4 groups, the history cluster's
-    // undo/redo, and the slice-4/5 clipboard family).
-    for (const shipped of ['grouping', 'undo-redo', 'clipboard', 'duplicate']) {
+    // list. These all ship today (J4 groups, the history cluster's
+    // undo/redo, the slice-4/5 clipboard family, and drag snapping).
+    for (const shipped of ['grouping', 'undo-redo', 'clipboard', 'duplicate', 'snapping']) {
       expect(SPATIAL_EDITOR_UNSUPPORTED).not.toContain(shipped)
     }
   })
