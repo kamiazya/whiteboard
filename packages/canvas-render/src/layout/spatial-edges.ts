@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 
 type Side = 'top' | 'right' | 'bottom' | 'left'
@@ -162,24 +162,64 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
-function detourAround(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
-  const blocking = obstacles.filter((rect) => segmentCrossesRect(start, end, rect))
-  const region = unionRect(blocking)
-  if (region === undefined) return [start, end]
+/** The candidate that clears every obstacle, shortest first; the shortest overall if none does. */
+function bestCandidate(candidates: readonly Point[][], obstacles: readonly Rect[]): Point[] {
+  const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
+  return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
+}
 
+/**
+ * The two right-angle elbows between `start` and `end`: across then down, and
+ * down then across. Every detour candidate is already axis-aligned, so the
+ * orthogonal style is these two plus those, judged by the same rule.
+ */
+function elbows(start: Point, end: Point): Point[][] {
+  return [
+    [start, { x: end.x, y: start.y }, end],
+    [start, { x: start.x, y: end.y }, end],
+  ]
+}
+
+/** Ways past a blocking region: over it, under it, left of it, right of it. */
+function detourCandidates(start: Point, end: Point, region: Rect): Point[][] {
   const above = region.y - OBSTACLE_CLEARANCE_PX
   const below = region.y + region.h + OBSTACLE_CLEARANCE_PX
   const leftOf = region.x - OBSTACLE_CLEARANCE_PX
   const rightOf = region.x + region.w + OBSTACLE_CLEARANCE_PX
-
-  const candidates: Point[][] = [
+  return [
     [start, { x: start.x, y: above }, { x: end.x, y: above }, end],
     [start, { x: start.x, y: below }, { x: end.x, y: below }, end],
     [start, { x: leftOf, y: start.y }, { x: leftOf, y: end.y }, end],
     [start, { x: rightOf, y: start.y }, { x: rightOf, y: end.y }, end],
   ]
-  const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
-  return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
+}
+
+/** The union of whatever `start`→`end` runs through, if anything does. */
+function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): Rect | undefined {
+  return unionRect(obstacles.filter((rect) => segmentCrossesRect(start, end, rect)))
+}
+
+function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
+  const region = blockingRegion(start, end, obstacles)
+  if (region === undefined) return [start, end]
+  return bestCandidate(detourCandidates(start, end, region), obstacles)
+}
+
+/**
+ * Right angles only, whether or not anything is in the way — that is what the
+ * style asks for, so a clear path bends too.
+ *
+ * The elbows come first and the detours join them only when something blocks,
+ * which keeps the common case to a single corner instead of routing every
+ * edge around a region that is not there.
+ */
+function routeOrthogonal(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
+  const region = blockingRegion(start, end, obstacles)
+  const candidates =
+    region === undefined
+      ? elbows(start, end)
+      : [...elbows(start, end), ...detourCandidates(start, end, region)]
+  return bestCandidate(candidates, obstacles)
 }
 
 /**
@@ -193,7 +233,11 @@ function detourAround(start: Point, end: Point, obstacles: readonly Rect[]): Poi
  * straight through a node reads as though it connects that node instead. The
  * two endpoint nodes are never obstacles — the edge has to reach them.
  */
-export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): ResolvedEdgeNode {
+export function routeEdge(
+  nodes: readonly SpatialNode[],
+  edge: CanvasEdge,
+  style: EdgeRoutingStyle = 'straight',
+): ResolvedEdgeNode {
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
   const toNode = nodes.find((n) => n.id === edge.toNode)
 
@@ -248,7 +292,15 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
   return {
     kind: 'edge',
     id: edge.id,
-    path: detourAround(start, end, obstacles),
+    // 'curved' is accepted by the model but has no rendering yet: the scene
+    // graph carries edges as a point path and the SVG backend draws them as a
+    // <polyline>, so control points would render as corners. Until the
+    // backend can express a curve it routes as 'straight' rather than
+    // pretending — see the routing-style slice notes.
+    path:
+      style === 'orthogonal'
+        ? routeOrthogonal(start, end, obstacles)
+        : routeStraight(start, end, obstacles),
     fromSide,
     toSide,
     fromEnd,
