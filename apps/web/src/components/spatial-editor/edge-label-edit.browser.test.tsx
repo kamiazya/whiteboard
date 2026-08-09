@@ -80,7 +80,7 @@ it('double-clicking an edge opens the label editor; committing sets the label', 
   expect(latest.canvas.nodes).toHaveLength(2)
 
   await userEvent.fill(labelEditor(container) as HTMLTextAreaElement, 'yes')
-  await userEvent.click(rootOf(container), { position: { x: 650, y: 500 } })
+  await userEvent.click(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() => expect(labelEditor(container)).toBeNull())
 
   expect(latest.commands).toContain('set-edge-label')
@@ -115,7 +115,7 @@ it('committing an empty value removes the label', async () => {
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
 
   await userEvent.fill(labelEditor(container) as HTMLTextAreaElement, '')
-  await userEvent.click(rootOf(container), { position: { x: 650, y: 500 } })
+  await userEvent.click(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() => expect(labelEditor(container)).toBeNull())
 
   expect(latest.canvas.edges[0]).not.toHaveProperty('label')
@@ -136,7 +136,7 @@ it('typed spaces reach the label editor instead of arming the Space-pan', async 
   await userEvent.type(labelEditor(container) as HTMLTextAreaElement, 'depends on')
   expect((labelEditor(container) as HTMLTextAreaElement).value).toBe('depends on')
 
-  await userEvent.click(rootOf(container), { position: { x: 650, y: 500 } })
+  await userEvent.click(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() => expect(latest.canvas.edges[0]).toMatchObject({ label: 'depends on' }))
 })
 
@@ -144,7 +144,7 @@ it('double-clicking empty space still creates a node (S6-2 unaffected)', async (
   const { Host, latest } = makeHost(makeStart())
   const { container } = render(<Host />)
 
-  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 480 } })
+  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
   expect(latest.canvas.nodes).toHaveLength(3)
   expect(labelEditor(container)).toBeNull()

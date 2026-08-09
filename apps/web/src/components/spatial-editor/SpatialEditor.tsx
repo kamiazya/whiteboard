@@ -142,6 +142,7 @@ import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
+import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
@@ -188,6 +189,10 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
  * alone.
  */
 const SNAP_GRID_CANVAS_PX = 20
+
+/** Overview size. Big enough to aim at, small enough not to cover content. */
+const MINIMAP_WIDTH_PX = 160
+const MINIMAP_HEIGHT_PX = 110
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -1886,6 +1891,53 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
     }
 
+    /**
+     * The editor's own pixel size, for the minimap's visible-area marker.
+     *
+     * A ResizeObserver rather than a window `resize` listener, because the
+     * container resizes without the window doing so — a side panel opening,
+     * the browser chrome changing height on mobile — and a marker that lags
+     * those is wrong about where you are.
+     *
+     * Guarded because jsdom has no ResizeObserver: without the guard every
+     * jsdom test that mounts this editor would throw. There it measures once
+     * and stays there, which is correct for a layout that never changes.
+     */
+    const [rootSize, setRootSize] = useState({ width: 0, height: 0 })
+    useLayoutEffect(() => {
+      const root = rootRef.current
+      if (root === null) return
+      const measure = () => {
+        setRootSize((prev) =>
+          prev.width === root.clientWidth && prev.height === root.clientHeight
+            ? prev
+            : { width: root.clientWidth, height: root.clientHeight },
+        )
+      }
+      measure()
+      if (typeof ResizeObserver === 'undefined') return
+      const observer = new ResizeObserver(measure)
+      observer.observe(root)
+      return () => observer.disconnect()
+    }, [])
+
+    /**
+     * Node boxes for the overview, with each authored colour resolved to the
+     * accent the scene already uses for it. A preset key resolves through the
+     * current mode's palette; a hex passes through; an unstyled node carries
+     * no colour and the overview falls back to its muted default.
+     */
+    const minimapNodes = useMemo(() => {
+      const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+      const colorOf = (id: string): string | undefined => {
+        const color = canvas.nodes.find((n) => n.id === id)?.color
+        if (color === undefined) return undefined
+        if (color.startsWith('#')) return color
+        return palette.presets[color as SpatialPresetKey]?.stroke
+      }
+      return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
+    }, [boxes, canvas, theme])
+
     /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
     const zoomAtViewportCenter = (factor: number) => {
       setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
@@ -2288,6 +2340,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onLostPointerCapture={handlePointerCancel}
         onKeyDown={handleKeyDown}
       >
+        {/* Screen space, outside the pan/zoom transform — an overview that
+          panned with the canvas would defeat its purpose.
+          It stays up during a drag: `data-editor-overlay` already stops a
+          press on it reaching the canvas, so hiding bought nothing and cost
+          a flicker on every gesture. Hidden only on an empty canvas, where
+          an overview of nothing is chrome with no job. */}
+        {boxes.length > 0 && rootSize.width > 0 && (
+          <MinimapOverlay
+            boxes={minimapNodes}
+            viewportRect={{
+              x: viewport.x,
+              y: viewport.y,
+              width: rootSize.width / viewport.zoom,
+              height: rootSize.height / viewport.zoom,
+            }}
+            width={MINIMAP_WIDTH_PX}
+            height={MINIMAP_HEIGHT_PX}
+            onNavigate={(point: { x: number; y: number }) =>
+              setViewport((vp) => ({
+                ...vp,
+                x: point.x - rootSize.width / vp.zoom / 2,
+                y: point.y - rootSize.height / vp.zoom / 2,
+              }))
+            }
+          />
+        )}
         {/* The OOUI creation surface: every canvas is empty until a node
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to

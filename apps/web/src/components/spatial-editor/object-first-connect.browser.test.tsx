@@ -8,6 +8,11 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
+// Without the stylesheet every Tailwind `absolute` in the dock degrades to
+// `static`, so the dock lands in document flow and any absolutely-positioned
+// sibling shifts it into the scene — where it becomes unclickable. This file
+// asserts on real click targets, so it needs real styles.
+import '../../index.css'
 
 afterEach(cleanup)
 
@@ -85,7 +90,7 @@ it('double-click creation survives while the Connect tool is armed (S6-2)', asyn
   const { container } = render(<Host />)
 
   await userEvent.click(connectToolButton(container))
-  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 480 } })
+  await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 300 } })
 
   await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
   expect(latest.canvas.nodes.length).toBe(3)
