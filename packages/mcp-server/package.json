@@ -174,7 +174,7 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@resvg/resvg-js": "^2.6.2",
     "cosmiconfig": "^9.0.0",
-    "hono": "^4.12.27",
+    "hono": "^4.12.34",
     "inversify": "catalog:",
     "jose": "^6.2.3",
     "kysely": "^0.28.17",

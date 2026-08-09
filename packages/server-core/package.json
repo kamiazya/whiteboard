@@ -24,7 +24,7 @@
     "@kamiazya/whiteboard-canvas-ports": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-workspace": "workspace:*",
-    "hono": "^4.12.27",
+    "hono": "^4.12.34",
     "loro-crdt": "catalog:",
     "zod": "catalog:"
   },
