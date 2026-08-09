@@ -60,6 +60,7 @@
 import type {
   CanvasColor,
   ClipboardFragment,
+  EdgeRoutingStyle,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -211,6 +212,21 @@ const MINIMAP_HEIGHT_PX = 110
  * screen collides in exactly the same way, and a media query cannot see it.
  */
 const MINIMAP_MIN_ROOT_WIDTH_PX = 768
+
+/**
+ * The routing styles offered in the UI.
+ *
+ * `curved` is a valid model value but routes as `straight` until the SVG
+ * backend can draw a curve, so offering it would be a control that changes
+ * nothing. It joins this list when it renders.
+ */
+const EDGE_ROUTING_CHOICES: readonly {
+  readonly style: EdgeRoutingStyle
+  readonly label: string
+}[] = [
+  { style: 'straight', label: 'Straight' },
+  { style: 'orthogonal', label: 'Orthogonal' },
+]
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -2890,6 +2906,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     },
                   })
                 }
+                // Empty space IS the canvas, so canvas-wide settings are acted
+                // on from here — the recorded OOUI rule puts actions on an
+                // existing object with that object, and keeps the dock's "+"
+                // menu for things that do not exist yet.
+                //
+                // Provisional placement: a canvas with several settings wants
+                // its own surface rather than a growing context menu.
+                const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
+                emptyItems.push({ kind: 'separator' })
+                emptyItems.push({
+                  kind: 'options',
+                  label: 'Edge routing',
+                  options: EDGE_ROUTING_CHOICES.map(({ style, label }) => ({
+                    key: style,
+                    label,
+                    selected: currentRouting === style,
+                    onSelect: () => {
+                      const command: EditorCommand = { kind: 'set-edge-routing', style }
+                      onChange(applyCommand(canvasRef.current, command), command)
+                    },
+                  })),
+                })
                 return emptyItems
               }
               const items: ContextMenuItem[] = []

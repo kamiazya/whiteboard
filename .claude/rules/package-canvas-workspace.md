@@ -49,6 +49,15 @@
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT
   merge while avoiding Loro's nested-container overwrite issues.
+- A third map, `doc.getMap('canvas')`, holds the canvas ENVELOPE —
+  properties of the canvas rather than of anything on it (today
+  `x-whiteboard`, the rendering preferences). Separate because the merge
+  story differs in kind: nodes and edges are keyed per object so two peers
+  editing different objects both survive, whereas a canvas-wide preference
+  is one value with one meaning and last-writer-wins per key is all it
+  needs. Anything the canvas carries beside `nodes`/`edges` must be written
+  here — a schema round-trip through JSON is NOT evidence it persists,
+  since this bridge is the path the app actually saves through.
 
 ## Tests
 

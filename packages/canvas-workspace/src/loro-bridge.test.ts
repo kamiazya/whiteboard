@@ -844,3 +844,62 @@ test('a lock written after the snapshot survives snapshot + update replay', () =
       .sort(),
   ).toEqual([FILE_NODE.id, TEXT_NODE.id].sort())
 })
+
+// The canvas ENVELOPE, not its contents. Nodes and edges each get a keyed
+// map so two peers editing different objects converge; a canvas-wide
+// preference is one value with one meaning, so last-writer-wins per key is
+// the whole story.
+describe('canvas-level extension', () => {
+  test('round-trips the routing style', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    })
+
+    expect(readSpatialCanvas(doc)['x-whiteboard']).toEqual({
+      edgeRouting: { style: 'orthogonal' },
+    })
+  })
+
+  test('leaves the key absent when the canvas never set one', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [], edges: [] })
+
+    expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
+  })
+
+  // Reverting to the default must clear the stored value, or the canvas keeps
+  // rendering a preference the user turned off.
+  test('clears the stored setting when the canvas drops it', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    })
+    writeSpatialCanvas(doc, { nodes: [], edges: [] })
+
+    expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
+  })
+
+  test('survives a merge from a peer that only moved a node', () => {
+    const a = makeDoc()
+    writeSpatialCanvas(a, {
+      nodes: [TEXT_NODE],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    })
+    const b = makeDoc()
+    b.import(a.export({ mode: 'snapshot' }))
+    writeSpatialCanvas(b, {
+      nodes: [{ ...TEXT_NODE, x: 999 }],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    })
+    a.import(b.export({ mode: 'snapshot' }))
+
+    expect(readSpatialCanvas(a)['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+  })
+})
