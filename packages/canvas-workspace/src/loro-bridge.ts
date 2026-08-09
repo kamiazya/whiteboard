@@ -3,6 +3,7 @@ import {
   type CanvasEdge,
   canvasCoreMetaSchema,
   canvasEdgeSchema,
+  canvasExtensionSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   type SpatialCanvas,
@@ -14,6 +15,18 @@ import type { z } from 'zod'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
+/**
+ * The canvas ENVELOPE — properties of the canvas rather than of anything on
+ * it (today: the `x-whiteboard` rendering preferences).
+ *
+ * A third top-level map rather than a field beside the node entries, because
+ * the merge story is different in kind. Nodes and edges are keyed per object
+ * so two peers editing different objects both survive; a canvas-wide
+ * preference is ONE value with one meaning, and last-writer-wins per key is
+ * the whole of what it needs.
+ */
+const CANVAS_KEY = 'canvas'
+const EXTENSION_FIELD = 'x-whiteboard'
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -85,6 +98,13 @@ function edgeToFields(edge: CanvasEdge): Fields {
 export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
+  // Deleted rather than left behind when the canvas drops it: a canvas that
+  // returned to the default must stop rendering a preference the author
+  // turned off.
+  const canvasMap = doc.getMap(CANVAS_KEY)
+  const extension = canvas[EXTENSION_FIELD]
+  if (extension === undefined) canvasMap.delete(EXTENSION_FIELD)
+  else canvasMap.set(EXTENSION_FIELD, extension)
 
   const existingNodeIds = new Set<string>(nodesMap.keys())
   const existingEdgeIds = new Set<string>(edgesMap.keys())
@@ -320,7 +340,11 @@ export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
     if (parsed.success) edges.push(parsed.data)
   }
 
-  return { nodes, edges }
+  // Parsed, not trusted: the stored value came from another version or peer,
+  // and canvas-model's own rule for this key is that an unreadable payload
+  // costs the preference, never the canvas.
+  const extension = canvasExtensionSchema.safeParse(doc.getMap(CANVAS_KEY).get(EXTENSION_FIELD))
+  return extension.success ? { nodes, edges, [EXTENSION_FIELD]: extension.data } : { nodes, edges }
 }
 
 /**
