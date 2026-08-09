@@ -14,12 +14,14 @@ import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -182,6 +184,27 @@ export function DaemonCanvasPage({
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
     onViewportRequest: (payload) => applyViewportRequest(payload, spatialEditorRef.current),
     identity: canvas ?? undefined,
+  })
+
+  // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
+  // snapshot routes. The staleness stamp is the referenced canvas's
+  // updatedAt, exactly as in browser-local mode.
+  const fileSeams = useCanvasFileSeams({
+    canvas: canvasValue,
+    adapter: useMemo(
+      () =>
+        createDaemonFileAdapter({
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceId: canvas?.workspaceId ?? '',
+          slug: canvas?.slug ?? '',
+        }),
+      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug],
+    ),
+    stampOf: useMemo(
+      () => new Map(controller.canvases.map((entry) => [entry.slug, entry.updatedAt ?? ''])),
+      [controller.canvases],
+    ),
   })
 
   const commands = useWhiteboardCommands({
@@ -499,6 +522,7 @@ export function DaemonCanvasPage({
                 .filter((entry) => entry.slug !== canvas?.slug)
                 .map((entry) => ({ file: entry.slug, label: entry.slug }))}
               onOpenFileRef={(file) => controller.switchCanvas(file)}
+              {...fileSeams}
               lockedNodeIds={lockedNodeIds}
               lockedEdgeIds={lockedEdgeIds}
               onToggleNodeLock={setNodeLock}

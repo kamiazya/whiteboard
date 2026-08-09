@@ -13,6 +13,7 @@ import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import { isImageRef, newImageRef } from './canvas-file-ref.js'
 import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
@@ -38,20 +39,13 @@ export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
   return [...new Set(canvas.nodes.flatMap((node) => (node.type === 'file' ? [node.file] : [])))]
 }
 
-/** Reference prefix distinguishing stored image assets from canvas ids. */
-const IMAGE_REF_PREFIX = 'asset:'
-
-function isImageRef(file: string): boolean {
-  return file.startsWith(IMAGE_REF_PREFIX)
-}
-
 /**
  * Stores a picked/dropped/pasted image in the canvas file store and returns
  * the reference for the created file node, or undefined on failure.
  */
 async function storeImageAsset(file: File): Promise<string | undefined> {
   try {
-    const ref = `${IMAGE_REF_PREFIX}${crypto.randomUUID()}`
+    const ref = newImageRef(crypto.randomUUID())
     await new CanvasFileStore().put(ref, {
       mimeType: file.type,
       blob: file,
