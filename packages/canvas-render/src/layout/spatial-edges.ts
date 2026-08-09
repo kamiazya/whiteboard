@@ -81,12 +81,117 @@ function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
   }
 }
 
+/** How far a detour keeps clear of the boxes it steps around, in px. */
+const OBSTACLE_CLEARANCE_PX = 16
+
+/**
+ * Whether a segment passes through a rect's INTERIOR. Touching a border does
+ * not count: every edge starts and ends on a border by construction, and a
+ * route that grazes a corner is not the failure this is looking for.
+ *
+ * Slab method, with the parallel-to-an-axis case handled by the same
+ * comparison rather than a special branch.
+ */
+function segmentCrossesRect(a: Point, b: Point, rect: Rect): boolean {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  let enter = 0
+  let exit = 1
+  const slabs: readonly [number, number, number][] = [
+    [dx, rect.x - a.x, rect.x + rect.w - a.x],
+    [dy, rect.y - a.y, rect.y + rect.h - a.y],
+  ]
+  for (const [delta, near, far] of slabs) {
+    if (delta === 0) {
+      // Parallel to this axis: no crossing unless it already lies within.
+      if (near > 0 || far < 0) return false
+      continue
+    }
+    const t0 = Math.min(near / delta, far / delta)
+    const t1 = Math.max(near / delta, far / delta)
+    enter = Math.max(enter, t0)
+    exit = Math.min(exit, t1)
+    if (enter >= exit) return false
+  }
+  return exit > enter
+}
+
+const pathIsClear = (path: readonly Point[], obstacles: readonly Rect[]) =>
+  path.every(
+    (point, i) =>
+      i === 0 || obstacles.every((rect) => !segmentCrossesRect(path[i - 1] as Point, point, rect)),
+  )
+
+function unionRect(rects: readonly Rect[]): Rect | undefined {
+  const [first, ...rest] = rects
+  if (first === undefined) return undefined
+  let minX = first.x
+  let minY = first.y
+  let maxX = first.x + first.w
+  let maxY = first.y + first.h
+  for (const rect of rest) {
+    minX = Math.min(minX, rect.x)
+    minY = Math.min(minY, rect.y)
+    maxX = Math.max(maxX, rect.x + rect.w)
+    maxY = Math.max(maxY, rect.y + rect.h)
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+const pathLength = (path: readonly Point[]) =>
+  path.reduce(
+    (total, point, i) =>
+      i === 0
+        ? 0
+        : total +
+          Math.hypot(point.x - (path[i - 1] as Point).x, point.y - (path[i - 1] as Point).y),
+    0,
+  )
+
+/**
+ * A path from `start` to `end` that steps around everything in `obstacles`.
+ *
+ * Four candidates — over, under, left of, right of the blocking region — each
+ * a pair of waypoints on one side of it. The shortest candidate that is
+ * itself clear wins; if none is clear the shortest is used anyway, because
+ * layout has to return SOMETHING and a route that still crosses is better
+ * than a thrown error or a straight line through everything.
+ *
+ * Deliberately not a visibility graph or A*: this runs per edge on every
+ * layout, and four candidates against a union box handles the arrangements
+ * that actually occur (a node or two sitting between two others). A denser
+ * search belongs behind the routing-style setting, not in the default path.
+ */
+function detourAround(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
+  const blocking = obstacles.filter((rect) => segmentCrossesRect(start, end, rect))
+  const region = unionRect(blocking)
+  if (region === undefined) return [start, end]
+
+  const above = region.y - OBSTACLE_CLEARANCE_PX
+  const below = region.y + region.h + OBSTACLE_CLEARANCE_PX
+  const leftOf = region.x - OBSTACLE_CLEARANCE_PX
+  const rightOf = region.x + region.w + OBSTACLE_CLEARANCE_PX
+
+  const candidates: Point[][] = [
+    [start, { x: start.x, y: above }, { x: end.x, y: above }, end],
+    [start, { x: start.x, y: below }, { x: end.x, y: below }, end],
+    [start, { x: leftOf, y: start.y }, { x: leftOf, y: end.y }, end],
+    [start, { x: rightOf, y: start.y }, { x: rightOf, y: end.y }, end],
+  ]
+  const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
+  return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
+}
+
 /**
  * Resolves one canvas-model edge into a scene-graph edge with a concrete
  * point path. Pure function of (nodes, edge): never throws — a missing
  * endpoint id degenerates to a zero-length path at the origin rather than
  * raising, so a single bad reference never aborts layout for the rest of
  * the canvas.
+ *
+ * The path steps around any OTHER node between the endpoints; an edge drawn
+ * straight through a node reads as though it connects that node instead. The
+ * two endpoint nodes are never obstacles — the edge has to reach them.
  */
 export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): ResolvedEdgeNode {
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
@@ -138,6 +243,15 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
 
   const start = sidePoint(fromRect, fromSide)
   const end = sidePoint(toRect, toSide)
+  const obstacles = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
 
-  return { kind: 'edge', id: edge.id, path: [start, end], fromSide, toSide, fromEnd, toEnd }
+  return {
+    kind: 'edge',
+    id: edge.id,
+    path: detourAround(start, end, obstacles),
+    fromSide,
+    toSide,
+    fromEnd,
+    toEnd,
+  }
 }
