@@ -206,6 +206,35 @@ describe('SSE sync transport', () => {
     expect(frames.some((f) => f.includes('viewport_request') && f.includes('req-2'))).toBe(true)
   })
 
+  it('stops treating a stream as ready for a document it unsubscribed', async () => {
+    // Readiness lives on the subscription, so releasing the document takes it
+    // with it. Held separately it would outlive the subscription and keep the
+    // daemon sending viewport requests for a canvas the client stopped
+    // receiving updates for.
+    const app = createApp(createRuntimeOptions())
+    const { res, streamId } = await openStream(app)
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-gone'] }),
+    })
+    await app.request('/api/sync/message', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, doc: 'ws-1/vp-gone', message: { type: 'client_ready' } }),
+    })
+
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, unsubscribe: ['ws-1/vp-gone'] }),
+    })
+    sendViewportRequest('ws-1', 'vp-gone', 'req-gone', { mode: 'fit' })
+
+    const frames = await readEvents(res, 1, 300)
+    expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])
+  })
+
   it('resolves a pending viewport request from a viewport_response', async () => {
     const app = createApp(createRuntimeOptions())
     const { streamId } = await openStream(app)

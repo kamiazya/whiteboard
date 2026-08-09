@@ -123,7 +123,12 @@ export function fromBase64(value: string): Uint8Array {
 
 export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
-  private readonly listeners = new Map<string, Set<DocListener>>()
+  /**
+   * One record per document. `ready` lives beside the listeners rather than in
+   * a set of its own so it cannot outlive the subscription it describes:
+   * releasing a document is a single delete, with nothing left to forget.
+   */
+  private readonly docs = new Map<string, { listeners: Set<DocListener>; ready: boolean }>()
   private abort: AbortController | null = null
   /** Minted by the daemon and delivered on the stream itself, so it exists only
    *  between a stream opening and that stream ending. */
@@ -132,9 +137,6 @@ export class SseStreamHub implements SseStreamSource {
   private closed = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
-  /** Documents that have signalled readiness, so the signal can be repeated
-   *  against a stream the daemon opened after a reconnect. */
-  private readonly readyDocs = new Set<string>()
 
   constructor(options: SseStreamHubOptions) {
     this.options = { ...options, baseUrl: options.baseUrl.replace(/\/$/, '') }
@@ -146,24 +148,24 @@ export class SseStreamHub implements SseStreamSource {
    * back off, so an abandoned canvas stops costing traffic.
    */
   subscribe(doc: string, listener: DocListener): () => void {
-    let set = this.listeners.get(doc)
-    if (!set) {
-      set = new Set()
-      this.listeners.set(doc, set)
+    let entry = this.docs.get(doc)
+    if (!entry) {
+      entry = { listeners: new Set(), ready: false }
+      this.docs.set(doc, entry)
       void this.send({ subscribe: [doc] })
     }
-    set.add(listener)
+    entry.listeners.add(listener)
     void this.start()
 
     return () => {
-      const current = this.listeners.get(doc)
+      const current = this.docs.get(doc)
       if (!current) return
-      current.delete(listener)
-      if (current.size > 0) return
-      this.listeners.delete(doc)
-      // Readiness is replayed on every reconnect, so a document left here would
-      // keep declaring the new stream ready for a canvas nobody is watching.
-      this.readyDocs.delete(doc)
+      current.listeners.delete(listener)
+      if (current.listeners.size > 0) return
+      // One delete drops the readiness with it. Kept apart, it would survive
+      // here and keep declaring every reconnected stream ready for a canvas
+      // nobody is watching.
+      this.docs.delete(doc)
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -172,7 +174,8 @@ export class SseStreamHub implements SseStreamSource {
     // Readiness is stream state, not a one-off event: the daemon only routes
     // viewport requests to streams that declared it, and a reconnect gives us
     // a stream that never has.
-    if (isClientReady(message)) this.readyDocs.add(doc)
+    const entry = this.docs.get(doc)
+    if (isClientReady(message) && entry) entry.ready = true
     // Before a stream exists there is nothing to address, and the daemon would
     // have nowhere to apply it. Readiness is replayed once one opens; the other
     // control messages are inert server-side, so dropping them costs nothing.
@@ -214,9 +217,9 @@ export class SseStreamHub implements SseStreamSource {
     const delayFor = this.options.retryDelayMs ?? defaultRetryDelayMs
 
     let attempt = 0
-    while (!this.closed && this.listeners.size > 0) {
+    while (!this.closed && this.docs.size > 0) {
       const connected = await this.readStreamOnce()
-      if (this.closed || this.listeners.size === 0) break
+      if (this.closed || this.docs.size === 0) break
       attempt = connected ? 0 : attempt + 1
       await this.wait(delayFor(attempt))
     }
@@ -274,9 +277,10 @@ export class SseStreamHub implements SseStreamSource {
     if (!payload) return
     this.streamId = payload.streamId
 
-    const docs = [...this.listeners.keys()]
+    const docs = [...this.docs.keys()]
     if (docs.length > 0) void this.send({ subscribe: docs })
-    for (const doc of this.readyDocs) {
+    for (const [doc, entry] of this.docs) {
+      if (!entry.ready) continue
       void this.post('/api/sync/message', {
         streamId: payload.streamId,
         doc,
@@ -303,19 +307,19 @@ export class SseStreamHub implements SseStreamSource {
     if (evt.event === 'update') {
       const payload = parseFrame(syncUpdateEventSchema, evt.data)
       if (!payload) return
-      const set = this.listeners.get(payload.doc)
-      if (!set) return
+      const entry = this.docs.get(payload.doc)
+      if (!entry) return
       const bytes = fromBase64(payload.update)
-      for (const l of set) l.onUpdate(bytes)
+      for (const l of entry.listeners) l.onUpdate(bytes)
       return
     }
     // Text frames are addressed too, so a version_created for one canvas never
     // reaches another canvas sharing this stream.
     const envelope = parseFrame(syncMessageEventSchema, evt.data)
     if (!envelope) return
-    const set = this.listeners.get(envelope.doc)
-    if (!set) return
-    for (const l of set) l.onMessage(envelope.raw)
+    const entry = this.docs.get(envelope.doc)
+    if (!entry) return
+    for (const l of entry.listeners) l.onMessage(envelope.raw)
   }
 
   close(): void {
@@ -327,8 +331,7 @@ export class SseStreamHub implements SseStreamSource {
     // Settle a wait in flight: the loop awaiting it checks `closed` and exits.
     this.retryResolve?.()
     this.retryResolve = null
-    this.listeners.clear()
-    this.readyDocs.clear()
+    this.docs.clear()
     this.started = false
   }
 }

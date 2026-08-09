@@ -62,13 +62,22 @@ export function setSyncSseHooks(hooks: {
   resolveViewportRequest = hooks.resolveViewportRequest
 }
 
+/**
+ * `ready` says the stream has signalled `client_ready` for that document. A
+ * viewport request is withheld until then and replayed from cache on ready,
+ * matching the WebSocket path — a pre-ready client cannot apply a viewport,
+ * and sending it both now and on replay would deliver it twice.
+ *
+ * It is a field on the subscription rather than a second set keyed by the same
+ * document, so readiness cannot outlive the subscription it describes:
+ * unsubscribing is one delete, with nothing left to forget to clear.
+ */
+interface SyncStreamDoc {
+  ready: boolean
+}
+
 interface SyncStream {
-  docs: Set<string>
-  // Docs this stream has signalled `client_ready` for. A viewport request is
-  // withheld until then and replayed from cache on ready, matching the
-  // WebSocket path — a pre-ready client cannot apply a viewport, and sending
-  // it both now and on replay would deliver it twice.
-  ready: Set<string>
+  docs: Map<string, SyncStreamDoc>
   send: (event: string, data: string) => void
 }
 
@@ -125,7 +134,7 @@ export function sseBroadcastTextToReady(workspaceId: string, slug: string, raw: 
   const payload: SyncMessageEvent = { doc: key, raw }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {
-    if (!stream.ready.has(key)) continue
+    if (!stream.docs.get(key)?.ready) continue
     stream.send('message', frame)
   }
 }
@@ -149,8 +158,7 @@ export function createSyncSseRouter() {
 
     return streamSSE(c, async (stream) => {
       const entry: SyncStream = {
-        docs: new Set(),
-        ready: new Set(),
+        docs: new Map(),
         send: (event, data) => {
           void stream.writeSSE({ event, data })
         },
@@ -183,12 +191,12 @@ export function createSyncSseRouter() {
     // believing it is subscribed and waiting forever for updates.
     if (!stream) return c.json({ error: 'unknown_stream' }, 404)
 
-    for (const key of parsed.data.subscribe ?? []) stream.docs.add(key)
-    for (const key of parsed.data.unsubscribe ?? []) {
-      stream.docs.delete(key)
-      stream.ready.delete(key)
+    for (const key of parsed.data.subscribe ?? []) {
+      if (!stream.docs.has(key)) stream.docs.set(key, { ready: false })
     }
-    return c.json({ ok: true, docs: [...stream.docs].sort() })
+    // One delete takes the readiness with it.
+    for (const key of parsed.data.unsubscribe ?? []) stream.docs.delete(key)
+    return c.json({ ok: true, docs: [...stream.docs.keys()].sort() })
   })
 
   // The client->server half of the sync protocol. A WebSocket carries these as
@@ -204,7 +212,14 @@ export function createSyncSseRouter() {
 
     const { doc, message } = parsed.data
     if (message.type === 'client_ready') {
-      stream.ready.add(doc)
+      // Upsert rather than require an existing subscription: subscribe and
+      // client_ready are separate POSTs with no ordering guarantee between
+      // them, and dropping readiness that arrived first would withhold the
+      // viewport request for good. Declaring readiness is a statement of
+      // interest in the document either way.
+      const entry = stream.docs.get(doc) ?? { ready: false }
+      entry.ready = true
+      stream.docs.set(doc, entry)
       // Replay the latest viewport request so a stream that connected after
       // the request was issued still inherits the same fit/scroll/zoom intent.
       const cached = getCachedViewportRequest(doc)
