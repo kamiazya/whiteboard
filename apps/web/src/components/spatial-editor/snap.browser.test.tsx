@@ -21,7 +21,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(canvas0: SpatialCanvas = initial) {
+function makeHost(canvas0: SpatialCanvas = initial, lockedNodes: readonly string[] = []) {
   const latest: { canvas: SpatialCanvas } = { canvas: canvas0 }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(canvas0)
@@ -33,6 +33,8 @@ function makeHost(canvas0: SpatialCanvas = initial) {
           canvas={canvas}
           onChange={(next) => setCanvas(next)}
           theme="light"
+          lockedNodeIds={new Set(lockedNodes)}
+          onToggleNodeLock={() => {}}
         />
       </div>
     )
@@ -48,7 +50,7 @@ function drag(
   root: HTMLElement,
   from: { x: number; y: number },
   to: { x: number; y: number },
-  modifiers: { metaKey?: boolean } = {},
+  modifiers: { metaKey?: boolean; ctrlKey?: boolean } = {},
 ) {
   const r = root.getBoundingClientRect()
   fireEvent.pointerDown(root, {
@@ -122,11 +124,17 @@ it('draws the guide that justifies the snap while the drag is in flight', () => 
   expect(container.querySelector('[data-testid="snap-guides"]')).toBeNull()
 })
 
-it('places the node exactly where the pointer stopped while Cmd/Ctrl is held', () => {
+// Both modifiers, because the suspension is claimed for Cmd AND Ctrl and the
+// two reach the handler through different event fields — testing one would
+// leave the other free to regress on the platform that uses it.
+it.each([
+  ['Cmd', { metaKey: true }],
+  ['Ctrl', { ctrlKey: true }],
+] as const)('places the node exactly where the pointer stopped while %s is held', (_name, mod) => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  drag(rootOf(container), GRAB, DROP_NEAR_A, { metaKey: true })
+  drag(rootOf(container), GRAB, DROP_NEAR_A, mod)
 
   expect(byId(latest.canvas, 'b').x).toBe(135)
 })
@@ -142,22 +150,39 @@ it('snaps to the grid when no neighbour edge is in range', () => {
   expect(byId(latest.canvas, 'b').x).toBe(600)
 })
 
+const framedCanvas: SpatialCanvas = {
+  nodes: [
+    { id: 'frame', type: 'group', x: 407, y: 400, width: 200, height: 200, label: 'F' },
+    // Sits 5 inside the frame's left edge — close enough to attract.
+    { id: 'inner', type: 'text', x: 412, y: 460, width: 60, height: 40, text: 'I' },
+  ],
+  edges: [],
+}
+// Grab the frame chrome above `inner` and move 3 right. 410 is 10 from the
+// nearest grid line, so only the member can decide where this lands.
+const FRAME_GRAB = { x: 450, y: 420 }
+const FRAME_DROP = { x: 453, y: 420 }
+
 it('never snaps a group frame to a member it is carrying', () => {
-  const framed: SpatialCanvas = {
-    nodes: [
-      { id: 'frame', type: 'group', x: 407, y: 400, width: 200, height: 200, label: 'F' },
-      // Sits 5 inside the frame's left edge — close enough to attract, and
-      // it travels with the frame, so honouring it would peg the drag.
-      { id: 'inner', type: 'text', x: 412, y: 460, width: 60, height: 40, text: 'I' },
-    ],
-    edges: [],
-  }
-  const { Host, latest } = makeHost(framed)
+  const { Host, latest } = makeHost(framedCanvas)
   const { container } = render(<Host />)
 
-  // Grab the frame chrome above `inner` and move 3 right. 410 is 10 from
-  // the nearest grid line, so nothing but the member could pull it.
-  drag(rootOf(container), { x: 450, y: 420 }, { x: 453, y: 420 })
+  drag(rootOf(container), FRAME_GRAB, FRAME_DROP)
 
   expect(byId(latest.canvas, 'frame').x).toBe(410)
+})
+
+it('DOES snap a group frame to a LOCKED member, which stays put', () => {
+  // Containment is geometric, but the commit path refuses to move a locked
+  // member with its frame. So a locked member is stationary content, not
+  // something travelling with the drag — excluding it would throw away a
+  // real alignment target.
+  const { Host, latest } = makeHost(framedCanvas, ['inner'])
+  const { container } = render(<Host />)
+
+  drag(rootOf(container), FRAME_GRAB, FRAME_DROP)
+
+  expect(byId(latest.canvas, 'frame').x).toBe(412)
+  // ...and the lock still holds: the member did not travel.
+  expect(byId(latest.canvas, 'inner').x).toBe(412)
 })

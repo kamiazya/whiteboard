@@ -753,11 +753,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // member, or a frame's geometrically contained members (same rule the
       // commit uses). Left in, a carried node would attract its own carrier
       // and peg the gesture at a fixed offset.
+      //
+      // A LOCKED contained member is the exception, and it has to mirror the
+      // commit path exactly: that path refuses to move a locked member with
+      // its frame, so the member stays put and remains a legitimate
+      // alignment target. Dropping it here would silently discard one.
       const movingNode = canvas.nodes.find((n) => n.id === gestureState.nodeId)
       const carried = new Set<string>([gestureState.nodeId, ...extraIds])
       if (movingNode?.type === 'group') {
         for (const n of canvas.nodes) {
           if (
+            !isLocked(n.id) &&
             n.x >= gestureState.startX &&
             n.y >= gestureState.startY &&
             n.x + n.width <= gestureState.startX + movingNode.width &&
