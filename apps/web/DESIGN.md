@@ -103,6 +103,14 @@ Bindings today: `Cmd/Ctrl+A` select all, `Cmd/Ctrl+C/X/V` copy/cut/paste,
 `Shift+1`/`Shift+2` zoom to fit / to selection, plus the inline-handled
 Delete / Esc / Space-pan / arrows.
 
+The clipboard family (`Cmd+C/X/V`) is declared in the catalog but
+`handledInline` on purpose: it rides the NATIVE copy/cut/paste DOM
+events, because a keydown `preventDefault` on the chord suppresses the
+very event carrying `clipboardData` — the payload that crosses tabs and
+that lets foreign text degrade into a note. Paste follows a content
+cascade (image file → our `whiteboard/clipboard` JSON → any other text
+as a note → in-app slot fallback).
+
 Modifier policy: a spec claims the platform command chord with
 `mod: true` (Cmd on macOS or Ctrl elsewhere — either satisfies it) and
 Alt with `alt: true`; a held modifier suppresses every spec that does

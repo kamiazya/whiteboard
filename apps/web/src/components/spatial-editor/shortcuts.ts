@@ -85,9 +85,11 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: 'Select every node',
     tools: ['select'],
   },
-  // Clipboard family. With nothing to act on the handlers return false and
-  // the event falls through, so the browser keeps its own copy/paste for
-  // text selections.
+  // Clipboard family — declared here for catalog completeness, but handled
+  // by the NATIVE copy/cut/paste DOM events (handledInline): a keydown
+  // preventDefault on the chord would suppress the very event that carries
+  // `clipboardData`, which is what crosses tabs and what lets foreign text
+  // degrade into a note.
   {
     id: 'copy-selection',
     keys: ['c'],
@@ -95,6 +97,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     display: 'Cmd+C',
     description: 'Copy the selection',
     tools: ['select'],
+    handledInline: true,
   },
   {
     id: 'cut-selection',
@@ -103,6 +106,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     display: 'Cmd+X',
     description: 'Cut the selection',
     tools: ['select'],
+    handledInline: true,
   },
   {
     id: 'paste-clipboard',
@@ -111,6 +115,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     display: 'Cmd+V',
     description: 'Paste the copied nodes',
     tools: ['select'],
+    handledInline: true,
   },
   {
     id: 'duplicate-selection',

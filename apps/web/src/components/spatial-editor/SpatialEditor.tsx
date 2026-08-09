@@ -42,7 +42,12 @@
  * grouping, undo/redo, snapping,
  * persistence, and sync. Those are later phases.
  */
-import type { CanvasColor, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type {
+  CanvasColor,
+  ClipboardFragment,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
@@ -83,7 +88,11 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { extractClipboardFragment, remintClipboardFragment } from '../../lib/clipboard-fragment.js'
+import {
+  extractClipboardFragment,
+  parseClipboardText,
+  remintClipboardFragment,
+} from '../../lib/clipboard-fragment.js'
 import {
   hasClipboardFragment,
   readClipboardFragment,
@@ -112,7 +121,7 @@ import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
-import { findShortcut, type ShortcutId } from './shortcuts.js'
+import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
@@ -1146,32 +1155,58 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
-    /** Copy the selection into the in-app clipboard slot. No mutation. */
-    const copySelection = (): boolean => {
-      if (selection === undefined) return false
+    /**
+     * Copy the selection into the in-app clipboard slot, returning the
+     * fragment so the caller can also hand it to the OS clipboard. null
+     * when there is nothing to copy.
+     */
+    const copySelection = (): ClipboardFragment | null => {
+      if (selection === undefined) return null
       const fragment = extractClipboardFragment(
         canvasRef.current,
         new Set([selection.id, ...extraIds]),
       )
-      if (fragment.nodes.length === 0) return false
+      if (fragment.nodes.length === 0) return null
       writeClipboardFragment(fragment)
-      return true
+      return fragment
     }
 
-    /** Copy, then remove the selection as ONE batch (one undo step). */
-    const cutSelection = (): boolean => {
-      if (!copySelection() || selection === undefined) return false
+    /** Remove the selection as ONE batch (one undo step). */
+    const deleteSelectionAsBatch = (): boolean => {
+      if (selection === undefined) return false
       const ids = [selection.id, ...extraIds]
       const command: EditorCommand = {
         kind: 'batch',
         commands: ids.map((id) => ({ kind: 'delete-node', id }) as const),
       }
       const running = applyCommand(canvasRef.current, command)
-      if (running !== canvasRef.current) onChange(running, command)
+      if (running === canvasRef.current) return false
+      onChange(running, command)
       setSelectedId(null)
       setExtraIds(new Set())
       setSelectedEdgeId(null)
       return true
+    }
+
+    /** A note carrying pasted foreign text, at the viewport center. */
+    const createTextNodeAtViewportCenter = (text: string): void => {
+      const point = screenToCanvas(viewportCenterScreen(), viewport)
+      const node: SpatialNode = {
+        id: createId?.() ?? crypto.randomUUID(),
+        type: 'text',
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: NEW_NODE_HEIGHT,
+        text,
+      }
+      const command: EditorCommand = { kind: 'create-node', node }
+      const running = applyCommand(canvasRef.current, command)
+      if (running === canvasRef.current) return
+      onChange(running, command)
+      setSelectedId(node.id)
+      setExtraIds(new Set())
+      setSelectedEdgeId(null)
     }
 
     /**
@@ -1182,7 +1217,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const pasteClipboard = (at?: Point): boolean => {
       const fragment = readClipboardFragment()
-      if (fragment === null || fragment.nodes.length === 0) return false
+      if (fragment === null) return false
+      return pasteFragment(fragment, at)
+    }
+
+    /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
+    const pasteFragment = (
+      fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+      at?: Point,
+    ): boolean => {
+      if (fragment.nodes.length === 0) return false
       const current = canvasRef.current
       const existingIds = new Set([
         ...current.nodes.map((node) => node.id),
@@ -1249,12 +1293,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           return frameSelection()
         case 'select-all':
           return selectAllNodes()
-        case 'copy-selection':
-          return copySelection()
-        case 'cut-selection':
-          return cutSelection()
-        case 'paste-clipboard':
-          return pasteClipboard()
         case 'duplicate-selection':
           return duplicateSelection()
         case 'reorder-forward':
@@ -1860,12 +1898,53 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           const local = clientPointToRootLocal(e, root)
           addImageFile(file, screenToCanvas(local, viewport))
         }}
-        onPaste={(e) => {
-          if (onAddImage === undefined) return
-          const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
-          if (file === undefined) return
+        // The clipboard family rides the NATIVE events, not keydown: a
+        // keydown preventDefault on Cmd+C/X/V suppresses the very event
+        // carrying `clipboardData`, and that data is what crosses tabs and
+        // what lets foreign text degrade into a note.
+        onCopy={(e) => {
+          if (isTextEntryEvent(e.nativeEvent)) return
+          const fragment = copySelection()
+          if (fragment === null) return
           e.preventDefault()
-          addImageFile(file)
+          e.clipboardData?.setData('text/plain', JSON.stringify(fragment))
+        }}
+        onCut={(e) => {
+          if (isTextEntryEvent(e.nativeEvent)) return
+          const fragment = copySelection()
+          if (fragment === null) return
+          e.preventDefault()
+          e.clipboardData?.setData('text/plain', JSON.stringify(fragment))
+          deleteSelectionAsBatch()
+        }}
+        onPaste={(e) => {
+          if (isTextEntryEvent(e.nativeEvent)) return
+          // Content cascade (Excalidraw's shape): image file, then our own
+          // JSON, then any other text as a note. Only a completely empty
+          // clipboard falls through untouched.
+          const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
+          if (file !== undefined) {
+            if (onAddImage === undefined) return
+            e.preventDefault()
+            addImageFile(file)
+            return
+          }
+          const text = e.clipboardData?.getData('text/plain') ?? ''
+          const parsed = parseClipboardText(text)
+          if (parsed !== null) {
+            e.preventDefault()
+            pasteFragment(parsed)
+            return
+          }
+          if (text.trim() !== '') {
+            e.preventDefault()
+            createTextNodeAtViewportCenter(text)
+            return
+          }
+          // Nothing recognizable in the event — fall back to the in-app
+          // slot, which is what a same-tab Cmd+V carries in browsers that
+          // hand us an empty clipboardData for a canvas paste.
+          if (pasteClipboard()) e.preventDefault()
         }}
         onKeyUp={(e) => {
           if (e.key === ' ') spaceDownRef.current = false
@@ -2284,7 +2363,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 label: 'Cut',
                 icon: <Scissors />,
                 onSelect: () => {
-                  cutSelection()
+                  // Menu path mirrors the native cut: copy, then remove.
+                  if (copySelection() !== null) deleteSelectionAsBatch()
                 },
               })
               items.push({
