@@ -21,6 +21,7 @@
  */
 import { History, Redo2, Undo2 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { VersionPanel } from '../workspace-top-bar/VersionPanel.js'
@@ -46,8 +47,7 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(n
 const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl+'
 const MOD_KEY = IS_MAC ? 'Meta' : 'Control'
 
-const CLUSTER_BUTTON_CLASS =
-  'flex size-9 pointer-coarse:size-11 items-center justify-center rounded-md text-muted-foreground transition-[transform,color,background-color] duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+export const CLUSTER_BUTTON_CLASS = DOCK_BUTTON_CLASS
 
 function StepButton({
   label,

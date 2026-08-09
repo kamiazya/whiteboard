@@ -147,6 +147,7 @@ import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
+import { DOCK_WIDE_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
@@ -2392,7 +2393,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   data-testid="zoom-reset-button"
                   aria-label="Reset zoom to 100%"
                   onClick={() => zoomAtViewportCenter(1 / viewport.zoom)}
-                  className={`${TOOL_BUTTON_CLASS} w-12 text-xs tabular-nums`}
+                  className={`${DOCK_WIDE_BUTTON_CLASS} text-xs tabular-nums`}
                 >
                   {Math.round(viewport.zoom * 100)}%
                 </button>
