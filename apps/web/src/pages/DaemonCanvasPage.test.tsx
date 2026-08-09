@@ -373,9 +373,8 @@ describe('DaemonCanvasPage', () => {
   })
 
   it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
-    // Measured on the deployed app: the daemon had no open sync stream for
-    // tens of seconds at a time while the chip still read "Synced". Remote
-    // edits are not arriving in that window and nothing said so.
+    // A chip that reads Synced while the transport is down tells the user
+    // remote edits are arriving when they are not.
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,

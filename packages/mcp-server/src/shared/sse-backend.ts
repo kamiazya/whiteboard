@@ -103,7 +103,10 @@ export class SseBackend implements CanvasBackend {
         else handlers.onDisconnected?.()
       },
     })
-    handlers.onConnected()
+    // No unconditional report here: the source announces its state at
+    // subscribe time and on every change, so anything added on top would
+    // either overwrite an accurate "not connected yet" or double-report a
+    // connection — and the session sends client_ready per report.
   }
 
   /**

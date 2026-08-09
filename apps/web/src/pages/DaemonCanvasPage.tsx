@@ -339,9 +339,12 @@ export function DaemonCanvasPage({
   // consent page, the same trust anchor first-time pairing uses.
   const connectionStatus = (
     <ConnectionStatus
-      // An auth rejection outranks a dropped transport: re-pairing is the way
-      // out of it, while reconnecting resolves itself.
-      state={authError ? 'sync-off' : syncStatus === 'reconnecting' ? 'reconnecting' : 'synced'}
+      // Synced is claimed only while the session is actually connected. An
+      // auth rejection outranks everything else because re-pairing is the only
+      // way out of it; `idle` (not started yet) and `error` are folded in with
+      // `reconnecting`, whose copy makes no claim about recovery timing —
+      // reporting them as Synced is what this whole change exists to stop.
+      state={authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting'}
       daemonBaseUrl={daemonBaseUrl}
       onRepair={() => {
         void beginPairingGrant({

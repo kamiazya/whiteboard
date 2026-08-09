@@ -8,9 +8,11 @@
  * - `local`    — browser-local page; data exists only in this browser.
  *                `children` hosts page-supplied extras (daemon detection,
  *                capability hint) inside the popover.
- * - `reconnecting` — the transport dropped and is being retried. Edits stay
- *                in this browser and are sent when it comes back, so this is
- *                informational, not an error.
+ * - `reconnecting` — live sync is not running: the transport has not come up
+ *                yet, dropped, or failed. Deliberately makes NO promise about
+ *                edits made meanwhile — DaemonBackend.pushLocalUpdate drops
+ *                bytes while the socket is not OPEN, so claiming they are sent
+ *                on recovery would be false.
  * - `sync-off` — daemon-backed page whose session was rejected. The chip
  *                turns attention-colored and the popover carries the two
  *                ways forward (re-pair / continue browser-local). A polite
@@ -103,6 +105,15 @@ export function ConnectionStatus({
                 </>
               ) : null}
               .
+            </p>
+          </div>
+        )}
+        {state === 'reconnecting' && (
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="font-medium">Live sync is not running</p>
+            <p className="text-muted-foreground">
+              This canvas is not receiving changes from your local daemon right now, and edits made
+              here may not reach it. Reload the page if it does not recover.
             </p>
           </div>
         )}

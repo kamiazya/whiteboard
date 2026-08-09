@@ -173,10 +173,14 @@ export function sseStreamSourceContract(
       onConnectionChange: (connected) => states.push(connected),
     })
     await until(() => states.includes(true))
+    // Measured from here on: subscribing already records the state at join
+    // time, which on a fresh source is `false`. Asserting `includes(false)`
+    // over the whole array would pass without the drop emitting anything.
+    const before = states.length
 
     h.dropStream()
 
-    await until(() => states.includes(false))
+    await until(() => states.slice(before).includes(false))
     h.cleanup()
   })
 
