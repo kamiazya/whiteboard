@@ -288,6 +288,45 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   )
 
   itPosix(
+    'writes the reason to the daemon log when the spawned dev server cannot bind',
+    async () => {
+      const { port, env } = await prepareHookRun()
+      const logPath = join(REPO_ROOT, LOG_PATH_SUFFIX)
+
+      // reserveFreePort() binds port 0, reads the number, then CLOSES the
+      // listener — so between that close and the spawned server's own
+      // listen() the OS may hand the same ephemeral port to anything else on
+      // the machine. On a sharded CI runner that is a real, observed race
+      // (2026-08-09). Steal the port inside that window: the hook's probe
+      // still sees it free, and the delayed bind then fails.
+      const hookRun = runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '3000',
+        FAKE_PNPM_BIND_DELAY_MS: '600',
+      })
+      await new Promise((settle) => setTimeout(settle, 250))
+      // Drops every connection on arrival: this server exists only to hold
+      // the port, and a lingering socket from the hook's probe would make
+      // close() below wait on it.
+      const squatter = createServer((socket) => socket.destroy())
+      await new Promise<void>((listening) => squatter.listen(port, HOST, () => listening()))
+
+      try {
+        const { exitCode, stderr } = await hookRun
+        expect(exitCode).not.toBe(0)
+        // The hook points at the log; the log must actually name the cause,
+        // or "spawned process exited with code 1" is all anyone ever sees.
+        expect(stderr).toContain(LOG_PATH_SUFFIX)
+        const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
+        expect(log).toContain('EADDRINUSE')
+        expect(log).toContain(String(port))
+      } finally {
+        await new Promise<void>((closed) => squatter.close(() => closed()))
+      }
+    },
+  )
+
+  itPosix(
     'fails loudly when a colliding worktree answers the readiness probe right after our own spawn (post-spawn TOCTOU)',
     async () => {
       const { port, dataDir, invokedSentinelPath, env } = await prepareHookRun()
