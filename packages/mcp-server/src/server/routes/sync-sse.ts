@@ -87,9 +87,9 @@ export function docKey(workspaceId: string, slug: string): string {
 }
 
 function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
+  // Node-only file (mcp-server builds with `platform: 'node'`), so this takes
+  // the native conversion rather than building a string one byte at a time.
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
 }
 
 /**

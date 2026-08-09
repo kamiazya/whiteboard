@@ -99,7 +99,12 @@ const authFor = (doc: string): string | null | undefined => {
   const i = subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
   return i === -1 ? undefined : subscribeAuth[i]
 }
-const idle = () => vi.waitFor(() => expect(true).toBe(true))
+/**
+ * A real window in which a wrongly-forwarded message could arrive, for
+ * asserting that none does. `vi.waitFor` cannot express this: it passes on its
+ * first invocation, so it waits for approximately nothing.
+ */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
 
 describe('sse-shared-worker', () => {
   it('opens one stream however many documents are subscribed', async () => {
@@ -124,12 +129,18 @@ describe('sse-shared-worker', () => {
     port.postMessage({ type: 'subscribe', doc })
     await until(() => pushFrame !== null && subscribeBodies.length >= 1)
 
+    // The unsubscribed frame is pushed alone and given a real window to be
+    // wrongly forwarded in. Sending both at once would prove nothing: they
+    // would land in the same parser call, so the assertion would hold whether
+    // or not the addressing worked.
     pushFrame?.(
       `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: btoa('\x09') })}\n\n`,
     )
+    await settle()
+    expect(seen).toEqual([])
+
     pushFrame?.(`event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
     await until(() => seen.length >= 1)
-    await idle()
 
     expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
   })

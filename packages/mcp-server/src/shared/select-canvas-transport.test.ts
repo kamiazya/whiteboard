@@ -52,4 +52,12 @@ describe('selectCanvasTransport', () => {
       selectCanvasTransport({ pageOrigin: 'not a url', daemonBaseUrl: 'http://127.0.0.1:3099' }),
     ).toBe('sse')
   })
+
+  it('falls back to sse when the daemon base url cannot be parsed', () => {
+    // The other half of the same guard: either side failing to parse leaves the
+    // mixed-content question unanswerable, and SSE is the answer that works.
+    expect(
+      selectCanvasTransport({ pageOrigin: 'https://app.example', daemonBaseUrl: 'not a url' }),
+    ).toBe('sse')
+  })
 })

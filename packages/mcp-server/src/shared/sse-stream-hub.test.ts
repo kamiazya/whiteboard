@@ -119,6 +119,28 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
+  it('reassembles a frame that arrives split across chunks', async () => {
+    // The normal case on a real network, and the reason the frame parser is a
+    // separate function rather than something the reader loop does inline.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
+    const a: Uint8Array[] = []
+    hub.subscribe('w/a', { onUpdate: (u) => a.push(u), onMessage: () => {} })
+    await flush()
+
+    const frame = `event: update\ndata: ${JSON.stringify({ doc: 'w/a', update: btoa('\x05') })}\n\n`
+    const cut = Math.floor(frame.length / 2)
+    fake.push(frame.slice(0, cut))
+    await flush()
+    // Nothing may be dispatched from half a frame.
+    expect(a).toEqual([])
+
+    fake.push(frame.slice(cut))
+    await vi.waitFor(() => expect(a.length).toBe(1))
+    expect(a[0]).toEqual(new Uint8Array([5]))
+    hub.close()
+  })
+
   it('reopens the stream after it drops and re-announces every subscription', async () => {
     // Without this a disconnected client keeps its listeners registered and
     // silently stops receiving updates — the worst failure mode available,

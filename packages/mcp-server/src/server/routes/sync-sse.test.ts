@@ -7,14 +7,23 @@
 // The initial snapshot is NOT carried here: GET /api/canvas/:ws/:slug/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
+import { resetSyncStreamsForTests } from './sync-sse.js'
 import {
   broadcastLoroUpdate,
   sendHeadChanged,
   sendViewportRequest,
   setResolveViewportFn,
 } from './ws.js'
+
+// Both registries are module-level and outlive a single app instance, so a
+// stream opened here would otherwise stay subscribed for the rest of the run
+// and receive the next test's broadcasts.
+afterEach(() => {
+  resetSyncStreamsForTests()
+  setResolveViewportFn(() => {})
+})
 
 const TOKEN = 'sse-sync-test-token'
 

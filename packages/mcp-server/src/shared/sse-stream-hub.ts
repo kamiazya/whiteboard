@@ -88,7 +88,9 @@ function isClientReady(message: unknown): boolean {
   )
 }
 
-function fromBase64(value: string): Uint8Array {
+/** Exported so the SharedWorker-backed source decodes with this one
+ *  implementation rather than a copy that can drift from it. */
+export function fromBase64(value: string): Uint8Array {
   const binary = atob(value)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)

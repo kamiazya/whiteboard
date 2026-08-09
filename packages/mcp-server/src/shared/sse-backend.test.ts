@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import type { CanvasBackendHandlers } from './canvas-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
 
 function sseFrame(event: string, data: string): string {
@@ -66,7 +67,7 @@ function createHandlers() {
       onHeadChanged: () => {},
       onViewportRequest: () => {},
       onExportRequest: () => {},
-    } as never,
+    } satisfies CanvasBackendHandlers,
     snapshots,
     updates,
     connectedCount: () => connected,
