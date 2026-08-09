@@ -186,3 +186,74 @@ it('DOES snap a group frame to a LOCKED member, which stays put', () => {
   // ...and the lock still holds: the member did not travel.
   expect(byId(latest.canvas, 'inner').x).toBe(412)
 })
+
+// Resizing snaps the DRAGGED EDGE. Handles are real DOM elements with their
+// own pointerdown — the root's handler never hit-tests them — so the press
+// must target the handle, not the editor root, or the gesture is a move.
+function startResize(container: HTMLElement, handleKind: string) {
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  // Select `b` first: handles only mount for the current selection.
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 2,
+    clientX: r.left + 450,
+    clientY: r.top + 430,
+  })
+  fireEvent.pointerUp(root, { pointerId: 2, clientX: r.left + 450, clientY: r.top + 430 })
+  const handle = container.querySelector(`[data-testid="resize-handle-${handleKind}"]`) as Element
+  expect(handle, `no ${handleKind} handle`).toBeTruthy()
+  return { root, r, handle }
+}
+
+it('snaps a resized edge to a neighbour edge, leaving the anchored edge alone', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const { root, r, handle } = startResize(container, 'w')
+
+  // West edge from 400 to 235: 2 from `a`\'s right edge at 237, 5 from the
+  // grid line at 240, so the neighbour wins.
+  fireEvent.pointerDown(handle, {
+    button: 0,
+    pointerId: 1,
+    clientX: r.left + 400,
+    clientY: r.top + 430,
+  })
+  fireEvent.pointerMove(root, { pointerId: 1, clientX: r.left + 235, clientY: r.top + 430 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 235, clientY: r.top + 430 })
+
+  const b = byId(latest.canvas, 'b')
+  expect(b.x).toBe(237)
+  // The opposite edge is anchored by the gesture, so the width absorbs it all.
+  expect(b.x + b.width).toBe(500)
+  // The un-dragged axis must not move: a west handle resizes x only.
+  expect(b.y).toBe(400)
+  expect(b.height).toBe(60)
+})
+
+it('leaves a resized edge where the pointer stopped while Cmd is held', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const { root, r, handle } = startResize(container, 'w')
+
+  fireEvent.pointerDown(handle, {
+    button: 0,
+    pointerId: 1,
+    clientX: r.left + 400,
+    clientY: r.top + 430,
+  })
+  fireEvent.pointerMove(root, {
+    pointerId: 1,
+    clientX: r.left + 235,
+    clientY: r.top + 430,
+    metaKey: true,
+  })
+  fireEvent.pointerUp(root, {
+    pointerId: 1,
+    clientX: r.left + 235,
+    clientY: r.top + 430,
+    metaKey: true,
+  })
+
+  expect(byId(latest.canvas, 'b').x).toBe(235)
+})

@@ -132,6 +132,7 @@ import type { Box, ResizeHandleKind } from './geometry.js'
 import {
   distanceToPolyline,
   findFreeSpot,
+  HANDLE_SIGN,
   hitTest,
   indexNodeBoxes,
   polylineMidpoint,
@@ -144,7 +145,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
-import { type SnapBox, snapBox } from './snap.js'
+import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
@@ -730,16 +731,54 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * only one of them would let the box render in one place and land in
      * another.
      *
-     * Move only. A resize would have to snap the dragged EDGE rather than the
-     * origin, which is a different candidate set — deferred rather than
-     * approximated, since an approximate resize snap fights the handle.
+     * Serves both gestures, but they snap DIFFERENT things: a move snaps the
+     * box (three lines per axis — edge, centre, edge), a resize snaps only the
+     * edge under the handle. Feeding a resize the move candidates would let
+     * the box's own centre or far edge pull the handle, which reads as the
+     * handle fighting the pointer.
      */
-    const snapMovePoint = (
+    const snapGesturePoint = (
       raw: Point,
       suspended: boolean,
     ): { point: Point; guides: { x: readonly number[]; y: readonly number[] } } => {
       const unchanged = { point: raw, guides: { x: [], y: [] } }
-      if (suspended || gestureState.kind !== 'moving') return unchanged
+      if (suspended) return unchanged
+      const options = {
+        thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / viewport.zoom,
+        gridSize: SNAP_GRID_CANVAS_PX,
+      }
+
+      if (gestureState.kind === 'resizing') {
+        // Only the node being resized is excluded — nothing else moves with a
+        // resize, so every other box stays a legitimate target.
+        const others = boxes
+          .filter((entry) => entry.id !== gestureState.nodeId)
+          .map((entry) => entry.box)
+        const sign = HANDLE_SIGN[gestureState.handle]
+        const start = gestureState.startBox
+        const guides: { x: number[]; y: number[] } = { x: [], y: [] }
+        let point = raw
+
+        // sign 0 means that axis is anchored (an edge handle moves one axis
+        // only), -1 the leading edge travels, +1 the trailing one.
+        if (sign.x !== 0) {
+          const dx = raw.x - gestureState.startPoint.x
+          const edge = sign.x === -1 ? start.x + dx : start.x + start.width + dx
+          const snapped = snapEdge(edge, others, options, 'x')
+          point = { ...point, x: raw.x + (snapped.position - edge) }
+          if (snapped.guide !== undefined) guides.x.push(snapped.guide)
+        }
+        if (sign.y !== 0) {
+          const dy = raw.y - gestureState.startPoint.y
+          const edge = sign.y === -1 ? start.y + dy : start.y + start.height + dy
+          const snapped = snapEdge(edge, others, options, 'y')
+          point = { ...point, y: raw.y + (snapped.position - edge) }
+          if (snapped.guide !== undefined) guides.y.push(snapped.guide)
+        }
+        return { point, guides }
+      }
+
+      if (gestureState.kind !== 'moving') return unchanged
       const moving = boxes.find((entry) => entry.id === gestureState.nodeId)
       if (moving === undefined) return unchanged
 
@@ -777,10 +816,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const result = snapBox(
         candidate,
         boxes.filter((entry) => !carried.has(entry.id)).map((entry) => entry.box),
-        {
-          thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / viewport.zoom,
-          gridSize: SNAP_GRID_CANVAS_PX,
-        },
+        options,
       )
       return {
         point: { x: raw.x + (result.x - candidate.x), y: raw.y + (result.y - candidate.y) },
@@ -1132,7 +1168,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return
       }
       if (gestureState.kind === 'idle') return
-      const snapped = snapMovePoint(screenToCanvas(screenPoint, viewport), e.metaKey || e.ctrlKey)
+      const snapped = snapGesturePoint(
+        screenToCanvas(screenPoint, viewport),
+        e.metaKey || e.ctrlKey,
+      )
       setSnapGuides(snapped.guides)
       setLivePoint(snapped.point)
       applyResult(
@@ -1210,7 +1249,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       // Snapped with the same helper the preview used, so the box commits
       // exactly where the last frame drew it.
-      const point = snapMovePoint(
+      const point = snapGesturePoint(
         screenToCanvas(screenPoint, viewport),
         e.metaKey || e.ctrlKey,
       ).point
