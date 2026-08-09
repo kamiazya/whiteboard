@@ -35,6 +35,7 @@ import {
   StickyNote,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type EditorTool = 'select' | 'hand' | 'connect'
@@ -53,8 +54,7 @@ interface ToolPaletteProps {
   readonly onToolChange: (tool: EditorTool) => void
 }
 
-export const TOOL_BUTTON_CLASS =
-  'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
+export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground`
 
 interface AddMenuEntry {
   readonly label: string

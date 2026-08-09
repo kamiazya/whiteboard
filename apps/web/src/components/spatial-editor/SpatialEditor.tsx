@@ -112,6 +112,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { DOCK_WIDE_BUTTON_CLASS } from '@/components/ui/dock-button'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {
   extractClipboardFragment,
@@ -142,6 +143,8 @@ import {
   indexNodeBoxes,
   polylineMidpoint,
   resizeBoxByDelta,
+  scaleBoxWithin,
+  unionBox,
 } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
@@ -193,6 +196,21 @@ const SNAP_GRID_CANVAS_PX = 20
 /** Overview size. Big enough to aim at, small enough not to cover content. */
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
+
+/**
+ * Below this container width the overview and the dock fight for the bottom
+ * edge, so the overview yields.
+ *
+ * Both are bottom-anchored in the same container. The dock is centred and, on
+ * a coarse pointer, runs about 380px; the overview claims 160px plus a 16px
+ * inset on the right. They start touching once
+ * `(W + 380) / 2 > W - 176`, i.e. below ~732px. 768 rounds that up so the two
+ * never sit shoulder to shoulder with no gap.
+ *
+ * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
+ * screen collides in exactly the same way, and a media query cannot see it.
+ */
+const MINIMAP_MIN_ROOT_WIDTH_PX = 768
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -439,6 +457,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // the marquee/move path mid-air.
     const touchPointsRef = useRef<Map<number, Point>>(new Map())
     const pinchActiveRef = useRef(false)
+    /**
+     * Touch multi-selection, the iOS "hold one, tap the rest" gesture.
+     *
+     * `gatherAnchorRef` is the finger holding the selection open; while it is
+     * down, a second finger's tap on a node collects that node instead of
+     * starting a pinch. Long press is NOT the trigger: the browser already
+     * synthesises `contextmenu` from it, and taking it would leave touch with
+     * no route to an object's menu.
+     *
+     * A second finger otherwise means pinch, so the two are separated by
+     * STATE rather than by timing — gathering needs a finger already holding
+     * a node, which a pinch never has. Fingers listed in `gatherPointersRef`
+     * have already done their job on the press and stay inert until they lift.
+     */
+    const gatherAnchorRef = useRef<number | null>(null)
+    const gatherPointersRef = useRef<Set<number>>(new Set())
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
@@ -701,6 +735,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         : undefined
 
     /**
+     * Every selected node with the box it currently occupies, primary first.
+     *
+     * The resize handles surround the UNION of these rather than the primary
+     * alone: handles drawn around a group have to act on the group, or a
+     * three-node selection offers one node's handles and resizes that node
+     * while the other two watch.
+     */
+    const selectionMembers = useMemo(() => {
+      if (selectedId === null) return []
+      return [selectedId, ...extraIds].flatMap((id) => {
+        const entry = boxes.find((candidate) => candidate.id === id)
+        return entry === undefined ? [] : [{ id, box: entry.box }]
+      })
+    }, [selectedId, extraIds, boxes])
+    const selectionBox = useMemo(
+      () => unionBox(selectionMembers.map((member) => member.box)),
+      [selectionMembers],
+    )
+    const isMultiSelection = selectionMembers.length > 1
+
+    /**
      * The in-flight preview geometry, derived per frame from the gesture's own
      * start snapshot plus the live pointer — never from `canvas`. See
      * drag-preview.ts for why that matters and for the single-source
@@ -922,6 +977,40 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const isOverlayEvent = (e: React.SyntheticEvent) =>
       e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
 
+    /**
+     * Add or remove one node from the multi-selection, shared by shift-click
+     * and the touch gather gesture so the two can never disagree about what
+     * "already selected" means.
+     *
+     * `primaryId` is passed in rather than read from state because the gather
+     * path learns the anchor from the in-flight gesture, whose `setSelectedId`
+     * has not been applied yet when this runs.
+     */
+    const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
+      // Node and edge selection are mutually exclusive: Delete processes a
+      // selected edge FIRST, so an edge left selected here would be what a
+      // Delete on the node multi-selection actually removes.
+      setSelectedEdgeId(null)
+      if (primaryId === null) {
+        setSelectedId(hitId)
+        return
+      }
+      if (hitId === primaryId) {
+        // Deselecting the primary promotes an extra, if any.
+        const [next, ...rest] = [...extraIds]
+        setSelectedId(next ?? null)
+        setExtraIds(new Set(rest))
+        return
+      }
+      setSelectedId(primaryId)
+      setExtraIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(hitId)) next.delete(hitId)
+        else next.add(hitId)
+        return next
+      })
+    }
+
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       if (isOverlayEvent(e)) return
       const root = rootRef.current
@@ -929,6 +1018,47 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (e.pointerType === 'touch') {
         touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
         if (pinchActiveRef.current) return
+        if (gatherPointersRef.current.size > 0 || gatherAnchorRef.current !== null) {
+          // Already gathering: any further finger is another tap, never a
+          // pinch participant, so it must not sit in touchPointsRef.
+          touchPointsRef.current.delete(e.pointerId)
+        }
+        if (touchPointsRef.current.size === 2 || gatherAnchorRef.current !== null) {
+          const anchorId =
+            gatherAnchorRef.current ??
+            [...touchPointsRef.current.keys()].find((id) => id !== e.pointerId) ??
+            null
+          const anchorPrimary =
+            gatherAnchorRef.current !== null
+              ? selectedId
+              : gestureState.kind === 'moving'
+                ? gestureState.nodeId
+                : null
+          const gathered =
+            anchorPrimary === null
+              ? undefined
+              : hitTest(selectableBoxes, screenToCanvas(clientPointToRootLocal(e, root), viewport))
+          if (gathered !== undefined && anchorId !== null) {
+            touchPointsRef.current.delete(e.pointerId)
+            gatherPointersRef.current.add(e.pointerId)
+            if (gatherAnchorRef.current === null) {
+              gatherAnchorRef.current = anchorId
+              // Gathering is a selection act, not a drag. Whatever the anchor
+              // had begun to move is abandoned here — carrying a half-applied
+              // delta into the new multi-selection would jump every node
+              // gathered afterwards by an offset the user never gave it.
+              if (gestureState.kind !== 'idle') {
+                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+              }
+            }
+            setMarquee(null)
+            isPanningRef.current = false
+            lastPressRef.current = null
+            doublePressRef.current = null
+            toggleSelectionMember(anchorPrimary, gathered)
+            return
+          }
+        }
         if (touchPointsRef.current.size === 2) {
           // The second finger converts whatever the first finger started
           // (marquee, node move, double-press arming) into navigation:
@@ -986,23 +1116,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // re-renders because it compares node ids, not DOM identity.
       // Shift-click builds a multi-selection instead of starting a gesture.
       if (e.shiftKey && hitId !== undefined) {
-        // Node and edge selection are mutually exclusive: Delete processes a
-        // selected edge FIRST, so an edge left selected here would be what a
-        // Delete on the node multi-selection actually removes.
-        setSelectedEdgeId(null)
-        if (selectedId === null) {
-          setSelectedId(hitId)
-        } else if (hitId === selectedId) {
-          // Deselecting the primary promotes an extra, if any.
-          const [next, ...rest] = [...extraIds]
-          setSelectedId(next ?? null)
-          setExtraIds(new Set(rest))
-        } else {
-          const next = new Set(extraIds)
-          if (next.has(hitId)) next.delete(hitId)
-          else next.add(hitId)
-          setExtraIds(next)
-        }
+        toggleSelectionMember(selectedId, hitId)
         return
       }
       // Edge hit-test runs at the press so the double-press pairing can
@@ -1126,6 +1240,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      // A gathering finger has already acted on its press, and the anchor's
+      // own gesture was cancelled when gathering began — neither may resume
+      // dragging the canvas while the other is still down.
+      if (gatherPointersRef.current.has(e.pointerId) || gatherAnchorRef.current === e.pointerId) {
+        return
+      }
       if (e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
         const points = touchPointsRef.current
         const nextPoint = clientPointToRootLocal(e, root)
@@ -1186,6 +1306,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
+      // Gathering fingers act on the press, so their release carries no
+      // meaning — running the click/marquee logic here would re-collapse the
+      // very selection the gesture just built. The anchor lifting ends it.
+      if (gatherPointersRef.current.delete(e.pointerId)) return
+      if (gatherAnchorRef.current === e.pointerId) {
+        gatherAnchorRef.current = null
+        touchPointsRef.current.delete(e.pointerId)
+        return
+      }
       if (e.pointerType === 'touch') {
         touchPointsRef.current.delete(e.pointerId)
         if (pinchActiveRef.current) {
@@ -1356,6 +1485,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+      // Pointer ids are reused, so a gathering finger left in these refs by a
+      // cancel would silently deaden whichever later touch inherits its id.
+      gatherPointersRef.current.delete(e.pointerId)
+      if (gatherAnchorRef.current === e.pointerId) gatherAnchorRef.current = null
       if (e.pointerType === 'touch') {
         touchPointsRef.current.delete(e.pointerId)
         if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
@@ -1775,10 +1908,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       e: React.KeyboardEvent,
     ) => {
       if (selection === undefined) return
-      // The resize anchor is the NODE's box, not the handle's own tiny
-      // hit-box `_handleBox` describes — same reasoning as
-      // onHandlePointerDown's `box: selection.box` below.
-      const box = selection.box
+      // Geometry comes from `canvasRef`, not from the render snapshot the
+      // pointer path can afford to use. Key repeat delivers the next press
+      // before React has re-rendered, and a parent that applies `onChange`
+      // asynchronously lags further still — reading the stale snapshot would
+      // make every press compute the same coordinates, so holding the key
+      // would resize once and then appear to stick.
+      const members = [selection.id, ...extraIds].flatMap((id) => {
+        const node = canvasRef.current.nodes.find((candidate) => candidate.id === id)
+        return node === undefined
+          ? []
+          : [{ id, box: { x: node.x, y: node.y, width: node.width, height: node.height } }]
+      })
+      // The resize anchor is the box the HANDLES surround, not the handle's
+      // own tiny hit-box `_handleBox` describes — same reasoning as
+      // onHandlePointerDown's `box: selectionBox` below.
+      const box = unionBox(members.map((member) => member.box))
+      if (box === undefined) return
       const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
       const delta = ARROW_KEY_DELTA[e.key]
       if (delta === undefined) return
@@ -1792,15 +1938,43 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         return
       }
-      const command: EditorCommand = {
-        kind: 'resize-node',
-        id: selection.id,
-        x: nextBox.x,
-        y: nextBox.y,
-        width: nextBox.width,
-        height: nextBox.height,
+      // Same handles, same meaning as the pointer drag: a lone node takes the
+      // dragged box verbatim, a selection has each member re-placed inside it.
+      const commands: readonly EditorCommand[] =
+        members.length > 1
+          ? members.map((member) => {
+              const scaled = scaleBoxWithin(box, nextBox, member.box)
+              return {
+                kind: 'resize-node',
+                id: member.id,
+                x: scaled.x,
+                y: scaled.y,
+                width: scaled.width,
+                height: scaled.height,
+              }
+            })
+          : [
+              {
+                kind: 'resize-node',
+                id: selection.id,
+                x: nextBox.x,
+                y: nextBox.y,
+                width: nextBox.width,
+                height: nextBox.height,
+              },
+            ]
+      // Threaded through a running canvas, not re-applied to `canvasRef`
+      // each time: the ref does not advance within this tick, so a second
+      // command built on it would discard the first.
+      let running = canvasRef.current
+      for (const command of commands) {
+        running = applyCommand(running, command)
+        onChange(running, command)
       }
-      onChange(applyCommand(canvasRef.current, command), command)
+      // Same write-back the gesture path does (see applyResult): without it
+      // the ref keeps describing the pre-keypress canvas until the parent's
+      // re-render lands.
+      canvasRef.current = running
     }
 
     const handleConnectKeyDown = () => {
@@ -2346,7 +2520,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           press on it reaching the canvas, so hiding bought nothing and cost
           a flicker on every gesture. Hidden only on an empty canvas, where
           an overview of nothing is chrome with no job. */}
-        {boxes.length > 0 && rootSize.width > 0 && (
+        {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
           <MinimapOverlay
             boxes={minimapNodes}
             viewportRect={{
@@ -2392,7 +2566,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   data-testid="zoom-reset-button"
                   aria-label="Reset zoom to 100%"
                   onClick={() => zoomAtViewportCenter(1 / viewport.zoom)}
-                  className={`${TOOL_BUTTON_CLASS} w-12 text-xs tabular-nums`}
+                  className={`${DOCK_WIDE_BUTTON_CLASS} text-xs tabular-nums`}
                 >
                   {Math.round(viewport.zoom * 100)}%
                 </button>
@@ -3129,9 +3303,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               })}
             </svg>
           )}
-          {selection !== undefined && (
+          {selection !== undefined && selectionBox !== undefined && (
             <SelectionOverlay
-              box={selection.box}
+              box={selectionBox}
               zoom={viewport.zoom}
               onHandlePointerDown={(handle, _handleBox, e) => {
                 const root = beginOverlayGesture(e)
@@ -3143,28 +3317,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     nodeId: selection.id,
                     handle,
                     point,
-                    // The resize anchor is the NODE's box, not the handle's own
-                    // tiny hit-box `_handleBox` describes — using the handle
-                    // box here would seed `reducePointerUpResizing`'s
-                    // anchor-preserving math from an 8px square instead of the
-                    // node, growing/shrinking from the wrong origin.
-                    box: selection.box,
+                    // The resize anchor is the box the HANDLES surround, not
+                    // the handle's own tiny hit-box `_handleBox` describes —
+                    // using the handle box here would seed
+                    // `reducePointerUpResizing`'s anchor-preserving math from
+                    // an 8px square instead, growing/shrinking from the wrong
+                    // origin.
+                    box: selectionBox,
+                    // Omitted for a lone node, which keeps the original
+                    // single-command path — including its collapse-to-zero
+                    // behavior, which group members deliberately do not share.
+                    ...(isMultiSelection ? { members: selectionMembers } : {}),
                   }),
                 )
               }}
-              onConnectPointerDown={(e) => {
-                if (beginOverlayGesture(e) === null) return
-                applyResult(
-                  reduceGesture(gestureState, canvas, {
-                    type: 'pointerdown-connect',
-                    nodeId: selection.id,
-                  }),
-                )
-              }}
+              // Connecting and editing act on ONE node; from handles that
+              // surround a group they would claim to apply to all of them.
+              onConnectPointerDown={
+                isMultiSelection
+                  ? undefined
+                  : (e) => {
+                      if (beginOverlayGesture(e) === null) return
+                      applyResult(
+                        reduceGesture(gestureState, canvas, {
+                          type: 'pointerdown-connect',
+                          nodeId: selection.id,
+                        }),
+                      )
+                    }
+              }
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
               onEditRequest={
-                selectedNode?.type === 'text'
+                !isMultiSelection && selectedNode?.type === 'text'
                   ? () => {
                       applyResult(
                         reduceGesture(gestureState, canvas, {

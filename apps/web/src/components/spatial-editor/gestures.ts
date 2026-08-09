@@ -29,7 +29,7 @@
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
-import { type ResizeHandleKind, resizeBoxByDelta } from './geometry.js'
+import { type Box, type ResizeHandleKind, resizeBoxByDelta, scaleBoxWithin } from './geometry.js'
 import type { Point } from './viewport.js'
 
 interface MoveSnapshot {
@@ -41,13 +41,26 @@ interface MoveSnapshot {
   readonly startY: number
 }
 
+interface ResizeMember {
+  readonly id: string
+  readonly box: Box
+}
+
 interface ResizeSnapshot {
   readonly kind: 'resizing'
+  /** The primary node — what the validity check follows across a canvas swap. */
   readonly nodeId: string
   readonly startType: string
   readonly handle: ResizeHandleKind
   readonly startPoint: Point
-  readonly startBox: { x: number; y: number; width: number; height: number }
+  /** The box the handles surround: one node's, or the selection's union. */
+  readonly startBox: Box
+  /**
+   * Every node the handles act on, with the box it started at. Absent for a
+   * single-node resize, which keeps the original one-command path exactly —
+   * a multi-selection is the addition, not a rewrite of the common case.
+   */
+  readonly members?: readonly ResizeMember[]
 }
 
 interface ConnectSnapshot {
@@ -83,7 +96,9 @@ export type GestureEvent =
       readonly nodeId: string
       readonly handle: ResizeHandleKind
       readonly point: Point
-      readonly box: { x: number; y: number; width: number; height: number }
+      readonly box: Box
+      /** Present when the handles surround a multi-selection; see ResizeSnapshot. */
+      readonly members?: readonly ResizeMember[]
     }
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
   | { readonly type: 'pointerdown-empty' }
@@ -216,6 +231,7 @@ function reducePointerDownHandle(
     handle: event.handle,
     startPoint: event.point,
     startBox: event.box,
+    ...(event.members === undefined ? {} : { members: event.members }),
   })
 }
 
@@ -246,18 +262,42 @@ function reducePointerUpResizing(
     nextBox.width === startBox.width &&
     nextBox.height === startBox.height
   if (isUnchanged) return idle
+  // A single node takes the dragged box verbatim, including the collapse to
+  // zero that overshooting a min-side handle produces. Its handles come back
+  // with it, so a collapsed node is still reachable.
+  if (state.members === undefined) {
+    return {
+      state: { kind: 'idle' },
+      commands: [
+        {
+          kind: 'resize-node',
+          id: state.nodeId,
+          x: nextBox.x,
+          y: nextBox.y,
+          width: nextBox.width,
+          height: nextBox.height,
+        },
+      ],
+    }
+  }
+  // Handles around a selection surround the union, so each member is
+  // re-placed inside the box they moved — the group behaves as one object
+  // rather than resizing the primary and leaving the rest behind. Members
+  // keep a one-pixel floor that a lone node does not: a member collapsed
+  // inside a group has no handles of its own to grab it back by.
   return {
     state: { kind: 'idle' },
-    commands: [
-      {
+    commands: state.members.map((member) => {
+      const box = scaleBoxWithin(startBox, nextBox, member.box)
+      return {
         kind: 'resize-node',
-        id: state.nodeId,
-        x: nextBox.x,
-        y: nextBox.y,
-        width: nextBox.width,
-        height: nextBox.height,
-      },
-    ],
+        id: member.id,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      }
+    }),
   }
 }
 
