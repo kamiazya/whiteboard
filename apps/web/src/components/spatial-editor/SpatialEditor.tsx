@@ -142,6 +142,7 @@ import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
+import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
@@ -188,6 +189,10 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
  * alone.
  */
 const SNAP_GRID_CANVAS_PX = 20
+
+/** Overview size. Big enough to aim at, small enough not to cover content. */
+const MINIMAP_WIDTH_PX = 160
+const MINIMAP_HEIGHT_PX = 110
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -1886,6 +1891,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
     }
 
+    /**
+     * The editor's own pixel size, for the minimap's visible-area marker.
+     *
+     * Re-read on every viewport change and on window resize rather than
+     * through a ResizeObserver: those two cover every way the visible rect
+     * actually moves in this app, and they need no new platform seam (and no
+     * jsdom stub). The gap is a container that resizes WITHOUT a window
+     * resize — a side panel opening, say. The marker then lags until the next
+     * pan or zoom, which is a stale overlay, not a wrong canvas.
+     */
+    const [rootSize, setRootSize] = useState({ width: 0, height: 0 })
+    useLayoutEffect(() => {
+      const measure = () => {
+        const root = rootRef.current
+        if (root === null) return
+        setRootSize((prev) =>
+          prev.width === root.clientWidth && prev.height === root.clientHeight
+            ? prev
+            : { width: root.clientWidth, height: root.clientHeight },
+        )
+      }
+      measure()
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }, [viewport])
+
     /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
     const zoomAtViewportCenter = (factor: number) => {
       setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
@@ -2288,6 +2319,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onLostPointerCapture={handlePointerCancel}
         onKeyDown={handleKeyDown}
       >
+        {/* Screen space, outside the pan/zoom transform — an overview that
+          panned with the canvas would defeat its purpose.
+          Hidden while a gesture is in flight: it sits over the canvas, so
+          leaving it up would put a pointer trap under a drag that started
+          somewhere else. Also hidden on an empty canvas, where an overview
+          of nothing is chrome with no job. */}
+        {boxes.length > 0 &&
+          rootSize.width > 0 &&
+          !isInFlightGesture(gestureState) &&
+          marquee === null && (
+            <MinimapOverlay
+              boxes={boxes.map((entry) => entry.box)}
+              viewportRect={{
+                x: viewport.x,
+                y: viewport.y,
+                width: rootSize.width / viewport.zoom,
+                height: rootSize.height / viewport.zoom,
+              }}
+              width={MINIMAP_WIDTH_PX}
+              height={MINIMAP_HEIGHT_PX}
+              onNavigate={(point: { x: number; y: number }) =>
+                setViewport((vp) => ({
+                  ...vp,
+                  x: point.x - rootSize.width / vp.zoom / 2,
+                  y: point.y - rootSize.height / vp.zoom / 2,
+                }))
+              }
+            />
+          )}
         {/* The OOUI creation surface: every canvas is empty until a node
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
