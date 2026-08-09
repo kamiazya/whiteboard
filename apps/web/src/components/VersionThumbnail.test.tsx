@@ -145,6 +145,15 @@ describe('VersionThumbnail', () => {
     await act(async () => {
       renderInDaemonMode(fetchMock as unknown as typeof fetch)
     })
+    // The placeholder is also what renders while the fetch is in flight, so
+    // wait for the response and flush the blob -> setState chain before
+    // asserting — otherwise every assertion below passes on the loading state
+    // and the test would stay green with the zero-byte guard removed.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
 
     expect(screen.queryByRole('img')).toBeNull()
     expect(createObjectURL).not.toHaveBeenCalled()

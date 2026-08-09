@@ -215,6 +215,10 @@ describe('createApp daemon mutation auth', () => {
     expect(csp).toContain("base-uri 'none'")
     expect(csp).toContain("object-src 'none'")
     expect(csp).toContain("frame-ancestors 'none'")
+    // A consent page embeds nothing, so it does not inherit the hosted app's
+    // `frame-src https:` — pinned so a later policy edit cannot quietly let
+    // this trust anchor frame remote content.
+    expect(csp).toContain("frame-src 'none'")
     // The daemon-fetched thumbnails this app renders are blob: URLs.
     expect(csp).toMatch(/img-src[^;]*\bblob:/)
   })
