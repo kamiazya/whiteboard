@@ -355,6 +355,31 @@ export function DaemonCanvasPage({
         })
       }}
       onContinueBrowserLocal={onContinueBrowserLocal}
+      onDisconnect={
+        onContinueBrowserLocal &&
+        (() => {
+          // Recorded so discovery skips it next time: the default port range
+          // is rescanned on every visit, so forgetting alone would bring this
+          // daemon straight back and make the action look like a no-op.
+          settingsStore.update((current) => {
+            const known = (current.storage.knownDaemonBaseUrls ?? []).filter(
+              (entry) => entry !== daemonBaseUrl,
+            )
+            const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
+              (entry) => entry !== daemonBaseUrl,
+            )
+            return {
+              ...current,
+              storage: {
+                ...current.storage,
+                knownDaemonBaseUrls: known,
+                dismissedDaemonBaseUrls: [daemonBaseUrl, ...dismissed].slice(0, 5),
+              },
+            }
+          })
+          onContinueBrowserLocal()
+        })
+      }
     />
   )
 

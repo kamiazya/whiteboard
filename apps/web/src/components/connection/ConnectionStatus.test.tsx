@@ -9,6 +9,28 @@ import { ConnectionStatus } from './ConnectionStatus.js'
 afterEach(cleanup)
 
 describe('ConnectionStatus chip', () => {
+  it('offers a way out while sync is on, and says what it does not do', () => {
+    // Connected was the one state with no exit: every other state offers a
+    // next step, so a user who picked the wrong daemon had to clear storage.
+    const onDisconnect = vi.fn()
+    render(
+      <ConnectionStatus
+        state="synced"
+        daemonBaseUrl="http://127.0.0.1:3099"
+        onDisconnect={onDisconnect}
+      />,
+      { container: document.body },
+    )
+    fireEvent.click(screen.getByTestId('connection-chip'))
+
+    const popover = screen.getByTestId('connection-popover')
+    // Disconnecting stops using this daemon here; it neither unpairs nor
+    // deletes anything on the daemon, and the copy has to say so.
+    expect(popover.textContent).toMatch(/stays on the daemon|not deleted/i)
+    fireEvent.click(screen.getByTestId('connection-disconnect'))
+    expect(onDisconnect).toHaveBeenCalledTimes(1)
+  })
+
   it('explains the reconnecting state instead of opening an empty popover', () => {
     // The chip can reach this state, so the popover must have something to
     // say; a state with no branch renders an empty box on click.
