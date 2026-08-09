@@ -22,6 +22,32 @@
  */
 export const DOCK_BUTTON_HEIGHT_CLASS = 'h-9 pointer-coarse:h-11'
 
+/**
+ * The same two sizes in pixels, for code that must reason about the dock's
+ * footprint without being able to observe it.
+ *
+ * A layout test cannot render under `pointer: coarse` — the runner exposes no
+ * way to emulate the media feature — yet the coarse dock is the wide one, and
+ * therefore the one that collides. Deriving the numbers from the class string
+ * lets such a test compute the worst-case footprint from the fine-pointer
+ * render it CAN produce, without a second copy of the sizes to keep in sync.
+ *
+ * Tailwind's spacing scale is 4px per step, so `h-9` is 36px and `h-11` is
+ * 44px; `dockControlSizesPx` re-derives that from the class rather than
+ * restating it, so editing the class above moves both together.
+ */
+export function dockControlSizesPx(): { readonly fine: number; readonly coarse: number } {
+  const TAILWIND_SPACING_STEP_PX = 4
+  const steps = [...DOCK_BUTTON_HEIGHT_CLASS.matchAll(/h-(\d+)/g)].map((match) => Number(match[1]))
+  const [fine, coarse] = steps
+  if (fine === undefined || coarse === undefined) {
+    throw new Error(
+      `DOCK_BUTTON_HEIGHT_CLASS lost one of its two sizes: ${DOCK_BUTTON_HEIGHT_CLASS}`,
+    )
+  }
+  return { fine: fine * TAILWIND_SPACING_STEP_PX, coarse: coarse * TAILWIND_SPACING_STEP_PX }
+}
+
 const DOCK_BUTTON_WIDTH_CLASS = 'w-9 pointer-coarse:w-11'
 
 // Press feedback and the transition property list live here rather than on one
