@@ -77,9 +77,10 @@ describe('BrowserLocalCanvasPage node-lock reload persistence (browser — real 
   it('a lock toggled through the editor seam is still reported after a remount', async () => {
     await mountPage()
 
-    // Seed a node, retried like the neighbouring tests: right after hydrate
-    // the page can swap backend identity, so the first captured onChange may
-    // belong to a torn-down session. Re-sending the same canvas is a no-op.
+    // Seed a node, retried like the neighbouring tests: the editor renders
+    // once the canvas metadata loads, before the session has hydrated, so an
+    // early onChange lands on a doc that cannot commit it yet. Re-sending the
+    // same canvas is a no-op.
     const created = textNodeCanvas('lock-probe', 20, 20)
     await waitFor(
       () => {
