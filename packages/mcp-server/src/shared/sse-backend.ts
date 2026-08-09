@@ -85,7 +85,11 @@ export class SseBackend implements CanvasBackend {
       )
       if (this.cancelled) return
       if (res.ok) {
-        handlers.onSnapshot(new Uint8Array(await res.arrayBuffer()))
+        // Reading the body is a second await: re-check, or a disconnect landing
+        // in that window seeds a document the caller has already torn down.
+        const bytes = new Uint8Array(await res.arrayBuffer())
+        if (this.cancelled) return
+        handlers.onSnapshot(bytes)
       }
     } catch {
       // A failed snapshot is not terminal: the stream may still connect and the

@@ -88,6 +88,37 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 
+  it('drops a snapshot that finishes reading after disconnect', async () => {
+    // Reading the body is a second await, so a disconnect can land between the
+    // response arriving and its bytes being decoded. Seeding a document the
+    // caller has already torn down would resurrect state it deliberately left.
+    let releaseBody: (() => void) | null = null
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes('/snapshot')) {
+        return {
+          ok: true,
+          arrayBuffer: () =>
+            new Promise<ArrayBuffer>((resolve) => {
+              releaseBody = () => resolve(new Uint8Array([1]).buffer)
+            }),
+        } as unknown as Response
+      }
+      return new Response('{}', { status: 200 })
+    })
+    const { handlers, snapshots } = createHandlers()
+    const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    })
+
+    backend.connect(handlers)
+    await vi.waitFor(() => expect(releaseBody).not.toBeNull())
+    backend.disconnect()
+    releaseBody?.()
+    await flush()
+
+    expect(snapshots).toEqual([])
+  })
+
   it('subscribes the stream to its own document', async () => {
     const fake = createFakeTransport([])
     const { handlers } = createHandlers()

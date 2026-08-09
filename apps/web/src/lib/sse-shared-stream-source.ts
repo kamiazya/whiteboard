@@ -16,7 +16,7 @@ function fromBase64(value: string): Uint8Array {
   return bytes
 }
 
-const sources = new Map<string, SseStreamSource>()
+const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
 
 export function createSharedSseStreamSource(
   baseUrl: string,
@@ -25,7 +25,13 @@ export function createSharedSseStreamSource(
   if (typeof SharedWorker === 'undefined') return null
 
   const cached = sources.get(baseUrl)
-  if (cached) return cached
+  if (cached) {
+    // The source is cached per origin but the pairing token is rotated under
+    // it, so a caller arriving with a fresher credential hands it on rather
+    // than silently reusing the one the worker was told about first.
+    cached.port.postMessage({ type: 'init', baseUrl, token })
+    return cached.source
+  }
 
   let worker: SharedWorker
   try {
@@ -87,6 +93,6 @@ export function createSharedSseStreamSource(
     listeners.clear()
   })
 
-  sources.set(baseUrl, source)
+  sources.set(baseUrl, { source, port })
   return source
 }

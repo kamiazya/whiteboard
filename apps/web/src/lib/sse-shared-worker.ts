@@ -22,15 +22,21 @@ interface PortState {
 
 const hubs = new Map<string, SseStreamHub>()
 const ports = new Map<MessagePort, PortState>()
+/**
+ * Latest credential per origin. A hub outlives the `init` that created it,
+ * while a pairing session token is rotated under it — so the token is read at
+ * request time rather than captured when the hub is built.
+ */
+const tokens = new Map<string, string | undefined>()
 
-function hubFor(baseUrl: string, token: string | undefined): SseStreamHub {
+function hubFor(baseUrl: string): SseStreamHub {
   const existing = hubs.get(baseUrl)
   if (existing) return existing
   // The daemon credential is attached by the app's single fetch seam, not
   // here — a second place building the header is exactly what
   // daemon-auth-seam.test.ts exists to prevent.
   const hub = new SseStreamHub({
-    fetch: createDaemonFetch(baseUrl, token),
+    fetch: createDaemonFetch(baseUrl, () => tokens.get(baseUrl)),
     baseUrl,
     // One stream id per origin per worker: every tab shares this one stream.
     streamId: `shared-${globalThis.crypto.randomUUID()}`,
@@ -51,8 +57,17 @@ function handle(port: MessagePort, raw: unknown): void {
   const msg = parsed.data
 
   if (msg.type === 'init') {
+    tokens.set(msg.baseUrl, msg.token)
+    // Re-init is also how a rotated token arrives, so an existing port keeps
+    // its subscription handles: replacing them would strand the claims it
+    // already holds with nothing left able to release them.
+    const existing = ports.get(port)
+    if (existing?.baseUrl === msg.baseUrl) {
+      hubFor(msg.baseUrl)
+      return
+    }
     ports.set(port, { baseUrl: msg.baseUrl, subscriptions: new Map() })
-    hubFor(msg.baseUrl, msg.token)
+    hubFor(msg.baseUrl)
     return
   }
 

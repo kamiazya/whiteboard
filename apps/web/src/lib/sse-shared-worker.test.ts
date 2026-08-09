@@ -26,6 +26,7 @@ const BASE = 'http://127.0.0.1:3099'
 
 let streamOpens = 0
 let subscribeBodies: string[] = []
+let subscribeAuth: (string | null)[] = []
 let messageBodies: string[] = []
 let openedStreamIds: string[] = []
 let pushFrame: ((frame: string) => void) | null = null
@@ -47,6 +48,7 @@ const server = setupServer(
     })
   }),
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
+    subscribeAuth.push(request.headers.get('Authorization'))
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
@@ -61,6 +63,7 @@ afterAll(() => server.close())
 beforeEach(() => {
   streamOpens = 0
   subscribeBodies = []
+  subscribeAuth = []
   messageBodies = []
   openedStreamIds = []
   pushFrame = null
@@ -85,6 +88,12 @@ function connect(): MessagePort {
 // async, and a fixed sleep long enough on an idle machine is not long enough
 // under a full parallel suite. Wait on the observable instead.
 const until = (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true))
+
+/** The Authorization header of the subscribe that first announced `doc`. */
+const authFor = (doc: string): string | null | undefined => {
+  const i = subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
+  return i === -1 ? undefined : subscribeAuth[i]
+}
 const idle = () => vi.waitFor(() => expect(true).toBe(true))
 
 describe('sse-shared-worker', () => {
@@ -136,6 +145,43 @@ describe('sse-shared-worker', () => {
     const body = JSON.parse(messageBodies.find((b) => b.includes(doc)) as string)
     expect(body.streamId).toBe(openedStreamIds[0])
     expect(body.message).toEqual({ type: 'client_ready' })
+  })
+
+  it('follows a rotated token instead of holding the one it started with', async () => {
+    // A pairing session token is refreshed while tabs stay open. The hub is
+    // cached per origin, so a credential captured when it was built would leave
+    // every tab in the profile talking to the daemon with a dead token.
+    const port = connect()
+    const first = nextDoc()
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 'old' })
+    port.postMessage({ type: 'subscribe', doc: first })
+    // Matched by document rather than by count: opening the stream re-announces
+    // the subscriptions, so a count would be satisfied by that echo instead.
+    await until(() => authFor(first) !== undefined)
+    expect(authFor(first)).toBe('Bearer old')
+
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 'new' })
+    const second = nextDoc()
+    port.postMessage({ type: 'subscribe', doc: second })
+
+    await until(() => authFor(second) !== undefined)
+    expect(authFor(second)).toBe('Bearer new')
+  })
+
+  it('keeps a port’s subscriptions across a re-init', async () => {
+    // Re-init is how a rotated token arrives, not a fresh connection — losing
+    // the port's subscription handles there would strand them: nothing could
+    // release them and the worker would keep routing documents nobody watches.
+    const port = connect()
+    const doc = nextDoc()
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 'old' })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => subscribeBodies.length >= 1)
+
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 'new' })
+    port.postMessage({ type: 'unsubscribe', doc })
+
+    await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
   })
 
   it('takes a document back off the stream once it is unsubscribed', async () => {

@@ -42,7 +42,11 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
  */
 export function createDaemonFetch(
   daemonBaseUrl: string,
-  token?: string,
+  // A function rather than a value when the credential outlives the wrapper: a
+  // pairing session token is rotated while the page stays open, and a holder
+  // that captured the old one keeps presenting a dead credential. Callers that
+  // rebuild the wrapper on rotation (React memo on `token`) pass the string.
+  token?: string | (() => string | undefined),
   // The fetch this wrapper delegates to. Injectable so a caller that already
   // holds its own fetch (a test double, a same-origin page helper) can route
   // its credential through this one seam instead of setting the header itself.
@@ -57,8 +61,9 @@ export function createDaemonFetch(
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     )
-    if (token && isDaemonOrigin) {
-      headers.set('Authorization', `Bearer ${token}`)
+    const bearer = typeof token === 'function' ? token() : token
+    if (bearer && isDaemonOrigin) {
+      headers.set('Authorization', `Bearer ${bearer}`)
     }
 
     if (input instanceof Request) {
