@@ -28,7 +28,12 @@ describe('setupSwRegistration', () => {
     const registerSW = vi.fn()
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
-    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
     // Not yet — registration must wait for 'load'.
     expect(importRegister).not.toHaveBeenCalled()
 
@@ -52,7 +57,12 @@ describe('setupSwRegistration', () => {
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
     expect(document.readyState).toBe('complete')
-    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
     // NO fireWindowLoad() — load already happened before setup ran.
     await Promise.resolve()
     await Promise.resolve()
@@ -65,7 +75,12 @@ describe('setupSwRegistration', () => {
     const importRegister = vi.fn()
 
     expect(() =>
-      setupSwRegistration({ isProd: true, hasServiceWorker: false, importRegister }),
+      setupSwRegistration({
+        isProd: true,
+        hasServiceWorker: false,
+        isDaemonServed: false,
+        importRegister,
+      }),
     ).not.toThrow()
     fireWindowLoad()
     await Promise.resolve()
@@ -77,7 +92,33 @@ describe('setupSwRegistration', () => {
     Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
     const importRegister = vi.fn()
 
-    setupSwRegistration({ isProd: false, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: false,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
+    fireWindowLoad()
+    await Promise.resolve()
+
+    expect(importRegister).not.toHaveBeenCalled()
+  })
+
+  // The local daemon serves one page (/pair) and redirects every other path
+  // to the hosted app, so `/sw.js` there answers 302 to a different origin.
+  // Registering would make the browser fetch the hosted app's HTML as a
+  // worker script — a request that can never succeed and, under the page's
+  // CSP, never settles either.
+  it('does not register on a daemon-served page', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const importRegister = vi.fn()
+
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: true,
+      importRegister,
+    })
     fireWindowLoad()
     await Promise.resolve()
 
@@ -94,7 +135,12 @@ describe('setupSwRegistration', () => {
     window.addEventListener('unhandledrejection', onUnhandledRejection)
 
     try {
-      setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+      setupSwRegistration({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister,
+      })
       fireWindowLoad()
       await Promise.resolve()
       await Promise.resolve()
@@ -111,7 +157,12 @@ describe('setupSwRegistration', () => {
     const registerSW = vi.fn()
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
-    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -126,7 +177,12 @@ describe('setupSwRegistration', () => {
     const registerSW = vi.fn()
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
-    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -158,7 +214,12 @@ describe('setupSwRegistration', () => {
     window.addEventListener('unhandledrejection', onUnhandledRejection)
 
     try {
-      setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+      setupSwRegistration({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister,
+      })
       await Promise.resolve()
       await Promise.resolve()
 
@@ -188,7 +249,12 @@ describe('setupSwRegistration', () => {
     const registerSW = vi.fn()
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
-    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
     await Promise.resolve()
     await Promise.resolve()
 

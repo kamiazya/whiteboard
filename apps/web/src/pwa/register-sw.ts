@@ -10,6 +10,16 @@ type ImportRegisterModule = () => Promise<{
 export interface SetupSwRegistrationOptions {
   isProd: boolean
   hasServiceWorker: boolean
+  /**
+   * True when this document came from the local daemon rather than the hosted
+   * app. The daemon serves exactly one page (/pair) and redirects every other
+   * path to the hosted app, so `/sw.js` there answers 302 to a different
+   * origin: registering makes the browser fetch the hosted app's HTML as a
+   * worker script. That request can never succeed, and under the page's CSP it
+   * is blocked outright and never settles, stranding the dynamic import below.
+   * The PWA is a hosted-app concern; a consent page has nothing to cache.
+   */
+  isDaemonServed: boolean
   importRegister: ImportRegisterModule
 }
 
@@ -23,9 +33,10 @@ export interface SetupSwRegistrationOptions {
 export function setupSwRegistration({
   isProd,
   hasServiceWorker,
+  isDaemonServed,
   importRegister,
 }: SetupSwRegistrationOptions): void {
-  if (!isProd || !hasServiceWorker) return
+  if (!isProd || !hasServiceWorker || isDaemonServed) return
 
   const register = () => {
     void importRegister()
