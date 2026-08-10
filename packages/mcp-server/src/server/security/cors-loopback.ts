@@ -117,12 +117,14 @@ export function createApiLoopbackCorsMiddleware(
 
     if (c.req.method.toUpperCase() === 'OPTIONS') {
       if (isAdmitted && origin) {
-        // Access-Control-Allow-Local-Network is Chrome's in-flight successor
-        // to Access-Control-Allow-Private-Network; both are emitted so the
-        // preflight satisfies whichever LNA generation the browser enforces.
+        // Private Network Access is on hold rather than withdrawn, so this
+        // header is kept for a browser still enforcing that generation. Its
+        // successor, Local Network Access, defines NO response header at all
+        // — it gates the request on a user permission instead, which no
+        // server response can satisfy. A server-side answer to an LNA block
+        // therefore does not exist; the client has to read the permission.
         // https://wicg.github.io/local-network-access/
         c.res.headers.set('Access-Control-Allow-Private-Network', 'true')
-        c.res.headers.set('Access-Control-Allow-Local-Network', 'true')
       }
       return new Response(null, { status: 204, headers: c.res.headers })
     }

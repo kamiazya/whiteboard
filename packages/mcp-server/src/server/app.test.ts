@@ -1029,14 +1029,23 @@ describe('createApp daemon mutation auth', () => {
       expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
     })
 
-    it('OPTIONS preflight for a loopback Origin also carries Access-Control-Allow-Local-Network', async () => {
+    it('does not invent an Access-Control-Allow-Local-Network response header', async () => {
+      // Local Network Access gates on a user permission and defines no
+      // response header, so emitting one states a capability the server does
+      // not have: it cannot unblock an LNA denial no matter what it answers.
+      // Re-adding it would send the client looking for a server-side fix to a
+      // problem only the browser's permission can resolve.
+      // https://wicg.github.io/local-network-access/
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/api/runtime/ping', {
         method: 'OPTIONS',
         headers: { Origin: 'http://localhost:5173' },
       })
       expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
+      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBeNull()
+      // Asserted together so the pair is pinned as a contract: dropping BOTH
+      // headers would satisfy the absence check alone and look like a pass.
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
     })
   })
 
@@ -1055,7 +1064,7 @@ describe('createApp daemon mutation auth', () => {
       expect(res.headers.get('Vary')).toContain('Origin')
     })
 
-    it('OPTIONS preflight for an allowlisted hosted origin returns PNA + ALN headers', async () => {
+    it('OPTIONS preflight for an allowlisted hosted origin returns the PNA header', async () => {
       const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
       const res = await app.request('/api/runtime/ping', {
         method: 'OPTIONS',
@@ -1066,7 +1075,6 @@ describe('createApp daemon mutation auth', () => {
         'https://kamiazya-whiteboard.pages.dev',
       )
       expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
     })
 
     it('does NOT reflect ACAO for an evil-prefix lookalike origin', async () => {
@@ -1150,7 +1158,6 @@ describe('createApp daemon mutation auth', () => {
         'https://pr-42.kamiazya-whiteboard.pages.dev',
       )
       expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
     })
 
     it('does NOT reflect ACAO for an origin outside the wildcard suffix', async () => {
@@ -1169,7 +1176,7 @@ describe('createApp daemon mutation auth', () => {
   describe('/mcp hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
     const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
 
-    it('OPTIONS /mcp with an allowlisted hosted Origin returns PNA + ALN headers', async () => {
+    it('OPTIONS /mcp with an allowlisted hosted Origin returns the PNA header', async () => {
       const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
       const res = await app.request('http://127.0.0.1/mcp', {
         method: 'OPTIONS',
@@ -1180,7 +1187,6 @@ describe('createApp daemon mutation auth', () => {
         'https://kamiazya-whiteboard.pages.dev',
       )
       expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
     })
 
     it('OPTIONS /mcp with a non-allowlisted hosted Origin is still forbidden (default preserved)', async () => {
