@@ -77,13 +77,12 @@ export function createMcpHttpOriginMiddleware(
 
     if (normalizeMethod(c.req.method) === 'OPTIONS') {
       if (origin) {
-        // Local Network Access preflight headers — required by Chrome for
-        // private-network → loopback requests. Both the legacy PNA header and
-        // its in-flight successor (ALN) are emitted so the preflight
-        // satisfies whichever LNA generation the browser enforces.
+        // Private Network Access preflight header, for a browser still
+        // enforcing that (on-hold) generation. Its successor, Local Network
+        // Access, defines no response header — it gates on a user permission
+        // instead, so no preflight answer here can unblock it.
         // https://wicg.github.io/local-network-access/
         c.res.headers.set('Access-Control-Allow-Private-Network', 'true')
-        c.res.headers.set('Access-Control-Allow-Local-Network', 'true')
       }
       return new Response(null, { status: 204, headers: c.res.headers })
     }
