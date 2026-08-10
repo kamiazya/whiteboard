@@ -93,6 +93,32 @@ describe('obstacle-aware edge routing', () => {
     }
   })
 
+  // A rect that contains an edge's endpoint can never be routed around —
+  // every detour still has to reach the point inside it. A group enclosing
+  // its members is the everyday case: edges between two nodes in the same
+  // group used to detour all the way around the group's frame.
+  it('ignores a group that encloses both endpoints', () => {
+    const group: SpatialNode = { id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 600 }
+    const nodes = [group, node('a', 100, 100), node('b', 100, 400)]
+    const routed = routeEdge(nodes, edge('a', 'b'))
+
+    expect(routed.path).toEqual([
+      { x: 150, y: 160 },
+      { x: 150, y: 400 },
+    ])
+  })
+
+  it('ignores a group that encloses one endpoint, so the edge pierces its border', () => {
+    const group: SpatialNode = { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 400 }
+    const nodes = [group, node('a', 100, 100), node('b', 600, 100)]
+    const routed = routeEdge(nodes, edge('a', 'b'))
+
+    expect(routed.path).toEqual([
+      { x: 200, y: 130 },
+      { x: 600, y: 130 },
+    ])
+  })
+
   // Layout must never abort over an arrangement no detour can clear.
   it('returns a finite path even when the obstacle cannot be cleared', () => {
     const swallowing = node('wall', -1000, -1000, 3000, 3000)

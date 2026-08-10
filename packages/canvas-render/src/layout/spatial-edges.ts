@@ -13,6 +13,16 @@ function centerOf(rect: Rect): Point {
   return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
 }
 
+/** Border-inclusive: a point sitting exactly on the rect's edge counts as inside. */
+function containsPoint(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.w &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.h
+  )
+}
+
 function sidePoint(rect: Rect, side: Side): Point {
   switch (side) {
     case 'top':
@@ -342,7 +352,14 @@ export function routeEdge(
 
   const start = sidePoint(fromRect, fromSide)
   const end = sidePoint(toRect, toSide)
-  const obstacles = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  // A rect that contains an endpoint can never be routed around — every
+  // detour still has to reach the point inside it — so it is not an
+  // obstacle. This is what lets an edge between two members of a group run
+  // inside the group's frame instead of detouring around it.
+  const obstacles = nodes
+    .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
+    .map(rectOf)
+    .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
 
   return {
     kind: 'edge',
