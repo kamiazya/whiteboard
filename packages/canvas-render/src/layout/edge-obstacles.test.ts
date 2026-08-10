@@ -164,3 +164,73 @@ describe('orthogonal routing style', () => {
     expect(routeEdge(nodes, edge('a', 'b')).path).toHaveLength(2)
   })
 })
+
+// An edge that leaves a node sideways but starts by running vertically traces
+// the node's own border for its first segment, so the two read as one line.
+// Leaving and arriving along the side's outward normal is what separates them.
+describe('orthogonal edges meet a node perpendicular to its side', () => {
+  const axisOf = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    a.x === b.x ? 'vertical' : a.y === b.y ? 'horizontal' : 'diagonal'
+
+  const firstAxis = (path: readonly { x: number; y: number }[]) =>
+    axisOf(path[0] as { x: number; y: number }, path[1] as { x: number; y: number })
+  const lastAxis = (path: readonly { x: number; y: number }[]) =>
+    axisOf(path.at(-2) as { x: number; y: number }, path.at(-1) as { x: number; y: number })
+
+  it('leaves a right-side attachment horizontally', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+    const routed = routeEdge(nodes, { ...edge('a', 'b'), fromSide: 'right' }, 'orthogonal')
+
+    expect(routed.fromSide).toBe('right')
+    expect(firstAxis(routed.path)).toBe('horizontal')
+  })
+
+  it('leaves a bottom-side attachment vertically', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+    const routed = routeEdge(nodes, { ...edge('a', 'b'), fromSide: 'bottom' }, 'orthogonal')
+
+    expect(firstAxis(routed.path)).toBe('vertical')
+  })
+
+  it('arrives at a top-side attachment vertically', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+    const routed = routeEdge(nodes, { ...edge('a', 'b'), toSide: 'top' }, 'orthogonal')
+
+    expect(lastAxis(routed.path)).toBe('vertical')
+  })
+
+  it('arrives at a left-side attachment horizontally', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+    const routed = routeEdge(nodes, { ...edge('a', 'b'), toSide: 'left' }, 'orthogonal')
+
+    expect(lastAxis(routed.path)).toBe('horizontal')
+  })
+
+  it('holds for the derived sides too, with no explicit fromSide/toSide', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'orthogonal')
+    const horizontalSide = routed.fromSide === 'left' || routed.fromSide === 'right'
+
+    expect(firstAxis(routed.path)).toBe(horizontalSide ? 'horizontal' : 'vertical')
+  })
+})
+
+// The orthogonal path never travels the direct diagonal, so asking whether
+// THAT segment is blocked answers the wrong question: two obstacles can sit on
+// the two elbows while leaving the diagonal clear, and the router would then
+// build no detours and return a blocked elbow.
+it('detours when both elbows are blocked but the direct line is not', () => {
+  const onFirstElbow = node('m1', 200, 10, 40, 40)
+  const onSecondElbow = node('m2', 100, 200, 40, 40)
+  const nodes = [
+    node('a', 0, 0, 100, 60),
+    onFirstElbow,
+    onSecondElbow,
+    node('b', 400, 300, 100, 60),
+  ]
+
+  const routed = routeEdge(nodes, edge('a', 'b'), 'orthogonal')
+
+  expect(pathCrosses(routed.path, onFirstElbow), 'crosses m1').toBe(false)
+  expect(pathCrosses(routed.path, onSecondElbow), 'crosses m2').toBe(false)
+})

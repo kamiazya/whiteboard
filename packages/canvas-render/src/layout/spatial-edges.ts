@@ -168,18 +168,6 @@ function bestCandidate(candidates: readonly Point[][], obstacles: readonly Rect[
   return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
 }
 
-/**
- * The two right-angle elbows between `start` and `end`: across then down, and
- * down then across. Every detour candidate is already axis-aligned, so the
- * orthogonal style is these two plus those, judged by the same rule.
- */
-function elbows(start: Point, end: Point): Point[][] {
-  return [
-    [start, { x: end.x, y: start.y }, end],
-    [start, { x: start.x, y: end.y }, end],
-  ]
-}
-
 /** Ways past a blocking region: over it, under it, left of it, right of it. */
 function detourCandidates(start: Point, end: Point, region: Rect): Point[][] {
   const above = region.y - OBSTACLE_CLEARANCE_PX
@@ -205,20 +193,87 @@ function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Po
   return bestCandidate(detourCandidates(start, end, region), obstacles)
 }
 
+/** How far an orthogonal edge travels straight out of a node before turning. */
+const ORTHOGONAL_STUB_PX = 20
+
+/** The direction a side faces, away from the node's interior. */
+function outwardNormal(side: Side): Point {
+  switch (side) {
+    case 'top':
+      return { x: 0, y: -1 }
+    case 'bottom':
+      return { x: 0, y: 1 }
+    case 'left':
+      return { x: -1, y: 0 }
+    case 'right':
+      return { x: 1, y: 0 }
+  }
+}
+
+function stubFrom(point: Point, side: Side): Point {
+  const normal = outwardNormal(side)
+  return {
+    x: point.x + normal.x * ORTHOGONAL_STUB_PX,
+    y: point.y + normal.y * ORTHOGONAL_STUB_PX,
+  }
+}
+
+/** Drops repeated points, so a collapsed corner never becomes a zero-length segment. */
+function withoutRepeats(path: readonly Point[]): Point[] {
+  return path.filter((point, i) => {
+    const prev = path[i - 1]
+    return i === 0 || prev === undefined || point.x !== prev.x || point.y !== prev.y
+  })
+}
+
 /**
  * Right angles only, whether or not anything is in the way — that is what the
  * style asks for, so a clear path bends too.
+ *
+ * Both ends leave along their side's outward normal before turning. Without
+ * that stub an edge attached to a node's right side can start by running
+ * vertically, tracing the node's own border for its first segment so the two
+ * read as one line rather than as an edge meeting a box.
  *
  * The elbows come first and the detours join them only when something blocks,
  * which keeps the common case to a single corner instead of routing every
  * edge around a region that is not there.
  */
-function routeOrthogonal(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
-  const region = blockingRegion(start, end, obstacles)
+function routeOrthogonal(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  obstacles: readonly Rect[],
+): Point[] {
+  const exit = stubFrom(start, fromSide)
+  const entry = stubFrom(end, toSide)
+  const between = (middles: readonly Point[]) =>
+    withoutRepeats([start, exit, ...middles, entry, end])
+
+  const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
+  if (elbows.some((path) => pathIsClear(path, obstacles))) {
+    return bestCandidate(elbows, obstacles)
+  }
+
+  // Detours are needed when the paths this style actually travels are
+  // blocked — which the direct diagonal cannot answer, since an orthogonal
+  // edge never travels it. Two obstacles can sit on the two elbows while
+  // leaving that diagonal clear.
+  const region = unionRect(
+    obstacles.filter((rect) =>
+      elbows.some((path) =>
+        path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
+      ),
+    ),
+  )
   const candidates =
     region === undefined
-      ? elbows(start, end)
-      : [...elbows(start, end), ...detourCandidates(start, end, region)]
+      ? elbows
+      : [
+          ...elbows,
+          ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
+        ]
   return bestCandidate(candidates, obstacles)
 }
 
@@ -299,7 +354,7 @@ export function routeEdge(
     // pretending — see the routing-style slice notes.
     path:
       style === 'orthogonal'
-        ? routeOrthogonal(start, end, obstacles)
+        ? routeOrthogonal(start, end, fromSide, toSide, obstacles)
         : routeStraight(start, end, obstacles),
     fromSide,
     toSide,
