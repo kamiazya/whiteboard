@@ -161,7 +161,12 @@ function renderNode(node: SceneNode): string {
     case 'edge': {
       const points = node.path.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
       const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
-      const polyline = `<polyline points="${points}"${appearance} ${PRESENTATION_ATTR}/>`
+      // `fill="none"` is not decoration. SVG's initial fill is black and a
+      // <polyline> fills the region its points enclose, so a bent edge would
+      // paint a solid wedge across its own corner in whatever fill the
+      // surrounding document inherits — invisible while every path had two
+      // points, glaring the moment routing started bending them.
+      const polyline = `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
       // Arrowheads are filled triangles in the edge's stroke color, drawn
       // after (over) the polyline. Geometry comes from the shared helper so
       // sceneBounds always agrees on how far the wings reach.
