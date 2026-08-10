@@ -1043,6 +1043,9 @@ describe('createApp daemon mutation auth', () => {
       })
       expect(res.status).toBe(204)
       expect(res.headers.get('Access-Control-Allow-Local-Network')).toBeNull()
+      // Asserted together so the pair is pinned as a contract: dropping BOTH
+      // headers would satisfy the absence check alone and look like a pass.
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
     })
   })
 

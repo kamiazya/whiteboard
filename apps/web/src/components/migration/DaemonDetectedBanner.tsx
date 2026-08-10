@@ -206,6 +206,19 @@ export function DaemonDetectedBanner({
 
   // Always paired with aborting/settling the sweep the timer belongs to, so
   // a pending hint can never outlive its own probe.
+  // The only way this component reads the permission. A rejection has to
+  // become 'unknown' here rather than at each call site: both callers are
+  // downstream of a `setChecking(true)` or gate a piece of failure copy, so a
+  // propagating rejection strands the button or silently drops the copy
+  // instead of surfacing anything the user can act on.
+  async function readPermission(): Promise<LocalNetworkPermissionState> {
+    try {
+      return await queryPermissionFn()
+    } catch {
+      return 'unknown'
+    }
+  }
+
   function clearHintTimer() {
     if (hintTimerRef.current !== null) {
       clearTimeout(hintTimerRef.current)
@@ -265,7 +278,19 @@ export function DaemonDetectedBanner({
               failures[0] ??
               ({ detected: false, reason: 'network' } as const)),
       )
-      setManualCheckFailed(Boolean(forceRecheck) && nextFound.length === 0)
+      if (forceRecheck && nextFound.length === 0) {
+        // Re-read before the failure copy renders, never reuse the pre-probe
+        // snapshot: the prompt is answered DURING the sweep, so a check that
+        // began at 'prompt' and was then allowed would otherwise be explained
+        // as "left unanswered" — telling the user to allow what they just did.
+        void readPermission().then((settled) => {
+          if (controller.signal.aborted) return
+          setPermission(settled)
+          setManualCheckFailed(true)
+        })
+      } else {
+        setManualCheckFailed(false)
+      }
       if (nextFound.length > 0) {
         // Persist every confirmed daemon, first-found ending most recent,
         // so the next visit's narrow auto-probe reaches them directly.
@@ -398,7 +423,7 @@ export function DaemonDetectedBanner({
     // Read the permission BEFORE probing, because probing is what triggers
     // the prompt. Afterwards is too late to explain it, and a denial that is
     // already on file makes the probe a guaranteed, unexplained failure.
-    const state = await queryPermissionFn()
+    const state = await readPermission()
     setPermission(state)
 
     const gate = decideConnectGate({ pageOriginScheme, permission: state })
@@ -471,8 +496,11 @@ export function DaemonDetectedBanner({
         // answer well.
         <span
           data-testid="lna-explainer"
-          role="dialog"
-          aria-label="About the local network permission"
+          // A live region rather than role="dialog": this is inline and
+          // non-blocking, and an unfocused dialog is announced by nothing at
+          // all — a screen reader user would meet the browser's permission
+          // prompt without ever hearing the explanation meant to precede it.
+          role="status"
           className="flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground"
         >
           Your browser is about to ask whether this site may reach devices on your local network.
@@ -518,16 +546,12 @@ export function DaemonDetectedBanner({
           </a>
         </span>
       )}
-      {showManualAffordance && manualCheckFailed && failureExplanation === 'browser-blocked' && (
-        <span
-          data-testid="daemon-check-blocked-notice"
-          role="alert"
-          className="text-xs text-amber-700"
-        >
-          Your browser blocked the request to your local network. Allow local network access for
-          this site in your browser's site settings, then check again.
-        </span>
-      )}
+      {/* 'browser-blocked' deliberately has no branch here. Both routes to it
+          are handled elsewhere already: a proven block (reason 'blocked') puts
+          the capability tier at 'tier2-blocked' and renders
+          UNSUPPORTED_BROWSER_NOTICE instead of this row, and a denied
+          permission returns at the gate above without ever probing. A branch
+          for it would be unreachable UI. */}
       {showManualAffordance &&
         manualCheckFailed &&
         failureExplanation === 'permission-unanswered' && (
