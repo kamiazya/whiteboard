@@ -65,7 +65,11 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
-import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import {
+  flattenRoundedEdgePath,
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+} from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   AlignCenterHorizontal,
@@ -616,11 +620,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
-    // distance-to-polyline test against a zoom-adjusted tolerance.
+    // distance-to-polyline test against a zoom-adjusted tolerance. A rounded
+    // edge is DRAWN as midpoint-quadratic corners, so its hit/highlight path
+    // is the flattened curve — the raw waypoints run through corners the ink
+    // never touches.
     const edgePaths = useMemo(
       () =>
         scene.nodes.flatMap((node) =>
-          node.kind === 'edge' ? [{ id: node.id, path: node.path }] : [],
+          node.kind === 'edge'
+            ? [
+                {
+                  id: node.id,
+                  path: node.rounded === true ? flattenRoundedEdgePath(node.path) : node.path,
+                },
+              ]
+            : [],
         ),
       [scene],
     )

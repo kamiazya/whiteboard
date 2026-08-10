@@ -1,4 +1,5 @@
 import { edgeArrowPolygons } from '../edge-arrows.js'
+import { roundedEdgeCorners } from '../layout/edge-rounding.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -125,46 +126,28 @@ function renderTableRow(row: TableRowSceneNode): string {
 
 type EdgePoint = { readonly x: number; readonly y: number }
 
-const midpoint = (a: EdgePoint, b: EdgePoint): EdgePoint => ({
-  x: (a.x + b.x) / 2,
-  y: (a.y + b.y) / 2,
-})
-
 /**
- * The same polyline with its corners rounded off.
- *
- * Each interior vertex becomes the CONTROL point of a quadratic curve whose
- * endpoints are the midpoints of the two segments meeting there. A quadratic
- * Bézier never leaves the triangle of its three points, so the drawn shape
- * stays inside the polyline — which is what lets `path` remain the single
- * source of the edge's geometry, with sceneBounds/translateScene/scaleScene
- * still correct working on the points alone. A smoothing that overshot (a
- * Catmull-Rom spline through the vertices, say) would put ink outside the
- * bounds those functions compute.
- *
- * Degenerate inputs fall back to the straight reading rather than emitting a
- * malformed `d`, matching this package's never-throw rule.
+ * The same polyline with its corners rounded off, per the shared
+ * `roundedEdgeCorners` decomposition (see layout/edge-rounding.ts — the
+ * editor's hit-testing flattens the SAME corners, which is what keeps a tap
+ * landing on the ink). Degenerate inputs fall back to the straight reading
+ * rather than emitting a malformed `d`, matching this package's never-throw
+ * rule.
  */
 function roundedPathData(path: readonly EdgePoint[]): string {
-  const [first, ...rest] = path
+  const first = path[0]
   const last = path.at(-1)
   if (first === undefined || last === undefined) return ''
   if (path.length < 3) {
     return `M ${formatCoord(first.x)} ${formatCoord(first.y)} L ${formatCoord(last.x)} ${formatCoord(last.y)}`
   }
 
-  const corners = rest.slice(0, -1)
   const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
-  let from = first
-  for (const [index, corner] of corners.entries()) {
-    const next = path[index + 2] as EdgePoint
-    const enter = midpoint(from, corner)
-    const leave = midpoint(corner, next)
+  for (const { enter, control, leave } of roundedEdgeCorners(path)) {
     parts.push(`L ${formatCoord(enter.x)} ${formatCoord(enter.y)}`)
     parts.push(
-      `Q ${formatCoord(corner.x)} ${formatCoord(corner.y)} ${formatCoord(leave.x)} ${formatCoord(leave.y)}`,
+      `Q ${formatCoord(control.x)} ${formatCoord(control.y)} ${formatCoord(leave.x)} ${formatCoord(leave.y)}`,
     )
-    from = corner
   }
   parts.push(`L ${formatCoord(last.x)} ${formatCoord(last.y)}`)
   return parts.join(' ')
