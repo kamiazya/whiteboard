@@ -87,8 +87,34 @@ const DESIGN_SCHEMA = {
       description:
         'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
     },
+    // The change's OUTWARD reach, which nothing else in the flow computes: `scope` is what the
+    // author intends to edit, this is who else is affected by that edit. typecheck already
+    // catches the callers a signature break reaches; the gap this closes is the caller whose
+    // types still compile but whose behavior changed, and that has no test to notice.
+    // Never empty, and fail-open by construction: `unavailable: <reason>` is a valid answer, so a
+    // contributor with no impact-graph tool on their machine is never blocked by this field.
+    blastRadius: {
+      type: 'array',
+      items: { type: 'string', pattern: '\\S' },
+      minItems: 1,
+      description:
+        'Existing call sites/consumers this change reaches, each flagged with whether a test would fail if the change broke it (e.g. "canvas-viewer/CanvasViewer.tsx calls layoutSpatialCanvas — covered by canvas-viewer-jsdom"; "mcp-server/export.ts — NO test"). Never empty. Supply exactly one entry "none: <reason>" for a leaf change with no existing callers, or "unavailable: <reason>" when no impact-graph tool is available on this machine.',
+    },
+    // `blastRadius` asks who this change reaches INSIDE the codebase; this asks whether it reaches
+    // a USER at all. A slice can build, typecheck and pass its tests while nothing registers,
+    // mounts, renders or routes it — the tests pass precisely because they call the new code
+    // directly. That increment reads as finished and merges as finished, and the gap comes back
+    // later as rework. A foundation-only slice is legitimate; a silently foundation-only one is
+    // the defect, so the sentinel demands the follow-up that wires it.
+    userReach: {
+      type: 'array',
+      items: { type: 'string', pattern: '\\S' },
+      minItems: 1,
+      description:
+        'The concrete path by which a user reaches this change, naming the entry point that makes it reachable and confirming this increment adds it (e.g. "registered via registerToolWithAnnotations + called by smoke:e2e"; "rendered by CanvasList, reachable from /w/:ws"; "mounted on the Hono app in createServer"). Never empty. When the increment deliberately lands unwired, supply exactly one entry "foundation: <reason> — wired by <named follow-up>"; an unwired slice with no named follow-up is not an acceptable answer.',
+    },
   },
-  required: ['completionCriteria', 'scope', 'testScenarios', 'properties'],
+  required: ['completionCriteria', 'scope', 'testScenarios', 'properties', 'blastRadius', 'userReach'],
 }
 
 const PLAN_VERDICT_SCHEMA = {
@@ -143,11 +169,24 @@ const FIX_SCHEMA = {
 // provided designDoc is held to the exact same non-blank-entry invariant as an agent-generated
 // design. Mirrors .claude/workflows/lib/design-schema.mjs's isValidDesignShape (see the sync test
 // for why this is duplicated instead of imported).
-const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+// One guard covers every minItems:1 + `\S` list field (properties/blastRadius/userReach) — they
+// share one pattern.
+const nonBlankItem = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+const isNonBlankList = (v) =>
+  Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && nonBlankItem.test(x))
 
 // Kept in lockstep with DESIGN_SCHEMA's `additionalProperties: false` at both the top level and
 // inside `testScenarios` — isValidDesignShape below must reject any key outside these lists.
-const ALLOWED_TOP_LEVEL_KEYS = ['completionCriteria', 'scope', 'contractChanges', 'testScenarios', 'risks', 'properties']
+const ALLOWED_TOP_LEVEL_KEYS = [
+  'completionCriteria',
+  'scope',
+  'contractChanges',
+  'testScenarios',
+  'risks',
+  'properties',
+  'blastRadius',
+  'userReach',
+]
 const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
 
 function isStringArray(v) {
@@ -170,8 +209,9 @@ function isValidDesignShape(d) {
   if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
   if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
   if (d.risks !== undefined && !isStringArray(d.risks)) return false
-  if (!Array.isArray(d.properties) || d.properties.length < 1) return false
-  if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
+  if (!isNonBlankList(d.properties)) return false
+  if (!isNonBlankList(d.blastRadius)) return false
+  if (!isNonBlankList(d.userReach)) return false
   return true
 }
 
@@ -195,14 +235,14 @@ function shouldBlockOnFailedPlanReview({ hasDesign, pass }) {
 let design = PROVIDED_DESIGN
 let discardedInvalidProvidedDesign = false
 if (design && !isValidDesignShape(design)) {
-  log('provided designDoc does not match DESIGN_SCHEMA (missing/invalid completionCriteria, scope, testScenarios.unit, or properties) — discarding it and generating a fresh design instead.')
+  log('provided designDoc does not match DESIGN_SCHEMA (missing/invalid completionCriteria, scope, testScenarios.unit, properties, blastRadius, or userReach) — discarding it and generating a fresh design instead.')
   design = null
   discardedInvalidProvidedDesign = true
 }
 if (shouldGenerateDesign({ hasDesign: !!design, skipDesign: SKIP_DESIGN, discardedInvalidProvidedDesign })) {
   phase('Design')
   design = await agent(
-    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, and \`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). \`properties\` must never be empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead. Do NOT write code yet.`,
+    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, \`properties\`, and \`blastRadius\`.\n\n\`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). Never empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead.\n\n\`blastRadius\` — who ELSE this change reaches, which \`scope\` does not answer. Enumerate the existing call sites/consumers of every symbol you plan to change, and flag each one with whether a test would fail if the change broke it; a caller with NO covering test is the finding this field exists to surface. Prefer an impact-graph MCP tool when one is connected (e.g. code-review-graph's \`get_impact_radius_tool\`/\`query_graph_tool\`, after a \`build_or_update_graph_tool\` refresh); otherwise fall back to grep over the symbol names. Never empty: supply exactly one entry \`"none: <reason>"\` for a genuine leaf change with no existing callers, or \`"unavailable: <reason>"\` if no impact tool is connected AND grep is not workable here — do not stall the gate over it.\n\n\`userReach\` — how a USER reaches this, which \`blastRadius\` does not answer. Name the concrete entry point that makes the change reachable and confirm THIS increment adds it: the MCP tool registration (+ the \`smoke:e2e\` step that calls it), the Hono route mounted on the app, the parent that renders the component on a real screen, the flag that is not only parsed but read. A slice that builds, typechecks and passes its tests while nothing registers/mounts/renders it delivers nothing and comes back as rework — its tests pass precisely because they call the new code directly. Never empty: if this increment deliberately lands unwired, supply exactly one entry \`"foundation: <reason> — wired by <named follow-up>"\`. An unwired slice with no named follow-up is not an acceptable answer; either wire it here or name what wires it.\n\nDo NOT write code yet.`,
     { label: 'design', phase: 'Design', schema: DESIGN_SCHEMA },
   )
 }
@@ -283,8 +323,8 @@ if (!impl || impl.blocked || !impl.committed) {
 // --- Phase 4: simplify ---
 phase('Simplify')
 const simplify = await agent(
-  `Run a simplification pass over the files changed by the last commit only. ${cwdNote}\nUse \`${GIT} show --stat HEAD\` to see them. Improve readability/duplication/over-engineering without changing behavior. Re-run the relevant tests. If you change anything, COMMIT it (\`${GIT} add <only the files you changed, never -A> && ${GIT} commit\`). Report what you changed or that you skipped (with reason).`,
-  { label: 'simplify', phase: 'Simplify', agentType: 'code-simplifier:code-simplifier' },
+  `Run a simplification pass over the files changed by the last commit only. ${cwdNote}\nUse \`${GIT} show --stat HEAD\` to see them. Apply your preloaded ponytail ladder — delete > reuse what this repo already has > stdlib > native platform > already-installed dependency > one line — and report findings as \`<file>:L<line>: <delete|stdlib|native|yagni|shrink>: <what>. <replacement>.\` Behavior-preserving only; never weaken an existing test to fit a simplification. Re-run the relevant tests. If you change anything, COMMIT it (\`${GIT} add <only the files you changed, never -A> && ${GIT} commit\`). Report what you changed or that you skipped (with reason).`,
+  { label: 'simplify', phase: 'Simplify', agentType: 'simplifier' },
 )
 
 // --- Phase 5: review (compose the review workflow over this task's commits) ---
