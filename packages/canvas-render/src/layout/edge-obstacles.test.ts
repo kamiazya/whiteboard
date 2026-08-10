@@ -234,3 +234,26 @@ it('detours when both elbows are blocked but the direct line is not', () => {
   expect(pathCrosses(routed.path, onFirstElbow), 'crosses m1').toBe(false)
   expect(pathCrosses(routed.path, onSecondElbow), 'crosses m2').toBe(false)
 })
+
+// `curved` was accepted by the model but routed as `straight`, because the
+// backend could only draw a polyline. It travels the orthogonal waypoints —
+// perpendicular exit and entry, obstacles avoided — and asks for them to be
+// drawn rounded rather than square.
+describe('curved routing style', () => {
+  it('asks for rounded corners', () => {
+    const nodes = [node('a', 0, 0), node('b', 400, 300)]
+
+    expect(routeEdge(nodes, edge('a', 'b'), 'curved').rounded).toBe(true)
+    expect(routeEdge(nodes, edge('a', 'b'), 'orthogonal').rounded).toBeUndefined()
+    expect(routeEdge(nodes, edge('a', 'b'), 'straight').rounded).toBeUndefined()
+  })
+
+  it('travels the same waypoints as orthogonal, so it avoids obstacles too', () => {
+    const blocker = node('mid', 200, 0)
+    const nodes = [node('a', 0, 0), blocker, node('b', 400, 0)]
+    const curved = routeEdge(nodes, edge('a', 'b'), 'curved')
+
+    expect(curved.path).toEqual(routeEdge(nodes, edge('a', 'b'), 'orthogonal').path)
+    expect(pathCrosses(curved.path, blocker)).toBe(false)
+  })
+})

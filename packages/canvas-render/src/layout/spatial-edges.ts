@@ -347,15 +347,16 @@ export function routeEdge(
   return {
     kind: 'edge',
     id: edge.id,
-    // 'curved' is accepted by the model but has no rendering yet: the scene
-    // graph carries edges as a point path and the SVG backend draws them as a
-    // <polyline>, so control points would render as corners. Until the
-    // backend can express a curve it routes as 'straight' rather than
-    // pretending — see the routing-style slice notes.
+    // 'curved' travels the same waypoints as 'orthogonal' — perpendicular
+    // exit and entry, obstacles stepped around — and differs only in asking
+    // for those corners to be drawn rounded. Keeping one set of waypoints is
+    // what makes the two styles agree about which nodes an edge avoids; only
+    // the drawing differs.
     path:
-      style === 'orthogonal'
-        ? routeOrthogonal(start, end, fromSide, toSide, obstacles)
-        : routeStraight(start, end, obstacles),
+      style === 'straight'
+        ? routeStraight(start, end, obstacles)
+        : routeOrthogonal(start, end, fromSide, toSide, obstacles),
+    ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,
     fromEnd,
