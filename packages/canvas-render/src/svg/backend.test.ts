@@ -422,7 +422,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 10,10" stroke="#888" stroke-width="1.5" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 10,10" fill="none" stroke="#888" stroke-width="1.5" role="presentation"/></svg>',
     )
   })
 
@@ -441,7 +441,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0" fill="none" role="presentation"/></svg>',
     )
   })
 
@@ -463,7 +463,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
     )
   })
 
@@ -485,7 +485,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" role="presentation"/><polygon points="0,0 10,-4 10,4" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" role="presentation"/><polygon points="0,0 10,-4 10,4" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
     )
   })
 
@@ -508,7 +508,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" stroke="#888" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="#888" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" stroke="#888" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="#888" role="presentation"/></svg>',
     )
   })
 
@@ -530,7 +530,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="5,5 5,5" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="5,5 5,5" fill="none" role="presentation"/></svg>',
     )
   })
 
@@ -720,4 +720,32 @@ describe('image nodes', () => {
     expect(svg).toContain('role="presentation"')
     expect(svg).not.toContain('<title>')
   })
+})
+
+// SVG's initial `fill` is black, and a <polyline> fills the region its points
+// enclose. A two-point edge encloses nothing, so this was invisible until
+// routing started bending paths — then every corner grew a filled wedge in
+// whatever fill the surrounding document happened to inherit. Reported as a
+// black blob on a canvas after a node was duplicated.
+it('draws a bent edge as a line, not a filled wedge', () => {
+  const svg = renderSceneToSvg({
+    nodes: [
+      {
+        kind: 'edge',
+        id: 'e1',
+        path: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+        ],
+        fromSide: 'right',
+        toSide: 'top',
+        fromEnd: 'none',
+        toEnd: 'none',
+      },
+    ],
+  })
+
+  const polyline = /<polyline[^>]*>/.exec(svg)?.[0] ?? ''
+  expect(polyline).toContain('fill="none"')
 })
