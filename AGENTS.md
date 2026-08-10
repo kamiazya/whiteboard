@@ -365,6 +365,7 @@ Keep:
 
 - The non-obvious **why** (a hidden constraint, an invariant, a workaround for a specific upstream bug, behavior that would surprise a reader).
 - A pointer to a durable spec, RFC, or vendor doc when behavior follows it.
+- A `ponytail:` marker on a deliberate shortcut, naming its ceiling and upgrade path (`ponytail: global lock, per-account locks if throughput matters`). Naming the ceiling is enduring rationale and belongs here; a bare "TODO: fix later" is chronology and belongs in the Drop list below.
 
 Drop:
 

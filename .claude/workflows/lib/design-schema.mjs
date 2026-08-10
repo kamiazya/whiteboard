@@ -33,20 +33,58 @@ export const DESIGN_SCHEMA = {
       description:
         'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
     },
+    // The change's OUTWARD reach, which nothing else in the flow computes: `scope` is what the
+    // author intends to edit, this is who else is affected by that edit. typecheck already
+    // catches the callers a signature break reaches; the gap this closes is the caller whose
+    // types still compile but whose behavior changed, and that has no test to notice.
+    // Never empty, and fail-open by construction: `unavailable: <reason>` is a valid answer, so a
+    // contributor with no impact-graph tool on their machine is never blocked by this field.
+    blastRadius: {
+      type: 'array',
+      items: { type: 'string', pattern: '\\S' },
+      minItems: 1,
+      description:
+        'Existing call sites/consumers this change reaches, each flagged with whether a test would fail if the change broke it (e.g. "canvas-viewer/CanvasViewer.tsx calls layoutSpatialCanvas — covered by canvas-viewer-jsdom"; "mcp-server/export.ts — NO test"). Never empty. Supply exactly one entry "none: <reason>" for a leaf change with no existing callers, or "unavailable: <reason>" when no impact-graph tool is available on this machine.',
+    },
+    // `blastRadius` asks who this change reaches INSIDE the codebase; this asks whether it reaches
+    // a USER at all. A slice can build, typecheck and pass its tests while nothing registers,
+    // mounts, renders or routes it — the tests pass precisely because they call the new code
+    // directly. That increment reads as finished and merges as finished, and the gap comes back
+    // later as rework. A foundation-only slice is legitimate; a silently foundation-only one is
+    // the defect, so the sentinel demands the follow-up that wires it.
+    userReach: {
+      type: 'array',
+      items: { type: 'string', pattern: '\\S' },
+      minItems: 1,
+      description:
+        'The concrete path by which a user reaches this change, naming the entry point that makes it reachable and confirming this increment adds it (e.g. "registered via registerToolWithAnnotations + called by smoke:e2e"; "rendered by CanvasList, reachable from /w/:ws"; "mounted on the Hono app in createServer"). Never empty. When the increment deliberately lands unwired, supply exactly one entry "foundation: <reason> — wired by <named follow-up>"; an unwired slice with no named follow-up is not an acceptable answer.',
+    },
   },
-  required: ['completionCriteria', 'scope', 'testScenarios', 'properties'],
+  required: ['completionCriteria', 'scope', 'testScenarios', 'properties', 'blastRadius', 'userReach'],
 }
 
 // Reuses the schema's own item pattern (rather than a second hand-picked regex) so a caller-
 // provided designDoc that bypasses the schema-constrained `agent()` call is held to the exact
-// same non-blank-entry invariant as an agent-generated design.
-const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+// same non-blank-entry invariant as an agent-generated design. One guard covers every
+// minItems:1 + `\S` list field (properties/blastRadius/userReach) — they share one pattern.
+const nonBlankItem = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+const isNonBlankList = (v) =>
+  Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && nonBlankItem.test(x))
 
 // Kept in lockstep with DESIGN_SCHEMA's `additionalProperties: false` at both the top level and
 // inside `testScenarios` — isValidDesignShape below must reject any key outside these lists or a
 // caller-provided designDoc could carry fields the schema-constrained agent() path can never
 // produce.
-const ALLOWED_TOP_LEVEL_KEYS = ['completionCriteria', 'scope', 'contractChanges', 'testScenarios', 'risks', 'properties']
+const ALLOWED_TOP_LEVEL_KEYS = [
+  'completionCriteria',
+  'scope',
+  'contractChanges',
+  'testScenarios',
+  'risks',
+  'properties',
+  'blastRadius',
+  'userReach',
+]
 const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
 
 function isStringArray(v) {
@@ -71,8 +109,9 @@ export function isValidDesignShape(d) {
   if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
   if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
   if (d.risks !== undefined && !isStringArray(d.risks)) return false
-  if (!Array.isArray(d.properties) || d.properties.length < 1) return false
-  if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
+  if (!isNonBlankList(d.properties)) return false
+  if (!isNonBlankList(d.blastRadius)) return false
+  if (!isNonBlankList(d.userReach)) return false
   return true
 }
 

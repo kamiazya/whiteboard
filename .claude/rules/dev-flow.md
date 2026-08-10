@@ -35,7 +35,7 @@ Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arr
 
 ## Phase agents (`agentType`)
 
-developer (TDD), plan-reviewer, reviewer-dimension, security-scanner, qa-scenario, code-simplifier:code-simplifier, dogfood-persona, technical-writer (docs sync), repo-hygiene-investigator (read-only repo policy/portability/hygiene investigation — default investigator for `investigate`, but `Explore` is the registered fallback until a session reload picks it up); planning panel: architect, security-architect, ux-designer, project-manager, product-manager, research-analyst (web research: best practices / prior art / standards), whiteboard-designer; release-time: marketing (drafts only, human ships). **Do not use internal-only agents (e.g. `anymind:*`) in this repo's flows. Custom agents added mid-session aren't registered as an `agentType` until reload — see the `workflow-authoring` skill.**
+developer (TDD), plan-reviewer, reviewer-dimension, security-scanner, qa-scenario, simplifier (repo-owned; preloads the `ponytail` ladder — the plugin `code-simplifier` carries another project's coding standards in its own prompt, so it is deliberately NOT used here), dogfood-persona, technical-writer (docs sync), repo-hygiene-investigator (read-only repo policy/portability/hygiene investigation — default investigator for `investigate`, but `Explore` is the registered fallback until a session reload picks it up); planning panel: architect, security-architect, ux-designer, project-manager, product-manager, research-analyst (web research: best practices / prior art / standards), whiteboard-designer; release-time: marketing (drafts only, human ships). **Do not use internal-only agents (e.g. `anymind:*`) in this repo's flows. Custom agents added mid-session aren't registered as an `agentType` until reload — see the `workflow-authoring` skill.**
 
 ## Gates (Codex second opinion on gate decisions)
 
@@ -46,6 +46,15 @@ developer (TDD), plan-reviewer, reviewer-dimension, security-scanner, qa-scenari
 ## Disciplines (non-negotiable)
 
 TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-written interface); `getLogger` (no `console.*` in server code); behavior-preserving refactors keep existing tests un-weakened; mutation-check schema/regression fixes; immutable updates; single-integrator / single-push. **Temp artifacts go in `tmp/` buckets — screenshots → `tmp/screenshots/` (explicit path), never the repo root or a source dir.**
+
+**Reach is designed, not discovered in review.** Beside `scope` (what you intend to edit), dev-loop's `DESIGN_SCHEMA` requires two answers `scope` cannot give, both judged by PlanReview and re-asked of the diff by the `reachability` review dimension:
+
+- **`blastRadius`** — who else inside the codebase this edit reaches, each caller flagged for whether a test would fail if it broke. `typecheck` already catches *signature* breaks; this is for the caller that still compiles, changed behavior, and has nothing watching it. Use an impact-graph MCP tool (`get_impact_radius_tool`) when connected, else grep. Sentinels: `none:` (leaf change), `unavailable:` (no such tool on this machine — accepted without argument; nobody is gated on optional local tooling).
+- **`userReach`** — whether it reaches a USER at all: the registration, route, rendering parent, or flag-read that this increment adds. Built-but-unwired passes every other gate, because the tests pass *precisely by calling the new code directly*. A foundation-only slice is fine; a silently foundation-only one is the defect. Sentinel: `foundation: <reason> — wired by <named follow-up>`, rejected if the follow-up is too vague to file.
+
+`codebase-auditor`'s `wiring-gaps` dimension stays the periodic sweep for whatever still slipped through.
+
+**Simplicity already has two executable rungs — reach for them before writing a prose rule.** `tools/arch-lint`'s allowed-third-party-dependency check fails the build on a dependency added outside a package's allowlist, and `pnpm knip` fails on the unused export a deleted feature left behind. Those are the "don't add a dependency" and "delete it" rungs made mechanical. What the `simplifier` agent and its `ponytail` ladder add on top is only the judgement-shaped rungs (does this need to exist, is this one line) — inherently prose, and the weakest rung by design.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 

@@ -31,7 +31,10 @@ const GIT = CWD ? `git -C ${CWD}` : 'git'
 // .claude/skills/review-gate/resources/ (mirroring audit-triage's
 // .claude/skills/audit-triage/resources/) — see the review-gate skill for how a caller
 // globs/reads those files and passes them through as {name, content}.
-const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
+// `reachability` is in the DEFAULT set, not opt-in: an increment that builds, typechecks and
+// passes its tests while nothing registers/mounts/renders it reads as finished to every other
+// dimension, so the only reliable catch is a lane that always asks.
+const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage', 'reachability']
 // Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
 // workflow runtime executes this file as a standalone function body with no module resolution,
 // so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry

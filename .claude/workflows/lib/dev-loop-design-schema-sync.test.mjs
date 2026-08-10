@@ -30,11 +30,11 @@ function extractInlineDesignSchema() {
 
 function extractIsValidDesignShape() {
   const match = source.match(
-    /\nconst propertiesItemPattern = new RegExp\(DESIGN_SCHEMA[\s\S]*?\nfunction isValidDesignShape\(d\) \{[\s\S]*?\n\}\n/,
+    /\nconst nonBlankItem = new RegExp\(DESIGN_SCHEMA[\s\S]*?\nfunction isValidDesignShape\(d\) \{[\s\S]*?\n\}\n/,
   )
   assert.ok(
     match,
-    'could not locate `propertiesItemPattern` + `function isValidDesignShape(d) {...}` in dev-loop.workflow.mjs',
+    'could not locate `nonBlankItem` + `function isValidDesignShape(d) {...}` in dev-loop.workflow.mjs',
   )
   // eslint-disable-next-line no-new-func -- evaluating our own source (DESIGN_SCHEMA + a plain function declaration), not untrusted input
   return new Function('DESIGN_SCHEMA', `${match[0]}\nreturn isValidDesignShape`)(DESIGN_SCHEMA)
@@ -70,9 +70,50 @@ test('isValidDesignShape accepts a well-formed caller-provided designDoc', () =>
       scope: 'small',
       testScenarios: { unit: ['covers the thing'] },
       properties: ['none: pure UI wiring, no state/parser/store surface'],
+      blastRadius: ['none: new leaf module, no existing callers'],
+      userReach: ['rendered by CanvasList, reachable from /w/:ws'],
     }),
     true,
   )
+})
+
+test('isValidDesignShape rejects a designDoc missing the required `userReach` field', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const designWithoutUserReach = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+    blastRadius: ['none: new leaf module, no existing callers'],
+  }
+  assert.equal(isValidDesignShape(designWithoutUserReach), false)
+  assert.equal(sharedIsValidDesignShape(designWithoutUserReach), false)
+})
+
+test('isValidDesignShape rejects a designDoc missing the required `blastRadius` field', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const designWithoutBlastRadius = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+  }
+  assert.equal(isValidDesignShape(designWithoutBlastRadius), false)
+  assert.equal(sharedIsValidDesignShape(designWithoutBlastRadius), false)
+})
+
+test('isValidDesignShape rejects a whitespace-only `blastRadius` entry', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const designWithBlankBlastRadius = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+    blastRadius: ['   '],
+    userReach: ['rendered by CanvasList'],
+  }
+  assert.equal(isValidDesignShape(designWithBlankBlastRadius), false)
+  assert.equal(sharedIsValidDesignShape(designWithBlankBlastRadius), false)
 })
 
 test('isValidDesignShape rejects a designDoc missing the required `properties` invariant field', () => {
