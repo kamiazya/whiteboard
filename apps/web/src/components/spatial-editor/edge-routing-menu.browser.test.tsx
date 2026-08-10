@@ -119,3 +119,24 @@ it('drops the setting again when the style returns to straight', async () => {
     expect(latest.canvas).not.toHaveProperty('x-whiteboard')
   })
 })
+
+// Curved was withheld from the menu while it rendered as a straight line. It
+// belongs there now, and what makes it real is a <path> in the scene rather
+// than the entry existing.
+it('draws a curve when the canvas asks for one', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  openCanvasMenu(rootOf(container))
+
+  await vi.waitFor(() => expect(optionButton(container, 'Curved')).toBeDefined())
+  optionButton(container, 'Curved')?.click()
+
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('curved')
+  })
+  await vi.waitFor(() => {
+    const path = container.querySelector('[data-testid="viewport-transform"] path')
+    expect(path?.getAttribute('d')).toContain('Q')
+    expect(path?.getAttribute('fill')).toBe('none')
+  })
+})

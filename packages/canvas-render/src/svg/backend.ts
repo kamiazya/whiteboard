@@ -123,6 +123,53 @@ function renderTableRow(row: TableRowSceneNode): string {
   return `<g>${row.cells.map(renderTableCell).join('')}</g>`
 }
 
+type EdgePoint = { readonly x: number; readonly y: number }
+
+const midpoint = (a: EdgePoint, b: EdgePoint): EdgePoint => ({
+  x: (a.x + b.x) / 2,
+  y: (a.y + b.y) / 2,
+})
+
+/**
+ * The same polyline with its corners rounded off.
+ *
+ * Each interior vertex becomes the CONTROL point of a quadratic curve whose
+ * endpoints are the midpoints of the two segments meeting there. A quadratic
+ * Bézier never leaves the triangle of its three points, so the drawn shape
+ * stays inside the polyline — which is what lets `path` remain the single
+ * source of the edge's geometry, with sceneBounds/translateScene/scaleScene
+ * still correct working on the points alone. A smoothing that overshot (a
+ * Catmull-Rom spline through the vertices, say) would put ink outside the
+ * bounds those functions compute.
+ *
+ * Degenerate inputs fall back to the straight reading rather than emitting a
+ * malformed `d`, matching this package's never-throw rule.
+ */
+function roundedPathData(path: readonly EdgePoint[]): string {
+  const [first, ...rest] = path
+  const last = path.at(-1)
+  if (first === undefined || last === undefined) return ''
+  if (path.length < 3) {
+    return `M ${formatCoord(first.x)} ${formatCoord(first.y)} L ${formatCoord(last.x)} ${formatCoord(last.y)}`
+  }
+
+  const corners = rest.slice(0, -1)
+  const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
+  let from = first
+  for (const [index, corner] of corners.entries()) {
+    const next = path[index + 2] as EdgePoint
+    const enter = midpoint(from, corner)
+    const leave = midpoint(corner, next)
+    parts.push(`L ${formatCoord(enter.x)} ${formatCoord(enter.y)}`)
+    parts.push(
+      `Q ${formatCoord(corner.x)} ${formatCoord(corner.y)} ${formatCoord(leave.x)} ${formatCoord(leave.y)}`,
+    )
+    from = corner
+  }
+  parts.push(`L ${formatCoord(last.x)} ${formatCoord(last.y)}`)
+  return parts.join(' ')
+}
+
 function renderNode(node: SceneNode): string {
   switch (node.kind) {
     case 'textRun':
@@ -165,8 +212,12 @@ function renderNode(node: SceneNode): string {
       // <polyline> fills the region its points enclose, so a bent edge would
       // paint a solid wedge across its own corner in whatever fill the
       // surrounding document inherits — invisible while every path had two
-      // points, glaring the moment routing started bending them.
-      const polyline = `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+      // points, glaring the moment routing started bending them. A <path>
+      // needs it for exactly the same reason.
+      const polyline =
+        node.rounded === true
+          ? `<path d="${roundedPathData(node.path)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+          : `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
       // Arrowheads are filled triangles in the edge's stroke color, drawn
       // after (over) the polyline. Geometry comes from the shared helper so
       // sceneBounds always agrees on how far the wings reach.

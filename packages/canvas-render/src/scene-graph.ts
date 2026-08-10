@@ -233,6 +233,14 @@ export interface ResolvedEdgeNode {
   // constructor can forget which ends carry an arrowhead.
   readonly fromEnd: 'none' | 'arrow'
   readonly toEnd: 'none' | 'arrow'
+  /**
+   * Draw the corners of `path` rounded rather than square. A rendering hint,
+   * not geometry: `path` stays the single source of the edge's shape, so
+   * sceneBounds, translateScene and scaleScene keep working on the points
+   * alone. The backend's rounding is chosen to stay inside the polyline
+   * (see its `<path>` construction), which is what makes that safe.
+   */
+  readonly rounded?: true
   readonly appearance?: Appearance
 }
 
