@@ -11,7 +11,7 @@
  *   FIXED small button set that fits any viewport in a single row, and new
  *   node types extend the menu, never the dock's width.
  *
- * Design rule (recorded in the ooui-palette-vs-object-actions decision):
+ * Design rule (ADR-0006, docs/contributing/adr/0006-object-oriented-ui.md):
  * what does NOT exist yet comes from the palette; what already exists is
  * acted on from the object itself. The "+" menu is the palette's creation
  * surface — it must never grow per-object actions.
