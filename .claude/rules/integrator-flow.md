@@ -22,11 +22,13 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 
 ## Verifying on a Preview deployment
 
-`apps/web` registers a Workbox service worker, so **what the server deploys and what the browser executes are two different questions**. A preview URL you have opened before is controlled by a service worker serving its precache, and it will keep running the bundle from an earlier visit however many times you reload.
+`apps/web` registers a Workbox service worker with `registerType: 'prompt'`, so **what the server deploys and what the browser executes are two different questions**. A URL you have opened before keeps running the bundle from that visit, and **reloading does not change that** — under `prompt` the new worker waits until something calls `skipWaiting`.
 
-This is worth naming because it fakes the most misleading result there is: a fix that is deployed, correct, and covered by tests, behaving in the browser exactly as if it had never been written. Checking the deploy history does not rule it out — that answers what the server returns, not what the page runs.
+For a real user that is handled and deliberate: a scheduler checks for updates periodically and on tab focus, and `UpdateToast` offers the swap rather than performing it under someone mid-draw. The pitfall is for anyone verifying a fix by *driving the page from a script*, which reloads without ever taking the offer.
 
-Before treating a preview observation as evidence about the code:
+It fakes the most misleading result there is: a fix that is deployed, correct, and covered by tests, behaving in the browser exactly as if it had never been written. Checking the deploy history does not rule it out — that answers what the server returns, not what the page runs.
+
+Accept the update through the toast if it is showing. Otherwise clear the worker outright:
 
 ```js
 // In the page console. `controlled: true` means you may be running an old bundle.

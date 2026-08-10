@@ -749,3 +749,52 @@ it('draws a bent edge as a line, not a filled wedge', () => {
   const polyline = /<polyline[^>]*>/.exec(svg)?.[0] ?? ''
   expect(polyline).toContain('fill="none"')
 })
+
+describe('rounded edges', () => {
+  const bent = {
+    kind: 'edge' as const,
+    id: 'e1',
+    path: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ],
+    fromSide: 'right' as const,
+    toSide: 'top' as const,
+    fromEnd: 'none' as const,
+    toEnd: 'none' as const,
+  }
+
+  it('draws a rounded edge as a path, never a polyline', () => {
+    const svg = renderSceneToSvg({ nodes: [{ ...bent, rounded: true }] })
+
+    expect(svg).toContain('<path')
+    expect(svg).not.toContain('<polyline')
+    expect(/<path[^>]*>/.exec(svg)?.[0]).toContain('fill="none"')
+  })
+
+  // The corner is the control point and the segment midpoints are on the
+  // curve, so the drawn shape stays inside the polyline it rounds. That is
+  // what lets sceneBounds, translateScene and scaleScene keep working on the
+  // points alone — a smoothing that overshot would put ink outside the bounds
+  // they compute.
+  it('keeps every coordinate inside the polyline it rounds', () => {
+    const svg = renderSceneToSvg({ nodes: [{ ...bent, rounded: true }] })
+    const d = /<path[^>]*\sd="([^"]*)"/.exec(svg)?.[1] ?? ''
+    const numbers = d.match(/-?[\d.]+/g)?.map(Number) ?? []
+    const xs = numbers.filter((_, i) => i % 2 === 0)
+    const ys = numbers.filter((_, i) => i % 2 === 1)
+
+    expect(numbers.length).toBeGreaterThan(0)
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...xs)).toBeLessThanOrEqual(100)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...ys)).toBeLessThanOrEqual(100)
+  })
+
+  it('leaves an ordinary edge as a polyline, byte-for-byte', () => {
+    expect(renderSceneToSvg({ nodes: [bent] })).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 100,0 100,100" fill="none" role="presentation"/></svg>',
+    )
+  })
+})

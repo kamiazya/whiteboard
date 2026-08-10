@@ -53,6 +53,19 @@ export function setupSwRegistration({
               .catch((err: unknown) => {
                 log.error('failed to load the update toast module', err)
               })
+            // The notice alone leaves the swap waiting on a click that a user
+            // with no reason to care about versions may never give. Taking it
+            // while the tab is hidden costs nothing and needs no decision from
+            // them — and the prompt strategy's reason for existing (never swap
+            // under someone mid-draw) does not apply to a tab nobody is
+            // looking at.
+            void import('./sw-idle-apply.js')
+              .then(({ startSwIdleAutoApply }) => {
+                startSwIdleAutoApply({ apply: () => updateServiceWorker(true) })
+              })
+              .catch((err: unknown) => {
+                log.error('failed to load the idle auto-apply module', err)
+              })
           },
           onRegisteredSW: (_swScriptUrl, registration) => {
             // A long-open or quickly-reloaded tab may never re-check sw.js on

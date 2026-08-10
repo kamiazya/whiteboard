@@ -34,18 +34,13 @@ export function mountUpdateToast(updateServiceWorker: (reloadPage?: boolean) => 
   root.render(
     <UpdateToast
       onReload={() => updateServiceWorker(true)}
+      // The toast collapses itself to a persistent chip rather than going
+      // away, so the root stays mounted — unmounting here would remove the
+      // very reminder the collapse exists to keep. This only records that the
+      // user has already been told, so a later onNeedRefresh does not reopen
+      // the expanded form under them.
       onDismiss={() => {
         dismissedThisPageLoad = true
-        // Guard + defer: unmounting synchronously from an event handler
-        // rendered by this same root makes React 18 warn about unmounting a
-        // root while it is rendering, and a double-click would unmount twice.
-        if (activeRoot === null) return
-        const rootToUnmount = activeRoot
-        activeRoot = null
-        setTimeout(() => {
-          rootToUnmount.unmount()
-          container?.remove()
-        }, 0)
       }}
     />,
   )
