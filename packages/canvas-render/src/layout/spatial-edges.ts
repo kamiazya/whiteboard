@@ -251,14 +251,29 @@ function routeOrthogonal(
   const between = (middles: readonly Point[]) =>
     withoutRepeats([start, exit, ...middles, entry, end])
 
-  const region = blockingRegion(start, end, obstacles)
-  const candidates = [
-    between([{ x: entry.x, y: exit.y }]),
-    between([{ x: exit.x, y: entry.y }]),
-    ...(region === undefined
-      ? []
-      : detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1)))),
-  ]
+  const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
+  if (elbows.some((path) => pathIsClear(path, obstacles))) {
+    return bestCandidate(elbows, obstacles)
+  }
+
+  // Detours are needed when the paths this style actually travels are
+  // blocked — which the direct diagonal cannot answer, since an orthogonal
+  // edge never travels it. Two obstacles can sit on the two elbows while
+  // leaving that diagonal clear.
+  const region = unionRect(
+    obstacles.filter((rect) =>
+      elbows.some((path) =>
+        path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
+      ),
+    ),
+  )
+  const candidates =
+    region === undefined
+      ? elbows
+      : [
+          ...elbows,
+          ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
+        ]
   return bestCandidate(candidates, obstacles)
 }
 

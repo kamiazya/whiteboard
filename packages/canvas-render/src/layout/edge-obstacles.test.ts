@@ -214,3 +214,23 @@ describe('orthogonal edges meet a node perpendicular to its side', () => {
     expect(firstAxis(routed.path)).toBe(horizontalSide ? 'horizontal' : 'vertical')
   })
 })
+
+// The orthogonal path never travels the direct diagonal, so asking whether
+// THAT segment is blocked answers the wrong question: two obstacles can sit on
+// the two elbows while leaving the diagonal clear, and the router would then
+// build no detours and return a blocked elbow.
+it('detours when both elbows are blocked but the direct line is not', () => {
+  const onFirstElbow = node('m1', 200, 10, 40, 40)
+  const onSecondElbow = node('m2', 100, 200, 40, 40)
+  const nodes = [
+    node('a', 0, 0, 100, 60),
+    onFirstElbow,
+    onSecondElbow,
+    node('b', 400, 300, 100, 60),
+  ]
+
+  const routed = routeEdge(nodes, edge('a', 'b'), 'orthogonal')
+
+  expect(pathCrosses(routed.path, onFirstElbow), 'crosses m1').toBe(false)
+  expect(pathCrosses(routed.path, onSecondElbow), 'crosses m2').toBe(false)
+})
