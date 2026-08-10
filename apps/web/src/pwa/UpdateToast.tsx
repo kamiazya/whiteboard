@@ -9,8 +9,25 @@ export interface UpdateToastProps {
 // SW-controlled assets under a user mid-draw risks losing in-flight edit
 // state, so the user must opt into the reload explicitly.
 export function UpdateToast({ onReload, onDismiss }: UpdateToastProps) {
-  const [dismissed, setDismissed] = useState(false)
-  if (dismissed) return null
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Putting it off collapses the notice rather than removing it. Someone with
+  // no reason to care about versions would otherwise dismiss once and keep
+  // running old code indefinitely — which looks exactly like a fix that was
+  // never shipped.
+  if (collapsed) {
+    return (
+      <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="rounded-full border bg-background px-3 py-1 text-muted-foreground text-xs shadow-md transition-colors hover:bg-accent hover:text-foreground"
+        >
+          Update available
+        </button>
+      </div>
+    )
+  }
 
   // Fixed + z-index, not document flow: the app shell fills 100dvh, so a
   // static element appended to <body> sits below the viewport and the
@@ -37,12 +54,12 @@ export function UpdateToast({ onReload, onDismiss }: UpdateToastProps) {
         <button
           type="button"
           onClick={() => {
-            setDismissed(true)
+            setCollapsed(true)
             onDismiss()
           }}
           className="rounded-md px-2 py-0.5 text-muted-foreground transition-colors hover:bg-accent"
         >
-          Dismiss
+          Later
         </button>
       </div>
     </div>

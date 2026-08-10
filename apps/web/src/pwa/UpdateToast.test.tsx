@@ -38,13 +38,26 @@ describe('UpdateToast', () => {
     expect(overlay?.className).toMatch(/\bz-\d+\b/)
   })
 
-  it('hides the toast and calls onDismiss when Dismiss is clicked', () => {
+  // Putting it off must not make it unfindable. A user with no reason to care
+  // about versions would otherwise dismiss once and run old code forever,
+  // which is the failure this notice exists to prevent.
+  it('collapses to a persistent chip instead of disappearing', () => {
     const onDismiss = vi.fn()
     render(<UpdateToast onReload={vi.fn()} onDismiss={onDismiss} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
 
     expect(onDismiss).toHaveBeenCalledTimes(1)
-    expect(screen.queryByText(/Update available/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    expect(screen.getByRole('button', { name: /Update available/i })).toBeTruthy()
+  })
+
+  it('reopens from the chip', () => {
+    render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+    fireEvent.click(screen.getByRole('button', { name: /Update available/i }))
+
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
   })
 })

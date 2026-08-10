@@ -23,16 +23,20 @@ describe('mountUpdateToast', () => {
     expect(updateServiceWorker).toHaveBeenCalledWith(true)
   })
 
-  it('does not re-show the toast after Dismiss for the rest of the page lifetime', async () => {
+  // Putting it off leaves a chip rather than nothing: an update nobody can
+  // find again is how a page keeps running old code for the rest of its life.
+  // What must not happen is the expanded form reopening on its own.
+  it('leaves a persistent chip after Later, and does not reopen on a later refresh', async () => {
     const { mountUpdateToast } = await import('./mount-update-toast.js')
 
     mountUpdateToast(vi.fn())
-    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText(/Update available/i)).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Later' }))
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    expect(screen.getByRole('button', { name: /Update available/i })).toBeTruthy()
 
-    // A second onNeedRefresh within the same page lifetime must stay hidden.
     mountUpdateToast(vi.fn())
-    expect(screen.queryByText(/Update available/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    expect(screen.getByRole('button', { name: /Update available/i })).toBeTruthy()
   })
 
   it('reuses the existing root when onNeedRefresh fires again before dismiss', async () => {
