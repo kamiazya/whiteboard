@@ -16,6 +16,15 @@ import {
   type ProbeDaemonOptions,
   probeDaemon,
 } from '../../lib/daemon-probe.js'
+import {
+  decideConnectGate,
+  explainProbeFailure,
+  type ProbeFailureExplanation,
+} from '../../lib/local-network-gate.js'
+import {
+  type LocalNetworkPermissionState,
+  queryLocalNetworkPermission,
+} from '../../lib/local-network-permission.js'
 import { beginPairingGrant } from '../../lib/pairing-grant.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
@@ -45,9 +54,11 @@ export const HOW_TO_CONNECT_URL =
 // before the user gives up and clicks again.
 const LNA_HINT_DELAY_MS = 1000
 
-// Phrased as a possibility, not a claim: the same stall also happens from
-// a plain network timeout with no permission prompt involved, and this
-// component has no way to distinguish the two from script.
+// Phrased as a possibility, not a claim: the same stall also happens from a
+// plain network timeout with no permission prompt involved. The permission
+// read settles that afterwards, but this hint is shown WHILE the sweep is
+// still outstanding, when the prompt (if any) is unanswered and there is
+// still nothing to distinguish the two cases by.
 export const LNA_HINT_TEXT =
   'This is taking a while — your browser may be asking for permission to reach local devices. Check for a permission prompt.'
 
@@ -64,6 +75,9 @@ interface DaemonDetectedBannerProps {
   // Injectable for tests; production default challenges the responder's
   // identity against the pinned key (see lib/daemon-identity-pin.ts).
   challengeFn?: (baseUrl: string) => Promise<IdentityChallengeResult>
+  // Injectable for tests; production default reads the browser's
+  // local-network permission (see lib/local-network-permission.ts).
+  queryPermissionFn?: () => Promise<LocalNetworkPermissionState>
 }
 
 /**
@@ -87,6 +101,7 @@ export function DaemonDetectedBanner({
     }),
   challengeFn = (baseUrl) =>
     challengeDaemonIdentity({ daemonBaseUrl: baseUrl, fetch: globalThis.fetch.bind(globalThis) }),
+  queryPermissionFn = () => queryLocalNetworkPermission(navigator.permissions),
 }: DaemonDetectedBannerProps) {
   const [result, setResult] = useState<DaemonProbeResult | null>(null)
   // Every daemon the last sweep confirmed (dynamic ports mean there can be
@@ -115,6 +130,17 @@ export function DaemonDetectedBanner({
   // silently deduped by the in-flight map one layer down.
   const [checking, setChecking] = useState(false)
   const [showLnaHint, setShowLnaHint] = useState(false)
+  // Last read of the browser's local-network permission. Read on demand
+  // rather than on mount: reading it is only useful next to a check, and a
+  // mount-time read would go stale the moment the user answers the prompt.
+  const [permission, setPermission] = useState<LocalNetworkPermissionState>('unknown')
+  // 'explain' holds the check back until the user has read why the browser
+  // is about to ask; 'blocked' replaces it entirely, because a denied
+  // permission cannot be re-prompted from script.
+  const [connectGate, setConnectGate] = useState<'idle' | 'explain' | 'blocked'>('idle')
+  // The port the held-back check was aimed at, so acknowledging the
+  // explanation resumes that check rather than a broader one.
+  const [gatedTarget, setGatedTarget] = useState<string | undefined>(undefined)
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // The store object identity never changes, so anything derived from it has
@@ -357,11 +383,49 @@ export function DaemonDetectedBanner({
     return `http://127.0.0.1:${port}`
   }
 
-  function checkNow() {
+  async function checkNow() {
     const explicit = enteredBaseUrl()
     if (explicit === null && portInput.trim() !== '') return
-    runProbe(true, explicit ?? undefined)
+    const target = explicit ?? undefined
+    // Claimed before the await, not inside runProbe: reading the permission
+    // is asynchronous, and across that gap the UI would otherwise still show
+    // the previous attempt — a live button a second click can double-start,
+    // next to a failure notice describing a check that is already being
+    // replaced.
+    setChecking(true)
+    setManualCheckFailed(false)
+
+    // Read the permission BEFORE probing, because probing is what triggers
+    // the prompt. Afterwards is too late to explain it, and a denial that is
+    // already on file makes the probe a guaranteed, unexplained failure.
+    const state = await queryPermissionFn()
+    setPermission(state)
+
+    const gate = decideConnectGate({ pageOriginScheme, permission: state })
+    if (gate === 'blocked') {
+      setChecking(false)
+      setConnectGate('blocked')
+      return
+    }
+    if (gate === 'explain') {
+      setChecking(false)
+      setGatedTarget(target)
+      setConnectGate('explain')
+      return
+    }
+    setConnectGate('idle')
+    runProbe(true, target)
   }
+
+  function confirmExplainedCheck() {
+    setConnectGate('idle')
+    runProbe(true, gatedTarget)
+  }
+
+  const failureExplanation: ProbeFailureExplanation | null =
+    result === null || result.detected
+      ? null
+      : explainProbeFailure({ pageOriginScheme, permission, reason: result.reason })
 
   return (
     <>
@@ -384,7 +448,7 @@ export function DaemonDetectedBanner({
       {showManualAffordance && (
         <button
           type="button"
-          onClick={checkNow}
+          onClick={() => void checkNow()}
           disabled={checking}
           aria-busy={checking}
           className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -400,42 +464,128 @@ export function DaemonDetectedBanner({
           {showLnaHint && <span className="text-xs text-muted-foreground">{LNA_HINT_TEXT}</span>}
         </>
       )}
-      {showManualAffordance && manualCheckFailed && (
-        // A CORS rejection (daemon running but this origin not in its
-        // WHITEBOARD_ALLOWED_WEB_ORIGINS) is indistinguishable from
-        // daemon-absent at the fetch layer, so the hosted-origin copy stays
-        // conditional ("if yours is running…") per the honesty discipline
-        // above. Loopback origins need no allowlist entry, so they get the
-        // plain not-found message.
-        <span data-testid="daemon-check-failed-notice" className="text-xs text-muted-foreground">
-          {pageOriginScheme === 'https' ? (
-            <>
-              No daemon reachable from this origin. If yours is running, approving it on the
-              daemon's consent page grants this origin access (a top-level navigation is not subject
-              to the CORS block that hides the daemon from the check) —{' '}
-              <button
-                type="button"
-                onClick={() => void beginGrantFn({ daemonBaseUrl: baseUrl })}
-                className="font-medium underline"
-              >
-                connect anyway
-              </button>
-              . Only approve a daemon you started yourself, or see{' '}
-              <a
-                href={HOW_TO_CONNECT_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium underline"
-              >
-                how to connect
-              </a>
-              .
-            </>
-          ) : (
-            <>No local daemon found at {baseUrl}.</>
-          )}
+      {connectGate === 'explain' && (
+        // Said before the check, not after: the browser's prompt is triggered
+        // BY the request, and a denial is remembered, so an unexplained
+        // prompt is a question the user usually gets exactly one chance to
+        // answer well.
+        <span
+          data-testid="lna-explainer"
+          role="dialog"
+          aria-label="About the local network permission"
+          className="flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground"
+        >
+          Your browser is about to ask whether this site may reach devices on your local network.
+          That is how it connects to the daemon running on your own machine — nothing leaves your
+          computer.
+          <button
+            type="button"
+            data-testid="lna-explainer-continue"
+            onClick={confirmExplainedCheck}
+            className="font-medium underline"
+          >
+            Continue
+          </button>
+          <button
+            type="button"
+            data-testid="lna-explainer-cancel"
+            onClick={() => setConnectGate('idle')}
+            className="font-medium underline"
+          >
+            Not now
+          </button>
         </span>
       )}
+      {connectGate === 'blocked' && (
+        // No check is offered here on purpose: the permission cannot be
+        // re-requested from script once it is denied, so a retry button would
+        // do nothing but fail again. Only browser settings can undo it.
+        <span
+          data-testid="lna-blocked"
+          role="alert"
+          className="flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-amber-700"
+        >
+          Your browser is blocking this site from reaching your local network, so the daemon cannot
+          be found however the port is set. Allow local network access for this site in your
+          browser's site settings, then check again.{' '}
+          <a
+            href={HOW_TO_CONNECT_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium underline"
+          >
+            How to connect
+          </a>
+        </span>
+      )}
+      {showManualAffordance && manualCheckFailed && failureExplanation === 'browser-blocked' && (
+        <span
+          data-testid="daemon-check-blocked-notice"
+          role="alert"
+          className="text-xs text-amber-700"
+        >
+          Your browser blocked the request to your local network. Allow local network access for
+          this site in your browser's site settings, then check again.
+        </span>
+      )}
+      {showManualAffordance &&
+        manualCheckFailed &&
+        failureExplanation === 'permission-unanswered' && (
+          <span
+            data-testid="daemon-check-unanswered-notice"
+            className="text-xs text-muted-foreground"
+          >
+            The browser asked for permission to reach your local network and the request was left
+            unanswered. Check again and choose Allow.
+          </span>
+        )}
+      {showManualAffordance && manualCheckFailed && failureExplanation === 'not-a-daemon' && (
+        <span
+          data-testid="daemon-check-wrong-server-notice"
+          className="text-xs text-muted-foreground"
+        >
+          Something is running on that port, but it is not a whiteboard daemon. Check the port
+          number.
+        </span>
+      )}
+      {showManualAffordance &&
+        manualCheckFailed &&
+        (failureExplanation === 'unreachable' || failureExplanation === 'unclear') && (
+          // A CORS rejection (daemon running but this origin not in its
+          // WHITEBOARD_ALLOWED_WEB_ORIGINS) is indistinguishable from
+          // daemon-absent at the fetch layer, so the hosted-origin copy stays
+          // conditional ("if yours is running…") per the honesty discipline
+          // above. Loopback origins need no allowlist entry, so they get the
+          // plain not-found message.
+          <span data-testid="daemon-check-failed-notice" className="text-xs text-muted-foreground">
+            {pageOriginScheme === 'https' ? (
+              <>
+                No daemon reachable from this origin. If yours is running, approving it on the
+                daemon's consent page grants this origin access (a top-level navigation is not
+                subject to the CORS block that hides the daemon from the check) —{' '}
+                <button
+                  type="button"
+                  onClick={() => void beginGrantFn({ daemonBaseUrl: baseUrl })}
+                  className="font-medium underline"
+                >
+                  connect anyway
+                </button>
+                . Only approve a daemon you started yourself, or see{' '}
+                <a
+                  href={HOW_TO_CONNECT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium underline"
+                >
+                  how to connect
+                </a>
+                .
+              </>
+            ) : (
+              <>No local daemon found at {baseUrl}.</>
+            )}
+          </span>
+        )}
       {!showUnsupportedNotice && (
         // Always offered, never gated on a failed check. Naming a port is the
         // primary way in now that there is no port scan to stumble on one:
@@ -452,7 +602,7 @@ export function DaemonDetectedBanner({
             value={portInput}
             onChange={(event) => setPortInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') checkNow()
+              if (event.key === 'Enter') void checkNow()
             }}
             placeholder="3099"
             className="w-16 rounded border px-1 py-0.5"
@@ -461,7 +611,7 @@ export function DaemonDetectedBanner({
           <button
             type="button"
             data-testid="daemon-port-connect"
-            onClick={checkNow}
+            onClick={() => void checkNow()}
             className="font-medium underline"
           >
             Check

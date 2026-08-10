@@ -815,3 +815,105 @@ describe('DaemonDetectedBanner', () => {
     })
   })
 })
+
+describe('DaemonDetectedBanner — local network permission', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+  afterEach(() => {
+    cleanup()
+  })
+
+  function renderWithPermission(
+    permission: 'granted' | 'prompt' | 'denied' | 'unknown',
+    probeFn = vi.fn().mockResolvedValue(NOT_DETECTED),
+  ) {
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+        queryPermissionFn={vi.fn().mockResolvedValue(permission)}
+      />,
+    )
+    return probeFn
+  }
+
+  it('explains the permission before the check that would trigger the prompt', async () => {
+    // The prompt fires on the request, so probing first and explaining after
+    // would put the explanation behind the dialog it is meant to introduce.
+    const probeFn = renderWithPermission('prompt')
+
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await screen.findByTestId('lna-explainer')
+    expect(probeFn).not.toHaveBeenCalled()
+  })
+
+  it('runs the held-back check once the explanation is acknowledged', async () => {
+    const probeFn = renderWithPermission('prompt')
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+    await screen.findByTestId('lna-explainer')
+
+    fireEvent.click(screen.getByTestId('lna-explainer-continue'))
+
+    await waitFor(() => expect(probeFn).toHaveBeenCalled())
+  })
+
+  it('does not probe at all once the permission is denied', async () => {
+    // Probing would fail in a way indistinguishable from an absent daemon,
+    // and cannot re-prompt, so it can only mislead.
+    const probeFn = renderWithPermission('denied')
+
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await screen.findByTestId('lna-blocked')
+    expect(probeFn).not.toHaveBeenCalled()
+  })
+
+  it('checks without an explanation once the permission is granted', async () => {
+    const probeFn = renderWithPermission('granted')
+
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await waitFor(() => expect(probeFn).toHaveBeenCalled())
+    expect(screen.queryByTestId('lna-explainer')).toBeNull()
+  })
+
+  it('does not blame the browser for a failure it has been shown to allow', async () => {
+    // A granted permission rules the browser out, so pointing the user at
+    // site settings here would send them to change something already correct.
+    renderWithPermission('granted')
+
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await screen.findByTestId('daemon-check-failed-notice')
+    expect(screen.queryByTestId('daemon-check-blocked-notice')).toBeNull()
+  })
+
+  it('names the browser as the obstacle when a failure follows a denial', async () => {
+    // Reached by a permission revoked between the gate check and the probe:
+    // the gate saw 'prompt', so the check ran, and the probe then failed.
+    const probeFn = vi.fn().mockResolvedValue(NOT_DETECTED)
+    const queryPermissionFn = vi.fn().mockResolvedValueOnce('prompt').mockResolvedValue('denied')
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+        queryPermissionFn={queryPermissionFn}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+    await screen.findByTestId('lna-explainer')
+    fireEvent.click(screen.getByTestId('lna-explainer-continue'))
+    await waitFor(() => expect(probeFn).toHaveBeenCalled())
+
+    // The second read is what the failure copy is keyed on.
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+
+    await screen.findByTestId('lna-blocked')
+  })
+})
