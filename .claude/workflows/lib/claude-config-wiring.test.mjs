@@ -87,3 +87,18 @@ test('the Simplify phase runs a repo-owned agent, not a foreign plugin agent', (
   assert.ok(match, "could not locate the Simplify phase's agentType in dev-loop.workflow.mjs")
   assert.ok(!match[1].includes(':'), `Simplify runs plugin agent "${match[1]}"; use a repo-owned agent`)
 })
+
+// architecture-map.md promises `.claude/rules/package-<name>.md` is path-scoped, and dev-flow.md
+// requires every new package to ship that rule. Neither is mechanical, and 6 of the 7 shipped
+// without the `paths:` frontmatter that makes the promise true — so every package's rule loaded
+// into every session regardless of what was being touched. This is that prose made executable.
+test('every package-<name>.md rule is path-scoped to packages/<name>', () => {
+  const rulesDir = path.join(repoRoot, '.claude', 'rules')
+  const unscoped = []
+  for (const file of readdirSync(rulesDir).filter((f) => f.startsWith('package-') && f.endsWith('.md'))) {
+    const pkg = file.slice('package-'.length, -'.md'.length)
+    const frontmatter = readFileSync(path.join(rulesDir, file), 'utf8').match(/^---\n([\s\S]*?)\n---\n/)
+    if (!frontmatter?.[1].includes(`packages/${pkg}/**`)) unscoped.push(file)
+  }
+  assert.deepEqual(unscoped, [], `package rules missing a "paths: packages/<name>/**" frontmatter: ${unscoped.join(', ')}`)
+})

@@ -1,3 +1,12 @@
+---
+paths:
+  - "packages/canvas-codec/**"
+  # apps/web imports this package directly and is NOT source-scanned by arch-lint, so the
+  # Consumers note below is the only place that boundary is written down — it has to reach
+  # whoever is editing apps/web, not just whoever is editing this package.
+  - "apps/web/**"
+---
+
 # canvas-codec — OKF-Markdown / JSON Canvas serialize+parse + remark pipeline
 
 ## What belongs here

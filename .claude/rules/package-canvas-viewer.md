@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/canvas-viewer/**"
+---
+
 # canvas-viewer — read-only OpenCanvas scene viewer UI
 
 ## What belongs here

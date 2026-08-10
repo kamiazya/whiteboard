@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/canvas-ports/**"
+---
+
 # canvas-ports — store/sync port contracts (contracts-only, no implementations)
 
 ## What belongs here

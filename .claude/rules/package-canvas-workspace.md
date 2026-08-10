@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/canvas-workspace/**"
+---
+
 # canvas-workspace — tree ops, alias derivation, index derivation, LoroDoc bridge
 
 ## What belongs here

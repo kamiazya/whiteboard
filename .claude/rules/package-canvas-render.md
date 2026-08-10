@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/canvas-render/**"
+---
+
 # canvas-render — scene graph, pure layout, SVG backend, sceneDigest
 
 ## What belongs here
