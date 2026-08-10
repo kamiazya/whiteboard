@@ -53,16 +53,25 @@ Check:
 
 ### 4. Focus management around dialogs and overlays
 
+The modal and non-modal patterns differ, and applying the modal rule to
+everything is its own bug — this repo's `ContextMenu`, `CanvasDropdown`, and
+`SelectionOverlay` are non-modal and must not trap.
+
 Check:
-- Does a new modal/overlay trap focus while open, set an initial focus
-  inside itself, and restore focus to its trigger on close?
+- Does a new **modal dialog** trap focus while open, set initial focus inside
+  itself, and restore focus to its trigger on close?
+- Does a **non-modal** popover, menu, or overlay follow its own pattern
+  instead — focus moves out normally, `Escape` closes and returns focus to
+  the trigger, and focus is NOT trapped?
 
 ### 5. State and error announcement
 
 Check:
 - Are expandable controls marked with `aria-expanded` (+ `aria-controls`)?
-- Are loading states conveyed by more than a spinner — `aria-busy` or
-  status text?
+- Are loading states conveyed by an accessible status or live message
+  (`role="status"` / `aria-live="polite"`)? `aria-busy` alone does not
+  announce anything — it tells assistive tech to suppress partial updates —
+  so it is a supplement on the affected region, never the announcement.
 - Are form errors linked to their field via `aria-describedby` with
   `aria-invalid` set, rather than sitting in an unassociated sibling?
 - Is a toast the ONLY way a critical message is conveyed? `UpdateToast` is
@@ -76,9 +85,11 @@ retains semantic provenance for a future a11y layer rather than emitting one.
 So the bar here is about the surrounding DOM, not the drawing:
 
 Check:
-- Does the container of an injected SVG (`CanvasViewer`'s
-  `dangerouslySetInnerHTML`) carry a name/role, or is it an unlabeled blob to
-  a screen reader?
+- Is the injected SVG (`CanvasViewer`'s `dangerouslySetInnerHTML`) meaningful
+  or decorative? Meaningful needs BOTH a role (`img`/`graphics-document`) and
+  an accessible name — a role without a name is still an unlabeled blob.
+  Decorative needs `aria-hidden="true"` or presentational semantics, chosen
+  deliberately rather than by omission.
 - Does an `ImageSceneNode` carry `alt` (rendered as `<title>`), or is its
   absence a deliberate presentational choice?
 - Is any canvas-only interaction reachable another way — a menu item, a

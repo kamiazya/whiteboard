@@ -98,7 +98,13 @@ test('every package-<name>.md rule is path-scoped to packages/<name>', () => {
   for (const file of readdirSync(rulesDir).filter((f) => f.startsWith('package-') && f.endsWith('.md'))) {
     const pkg = file.slice('package-'.length, -'.md'.length)
     const frontmatter = readFileSync(path.join(rulesDir, file), 'utf8').match(/^---\n([\s\S]*?)\n---\n/)
-    if (!frontmatter?.[1].includes(`packages/${pkg}/**`)) unscoped.push(file)
+    // Match a real `paths:` LIST ITEM, not a substring of the frontmatter: these blocks carry
+    // explanatory comments, and a pattern mentioned only in a comment would otherwise satisfy the
+    // guard while scoping nothing.
+    const isScoped = (frontmatter?.[1] ?? '')
+      .split('\n')
+      .some((line) => new RegExp(`^\\s*-\\s*["']?packages/${pkg}/\\*\\*["']?\\s*$`).test(line))
+    if (!isScoped) unscoped.push(file)
   }
   assert.deepEqual(unscoped, [], `package rules missing a "paths: packages/<name>/**" frontmatter: ${unscoped.join(', ')}`)
 })
