@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/server-core/**"
+---
+
 # server-core — /api/v1 Hono routes + MCP tool definitions, createServer(deps) factory
 
 ## What belongs here

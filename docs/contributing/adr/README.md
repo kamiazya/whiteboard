@@ -38,3 +38,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0003](0003-track-claude-dev-flow-tooling.md) | Track .claude AI dev-flow tooling in git with repo-relative workflow scriptPaths | Accepted |
 | [ADR-0004](0004-unified-capability-gated-canvas-page.md) | Unified capability-gated CanvasPage | Accepted |
 | [ADR-0005](0005-hosted-origin-authorization.md) | Authorizing a hosted origin against the local daemon | Accepted — not yet implemented |
+| [ADR-0006](0006-object-oriented-ui.md) | Object-oriented UI — create from the palette, act from the object | Accepted — one known violation |
