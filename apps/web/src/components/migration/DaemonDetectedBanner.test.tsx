@@ -35,6 +35,28 @@ describe('DaemonDetectedBanner', () => {
     cleanup()
   })
 
+  it('offers the port field even while a daemon is already connected', async () => {
+    // Entering a port is the primary way in, so it cannot be gated on a failed
+    // check: gating it there leaves a user connected to the wrong daemon with
+    // no way to name the right one, and a user whose dismissals hid every
+    // candidate with no way to name anything at all.
+    const probeFn = vi.fn().mockResolvedValue({ detected: true, instanceId: 'i-1' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+    // Waits for the DETECTED render, not merely for the probe call: the call
+    // resolves later, so asserting on it would check the pre-detection state
+    // and pass even if the field disappeared once a daemon was found.
+    await screen.findByTestId('daemon-detected-banner')
+
+    expect(screen.getByTestId('daemon-port-input')).toBeTruthy()
+  })
+
   it('probes a port the user typed, including one outside the scanned range', async () => {
     // Discovery scans ten ports from 3099 and re-checks remembered URLs, so a
     // daemon anywhere else — a dev worktree's derived port, or a packaged
@@ -103,10 +125,11 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-    // A manual check sweeps the default port range in parallel (dynamic
-    // server-side ports); every probe in the sweep is a forced recheck.
-    await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(2))
+    fireEvent.change(await screen.findByTestId('daemon-port-input'), { target: { value: '3099' } })
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
+    // A manual check bypasses the memo: the point of asking again is to get a
+    // fresh answer, not the one cached from a moment when the daemon was down.
+    await waitFor(() => expect(probeFn).toHaveBeenCalled())
     expect(probeFn.mock.calls[0]?.[0]).toBe('http://127.0.0.1:3099')
     for (const call of probeFn.mock.calls) {
       expect(call[1]).toMatchObject({ forceRecheck: true, pageOriginScheme: 'https' })
@@ -260,9 +283,9 @@ describe('DaemonDetectedBanner', () => {
   })
 
   it('a manual check finds a daemon on a non-default port (server-side ports are dynamic)', async () => {
-    // ensure-daemon binds findAvailablePort(3099): when 3099 is taken by
-    // something else, the daemon lives on 3100+ — the check must scan, not
-    // assume.
+    // ensure-daemon binds findAvailablePort(3099): when 3099 is taken the
+    // daemon lives on 3100+. There is no scan to stumble on it, so naming the
+    // port is how it is reached — the guarantee this case exists for.
     const probeFn = vi.fn(async (baseUrl: string) =>
       baseUrl === 'http://127.0.0.1:3101'
         ? ({ detected: true, instanceId: 'moved' } as const)
@@ -277,7 +300,10 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.change(await screen.findByTestId('daemon-port-input'), {
+      target: { value: '3101' },
+    })
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
 
     await screen.findByText(/A server responded at http:\/\/127\.0\.0\.1:3101/)
     expect(screen.getByRole('button', { name: /use here/i })).not.toBeNull()
@@ -298,7 +324,8 @@ describe('DaemonDetectedBanner', () => {
         probeFn={probeFn}
       />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.change(await screen.findByTestId('daemon-port-input'), { target: { value: '3104' } })
+    fireEvent.click(screen.getByTestId('daemon-port-connect'))
     await screen.findByText(/responded at http:\/\/127\.0\.0\.1:3104/)
     expect(store.load().storage.knownDaemonBaseUrls).toEqual(['http://127.0.0.1:3104'])
     first.unmount()
@@ -327,9 +354,19 @@ describe('DaemonDetectedBanner', () => {
         return { detected: true, instanceId: 'worktree' } as const
       return { detected: false, reason: 'refused' } as const
     })
+    // Two daemons the user has reached before: with no port scan, that is
+    // where a multi-candidate check comes from.
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        knownDaemonBaseUrls: ['http://127.0.0.1:3099', 'http://127.0.0.1:3102'],
+      },
+    }))
     render(
       <DaemonDetectedBanner
-        settingsStore={makeStore()}
+        settingsStore={store}
         fetch={vi.fn()}
         locationProtocol="https:"
         probeFn={probeFn}
