@@ -54,7 +54,7 @@ import {
 import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('createCanvasRequestSchema', () => {
-  const valid: CreateCanvasRequest = { slug: 'my-canvas' }
+  const valid: CreateCanvasRequest = { slug: 'my-canvas', kind: 'spatial' }
 
   it('parses a well-formed value', () => {
     const result: CreateCanvasRequest = createCanvasRequestSchema.parse(valid)
@@ -74,6 +74,20 @@ describe('createCanvasRequestSchema', () => {
   it('rejects empty slug', () => {
     expect(createCanvasRequestSchema.safeParse({ slug: '' }).success).toBe(false)
     expect(createCanvasRequestSchema.safeParse({ slug: '   ' }).success).toBe(false)
+  })
+
+  it('accepts an explicit kind: markdown', () => {
+    const result = createCanvasRequestSchema.parse({ slug: 'notes', kind: 'markdown' })
+    expect(result.kind).toBe('markdown')
+  })
+
+  it('defaults kind to spatial when absent — back-compat for existing callers', () => {
+    const result = createCanvasRequestSchema.parse({ slug: 'legacy' })
+    expect(result.kind).toBe('spatial')
+  })
+
+  it('rejects an unknown kind', () => {
+    expect(createCanvasRequestSchema.safeParse({ slug: 'x', kind: 'bogus' }).success).toBe(false)
   })
 })
 
@@ -355,7 +369,11 @@ describe('listWorkspacesResponseSchema', () => {
 })
 
 describe('canvasSummarySchema', () => {
-  const valid: CanvasSummary = { slug: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z' }
+  const valid: CanvasSummary = {
+    slug: 'canvas-1',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    kind: 'spatial',
+  }
 
   it('parses a well-formed value', () => {
     const result: CanvasSummary = canvasSummarySchema.parse(valid)
@@ -370,11 +388,28 @@ describe('canvasSummarySchema', () => {
   it('rejects missing updatedAt', () => {
     expect(canvasSummarySchema.safeParse({ slug: 'canvas-1' }).success).toBe(false)
   })
+
+  it('accepts an explicit kind: markdown', () => {
+    const result = canvasSummarySchema.parse({ ...valid, kind: 'markdown' })
+    expect(result.kind).toBe('markdown')
+  })
+
+  it('defaults kind to spatial when absent — back-compat for rows stored before this change', () => {
+    const result = canvasSummarySchema.parse({
+      slug: 'canvas-1',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    })
+    expect(result.kind).toBe('spatial')
+  })
+
+  it('rejects an unknown kind', () => {
+    expect(canvasSummarySchema.safeParse({ ...valid, kind: 'bogus' }).success).toBe(false)
+  })
 })
 
 describe('listCanvasesResponseSchema', () => {
   const valid: ListCanvasesResponse = {
-    canvases: [{ slug: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z' }],
+    canvases: [{ slug: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z', kind: 'spatial' }],
   }
 
   it('parses a well-formed value', () => {

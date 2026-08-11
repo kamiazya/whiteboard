@@ -1,3 +1,4 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
@@ -28,6 +29,9 @@ interface CanvasesTable {
   // Null for canvases that have never been compacted; consumed by the auto-
   // Optimize loop to skip canvases that have not changed since last run.
   lastCompactedAt: Timestamp | null
+  // Which editor opens this canvas. Null for rows created before this column
+  // existed; the application layer maps null to 'spatial'.
+  kind: CanvasKind | null
 }
 
 interface BranchesTable {

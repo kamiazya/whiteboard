@@ -9,8 +9,15 @@ import { z } from 'zod'
  */
 export const CANVAS_SCHEMA_VERSION = 1 as const
 
+// Single source of truth for the spatial/markdown split: canvasMetaSchema's
+// `format` and every kind-carrying contract downstream (mcp-server
+// api-contracts, the browser-local IndexedDB schema) reference this instead
+// of restating the two literals.
+export const canvasKindSchema = z.enum(['spatial', 'markdown'])
+export type CanvasKind = z.infer<typeof canvasKindSchema>
+
 export const canvasMetaSchema = z.object({
-  format: z.enum(['markdown', 'spatial']),
+  format: canvasKindSchema,
   schemaVersion: z.literal(CANVAS_SCHEMA_VERSION),
 })
 

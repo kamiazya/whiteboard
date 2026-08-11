@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { LoroDoc as LoroDocCtor } from 'loro-crdt'
+import type { z } from 'zod'
 import {
   type CreateCanvasResponse,
   createCanvasRequestSchema,
@@ -15,6 +16,18 @@ import {
 } from '../../store/canvas-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
+
+// Names the specific field createCanvasRequestSchema rejected, instead of a
+// single message covering the whole request — a valid slug with an invalid
+// kind must not be told "slug is required", which names the wrong field and
+// gives the caller no path to recovery.
+function createCanvasRequestErrorTitle(error: z.ZodError): string {
+  const issue = error.issues[0]
+  const field = issue?.path[0]
+  if (field === 'kind') return 'kind must be "spatial" or "markdown"'
+  if (field === 'slug') return 'slug is required'
+  return issue?.message ?? 'invalid request body'
+}
 
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/canvases
@@ -73,7 +86,7 @@ export function createWorkspacesRouter() {
     }
     const parsed = createCanvasRequestSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ title: 'slug is required' }, 400)
+      return c.json({ title: createCanvasRequestErrorTitle(parsed.error) }, 400)
     }
     const slug = parsed.data.slug
     try {
@@ -85,7 +98,7 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(workspaceId, slug, doc, { overwrite: false })
+      await saveCanvas(workspaceId, slug, doc, { overwrite: false, kind: parsed.data.kind })
       const response: CreateCanvasResponse = { slug }
       return c.json(response)
     } catch (err) {

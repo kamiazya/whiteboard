@@ -148,6 +148,76 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
+  it('creates a kind:markdown canvas, and the list carries it back', async () => {
+    const app = createCanvasRouter()
+    const createRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'note', kind: 'markdown' }),
+    })
+    expect(createRes.status).toBe(200)
+    // Response body stays exactly { slug } — kind is not echoed back.
+    expect(await createRes.json()).toEqual({ slug: 'note' })
+
+    const listRes = await app.request('/api/workspaces/ws1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string; kind: string }[] }
+    const created = listJson.canvases.find((c) => c.slug === 'note')
+    expect(created?.kind).toBe('markdown')
+
+    // The empty LoroDoc a markdown-kind create saves loads without error —
+    // an empty doc is a valid initial document for either kind.
+    const snapshotRes = await app.request('/api/canvas/ws1/note/snapshot')
+    expect(snapshotRes.status).toBe(200)
+  })
+
+  it('creates a canvas without kind — response and list stay byte-identical to spatial back-compat', async () => {
+    const app = createCanvasRouter()
+    const createRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'legacy' }),
+    })
+    expect(createRes.status).toBe(200)
+    expect(await createRes.json()).toEqual({ slug: 'legacy' })
+
+    const listRes = await app.request('/api/workspaces/ws1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string; kind: string }[] }
+    expect(listJson.canvases.find((c) => c.slug === 'legacy')?.kind).toBe('spatial')
+  })
+
+  it('returns 400 with Problem Details title naming the actual failing field on an invalid kind', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'bad-kind', kind: 'bogus' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    // A valid slug plus an invalid kind must not be told "slug is required" —
+    // that names the wrong field and gives no path to recovery.
+    expect(json.title).toMatch(/kind/i)
+    expect(json.title).not.toMatch(/slug is required/i)
+  })
+
+  it('falls back to the issue message when the invalid field is neither slug nor kind', async () => {
+    // An array body parses as JSON but fails the object schema at the TOP level — path [] —
+    // exercising createCanvasRequestErrorTitle's fallback branch rather than a field-specific
+    // message that would name the wrong thing.
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws-a/canvases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify([1, 2, 3]),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title: string }
+    expect(json.title).not.toMatch(/slug is required/i)
+    expect(json.title).not.toMatch(/spatial/i)
+    expect(json.title.length).toBeGreaterThan(0)
+  })
+
   it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/bad.workspace/canvases', {
@@ -1085,6 +1155,95 @@ describe('versions API', () => {
       const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
       expect(restoreBody.canvasId).toBe('session1/canvas-new')
       expect(restoreBody.elementCount).toBe(0)
+    })
+
+    it('restoring a markdown-kind canvas into a new target slug carries the source kind forward, not the spatial default', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'canvas-a', kind: 'markdown' }),
+      })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      sourceDoc.getText('body').insert(0, 'hello')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-new' }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+
+      const listRes = await app.request('/api/workspaces/session1/canvases')
+      const listBody = (await listRes.json()) as {
+        canvases: { slug: string; kind: string }[]
+      }
+      expect(listBody.canvases.find((c) => c.slug === 'canvas-new')?.kind).toBe('markdown')
+    })
+
+    it('restoring a markdown-kind canvas onto an existing spatial-kind target syncs the target kind to match the restored content', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'canvas-a', kind: 'markdown' }),
+      })
+      await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'canvas-b', kind: 'spatial' }),
+      })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      sourceDoc.getText('body').insert(0, 'hello')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+
+      const listRes = await app.request('/api/workspaces/session1/canvases')
+      const listBody = (await listRes.json()) as {
+        canvases: { slug: string; kind: string }[]
+      }
+      expect(listBody.canvases.find((c) => c.slug === 'canvas-b')?.kind).toBe('markdown')
     })
 
     it('restoring into an existing target slug WITHOUT overwrite returns 409 output_exists', async () => {

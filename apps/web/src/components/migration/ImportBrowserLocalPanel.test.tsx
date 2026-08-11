@@ -7,8 +7,12 @@ import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 
-function makeCanvas(id: string, name: string): CanvasSnapshot {
-  return { id, name, updatedAt: new Date().toISOString(), kind: 'spatial' as const }
+function makeCanvas(
+  id: string,
+  name: string,
+  kind: CanvasSnapshot['kind'] = 'spatial',
+): CanvasSnapshot {
+  return { id, name, updatedAt: new Date().toISOString(), kind }
 }
 
 function snapshotFor(tag: string): Uint8Array {
@@ -50,6 +54,41 @@ describe('ImportBrowserLocalPanel', () => {
 
     await screen.findByText('Alpha')
     await screen.findByText('Beta')
+  })
+
+  it("threads each canvas's kind into the create request (markdown stays markdown)", async () => {
+    const store = new MemoryStore()
+    await store.save(makeCanvas('c1', 'Notes', 'markdown'))
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ slug: 'notes' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+
+    render(
+      <ImportBrowserLocalPanel
+        workspaceId="ws1"
+        daemonFetch={daemonFetch}
+        browserLocalStore={store}
+        loroStore={makeLoroStore({ c1: { kind: 'ok', snapshot: snapshotFor('c1') } })}
+        settingsStore={createUserSettingsStore()}
+      />,
+    )
+
+    await screen.findByText('Notes')
+    fireEvent.click(screen.getByRole('button', { name: /import/i }))
+    await waitFor(() => expect(daemonFetch).toHaveBeenCalled())
+    const post = daemonFetch.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes('/canvases') && (init as RequestInit | undefined)?.method === 'POST',
+    )
+    expect(post).toBeTruthy()
+    // biome is right that post?.[1] could be undefined in general; the toBeTruthy above plus the
+    // non-null assertion (allowed by config) makes the intent explicit instead of casting past it.
+    const init = post![1] as RequestInit
+    expect(JSON.parse(String(init.body))).toEqual({
+      slug: expect.any(String),
+      kind: 'markdown',
+    })
   })
 
   it('renders an empty state, disables import, and makes zero calls when there are no canvases', async () => {

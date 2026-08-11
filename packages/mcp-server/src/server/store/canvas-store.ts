@@ -1,8 +1,10 @@
 import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
+import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
@@ -62,7 +64,7 @@ export async function saveCanvas(
   workspaceId: string,
   slug: string,
   doc: LoroDoc,
-  options: { overwrite?: boolean } = {},
+  options: { overwrite?: boolean; kind?: CanvasKind } = {},
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
@@ -92,9 +94,16 @@ export async function saveCanvas(
     await writeFile(path, snapshot)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingCanvasId) {
+      // A plain re-save (WS updates, applyAndPersist, compactCanvas) omits
+      // `kind` and must never touch the stored value. An explicit `kind` is
+      // an intentional sync request (e.g. restore reconciling a different-
+      // kind source's content onto an existing target) and is honored.
       await db
         .updateTable('canvases')
-        .set({ updatedAt: Date.now() })
+        .set({
+          updatedAt: Date.now(),
+          ...(options.kind !== undefined ? { kind: options.kind } : {}),
+        })
         .where('id', '=', canvasId)
         .execute()
     } else {
@@ -111,6 +120,12 @@ export async function saveCanvas(
           currentBranch: 'main',
           createdAt: now,
           updatedAt: now,
+          // Written on insert. The update branch above honors an explicit
+          // `kind` too (a plain re-save omits it and leaves the stored value
+          // untouched); the onConflict branch below is the rare
+          // insert-raced-with-a-concurrent-insert fallback and, like a plain
+          // re-save, does not touch `kind`.
+          kind: options.kind ?? null,
         })
         .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
         .execute()
@@ -217,6 +232,23 @@ export async function canvasExists(workspaceId: string, slug: string): Promise<b
   const db = await dbReady()
   const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
   return canvasId !== null
+}
+
+// Returns null when the canvas does not exist, so callers can distinguish
+// "no such canvas" from a stored-but-unset kind (which the null-column
+// back-compat default in listCanvases resolves to 'spatial').
+export async function getCanvasKind(workspaceId: string, slug: string): Promise<CanvasKind | null> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('canvases')
+    .select(['kind'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  if (!row) return null
+  return row.kind ?? 'spatial'
 }
 
 export interface CompactResult {
@@ -447,16 +479,17 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<{ slug: string; updatedAt: string }[]> {
+): Promise<Pick<CanvasSummary, 'slug' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
     .selectFrom('canvases')
-    .select(['slug', 'updatedAt'])
+    .select(['slug', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   return rows.map((r) => ({
     slug: r.slug,
     updatedAt: new Date(r.updatedAt).toISOString(),
+    kind: r.kind ?? 'spatial',
   }))
 }
