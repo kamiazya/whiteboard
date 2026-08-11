@@ -721,16 +721,22 @@ describe('BrowserLocalCanvasPage', () => {
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     fireEvent.pointerUp(await screen.findByText('Rename canvas'))
     const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    const refreshesBeforeRename = resolvers.length
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
     })
 
-    // The rename's list refresh resolves with the PRE-rename row: the store
-    // read raced the still-in-flight save and lost. Nothing schedules another
-    // refresh afterwards, so a list-only switcher label would stay stale
-    // forever — the current canvas's row must come from the loaded snapshot.
+    // The rename must have queued a list refresh of its own — otherwise
+    // resolving "the latest" one below would just re-resolve an already-settled
+    // promise from mount and pass without exercising the race at all.
+    expect(resolvers.length).toBeGreaterThan(refreshesBeforeRename)
+
+    // It resolves with the PRE-rename row: the store read raced the
+    // still-in-flight save and lost. Nothing schedules another refresh
+    // afterwards, so a list-only switcher label would stay stale forever —
+    // the current canvas's row must come from the loaded snapshot.
     await act(async () => {
       resolvers[resolvers.length - 1]!([snap])
     })
