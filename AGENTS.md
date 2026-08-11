@@ -33,7 +33,11 @@ Prefer a property or model-based test (fast-check; shared wrappers in
 Prefer example/browser tests for UI wiring, one-off integrations, and anything without a clean
 invariant to state. When a property finds a real bug, pin the shrunk counterexample as an example
 test before fixing the implementation — the example is the regression guard, the property is the
-generator that found it. Never pin a fast-check seed to make a flaky property pass; treat repeat
+generator that found it. Mutation-check every NEW property before trusting it: temporarily revert
+the rule/fix it pins and confirm the property goes red. A generator too sparse to reach the
+interesting arrangements (boxes that rarely overlap, sequences that rarely collide) passes
+vacuously — the mutation check is what catches a property that asserts nothing, and the fix is a
+denser generator, not more runs. Never pin a fast-check seed to make a flaky property pass; treat repeat
 failures under load as a signal to reduce `numRuns`, not to fix the RNG. Put arbitraries shared
 across test files in the owning package's `test-utils`, not duplicated per file.
 
