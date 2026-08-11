@@ -49,6 +49,24 @@ const CORE_KEY = 'core'
 type Fields = Record<string, unknown>
 
 function nodeToFields(node: SpatialNode): Fields {
+  // Refuse non-finite geometry LOUDLY: readSpatialCanvas round-trips every
+  // node through the Zod schema and silently drops failures, so a NaN or
+  // Infinity written here would delete the node for every reader — every
+  // synced peer, undo-proof, with no signal anywhere. A thrown error at
+  // the buggy call site is the only place this class of caller bug is
+  // still visible.
+  for (const [field, value] of [
+    ['x', node.x],
+    ['y', node.y],
+    ['width', node.width],
+    ['height', node.height],
+  ] as const) {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(
+        `spatial node "${node.id}" has a non-finite ${field} (${value}); geometry must be finite`,
+      )
+    }
+  }
   const fields: Fields = {
     id: node.id,
     type: node.type,
