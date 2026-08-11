@@ -810,6 +810,21 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
+/** Direction changes along a polyline, ignoring repeated/collinear points. */
+function bendCount(path: readonly Point[]): number {
+  let bends = 0
+  let lastDir: string | undefined
+  for (let i = 1; i < path.length; i++) {
+    const dx = Math.sign((path[i] as Point).x - (path[i - 1] as Point).x)
+    const dy = Math.sign((path[i] as Point).y - (path[i - 1] as Point).y)
+    if (dx === 0 && dy === 0) continue
+    const dir = `${dx},${dy}`
+    if (lastDir !== undefined && dir !== lastDir) bends++
+    lastDir = dir
+  }
+  return bends
+}
+
 /**
  * The best candidate by a two-tier clearance ranking, shortest first:
  * clear of the inflated obstacles (full margin kept), else clear of the
@@ -817,13 +832,22 @@ const pathLength = (path: readonly Point[]) =>
  * to cross the band to escape — that is acceptable; crossing the node
  * itself is not), else the shortest overall (layout has to return
  * SOMETHING).
+ *
+ * Equal-length candidates are ranked by BEND COUNT: the two stub-to-stub
+ * elbows are always the same Manhattan length, so without this key the
+ * arbitrary first candidate won even when the other ran collinear with
+ * both stubs and drew one corner instead of three.
  */
 function bestCandidate(
   candidates: readonly Point[][],
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
-  const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
+  const byLength = [...candidates].sort((a, b) => {
+    const byLen = pathLength(a) - pathLength(b)
+    if (Math.abs(byLen) > 1e-6) return byLen
+    return bendCount(a) - bendCount(b)
+  })
   return (
     byLength.find((path) => pathIsClear(path, inflated)) ??
     byLength.find((path) => pathIsClear(path, raw)) ??
