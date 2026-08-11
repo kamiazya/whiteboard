@@ -89,7 +89,7 @@ const TRIAGE_SCHEMA = {
 // --- Phase 1: personas ---
 phase('Personas')
 const personaResult = await agent(
-  `Invent ${PERSONA_COUNT} distinct, realistic user personas for a collaborative whiteboard product, spanning ${THEME}. Each must have a different job-to-be-done and a different entry context (device, expertise, motivation). Avoid generic personas — make their goals concrete enough to attempt in a real session. Do NOT open a browser; just design the personas.`,
+  `Invent ${PERSONA_COUNT} distinct, realistic user personas for a collaborative whiteboard product, spanning ${THEME}. Each must have a different job-to-be-done and a different entry context (device, expertise, motivation). Avoid generic personas — make their goals concrete enough to attempt in a real session. EXACTLY ONE persona must be a feature-mixer whose job forces composing features on a single canvas: groups containing nodes AND edges between the members, a non-default edge routing style, multi-node selection dragged from different members, and in-place text editing — the recurring defect class lives at these pairwise intersections, which single-feature personas never reach. Do NOT open a browser; just design the personas.`,
   { label: 'personas', phase: 'Personas', schema: PERSONAS_SCHEMA },
 )
 const personas = (personaResult && personaResult.personas) || []

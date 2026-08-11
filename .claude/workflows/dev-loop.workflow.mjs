@@ -91,7 +91,7 @@ const DESIGN_SCHEMA = {
       items: { type: 'string', pattern: '\\S' },
       minItems: 1,
       description:
-        'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
+        'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). At least one entry must answer the CROSS-FEATURE question: what stays true where this change meets an existing cross-cutting concept — containers/groups, selection, z-order, hit-testing vs painted geometry, locking, theming/the CSS reset? A change that genuinely meets none of them says so with one "no-interaction: <reason>" entry. Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
     },
     // The change's OUTWARD reach, which nothing else in the flow computes: `scope` is what the
     // author intends to edit, this is who else is affected by that edit. typecheck already
