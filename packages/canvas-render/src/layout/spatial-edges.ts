@@ -97,35 +97,105 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
  * derivation falls back to the preferred side, so fully-boxed-in nodes
  * keep the old behaviour.
  */
+/** Inset tangent spans of two facing sides overlap — a zero-bend lane exists. */
+function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
+  const span = (r: Rect): readonly [number, number] =>
+    axis === 'h'
+      ? [
+          r.y + Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
+          r.y + r.h - Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
+        ]
+      : [
+          r.x + Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
+          r.x + r.w - Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
+        ]
+  const [aLo, aHi] = span(fromRect)
+  const [bLo, bHi] = span(toRect)
+  return Math.max(aLo, bLo) <= Math.min(aHi, bHi)
+}
+
+/**
+ * Side-pair candidates ranked by ESTIMATED bends, best first:
+ * a facing opposing pair whose spans overlap routes as one straight
+ * segment (0 bends, dominant axis first); a perpendicular L-pair reaches a
+ * genuinely diagonal target with one bend; an opposing pair without a
+ * shared lane needs a two-bend Z. Ties between the two L-pairs break
+ * toward the less crowded sides (`crowd`), so a departure prefers a side
+ * other edges have not already claimed — fewer shared sides means fewer
+ * fanned anchors and lane jogs. The old dominant-axis rule survives as
+ * the ranking's tie-breaks, so aligned pairs keep their exact old sides.
+ */
+function rankedSidePairs(
+  dx: number,
+  dy: number,
+  fromRect: Rect,
+  toRect: Rect,
+  crowd: (end: 'from' | 'to', side: Side) => number,
+): readonly { fromSide: Side; toSide: Side }[] {
+  const h: Side = dx >= 0 ? 'right' : 'left'
+  const v: Side = dy >= 0 ? 'bottom' : 'top'
+  const opposingH = { fromSide: h, toSide: oppositeSide(h) }
+  const opposingV = { fromSide: v, toSide: oppositeSide(v) }
+  const zero: { fromSide: Side; toSide: Side }[] = []
+  const zeroH = facingSpansOverlap(fromRect, toRect, 'h')
+  const zeroV = facingSpansOverlap(fromRect, toRect, 'v')
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (zeroH) zero.push(opposingH)
+    if (zeroV) zero.push(opposingV)
+  } else {
+    if (zeroV) zero.push(opposingV)
+    if (zeroH) zero.push(opposingH)
+  }
+  const ls: { fromSide: Side; toSide: Side }[] = []
+  if (dx !== 0 && dy !== 0) {
+    const l1 = { fromSide: h, toSide: oppositeSide(v) }
+    const l2 = { fromSide: v, toSide: oppositeSide(h) }
+    const crowding = (p: { fromSide: Side; toSide: Side }) =>
+      crowd('from', p.fromSide) + crowd('to', p.toSide)
+    const dominantFirst = Math.abs(dx) >= Math.abs(dy) ? [l1, l2] : [l2, l1]
+    ls.push(...dominantFirst.sort((a, b) => crowding(a) - crowding(b)))
+  }
+  const fallback = Math.abs(dx) >= Math.abs(dy) ? [opposingH, opposingV] : [opposingV, opposingH]
+  const seen = new Set<string>()
+  return [...zero, ...ls, ...fallback].filter((p) => {
+    const key = `${p.fromSide} ${p.toSide}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function deriveDefaultSides(
   nodes: readonly SpatialNode[],
   edge: CanvasEdge,
   fromRect: Rect,
   toRect: Rect,
+  crowd: (end: 'from' | 'to', side: Side) => number = () => 0,
 ): { fromSide: Side; toSide: Side } {
   const fromCenter = centerOf(fromRect)
   const toCenter = centerOf(toRect)
   const dx = toCenter.x - fromCenter.x
   const dy = toCenter.y - fromCenter.y
-  const fromCandidates = facingSides(dx, dy)
-  // The to end's preferences mirror the from end's (the old derivation
-  // always returned opposite pairs), each end then skipping occlusion
-  // independently.
-  const toCandidates = fromCandidates.map(oppositeSide) as unknown as readonly [
-    Side,
-    Side,
-    Side,
-    Side,
-  ]
+  const pairs = rankedSidePairs(dx, dy, fromRect, toRect, crowd)
   const foreign = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
-  const pick = (rect: Rect, candidates: readonly Side[]): Side => {
+  const exposed = (rect: Rect, side: Side): boolean => {
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
-    return (
-      candidates.find((side) => !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))) ??
-      candidates[0]!
-    )
+    return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
   }
-  return { fromSide: pick(fromRect, fromCandidates), toSide: pick(toRect, toCandidates) }
+  // Ranking is geometric only; occlusion then adjusts each end
+  // independently from the chosen pair (an occluded end moves to its next
+  // exposed side alone, rather than dragging the other end with it).
+  const best = pairs[0]!
+  const pick = (rect: Rect, primary: Side, mirror: readonly [Side, Side, Side, Side]): Side => {
+    const candidates = [primary, ...mirror.filter((sd) => sd !== primary)]
+    return candidates.find((side) => exposed(rect, side)) ?? primary
+  }
+  const fromMirror = facingSides(dx, dy)
+  const toMirror = fromMirror.map(oppositeSide) as unknown as readonly [Side, Side, Side, Side]
+  return {
+    fromSide: pick(fromRect, best.fromSide, fromMirror),
+    toSide: pick(toRect, best.toSide, toMirror),
+  }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
@@ -171,6 +241,14 @@ export interface EdgeAnchorPair {
   /** Stub depth for each end, when its (node, side) group assigned a lane. */
   readonly fromLaneDepth?: number
   readonly toLaneDepth?: number
+  /**
+   * The sides the anchor pass resolved. Side choice can depend on how
+   * crowded each side is across the WHOLE edge set — information a single
+   * routeEdge call does not have — so the pass records its choice and
+   * routeEdge follows it, keeping the two producers agreeing.
+   */
+  readonly fromSide?: Side
+  readonly toSide?: Side
 }
 
 /** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
@@ -215,6 +293,35 @@ export function assignEdgeAnchors(
   edges: readonly CanvasEdge[],
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
+  // Crowding estimate per (node, side): every edge end's PROSPECTIVE side
+  // (authored, or the plain dominant-axis facing side — deliberately NOT
+  // the crowd-aware derivation, which would recurse) — so a departure can
+  // prefer a side other edges have not already claimed, deterministically
+  // and independent of edge order.
+  const crowdCounts = new Map<string, number>()
+  const prospective = new Map<string, { fromSide: Side; toSide: Side }>()
+  for (const edge of edges) {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) continue
+    if (edge.fromNode === edge.toNode) continue
+    const fromCenter = centerOf(rectOf(fromNode))
+    const toCenter = centerOf(rectOf(toNode))
+    const primary = facingSides(toCenter.x - fromCenter.x, toCenter.y - fromCenter.y)[0]
+    const sides = {
+      fromSide: edge.fromSide ?? primary,
+      toSide: edge.toSide ?? oppositeSide(primary),
+    }
+    prospective.set(edge.id, sides)
+    crowdCounts.set(
+      `${edge.fromNode} ${sides.fromSide}`,
+      (crowdCounts.get(`${edge.fromNode} ${sides.fromSide}`) ?? 0) + 1,
+    )
+    crowdCounts.set(
+      `${edge.toNode} ${sides.toSide}`,
+      (crowdCounts.get(`${edge.toNode} ${sides.toSide}`) ?? 0) + 1,
+    )
+  }
   type End = {
     readonly edgeId: string
     readonly edgeIndex: number
@@ -230,10 +337,17 @@ export function assignEdgeAnchors(
     if (fromNode === undefined || toNode === undefined) return
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
+    const own = prospective.get(edge.id)
+    const crowd = (end: 'from' | 'to', side: Side): number => {
+      const nodeId = end === 'from' ? edge.fromNode : edge.toNode
+      const ownSide = end === 'from' ? own?.fromSide : own?.toSide
+      const count = crowdCounts.get(`${nodeId} ${side}`) ?? 0
+      return ownSide === side ? count - 1 : count
+    }
     const derived =
       edge.fromNode === edge.toNode
         ? { fromSide: 'right' as Side, toSide: 'right' as Side }
-        : deriveDefaultSides(nodes, edge, fromRect, toRect)
+        : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
     const ends: End[] = [
       {
         edgeId: edge.id,
@@ -262,7 +376,14 @@ export function assignEdgeAnchors(
 
   const anchors = new Map<
     string,
-    { from?: Point; to?: Point; fromLaneDepth?: number; toLaneDepth?: number }
+    {
+      from?: Point
+      to?: Point
+      fromLaneDepth?: number
+      toLaneDepth?: number
+      fromSide?: Side
+      toSide?: Side
+    }
   >()
   for (const group of groups.values()) {
     group.sort(
@@ -294,8 +415,8 @@ export function assignEdgeAnchors(
       anchors.set(
         member.end.edgeId,
         member.end.role === 'from'
-          ? { ...entry, from: member.point, fromLaneDepth: depth }
-          : { ...entry, to: member.point, toLaneDepth: depth },
+          ? { ...entry, from: member.point, fromLaneDepth: depth, fromSide: member.end.side }
+          : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
       )
     }
   }
@@ -732,8 +853,10 @@ export function routeEdge(
   }
 
   const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
-  const fromSide = edge.fromSide ?? derived.fromSide
-  const toSide = edge.toSide ?? derived.toSide
+  // The anchor pass resolves sides with whole-edge-set crowding knowledge a
+  // single call lacks; when it spoke, follow it (authored sides still win).
+  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derived.fromSide
+  const toSide = edge.toSide ?? anchors?.toSide ?? derived.toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)

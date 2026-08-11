@@ -36,12 +36,12 @@ describe('assignEdgeAnchors', () => {
   it('spreads two ends sharing a side at 1/3 and 2/3, ordered by the far endpoint', () => {
     const nodes = [node('c', 0, 0), node('a', 300, -100), node('b', 300, 100)]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'c' },
-      { id: 'e2', fromNode: 'b', toNode: 'c' },
+      { id: 'e1', fromNode: 'a', toNode: 'c', toSide: 'right' },
+      { id: 'e2', fromNode: 'b', toNode: 'c', toSide: 'right' },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
-    // Both edges arrive at c's right side; a sits above b, so e1 lands the
-    // upper anchor — the two lines never cross right at the node.
+    // Both edges arrive at c's right side (authored); a sits above b, so e1
+    // lands the upper anchor — the two lines never cross right at the node.
     expect(anchors.get('e1')?.to?.x).toBeCloseTo(100)
     expect(anchors.get('e1')?.to?.y).toBeCloseTo(100 / 3)
     expect(anchors.get('e2')?.to?.x).toBeCloseTo(100)

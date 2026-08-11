@@ -339,10 +339,14 @@ describe('routing properties: stub lane depth', () => {
       const spokes = Array.from({ length: count }, (_, i) =>
         node(`s${i}`, 'text', { x: 2000, y: 150 + i * 130 + jitters[i]!, w: 100, h: 100 }),
       )
+      // fromSide authored: the property pins LANE mechanics on one shared
+      // side; without it the bend-aware derivation legitimately splits the
+      // group across sides.
       const edges: CanvasEdge[] = spokes.map((s, i) => ({
         id: `e${i}`,
         fromNode: 'hub',
         toNode: s.id,
+        fromSide: 'right' as const,
       }))
       const anchors = assignEdgeAnchors([hub, ...spokes], edges)
       const exits = edges.map((e) => {
@@ -387,6 +391,7 @@ describe('routing properties: sweep-rank lanes', () => {
         id: `e${i}`,
         fromNode: 'hub',
         toNode: s.id,
+        fromSide: 'right' as const,
       }))
       const anchors = assignEdgeAnchors([hub, ...spokes], edges)
       const routed = edges.map((e) =>
