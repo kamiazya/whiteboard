@@ -42,18 +42,24 @@ const memberArrangement = fc
   )
 
 describe('routing properties: containers', () => {
-  // The container is not an obstacle for its members' edges: with nothing
-  // else on the canvas, the straight route between two members is the
-  // direct segment — never a detour around the frame.
+  // The container is not an obstacle for its members' edges: the route
+  // between two members of an empty group is EXACTLY the route with the
+  // frame removed — the frame never adds a detour. (Stated as an
+  // equivalence rather than "two points" because degenerate member
+  // overlap can legitimately grow approach stubs, with or without the
+  // frame.)
   fcTest.prop([memberArrangement], withDefaults())(
-    'an edge between two members of an empty group is the direct segment',
+    "an empty group frame never changes its members' route",
     ({ W, H, a, b }) => {
-      const nodes = [
+      const withFrame = [
         node('g', 'group', { x: 0, y: 0, w: W, h: H }),
         node('a', 'text', a),
         node('b', 'text', b),
       ]
-      expect(routeEdge(nodes, edge('a', 'b'), 'straight').path).toHaveLength(2)
+      const withoutFrame = [node('a', 'text', a), node('b', 'text', b)]
+      expect(routeEdge(withFrame, edge('a', 'b'), 'straight').path).toEqual(
+        routeEdge(withoutFrame, edge('a', 'b'), 'straight').path,
+      )
     },
   )
 })

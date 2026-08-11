@@ -277,6 +277,9 @@ export function assignEdgeAnchors(
   return anchors
 }
 
+/** How close a route may pass to a foreign node's border, in px. */
+const ROUTE_MARGIN_PX = 8
+
 /** How far a detour keeps clear of the boxes it steps around, in px. */
 const OBSTACLE_CLEARANCE_PX = 16
 
@@ -387,6 +390,43 @@ function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Po
   const region = blockingRegion(start, end, obstacles)
   if (region === undefined) return [start, end]
   return bestCandidate(detourCandidates(start, end, region), obstacles)
+}
+
+/**
+ * Whether a straight run from `anchor` toward `other` would leave through
+ * the anchor side's outward half-plane. When it would not (the direction
+ * grazes along the side or points back across the node — the shape an
+ * occlusion-moved side produces), the edge needs a perpendicular stub
+ * first, or it draws sliding along the node's own border and the arrowhead
+ * meets the side edge-on.
+ */
+function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
+  const vx = other.x - anchor.x
+  const vy = other.y - anchor.y
+  // Coincident anchors have no direction to graze along — the degenerate
+  // zero-length path stays minimal rather than growing stubs.
+  if (vx === 0 && vy === 0) return false
+  const normal = outwardNormal(side)
+  return normal.x * vx + normal.y * vy <= 0
+}
+
+/**
+ * The straight style, with a perpendicular stub inserted at any end whose
+ * direct segment would graze along its own side (see `approachesSideways`).
+ * With neither end sideways this is exactly `routeStraight`, so every
+ * facing-pair canvas keeps its two-point segment.
+ */
+function routeStraightWithApproach(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  obstacles: readonly Rect[],
+): Point[] {
+  const exit = approachesSideways(start, end, fromSide) ? stubFrom(start, fromSide) : start
+  const entry = approachesSideways(end, start, toSide) ? stubFrom(end, toSide) : end
+  if (exit === start && entry === end) return routeStraight(start, end, obstacles)
+  return withoutRepeats([start, ...routeStraight(exit, entry, obstacles), end])
 }
 
 /** How far an orthogonal edge travels straight out of a node before turning. */
@@ -545,9 +585,21 @@ export function routeEdge(
   // detour still has to reach the point inside it — so it is not an
   // obstacle. This is what lets an edge between two members of a group run
   // inside the group's frame instead of detouring around it.
+  // Obstacles are inflated by the routing margin so a route keeps visible
+  // clearance from foreign borders instead of shaving past within a pixel
+  // or two of them. The endpoint-containment exclusion tests the SAME
+  // inflated rect: an anchor already inside a neighbour's margin band
+  // cannot detour out of it, so that neighbour degrades to a non-obstacle
+  // rather than making the edge unroutable.
   const obstacles = nodes
     .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
     .map(rectOf)
+    .map((rect) => ({
+      x: rect.x - ROUTE_MARGIN_PX,
+      y: rect.y - ROUTE_MARGIN_PX,
+      w: rect.w + 2 * ROUTE_MARGIN_PX,
+      h: rect.h + 2 * ROUTE_MARGIN_PX,
+    }))
     .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
 
   return {
@@ -560,7 +612,7 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraight(start, end, obstacles)
+        ? routeStraightWithApproach(start, end, fromSide, toSide, obstacles)
         : routeOrthogonal(start, end, fromSide, toSide, obstacles),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,

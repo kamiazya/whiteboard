@@ -91,3 +91,51 @@ describe('occlusion-aware default sides', () => {
     expect(routed.fromSide).toBe('right')
   })
 })
+
+describe('straight-style approach to a sideways anchor', () => {
+  it('enters a top anchor from above instead of sliding along the border', () => {
+    // Red's right-center and Cyan's top border share y = 110, so the direct
+    // segment to the top anchor grazes ALONG Cyan's border. The route must
+    // approach the top side perpendicular — from above.
+    const nodes = [
+      node('red', 40, 60, 150, 100),
+      node('green', 330, 140, 220, 140),
+      node('cyan', 460, 110, 160, 110),
+    ]
+    const routed = routeEdge(nodes, edge('red', 'cyan'), 'straight')
+    expect(routed.toSide).toBe('top')
+    const last = routed.path[routed.path.length - 1]!
+    const beforeLast = routed.path[routed.path.length - 2]!
+    expect(last).toEqual({ x: 540, y: 110 })
+    expect(beforeLast.x).toBe(540)
+    expect(beforeLast.y).toBeLessThan(110)
+  })
+
+  it('a plain facing pair keeps the two-point direct segment', () => {
+    const nodes = [node('a', 0, 0, 100, 100), node('b', 300, 0, 100, 100)]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'straight')
+    expect(routed.path).toEqual([
+      { x: 100, y: 50 },
+      { x: 300, y: 50 },
+    ])
+  })
+})
+
+describe('routing margin around foreign nodes', () => {
+  it('a segment shaving past a foreign border detours with clearance instead', () => {
+    // The direct a->b line passes 4px below o's bottom border — outside the
+    // rect, so an unpadded crossing test lets it hug the border. Obstacles
+    // are inflated by the routing margin, so the route detours clear.
+    const nodes = [
+      node('a', 0, 0, 100, 100),
+      node('o', 150, -60, 100, 106),
+      node('b', 400, 0, 100, 100),
+    ]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'straight')
+    expect(routed.path.length).toBeGreaterThan(2)
+    for (const p of routed.path.slice(1, -1)) {
+      const clearOfBand = p.y > 46 + 8 || p.y < -60 - 8
+      expect(clearOfBand).toBe(true)
+    }
+  })
+})
