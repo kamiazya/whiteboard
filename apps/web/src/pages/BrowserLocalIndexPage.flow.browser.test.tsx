@@ -102,5 +102,20 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       },
       { timeout: 15_000 },
     )
+
+    // Back to the list, then delete both canvases through the real
+    // AlertDialog: the empty state returns.
+    await router.navigate(-1)
+    await screen.findAllByTestId('canvas-list-card', undefined, { timeout: 15_000 })
+    for (let remaining = 2; remaining > 0; remaining--) {
+      const deleteButtons = await screen.findAllByRole('button', { name: /^Delete / })
+      await userEvent.click(deleteButtons[0]!)
+      const dialog = await screen.findByRole('alertdialog')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), {
+        timeout: 15_000,
+      })
+    }
+    await screen.findByText('No canvases yet', undefined, { timeout: 15_000 })
   })
 })

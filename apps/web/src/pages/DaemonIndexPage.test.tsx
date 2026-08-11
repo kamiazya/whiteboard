@@ -19,6 +19,9 @@ interface MockRoutes {
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
   >
   onCreateCanvas?: (workspaceId: string, slug: string, kind?: string) => void
+  // Return a Response (or a pending promise of one) to override the
+  // default 200 {ok:true}.
+  onDeleteCanvas?: (workspaceId: string, slug: string) => Response | Promise<Response> | undefined
   snapshotByCanvas?: Record<string, Uint8Array>
   onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
   onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
@@ -46,6 +49,13 @@ function installFetchMock(routes: MockRoutes) {
       const body = JSON.parse(String(init.body)) as { slug: string; kind?: string }
       routes.onCreateCanvas?.(workspaceId, body.slug, body.kind)
       return Promise.resolve(jsonResponse({ slug: body.slug }))
+    }
+    const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)$/)
+    if (canvasDeleteMatch && init?.method === 'DELETE') {
+      const workspaceId = decodeURIComponent(canvasDeleteMatch[1])
+      const slug = decodeURIComponent(canvasDeleteMatch[2])
+      const override = routes.onDeleteCanvas?.(workspaceId, slug)
+      return Promise.resolve(override ?? jsonResponse({ ok: true }))
     }
     const namesMatch = url.match(/\/api\/workspaces\/([^/]+)\/names$/)
     if (namesMatch) {
@@ -867,6 +877,146 @@ describe('DaemonIndexPage', () => {
 
     expect(created).toEqual(['untitled', 'untitled-2'])
     expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2')
+  })
+
+  it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
+    const deleted: string[] = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha Board' }, pinned: [] } },
+      onDeleteCanvas: (_ws, slug) => {
+        deleted.push(slug)
+        return undefined
+      },
+    })
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />, {
+      container: document.body,
+    })
+    await screen.findByText('Alpha Board')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Alpha Board' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/Delete "Alpha Board"\?/)).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(deleted).toEqual([])
+    expect(screen.getByText('Alpha Board')).toBeTruthy()
+    expect(onOpenCanvas).not.toHaveBeenCalled()
+  })
+
+  it('confirming Delete sends DELETE and the card disappears from the refreshed list', async () => {
+    const deleted: string[] = []
+    let rows = [
+      { slug: 'alpha', updatedAt: new Date().toISOString() },
+      { slug: 'beta', updatedAt: new Date().toISOString() },
+    ]
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        get 'ws-a'() {
+          return rows
+        },
+      },
+      onDeleteCanvas: (_ws, slug) => {
+        deleted.push(slug)
+        rows = rows.filter((r) => r.slug !== slug)
+        return undefined
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    )
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(deleted).toEqual(['alpha'])
+    await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
+    expect(screen.getByText('beta')).toBeTruthy()
+  })
+
+  it('sends exactly one DELETE for two confirm presses inside a single tick', async () => {
+    // Same mechanism as the create tests: React flushes `deleting` before a
+    // second click can dispatch on the now-disabled confirm button.
+    let resolveDelete: ((res: Response) => void) | undefined
+    const deleted: string[] = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      onDeleteCanvas: (_ws, slug) => {
+        deleted.push(slug)
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve
+        })
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    const confirm = within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: 'Delete',
+    })
+    // No await between them: the disabled flush is the guard under test.
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(deleted).toEqual(['alpha']))
+    resolveDelete?.(jsonResponse({ ok: true }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(deleted).toEqual(['alpha'])
+  })
+
+  it('a failed Delete shows the sanitized error in the dialog and refreshes after dismissal', async () => {
+    let listFetches = 0
+    let rows = [{ slug: 'alpha', updatedAt: new Date().toISOString() }]
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        get 'ws-a'() {
+          listFetches += 1
+          return rows
+        },
+      },
+      onDeleteCanvas: () => jsonResponse({ title: 'Canvas not found' }, 404),
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+    const fetchesBefore = listFetches
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    // The dialog stays open showing the daemon's sanitized title...
+    expect(await within(dialog).findByText('Canvas not found')).toBeTruthy()
+    // ...and dismissing it refreshes the list so a stale row (404 = already
+    // gone on the daemon) cannot linger.
+    rows = []
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    await waitFor(() => expect(listFetches).toBeGreaterThan(fetchesBefore))
+    await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
   })
 
   it('has no Storage tab — storage and pairing live in Settings (design refactor D2)', async () => {

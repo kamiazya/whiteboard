@@ -1,6 +1,7 @@
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
+import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { deriveDisplaySlug } from '../lib/derive-display-slug.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
@@ -55,6 +56,30 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
     })
   }, [snapshots])
 
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; displayName: string } | null>(
+    null,
+  )
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      // Unconditional removal by id. If this was the canvas the default
+      // pointer resumes into, the pointer dangles deliberately — the
+      // editor's resume path already falls back safely on a dead id.
+      await store.removeCanvas?.(pendingDelete.id)
+      setSnapshots(await store.listCanvases())
+      setPendingDelete(null)
+    } catch {
+      setDeleteError('Failed to delete the canvas from this browser.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [store, pendingDelete])
+
   const handleCreate = useCallback(
     async (kind: CanvasKind) => {
       setCreating(true)
@@ -106,6 +131,20 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
           onOpen={onOpenCanvas}
           onCreate={(kind) => void handleCreate(kind)}
           createDisabled={creating}
+          renderActions={(row) => (
+            <button
+              type="button"
+              aria-label={`Delete ${row.displayName}`}
+              onClick={(event) => {
+                // Prevents the click from bubbling to the wrapping open-button.
+                event.stopPropagation()
+                setPendingDelete({ id: row.slug, displayName: row.displayName })
+              }}
+              className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              Delete
+            </button>
+          )}
         />
       ) : (
         // Load failed (error set, snapshots never arrived): creating does
@@ -120,6 +159,17 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
           Create a canvas
         </button>
       )}
+      <DeleteCanvasDialog
+        pending={pendingDelete}
+        busy={deleting}
+        error={deleteError}
+        description="This permanently removes the canvas from this browser. There is no undo."
+        onCancel={() => {
+          setPendingDelete(null)
+          setDeleteError(null)
+        }}
+        onConfirm={() => void handleConfirmDelete()}
+      />
     </div>
   )
 }

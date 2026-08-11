@@ -4,6 +4,8 @@ import {
   type CreateCanvasResponse,
   canvasOkfV1ResponseSchema,
   createCanvasResponseSchema,
+  type DeleteCanvasResponse,
+  deleteCanvasResponseSchema,
   type ListCanvasesResponse,
   type ListCanvasesV1Response,
   type ListWorkspacesResponse,
@@ -90,6 +92,20 @@ export function createCanvas(
       // rejects unknown fields never sees one it can't parse.
       body: JSON.stringify(kind === undefined ? { slug } : { slug, kind }),
     },
+  )
+}
+
+export function deleteCanvas(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  slug: string,
+): Promise<DeleteCanvasResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}`,
+    deleteCanvasResponseSchema,
+    { method: 'DELETE' },
   )
 }
 

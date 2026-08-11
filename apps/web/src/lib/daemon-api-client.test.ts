@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createCanvas,
   createDaemonFetch,
+  deleteCanvas,
   getCanvasSnapshot,
   listCanvases,
   listWorkspaces,
@@ -190,6 +191,24 @@ describe('createCanvas', () => {
     fetchFn.mockResolvedValue(jsonResponse({ slug: 'y' }))
     await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
     expect(sentBody(fetchFn)).toEqual({ slug: 'y' })
+  })
+})
+
+describe('deleteCanvas', () => {
+  it('sends DELETE to the canvas URL and parses the ok body', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    const result = await deleteCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'old-canvas')
+    expect(result).toEqual({ ok: true })
+    const [url, init] = fetchFn.mock.calls[0]!
+    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/canvases/old-canvas`)
+    expect((init as RequestInit).method).toBe('DELETE')
+  })
+
+  it('rejects on a 404, surfacing the problem-details title', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Canvas not found' }, 404))
+    await expect(deleteCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
+      /canvas not found/i,
+    )
   })
 })
 

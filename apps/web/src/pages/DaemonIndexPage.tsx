@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
+import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
@@ -14,6 +15,7 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import {
   createCanvas,
   createDaemonFetch,
+  deleteCanvas,
   getCanvasSnapshot,
   listCanvases,
   listWorkspaces,
@@ -277,6 +279,44 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingSlug],
   )
 
+  const [pendingDelete, setPendingDelete] = useState<{
+    slug: string
+    displayName: string
+  } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Dismissing the dialog always refreshes the list: after a success the row
+  // must go, and after a FAILURE the daemon's state is unknown from here —
+  // a 404 means the canvas was already gone (another tab, an agent), and a
+  // stale row lingering after any failed delete is worse than one refetch.
+  const closeDeleteDialog = useCallback(() => {
+    setPendingDelete(null)
+    setDeleteError(null)
+    const workspaceAtStart = selectedWorkspace
+    if (!workspaceAtStart) return
+    const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+    void loadWorkspace(workspaceAtStart, isStale)
+  }, [selectedWorkspace, loadWorkspace])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete) return
+    const workspaceAtStart = selectedWorkspace
+    if (!workspaceAtStart) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.slug)
+      closeDeleteDialog()
+    } catch (err) {
+      // daemon-api-client errors are already sanitized (problem-details
+      // title or a generic status message) — safe to surface directly.
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete canvas.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, pendingDelete, closeDeleteDialog])
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-full flex-col overflow-y-auto p-4">
@@ -411,23 +451,44 @@ export function DaemonIndexPage({
                 <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
               )}
               renderActions={(row) => (
-                <button
-                  type="button"
-                  aria-label={`Duplicate ${row.displayName}`}
-                  disabled={duplicatingSlug === row.slug}
-                  onClick={(event) => {
-                    // Prevents the click from bubbling to the wrapping open-button.
-                    event.stopPropagation()
-                    void handleDuplicate(row.slug)
-                  }}
-                  className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-100 disabled:cursor-not-allowed"
-                >
-                  Duplicate
-                </button>
+                <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={`Duplicate ${row.displayName}`}
+                    disabled={duplicatingSlug === row.slug}
+                    onClick={(event) => {
+                      // Prevents the click from bubbling to the wrapping open-button.
+                      event.stopPropagation()
+                      void handleDuplicate(row.slug)
+                    }}
+                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-100"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${row.displayName}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setPendingDelete({ slug: row.slug, displayName: row.displayName })
+                    }}
+                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent"
+                  >
+                    Delete
+                  </button>
+                </div>
               )}
             />
           </div>
         )}
+        <DeleteCanvasDialog
+          pending={pendingDelete}
+          busy={deleting}
+          error={deleteError}
+          description="This permanently removes the canvas, including its versions and branches. There is no undo."
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void handleConfirmDelete()}
+        />
         <SettingsPanel
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
