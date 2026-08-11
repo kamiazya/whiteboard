@@ -164,6 +164,16 @@ export function BrowserLocalCanvasPage({
   // itself, so there is no App-level state this page needs to share.
   const { theme, resolvedTheme, setTheme } = useThemeMode()
 
+  // Fullscreen can also be left with Escape or the browser's own chrome, so
+  // the button's label follows the DOCUMENT rather than our own click.
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  useEffect(() => {
+    const sync = () => setIsFullscreen(document.fullscreenElement !== null)
+    sync()
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
   // Enumeration is a Promise, not reactive state — refresh whenever the
@@ -173,7 +183,7 @@ export function BrowserLocalCanvasPage({
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
   const listGenerationRef = useRef(0)
-  // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
+  // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
@@ -498,7 +508,12 @@ export function BrowserLocalCanvasPage({
     // every header-shaped row stacks inside the auto row, and the editor
     // owns minmax(0,1fr) — however many rows appear or however tall they
     // wrap, the editor row is always exactly the remaining viewport height.
-    <main ref={mainRef} className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
+    // `bg-background` on the FULLSCREEN TARGET, not just on `body`: going
+    // fullscreen promotes this element to the top layer, where the body's
+    // background no longer shows. Anything this element does not paint itself
+    // falls through to the browser's default black backdrop — which turned
+    // the canvas area black under a light theme.
+    <main ref={mainRef} className="bg-background grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
@@ -542,10 +557,13 @@ export function BrowserLocalCanvasPage({
               const created = await createCanvas(undefined, 'markdown')
               await switchCanvas(created.id)
             }}
-            theme={theme}
-            onToggleTheme={setTheme}
-            onEnterFullscreen={() => {
-              void mainRef.current?.requestFullscreen()
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => {
+              // The header lives INSIDE the fullscreen element, so it stays on
+              // screen and is the only way back out — entering without a
+              // matching exit left the user stuck with the Escape key.
+              if (document.fullscreenElement) void document.exitFullscreen()
+              else void mainRef.current?.requestFullscreen()
             }}
             capabilities={{
               versions: capabilities.versions,
