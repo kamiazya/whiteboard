@@ -130,6 +130,22 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
+    tools.tidyCanvas.name,
+    {
+      inputSchema: tools.tidyCanvas.inputSchema.shape,
+      outputSchema: tools.tidyCanvas.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.tidyCanvas.inputSchema.parse(args)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.tidyCanvas.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.canvasRenderSvg.name,
     {
       inputSchema: tools.canvasRenderSvg.inputSchema.shape,

@@ -77,6 +77,7 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
   SPATIAL_THEME_GEOMETRY,
   sceneBounds,
+  tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -179,7 +180,6 @@ import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
-import { tidyNodes } from './tidy.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   canvasToScreen,

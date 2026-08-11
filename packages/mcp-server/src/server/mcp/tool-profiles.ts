@@ -23,6 +23,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch spatial canvas edge' },
   node_lock: { profile: MUTATING_IDEMPOTENT, title: 'Lock or unlock a spatial canvas node' },
   edge_lock: { profile: MUTATING_IDEMPOTENT, title: 'Lock or unlock a spatial canvas edge' },
+  tidy_canvas: { profile: MUTATING_IDEMPOTENT, title: 'Tidy spatial canvas layout' },
   body_patch: { profile: MUTATING, title: 'Patch canvas markdown body' },
   canvas_render_svg: { profile: READ_ONLY, title: 'Render canvas as SVG' },
   canvas_digest: { profile: READ_ONLY, title: 'Generate AI-facing canvas digest' },

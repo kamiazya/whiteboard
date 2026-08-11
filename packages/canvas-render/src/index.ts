@@ -58,3 +58,5 @@ export type {
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
 export { createSpatialTheme } from './theme/spatial-theme.js'
+export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
+export { tidyNodes } from './tidy.js'

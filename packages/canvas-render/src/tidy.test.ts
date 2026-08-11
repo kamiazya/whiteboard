@@ -3,7 +3,7 @@
 // running-mean chaining), bounded overlap resolution, locked nodes as
 // fixed obstacles. Only boxes that actually move are reported.
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import type { TidyNode } from './tidy.js'
 import { tidyNodes } from './tidy.js'
 

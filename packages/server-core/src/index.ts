@@ -101,6 +101,12 @@ export {
   reindexInputSchema,
   reindexOutputSchema,
 } from './tools/reindex-tool.js'
+export type { TidyCanvasInput, TidyCanvasOutput } from './tools/tidy-canvas.js'
+export {
+  createTidyCanvasTool,
+  tidyCanvasInputSchema,
+  tidyCanvasOutputSchema,
+} from './tools/tidy-canvas.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,

@@ -11,6 +11,7 @@ const ACTIVE_TOOL_NAMES = [
   'node_patch',
   'edge_lock',
   'edge_patch',
+  'tidy_canvas',
   'body_patch',
   'canvas_render_svg',
   'canvas_digest',

@@ -62,6 +62,7 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 |---|---|
 | `wb_canvas_create` / `wb_canvas_list` / `wb_canvas_get` / `wb_canvas_delete` | Canvas lifecycle (CRUD). |
 | `node_patch` / `edge_patch` / `body_patch` | Patch a canvas's spatial nodes, edges, or a node's Markdown body. |
+| `tidy_canvas` | Normalize a canvas's spatial layout: snap near-aligned nodes into rows/columns on the grid and separate overlaps, optionally restricted to a `scope` of node ids. Locked nodes never move. Idempotent — a second call reports no moves. |
 | `facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
 | `canvas_render_svg` | Render the current canvas to an SVG string from its persisted document — no browser connection required. |
 | `canvas_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. |
