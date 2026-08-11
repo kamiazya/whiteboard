@@ -238,11 +238,13 @@ function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedD
   return !skipDesign || !!discardedInvalidProvidedDesign
 }
 
-// Gates the Implement phase on the PlanReview gate's final verdict. Mirrors
-// .claude/workflows/lib/design-schema.mjs's shouldBlockOnFailedPlanReview (see the sync test for
-// why this is duplicated instead of imported).
-function shouldBlockOnFailedPlanReview({ hasDesign, pass }) {
-  return !!hasDesign && !pass
+// Gates the Implement phase on the PlanReview gate's final verdict. A failed gate ALWAYS blocks:
+// there is deliberately no `hasDesign` escape hatch, because the gate only runs `if (design)` and
+// `planVerdict` defaults to `{ pass: true }`, so a skipped design can never reach here with
+// `pass: false`. Mirrors .claude/workflows/lib/design-schema.mjs's shouldBlockOnFailedPlanReview
+// (see the sync test for why this is duplicated instead of imported).
+function shouldBlockOnFailedPlanReview({ pass }) {
+  return !pass
 }
 
 // --- Phase 1: design ---
@@ -292,15 +294,24 @@ if (design) {
   while (!planVerdict.pass && planRev < MAX_PLAN_REV) {
     planRev += 1
     log(`PlanReview failed (revise ${planRev}/${MAX_PLAN_REV}): ${(planVerdict.mustFix || []).join('; ')}`)
-    design = await agent(
+    // agent() resolves to null when a subagent dies (a stalled stream, a terminal API error).
+    // Assigning that straight to `design` would destroy the design the previous round produced and
+    // send `null` into the next gate call, which then fails for the wrong reason. Keep the last
+    // good design and stop revising — the failed verdict already blocks Implement.
+    const revised = await agent(
       `Revise this design to address the must-fix items, keeping the same schema. Task: ${TASK}\nDesign: ${JSON.stringify(design)}\nMust-fix: ${JSON.stringify(planVerdict.mustFix || [])}`,
       { label: `design-revise:${planRev}`, phase: 'Design', schema: DESIGN_SCHEMA },
     )
+    if (!revised) {
+      log(`design-revise:${planRev} returned nothing (agent died) — keeping the previous design; the failed gate stands`)
+      break
+    }
+    design = revised
     planVerdict = await runGate()
   }
 }
 
-if (shouldBlockOnFailedPlanReview({ hasDesign: !!design, pass: planVerdict.pass })) {
+if (shouldBlockOnFailedPlanReview({ pass: planVerdict.pass })) {
   return {
     taskTitle: TASK,
     design,

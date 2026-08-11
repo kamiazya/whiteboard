@@ -125,11 +125,12 @@ export function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidPr
   return !skipDesign || !!discardedInvalidProvidedDesign
 }
 
-// Gates dev-loop's Implement phase on the PlanReview gate's final verdict. Without this, a design
-// that keeps failing PlanReview past the revision cap (e.g. a state/store design carrying only the
-// `none:` properties sentinel) still proceeds into Implement labeled "Approved design," making the
-// gate advisory instead of blocking. `hasDesign` is false when design/PlanReview was skipped
-// entirely (skipDesign with a pre-approved designDoc) — that case must not block.
-export function shouldBlockOnFailedPlanReview({ hasDesign, pass }) {
-  return !!hasDesign && !pass
+// Gates dev-loop's Implement phase on the PlanReview gate's final verdict. A failed gate ALWAYS
+// blocks. There is deliberately no `hasDesign` escape hatch: the gate only runs `if (design)` and
+// `planVerdict` defaults to `{ pass: true }`, so a skipped design can never reach here with
+// `pass: false`. The only way to be here without a design is that the revise agent died and its
+// `null` replaced a design that had existed — precisely when the gate must hold. An observed run
+// with that escape hatch implemented and committed against `design: null` and a failed gate.
+export function shouldBlockOnFailedPlanReview({ pass }) {
+  return !pass
 }
