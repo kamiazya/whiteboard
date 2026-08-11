@@ -270,7 +270,13 @@ describe('BrowserLocalCanvasPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
     })
-    expect(duplicateBtn.disabled).toBe(false)
+    // The actions cluster remounts with the canvas row when the page
+    // navigates to the copy (the row is keyed on canvas identity), so the
+    // re-enabled state is asserted on the CURRENT button, not the stale node.
+    const freshDuplicateBtn = screen.getByRole('button', {
+      name: /duplicate/i,
+    }) as HTMLButtonElement
+    expect(freshDuplicateBtn.disabled).toBe(false)
     const list = await store.listCanvases()
     expect(list.filter((c) => c.name === 'untitled (copy)')).toHaveLength(1)
   })
@@ -306,6 +312,26 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByText('Saved')).toBeTruthy()
     // the raw "saved" enum token must not leak to the UI
     expect(screen.queryByText('saved')).toBeNull()
+  })
+
+  it('the canvas row carries state, settings and operations in ONE row (no separate strip)', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    // Save state is the colored chip, not a bare text span.
+    expect(screen.getByTestId('save-status-chip').textContent).toContain('Saved')
+    // A spatial canvas offers its display settings from the same row.
+    expect(screen.getByRole('button', { name: 'Canvas display settings' })).toBeTruthy()
+    // The whole cluster lives inside the canvas row (CanvasProperties),
+    // beside the title — not in a second header strip of its own.
+    const title = screen.getByRole('textbox', { name: /title/i })
+    const row = title.closest('div.border-b')
+    expect(row?.contains(screen.getByTestId('save-status-chip'))).toBe(true)
+    expect(row?.contains(screen.getByRole('button', { name: 'Duplicate canvas' }))).toBe(true)
+    expect(row?.contains(screen.getByRole('button', { name: 'Delete canvas' }))).toBe(true)
   })
 
   it('surfaces the degraded save message in the header when a save fails', async () => {

@@ -1,14 +1,12 @@
-// Canvas-wide display settings (edge routing style, line jumps) live in a
-// dedicated settings popover on the dock, not in the empty-space context
-// menu — the menu is for actions on the canvas; a growing settings list
-// wants its own surface. This pins the wiring: the gear opens the popover,
-// a pick emits the canvas-wide command, and the context menu no longer
-// carries the rows.
+// The canvas display-settings popover, standalone: the gear opens it, a
+// pick applies the canvas-wide command immediately and keeps it open for
+// the next tweak, consecutive picks chain under a deferred parent, and
+// dismissal returns focus to the gear.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { afterEach, expect, it, vi } from 'vitest'
+import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 
 afterEach(cleanup)
 
@@ -25,124 +23,92 @@ function makeHost() {
   function Host() {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
+    return <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
   }
   return { Host, latest }
 }
 
-const gearOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
+const gear = (c: HTMLElement) =>
+  c.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
+const menu = () => document.querySelector('[data-testid="canvas-settings-menu"]')
+const option = (label: string) =>
+  [...(menu()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === label) as
+    | HTMLButtonElement
+    | undefined
 
-const settingsMenu = (container: HTMLElement) =>
-  container.querySelector('[data-testid="canvas-settings-menu"]')
-
-it('the gear opens the settings popover with both option rows', () => {
+it('the gear opens the popover with both option rows', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
-  expect(settingsMenu(container)).toBeNull()
-  fireEvent.click(gearOf(container))
-
-  const menu = settingsMenu(container)
-  expect(menu).toBeTruthy()
-  expect(menu?.textContent).toContain('Edge routing')
-  expect(menu?.textContent).toContain('Line jumps')
+  expect(menu()).toBeNull()
+  fireEvent.click(gear(container))
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  expect(menu()?.textContent).toContain('Edge routing')
+  expect(menu()?.textContent).toContain('Line jumps')
 })
 
-it('picking a routing style applies it canvas-wide; the popover stays open for the next tweak', () => {
+it('a pick applies canvas-wide and keeps the popover open; current values are marked', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  fireEvent.click(gearOf(container))
-  const curved = settingsMenu(container)?.querySelector('[aria-label="Curved"]') as HTMLElement
-  expect(curved).toBeTruthy()
-  fireEvent.click(curved)
+  fireEvent.click(gear(container))
+  await vi.waitFor(() => expect(option('Curved')).toBeDefined())
+  fireEvent.click(option('Curved') as HTMLElement)
 
-  expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('curved')
-  // Option rows are property pickers: they apply immediately and keep the
-  // surface open, same contract as the context menu's rows.
-  const menu = settingsMenu(container)
-  expect(menu).toBeTruthy()
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('curved')
+  })
+  expect(menu()).toBeTruthy()
+  expect(option('Curved')?.getAttribute('aria-pressed')).toBe('true')
 
-  fireEvent.keyDown(menu as HTMLElement, { key: 'Escape' })
-  expect(settingsMenu(container)).toBeNull()
+  fireEvent.click(option('On') as HTMLElement)
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting?.lineJumps).toBe('arc')
+  })
 })
 
-it('toggling line jumps applies canvas-wide', () => {
-  const { Host, latest } = makeHost()
-  const { container } = render(<Host />)
-
-  fireEvent.click(gearOf(container))
-  const on = settingsMenu(container)?.querySelector('[aria-label="On"]') as HTMLElement
-  fireEvent.click(on)
-
-  expect(latest.canvas['x-whiteboard']?.edgeRouting?.lineJumps).toBe('arc')
-})
-
-it('the popover marks the current values as selected', () => {
-  const withCurved: SpatialCanvas = {
-    ...initial,
-    'x-whiteboard': { edgeRouting: { style: 'curved', lineJumps: 'arc' } },
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState(withCurved)
+it('consecutive picks both survive a deferred parent', async () => {
+  const latest = { canvas: initial }
+  function DeferredHost() {
+    const [canvas, setCanvas] = useState(initial)
+    latest.canvas = canvas
     return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
+      <CanvasDisplaySettings
+        canvas={canvas}
+        onChange={(next) => {
+          setTimeout(() => {
+            latest.canvas = next
+            setCanvas(next)
+          }, 30)
+        }}
+      />
     )
   }
-  const { container } = render(<Host />)
+  const { container } = render(<DeferredHost />)
+  fireEvent.click(gear(container))
+  await vi.waitFor(() => expect(option('Orthogonal')).toBeDefined())
+  fireEvent.click(option('Orthogonal') as HTMLElement)
+  fireEvent.click(option('On') as HTMLElement)
 
-  fireEvent.click(gearOf(container))
-  const curved = settingsMenu(container)?.querySelector('[aria-label="Curved"]')
-  const on = settingsMenu(container)?.querySelector('[aria-label="On"]')
-  expect(curved?.getAttribute('aria-checked')).toBe('true')
-  expect(on?.getAttribute('aria-checked')).toBe('true')
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'arc',
+    })
+  })
 })
 
-it('Escape hands focus back to the gear, like the add menu does', () => {
+it('Escape closes and hands focus back to the gear', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
-  const gear = gearOf(container)
-  fireEvent.click(gear)
-  const menu = settingsMenu(container) as HTMLElement
-  expect(menu).toBeTruthy()
+  const trigger = gear(container)
+  fireEvent.click(trigger)
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
 
-  fireEvent.keyDown(menu, { key: 'Escape' })
-  expect(settingsMenu(container)).toBeNull()
-  // Closing unmounts the focused popover; without an explicit hand-back a
-  // keyboard user's focus falls to <body> and they lose their place.
-  expect(document.activeElement).toBe(gear)
-})
-
-it('the empty-space context menu no longer carries the settings rows', () => {
-  const { Host } = makeHost()
-  const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
-  const r = root.getBoundingClientRect()
-  fireEvent.contextMenu(root, { clientX: r.left + 700, clientY: r.top + 500 })
-
-  const menu = container.querySelector('[data-testid="context-menu"]')
-  expect(menu).toBeTruthy()
-  expect(menu?.textContent).not.toContain('Edge routing')
-  expect(menu?.textContent).not.toContain('Line jumps')
-  // Actions stay: the menu is still where you act on the canvas.
-  expect(menu?.textContent).toContain('Tidy canvas')
+  fireEvent.keyDown(menu() as HTMLElement, { key: 'Escape' })
+  await vi.waitFor(() => expect(menu()).toBeNull())
+  // Radix hands focus back to the trigger, so a keyboard user keeps their
+  // place instead of falling to <body>.
+  await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
 })

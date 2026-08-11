@@ -1,12 +1,26 @@
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { X } from 'lucide-react'
+import { Info, X } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface CanvasPropertiesProps {
   readonly meta: CanvasCoreMeta
   readonly onChange: (next: CanvasCoreMeta) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
+  /**
+   * Canvas display settings control, rendered beside the properties toggle.
+   * Spatial canvases pass the settings popover; markdown canvases omit it —
+   * edge routing has no meaning for a document with no spatial scene.
+   */
+  readonly settings?: ReactNode
+  /**
+   * Right-edge cluster: canvas STATE and whole-document operations (save
+   * chip, duplicate, delete). Supplied by the page — this component owns
+   * the canvas row's layout, not the operations themselves.
+   */
+  readonly actions?: ReactNode
 }
 
 /**
@@ -35,6 +49,8 @@ export function CanvasProperties({
   meta,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
+  settings,
+  actions,
 }: CanvasPropertiesProps) {
   const [open, setOpen] = useState(false)
   const [draftTag, setDraftTag] = useState('')
@@ -88,18 +104,29 @@ export function CanvasProperties({
           placeholder="Untitled"
           className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-base font-medium outline-none"
         />
-        <button
-          type="button"
-          onClick={() => setOpen((current) => !current)}
-          aria-expanded={open}
-          className="text-muted-foreground hover:text-foreground shrink-0 rounded px-2 py-1 text-xs"
-        >
-          Properties
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setOpen((current) => !current)}
+              aria-label="Canvas properties"
+              aria-expanded={open}
+              aria-controls={`${suggestionsId}-disclosure`}
+              className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
+            >
+              <Info aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Canvas properties</TooltipContent>
+        </Tooltip>
+        {settings}
+        {actions !== undefined && (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
+        )}
       </div>
 
       {open && (
-        <div className="flex flex-col gap-2 pb-1">
+        <div id={`${suggestionsId}-disclosure`} className="flex flex-col gap-2 pb-1">
           <div className="flex items-center gap-2">
             <label
               className="text-muted-foreground w-12 shrink-0 text-xs"

@@ -52,8 +52,6 @@ interface ToolPaletteProps {
   readonly onCreateImage?: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
-  /** Docked after the Add button (canvas-wide settings and the like). */
-  readonly trailing?: ReactNode
 }
 
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground`
@@ -73,7 +71,6 @@ export function ToolPalette({
   onCreateImage,
   tool,
   onToolChange,
-  trailing,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
   const dockRef = useRef<HTMLDivElement | null>(null)
@@ -257,12 +254,6 @@ export function ToolPalette({
             </button>
           ))}
         </div>
-      )}
-      {trailing !== undefined && (
-        <>
-          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-          {trailing}
-        </>
       )}
     </div>
   )

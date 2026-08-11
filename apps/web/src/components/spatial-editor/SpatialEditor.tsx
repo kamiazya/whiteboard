@@ -62,7 +62,6 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type {
   CanvasColor,
   ClipboardFragment,
-  EdgeRoutingStyle,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -110,7 +109,6 @@ import {
   Pencil,
   Scissors,
   SendToBack,
-  SlidersHorizontal,
   Sparkles,
   SquareDashed,
   StickyNote,
@@ -237,14 +235,6 @@ const MINIMAP_HEIGHT_PX = 110
 const MINIMAP_MIN_ROOT_WIDTH_PX = 768
 
 /** The routing styles offered in the UI. */
-const EDGE_ROUTING_CHOICES: readonly {
-  readonly style: EdgeRoutingStyle
-  readonly label: string
-}[] = [
-  { style: 'straight', label: 'Straight' },
-  { style: 'orthogonal', label: 'Orthogonal' },
-  { style: 'curved', label: 'Curved' },
-]
 
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
@@ -480,9 +470,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // deliberately NOT a mode — the palette's Add note works in every mode.
     const [tool, setTool] = useState<EditorTool>(defaultTool)
     /** Open right-click menu: screen position (root-relative) + hit target. */
-    // Canvas-wide display settings popover, anchored at the dock's gear.
-    const [settingsMenu, setSettingsMenu] = useState<{ x: number; y: number } | null>(null)
-    const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
     const [contextMenu, setContextMenu] = useState<{
       x: number
       y: number
@@ -1756,48 +1743,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
-     * Canvas-wide display settings, shown in the dock's settings popover.
-     * Option rows apply immediately and keep the popover open (the shared
-     * ContextMenu option-row contract), eager on canvasRef like every other
-     * command path so a second pick chains off the first.
-     */
-    const canvasSettingsItems = (): ContextMenuItem[] => {
-      const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
-      const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
-      const run = (command: EditorCommand) => {
-        const running = applyCommand(canvasRef.current, command)
-        canvasRef.current = running
-        onChange(running, command)
-      }
-      return [
-        {
-          kind: 'options',
-          label: 'Edge routing',
-          options: EDGE_ROUTING_CHOICES.map(({ style, label }) => ({
-            key: style,
-            label,
-            selected: currentRouting === style,
-            onSelect: () => run({ kind: 'set-edge-routing', style }),
-          })),
-        },
-        {
-          kind: 'options',
-          label: 'Line jumps',
-          options: (
-            [
-              { lineJumps: 'none', label: 'Off' },
-              { lineJumps: 'arc', label: 'On' },
-            ] as const
-          ).map(({ lineJumps, label }) => ({
-            label,
-            selected: currentJumps === lineJumps,
-            onSelect: () => run({ kind: 'set-line-jumps', lineJumps }),
-          })),
-        },
-      ]
-    }
-
-    /**
      * Clones the selection as ONE batch command (one undo step): reminted
      * ids via the clipboard-fragment helpers, +16px offset (the standard
      * duplicate-again cascade), edges kept only when both endpoints are
@@ -2874,45 +2819,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 }
           }
           tool={tool}
-          trailing={
-            tool === 'hand' ? undefined : (
-              <button
-                ref={settingsButtonRef}
-                type="button"
-                data-testid="canvas-settings-button"
-                aria-label="Canvas settings"
-                aria-haspopup="menu"
-                aria-expanded={settingsMenu !== null}
-                onClick={(e) => {
-                  if (settingsMenu !== null) {
-                    setSettingsMenu(null)
-                    return
-                  }
-                  const root = rootRef.current
-                  if (root === null) return
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  const rootRect = root.getBoundingClientRect()
-                  // Anchored at the gear; ContextMenu clamps itself back
-                  // inside the editor, so a dock-adjacent anchor just means
-                  // "as close to the gear as fits".
-                  setSettingsMenu({
-                    x: rect.left - rootRect.left,
-                    y: rect.top - rootRect.top,
-                  })
-                }}
-                className={TOOL_BUTTON_CLASS}
-              >
-                <SlidersHorizontal aria-hidden="true" className="size-4" />
-              </button>
-            )
-          }
           onToolChange={(next) => {
             setTool(next)
             // A context menu is an edit affordance of the mode it was
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.
             setContextMenu(null)
-            setSettingsMenu(null)
             // Entering hand mode drops EVERY edit affordance, not just the
             // menu: a surviving selection would keep Delete/resize/connect
             // handles live, an open editor would keep accepting text, and
@@ -2963,17 +2875,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               addImageFile(file, pendingImagePointRef.current ?? undefined)
               pendingImagePointRef.current = null
             }}
-          />
-        )}
-        {settingsMenu !== null && (
-          <ContextMenu
-            testId="canvas-settings-menu"
-            ariaLabel="Canvas settings"
-            x={settingsMenu.x}
-            y={settingsMenu.y}
-            onClose={() => setSettingsMenu(null)}
-            onEscape={() => settingsButtonRef.current?.focus()}
-            items={canvasSettingsItems()}
           />
         )}
         {contextMenu !== null && (
