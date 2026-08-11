@@ -68,7 +68,14 @@ export function computeEdgeJumps(
         }
       }
       onSegment.sort((p, q) => p.t - q.t)
-      for (const { point } of onSegment) {
+      // Hops closer than a diameter cannot fit as separate arcs — the
+      // first arc's exit would sit past the next arc's entry and the path
+      // would double back. The first crossing keeps its hop.
+      const segLen = Math.hypot(a2.x - a1.x, a2.y - a1.y)
+      let lastKeptT = Number.NEGATIVE_INFINITY
+      for (const { point, t } of onSegment) {
+        if ((t - lastKeptT) * segLen < 2 * EDGE_JUMP_RADIUS_PX) continue
+        lastKeptT = t
         jumps.push({ segment: seg, x: point.x, y: point.y })
       }
     }

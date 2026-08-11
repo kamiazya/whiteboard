@@ -196,3 +196,42 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     expect(latest.canvas).not.toHaveProperty('x-whiteboard')
   })
 })
+
+// Two picks from the SAME open menu can land before a slow parent commits
+// the first — the handlers must chain off the eagerly-updated ref, not the
+// stale prop, or the second command erases the first setting.
+it('consecutive style + jumps picks both survive a deferred parent', async () => {
+  const latest = { canvas: initial }
+  function DeferredHost() {
+    const [canvas, setCanvas] = useState(initial)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 900, height: 700 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => {
+            setTimeout(() => {
+              latest.canvas = next
+              setCanvas(next)
+            }, 30)
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<DeferredHost />)
+  openCanvasMenu(rootOf(container))
+
+  await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
+  optionButton(container, 'Orthogonal')?.click()
+  optionButton(container, 'On')?.click()
+
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'arc',
+    })
+  })
+})

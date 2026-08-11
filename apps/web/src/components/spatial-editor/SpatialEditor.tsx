@@ -2984,7 +2984,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     selected: currentRouting === style,
                     onSelect: () => {
                       const command: EditorCommand = { kind: 'set-edge-routing', style }
-                      onChange(applyCommand(canvasRef.current, command), command)
+                      const running = applyCommand(canvasRef.current, command)
+                      // Eager, like every other command path: a second pick
+                      // from the same open menu must chain off this result,
+                      // not the stale prop of a parent that has not
+                      // committed yet.
+                      canvasRef.current = running
+                      onChange(running, command)
                     },
                   })),
                 })
@@ -3002,7 +3008,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     selected: currentJumps === lineJumps,
                     onSelect: () => {
                       const command: EditorCommand = { kind: 'set-line-jumps', lineJumps }
-                      onChange(applyCommand(canvasRef.current, command), command)
+                      const running = applyCommand(canvasRef.current, command)
+                      canvasRef.current = running
+                      onChange(running, command)
                     },
                   })),
                 })

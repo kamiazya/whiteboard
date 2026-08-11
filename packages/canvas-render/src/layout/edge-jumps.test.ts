@@ -65,6 +65,32 @@ describe('line jumps', () => {
     }
   })
 
+  it('crossings closer than a hop diameter coalesce to the first', () => {
+    // Two vertical edges 6px apart cross one horizontal edge: separate arcs
+    // cannot fit (radius 5), and emitting both would draw a backward path
+    // between overlapping hops. The first crossing keeps its hop.
+    const tight: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 75, width: 50, height: 50, text: 'a' },
+        { id: 'b', type: 'text', x: 400, y: 75, width: 50, height: 50, text: 'b' },
+        { id: 'c1', type: 'text', x: 172, y: 0, width: 50, height: 50, text: 'c1' },
+        { id: 'd1', type: 'text', x: 172, y: 300, width: 50, height: 50, text: 'd1' },
+        { id: 'c2', type: 'text', x: 178, y: 0, width: 50, height: 50, text: 'c2' },
+        { id: 'd2', type: 'text', x: 178, y: 300, width: 50, height: 50, text: 'd2' },
+      ],
+      edges: [
+        { id: 'v1', fromNode: 'c1', toNode: 'd1' },
+        { id: 'v2', fromNode: 'c2', toNode: 'd2' },
+        { id: 'h', fromNode: 'a', toNode: 'b' },
+      ],
+      'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+    }
+    const scene = layoutSpatialCanvas(tight, options())
+    const jumps = edgeById(scene.nodes, 'h')?.jumps
+    expect(jumps).toHaveLength(1)
+    expect(jumps?.[0]).toMatchObject({ x: 197 })
+  })
+
   it('shared endpoints never count as crossings', () => {
     // Two edges fanning out of the same node touch at the source border —
     // that contact is a junction, not a crossing to hop over.
