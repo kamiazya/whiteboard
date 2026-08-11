@@ -1,9 +1,8 @@
-// The two stub-to-stub elbow candidates always tie on Manhattan length, so
-// ranking by length alone let the arbitrary first candidate win — even when
-// the other one runs collinear with BOTH stubs and draws one bend instead
-// of three. Pinned from a real phone repro: a node below-right of its
-// target, edge top-side → right-side, drew a 3-bend staircase where a
-// single L was available.
+// The two stub-to-stub elbow candidates always tie on Manhattan length,
+// so length alone cannot rank them. The routing invariant pinned here:
+// among equal-length clear candidates, the one with fewer bends wins — in
+// particular, an elbow collinear with BOTH stubs draws one corner, never a
+// three-bend staircase.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
