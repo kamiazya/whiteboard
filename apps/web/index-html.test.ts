@@ -36,6 +36,14 @@ describe('public/boot-splash.svg', () => {
     expect(svg).toMatch(/animation:[^;]*wb-breathe[^;]*infinite/)
   })
 
+  // At full dashoffset some renderers still paint a seam dot / rounded cap
+  // at the dash boundary — stray specks over the opening squiggle on real
+  // devices. Dash-revealed elements must be fully hidden until they draw.
+  it('hides dash-revealed elements until their draw begins', () => {
+    expect(svg).toMatch(/\.node,\s*\.edge,\s*\.tidy-edge\s*\{[^}]*opacity: 0/)
+    expect(svg).toMatch(/@keyframes wb-drawn\s*\{[^@]*from[^@]*opacity: 1/)
+  })
+
   it('neutralizes all animation under prefers-reduced-motion', () => {
     const idx = svg.indexOf('prefers-reduced-motion: reduce')
     expect(idx).toBeGreaterThan(-1)

@@ -66,29 +66,33 @@
         transform: translate(5px, 4px) rotate(0deg);
       }
     }
-    .node {
+    /* Dash-revealed elements stay INVISIBLE until their draw begins: at
+       full dashoffset some renderers still paint a seam dot / rounded cap
+       at the dash boundary, which reads as stray specks over the opening
+       squiggle. wb-drawn's `from` flips opacity on exactly at draw start. */
+    .node,
+    .edge,
+    .tidy-edge {
       stroke-dasharray: 100;
       stroke-dashoffset: 100;
+      opacity: 0;
     }
     .n1 { animation: wb-drawn 0.55s ease-out 2.7s forwards; }
     .n2 { animation: wb-drawn 0.55s ease-out 3.5s forwards; }
     .n3 { animation: wb-drawn 0.55s ease-out 4.3s forwards; }
-    .edge {
-      stroke-dasharray: 100;
-      stroke-dashoffset: 100;
-    }
     .e1 { animation: wb-drawn 0.45s ease-in-out 5.1s forwards, wb-fade 0.3s ease-out 7.2s forwards; }
     .e2 { animation: wb-drawn 0.45s ease-in-out 5.7s forwards, wb-fade 0.3s ease-out 7.2s forwards; }
     @keyframes wb-drawn {
+      from {
+        stroke-dashoffset: 100;
+        opacity: 1;
+      }
       to {
         stroke-dashoffset: 0;
+        opacity: 1;
       }
     }
     /* Phase 2 (6.7-8.6s): the spark tidies - nodes align, edges straighten. */
-    .tidy-edge {
-      stroke-dasharray: 100;
-      stroke-dashoffset: 100;
-    }
     .t1 { animation: wb-drawn 0.35s ease-out 7.6s forwards, wb-out 0.5s ease-in 9.2s forwards; }
     .t2 { animation: wb-drawn 0.35s ease-out 7.75s forwards, wb-out 0.5s ease-in 9.2s forwards; }
     .t3 { animation: wb-drawn 0.35s ease-out 7.9s forwards, wb-out 0.5s ease-in 9.2s forwards; }
