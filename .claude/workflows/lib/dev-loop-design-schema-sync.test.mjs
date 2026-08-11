@@ -233,11 +233,24 @@ test('shouldBlockOnFailedPlanReview does not block when the plan-review gate pas
   assert.equal(sharedShouldBlockOnFailedPlanReview(input), false)
 })
 
-test('shouldBlockOnFailedPlanReview does not block when design/PlanReview was skipped entirely', () => {
+// The gate only ever runs `if (design)`, and `planVerdict` defaults to `{ pass: true }` — so a
+// skipped design can never produce `pass: false`. The only way to arrive here without a design is
+// that the revise agent DIED and its `null` overwrote a design that had existed, which is exactly
+// when the gate must hold. A `hasDesign` escape hatch here turned a hard gate into no gate: an
+// observed run implemented and committed against `design: null` and `planVerdict.pass: false`.
+test('a failed gate blocks implementation even when the design was lost with it', () => {
   const shouldBlockOnFailedPlanReview = extractShouldBlockOnFailedPlanReview()
   const input = { hasDesign: false, pass: false }
-  assert.equal(shouldBlockOnFailedPlanReview(input), false)
-  assert.equal(sharedShouldBlockOnFailedPlanReview(input), false)
+  assert.equal(shouldBlockOnFailedPlanReview(input), true)
+  assert.equal(sharedShouldBlockOnFailedPlanReview(input), true)
+})
+
+// The other half of the same incident: a transient agent death must not destroy the design that
+// passed through the previous iteration, or the next gate call reviews `null` and fails for the
+// wrong reason.
+test('a failed design revision does not overwrite the last good design', () => {
+  assert.doesNotMatch(source, /design = await agent\(\s*\n\s*`Revise this design/)
+  assert.match(source, /const revised = await agent\(/)
 })
 
 test('shouldGenerateDesign regenerates when skipDesign is set but the provided designDoc was just discarded as invalid', () => {
