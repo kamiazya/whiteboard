@@ -154,6 +154,13 @@ export function useDaemonCanvasController(
         setSlug(created.slug)
       } catch (err) {
         setCreateError(errorMessage(err))
+        // The caller derives its next slug from `canvases`. A failure often means that list is
+        // already stale (another client took the slug) — without a refresh, a retry re-derives
+        // the SAME losing slug from the same stale list and collides forever. Best-effort:
+        // leaving the previous (possibly stale) list is no worse than not trying.
+        await listCanvasesApi(daemonFetch, daemonBaseUrl, workspaceId)
+          .then(({ canvases: refreshed }) => setCanvases(refreshed))
+          .catch(() => {})
       }
     },
     [daemonFetch, daemonBaseUrl, workspaceId],

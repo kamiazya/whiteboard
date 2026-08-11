@@ -1,6 +1,6 @@
 # ADR-0006: Object-oriented UI — create from the palette, act from the object
 
-**Status:** Accepted — one known violation, recorded below
+**Status:** Accepted
 
 ## Context
 
@@ -19,8 +19,8 @@ already selected instead of competing for room in a global menu.
 `ToolPalette.tsx` has carried this decision in a header comment since it was
 written, citing an "ooui-palette-vs-object-actions decision" that exists
 nowhere in the repository. That comment is the only place the rule is
-written down, so surfaces built elsewhere have not consistently followed it —
-see the violation below. This ADR is that missing document.
+written down, so surfaces built elsewhere have not consistently followed it.
+This ADR is that missing document.
 
 ## Decision
 
@@ -43,21 +43,9 @@ Concretely:
    surface, not a memorized strip, and shows icon **and** text. This is
    restated as criterion 2 of
    `.claude/skills/review-gate/resources/accessibility.md`, which the design
-   phases and the `accessibility` review dimension load.
-
-## Known violation
-
-`DaemonCanvasPage.tsx` mounts a permanent creation **form** in its
-empty-workspace view: a `New canvas name…` text input plus a `Create canvas`
-text button. It violates points 1, 3, and 4 at once — a verb-first form,
-always present whether or not the user intends to create anything, demanding
-a name before the object exists.
-
-`CanvasDropdown.tsx` shows the conforming shape for the same capability in a
-reading surface: a `New canvas…` entry with an icon **and** a label.
-
-This is recorded rather than quietly fixed so the ADR describes the shipped
-state. Correcting the page is follow-up work, not part of writing this down.
+   phases and the `accessibility` review dimension load. `CanvasDropdown.tsx`
+   shows the conforming shape: a `New canvas…` entry with an icon **and** a
+   label.
 
 ## Consequences
 
@@ -92,5 +80,4 @@ accessible-name criterion. The surface, not the icon, decides.
 
 **Leave the rule in the ToolPalette comment.** Zero effort, and it is what the
 repo did until now. Rejected because a rule reachable only by opening one
-component is not a rule the next surface will follow — which the violation
-above demonstrates.
+component is not a rule the next surface will consistently follow.

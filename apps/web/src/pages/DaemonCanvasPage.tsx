@@ -14,6 +14,7 @@ import { MergeToast } from '../components/MergeToast.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
+import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
@@ -24,6 +25,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
+import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -139,7 +141,11 @@ export function DaemonCanvasPage({
       : null
 
   const [authError, setAuthError] = useState(false)
-  const [newCanvasSlug, setNewCanvasSlug] = useState('')
+  // Disables the empty-state "Create a canvas" control while a create is in
+  // flight. `disabled` is the whole mechanism: an in-handler
+  // `if (creating) return` reads the render closure, so it is stale in exactly
+  // the same-tick double-press case it would have to catch.
+  const [creating, setCreating] = useState(false)
   // Bumped on an externally observed HEAD change (another client, an MCP
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
@@ -254,6 +260,18 @@ export function DaemonCanvasPage({
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
+
+  // Creation is immediate — no name is collected up front (ADR-0006 point 3).
+  // The slug is derived from the loaded canvases so it never collides with one
+  // already in this workspace; naming happens afterwards in the canvas's top bar.
+  const handleCreateCanvas = async (): Promise<void> => {
+    setCreating(true)
+    try {
+      await controller.createCanvas(deriveNewCanvasSlug(controller.canvases.map((c) => c.slug)))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
@@ -539,27 +557,18 @@ export function DaemonCanvasPage({
                 {controller.createError}
               </div>
             )}
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (!newCanvasSlug.trim()) return
-                void controller.createCanvas(newCanvasSlug.trim())
-              }}
+            {/* An empty state is a reading surface, not a dense toolbar strip
+                (ADR-0006 point 4), so the control keeps its text label rather
+                than becoming an icon-only "+". */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={creating}
+              onClick={() => void handleCreateCanvas()}
             >
-              <input
-                aria-label="New canvas name"
-                value={newCanvasSlug}
-                onChange={(event) => setNewCanvasSlug(event.target.value)}
-                className="rounded-md border bg-background px-2 py-1 text-xs"
-              />
-              <button
-                type="submit"
-                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                Create canvas
-              </button>
-            </form>
+              Create a canvas
+            </Button>
           </div>
         ) : (
           // Spatial is the only view this slice supports; markdown-view
