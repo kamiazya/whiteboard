@@ -1250,7 +1250,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // Right-clicking a member of an existing multi-selection must not
         // shrink it: the target is promoted to primary and the old primary
         // stays in the extras, or "Group selection" silently loses a node.
-        applySelection({ type: 'promote', id: hitId })
+        // An OUTSIDER collapses the selection to itself, same as a plain
+        // left press — old extras must not ride along into its menu actions.
+        applySelection(
+          hitId === selectedId || extraIds.has(hitId)
+            ? { type: 'promote', id: hitId }
+            : { type: 'set-members', ids: [hitId] },
+        )
         setSelectedEdgeId(null)
       }
       // Same edge tolerance as the click path: the object under the pointer
@@ -2076,6 +2082,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
       )
+      // Creation selects the new node EXCLUSIVELY. The double-press path
+      // collapsed the extras at its empty press already; the palette path
+      // never presses the canvas, so old extras would ride along into the
+      // next move/delete without this.
+      applySelection({ type: 'collapse-extras' })
     }
 
     /**
@@ -2255,6 +2266,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         commands: [{ kind: 'create-node', node }],
         selectedId: id,
       })
+      // Creation selects the new node EXCLUSIVELY — set-primary alone would
+      // keep the old extras riding along into the next move/delete.
+      applySelection({ type: 'collapse-extras' })
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
@@ -2282,6 +2296,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         commands: [{ kind: 'create-node', node }],
         selectedId: id,
       })
+      // Creation selects the new node EXCLUSIVELY — set-primary alone would
+      // keep the old extras riding along into the next move/delete.
+      applySelection({ type: 'collapse-extras' })
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
@@ -2316,6 +2333,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         commands: [{ kind: 'create-node', node }],
         selectedId: id,
       })
+      // Creation selects the new node EXCLUSIVELY — set-primary alone would
+      // keep the old extras riding along into the next move/delete.
+      applySelection({ type: 'collapse-extras' })
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
@@ -2401,6 +2421,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ],
         selectedId: id,
       })
+      // Creation selects the new node EXCLUSIVELY — set-primary alone would
+      // keep the old extras riding along into the next move/delete.
+      applySelection({ type: 'collapse-extras' })
       panToShow({
         x: Math.round(point.x - GROUP_FRAME_WIDTH / 2),
         y: Math.round(point.y - GROUP_FRAME_HEIGHT / 2),

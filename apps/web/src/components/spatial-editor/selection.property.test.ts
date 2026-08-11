@@ -20,9 +20,13 @@ const eventArb: fc.Arbitrary<SelectionEvent> = fc.oneof(
   fc.record({ type: fc.constant('set-primary' as const), id: fc.option(idArb, { nil: null }) }),
   fc.record({ type: fc.constant('press' as const), id: idArb }),
   fc.record({ type: fc.constant('toggle-member' as const), id: idArb }),
+  // Deliberately NOT uniqueArray: callers are trusted not to pass
+  // duplicates, but the reducer is the invariant guarantor — a polite
+  // generator here is exactly the vacuousness the mutation-check rule warns
+  // about (a duplicate-blind generator missed a real I1 violation).
   fc.record({
     type: fc.constant('set-members' as const),
-    ids: fc.uniqueArray(idArb, { maxLength: ID_POOL.length }),
+    ids: fc.array(idArb, { maxLength: ID_POOL.length + 2 }),
   }),
   fc.record({ type: fc.constant('promote' as const), id: idArb }),
   fc.record({ type: fc.constant('collapse-extras' as const) }),
@@ -99,14 +103,14 @@ describe('selection state machine (model-based)', () => {
   )
 
   fcTest.prop(
-    [fc.array(eventArb, { maxLength: 20 }), fc.uniqueArray(idArb, { maxLength: 4 })],
+    [fc.array(eventArb, { maxLength: 20 }), fc.array(idArb, { maxLength: 6 })],
     withDefaults(),
-  )('set-members selects exactly the given ids, first as primary', (warmup, ids) => {
+  )('set-members selects exactly the given ids (deduped), first as primary', (warmup, ids) => {
     let state = EMPTY_SELECTION
     for (const event of warmup) state = reduceSelection(state, event)
 
     const after = reduceSelection(state, { type: 'set-members', ids })
-    expect(selectionMembers(after)).toEqual(ids)
+    expect(selectionMembers(after)).toEqual([...new Set(ids)])
   })
 
   fcTest.prop(
@@ -121,6 +125,15 @@ describe('selection state machine (model-based)', () => {
     for (const member of selectionMembers(after)) {
       expect(lockedIds.has(member)).toBe(false)
     }
+  })
+})
+
+describe('set-members duplicate ids', () => {
+  // Shrunk counterexample pinned per the PBT guideline: duplicates put the
+  // primary inside the extras, violating I1.
+  it("dedupes ['a', 'a'] instead of selecting 'a' as both primary and extra", () => {
+    const after = reduceSelection(EMPTY_SELECTION, { type: 'set-members', ids: ['a', 'a'] })
+    expect(after).toEqual({ primaryId: 'a', extraIds: new Set() })
   })
 })
 
