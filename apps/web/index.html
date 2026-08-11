@@ -4,9 +4,66 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Whiteboard</title>
+    <!--
+      Boot splash: the only UI that exists before the app bundle (and the
+      vendored viewer font main.tsx awaits) has loaded, so it must be inline
+      CSS + markup — index.css and the theme class are not applied yet.
+      CSS-only on purpose: the production CSP allows inline styles but not
+      inline scripts, so the persisted-theme override cannot run this early;
+      prefers-color-scheme covers the default 'system' preference, and
+      main.tsx applies the stored class before React paints anything else.
+      Colors mirror index.css --background/--border for both schemes so the
+      splash-to-app handoff does not shift the ground color.
+    -->
+    <style>
+      :root {
+        --wb-boot-bg: oklch(1 0 0);
+        --wb-boot-line: oklch(0.87 0 0);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --wb-boot-bg: oklch(0.145 0 0);
+          --wb-boot-line: oklch(1 0 0 / 22%);
+        }
+      }
+      .wb-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--wb-boot-bg);
+      }
+      /* A quiet whiteboard-shaped mark breathing, not a spinner: opacity +
+         scale only (compositor-friendly, no layout churn). */
+      .wb-boot__mark {
+        width: 56px;
+        height: 42px;
+        border: 2px solid var(--wb-boot-line);
+        border-radius: 10px;
+        animation: wb-boot-breathe 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+      }
+      @keyframes wb-boot-breathe {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.94);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wb-boot__mark {
+          animation: wb-boot-breathe 0.01ms 1;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Inside #root so React's first commit replaces it — no removal code. -->
+    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><div class="wb-boot__mark"></div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
