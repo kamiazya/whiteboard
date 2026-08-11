@@ -38,8 +38,12 @@ re-derivation." Under promotion these strings stop being cosmetic and become
 the canonical identity that URLs, sync, branches and bookmarks key on. The
 promotion path is booby-trapped for anyone not naming canvases in ASCII.
 
-Nothing is broken yet: `deriveDisplaySlug` has no caller. The line is cheap
-to draw now and expensive later.
+This is no longer hypothetical. `deriveDisplaySlug` had no caller when the
+measurement above was taken; it acquired exactly one while this ADR was being
+drafted — `BrowserLocalIndexPage` renders its result as each row's secondary
+line. A browser-local list of Japanese-named canvases now reads `untitled`,
+`untitled-2`, `untitled-3` down the column it exists to disambiguate. One
+caller is still the cheap moment; it will not stay one.
 
 ### 2. Rename is already implemented, just unwired
 
@@ -101,7 +105,7 @@ read time. We already have Drive's projection layer.
    no-name-at-creation flow already produces, in every mode. The display name
    carries meaning; the slug carries addressability. This is what the daemon
    already does — the decision is to stop `deriveDisplaySlug` from becoming
-   the exception, and to delete it rather than wire it up.
+   the exception, and to delete it rather than let its one caller multiply.
 
    ADR-0007's rationale for slug-canonical identity says slugs are "what users
    see, share, and reason about." For an auto-derived `untitled-7` that is not
@@ -147,11 +151,12 @@ read time. We already have Drive's projection layer.
 
 ## Consequences
 
-- `deriveDisplaySlug` and its tests are deleted. It has no caller today, so
-  this is a deletion rather than a migration — the cheapest moment there will
-  ever be.
-- Point 2 makes the browser-local list simpler, not richer: one line instead
-  of two. The information it would have shown does not exist yet.
+- `deriveDisplaySlug` and its tests are deleted, and `BrowserLocalIndexPage`
+  stops passing a `secondary` — the prop is already optional, so the row
+  renders one line instead of two.
+- Point 2 makes the browser-local list simpler, not richer. The information it
+  would have shown does not exist yet: browser-local canvases are addressed by
+  UUID and have no slug.
 - Rename becomes a user-visible feature, which the header work has been
   routing around: `WorkspaceTopBar` still owns rename precisely because
   `DaemonCanvasPage` has no canvas row, and moving copy-URL and export down
