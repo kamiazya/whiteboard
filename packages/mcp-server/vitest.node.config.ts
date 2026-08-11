@@ -10,17 +10,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  *
  * `getDataDir()` falls back to `~/.whiteboard` when `WHITEBOARD_DATA_DIR` is
  * unset, and enough of this suite boots the server to run migrations against
- * whatever lives there. That is the developer's REAL database, shared with
- * every dev daemon on the machine — and daemons outlive `git worktree
- * remove`, so one built from a deleted branch keeps migrating it. The next
- * run on any branch then dies with unhandled `IncompatibleDatabaseError`
- * rejections while every test passes, failing the pre-push gate for reasons
- * unrelated to the change being pushed.
+ * whatever lives there — the developer's REAL database, shared with anything
+ * on the machine that uses the default. `.mcp.json` registers the PUBLISHED
+ * `@kamiazya/whiteboard-mcp@latest`, which does exactly that with the
+ * migration set of its own release, so this checkout then finds a migration
+ * history it does not recognise and the whole run dies with unhandled
+ * `IncompatibleDatabaseError` rejections while every test passes.
  *
- * Deliberately inside the checkout rather than an OS temp dir: each worktree
- * has its own, so two worktrees can run their suites at the same time without
- * sharing a database. `globalSetup` empties it before every run so a database
- * migrated by an older branch never outlives a branch switch.
+ * The repo's own dev daemons already avoid this: `with-dev-data-dir` points
+ * them at a per-worktree `<repoRoot>/.dev-data` so parallel lanes cannot
+ * corrupt each other. This mirrors that for tests — inside the checkout
+ * rather than an OS temp dir, so two worktrees can run their suites at the
+ * same time without sharing a database. `globalSetup` empties it before every
+ * run so a database migrated by an older branch never outlives a branch
+ * switch.
  */
 export const MCP_NODE_DATA_DIR = resolve(__dirname, 'tmp/test-data-dir')
 

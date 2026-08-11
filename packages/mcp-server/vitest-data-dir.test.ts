@@ -4,11 +4,11 @@
  * `getDataDir()` falls back to `~/.whiteboard` when `WHITEBOARD_DATA_DIR` is
  * unset, and several tests boot the server far enough to run migrations. On a
  * machine whose `~/.whiteboard/whiteboard.db` was last migrated by a DIFFERENT
- * build — a dev daemon from a worktree that has since been deleted keeps
- * running and keeps writing there — the run dies with two unhandled
- * `IncompatibleDatabaseError` rejections while every test still passes. That
- * fails the lefthook pre-push gate for reasons that have nothing to do with
- * the branch being pushed.
+ * build — the PUBLISHED `@kamiazya/whiteboard-mcp` that `.mcp.json` registers
+ * uses that same default dir with its own release's migrations — the run dies
+ * with two unhandled `IncompatibleDatabaseError` rejections while every test
+ * still passes. That fails the lefthook pre-push gate for reasons that have
+ * nothing to do with the branch being pushed.
  *
  * Asserting on the resolved env var rather than on a log line keeps this
  * independent of which test happens to boot the server today.
