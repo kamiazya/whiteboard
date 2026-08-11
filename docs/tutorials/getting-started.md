@@ -17,7 +17,11 @@ pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 The page lands on your canvas list. On a fresh browser it's empty — click
 **Create a canvas** (or the **+** menu, which also offers a markdown note)
 and the new canvas opens ready to draw; the list is where you come back to
-switch between canvases later. A fresh canvas starts empty —
+switch between canvases later.
+
+![Browser-local canvas list](../assets/browser-local-list.png)
+
+A fresh canvas starts empty —
 double-click empty canvas space, or click the "Add note" button in the
 top-left corner, to create a new note and start typing immediately. The
 browser UI also selects, moves, resizes, connects, and edits existing nodes,
