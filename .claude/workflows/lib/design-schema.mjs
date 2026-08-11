@@ -59,6 +59,14 @@ export const DESIGN_SCHEMA = {
       description:
         'The concrete path by which a user reaches this change, naming the entry point that makes it reachable and confirming this increment adds it (e.g. "registered via registerToolWithAnnotations + called by smoke:e2e"; "rendered by CanvasList, reachable from /w/:ws"; "mounted on the Hono app in createServer"). Never empty. When the increment deliberately lands unwired, supply exactly one entry "foundation: <reason> — wired by <named follow-up>"; an unwired slice with no named follow-up is not an acceptable answer.',
     },
+    // Optional by design: an absent answer preserves the previous behaviour. When present and not
+    // `none:`, dev-loop hands the design back to the main session BEFORE implementing, because the
+    // `developer` agent has no browser and can only report the unmet step afterwards.
+    manualVerification: {
+      type: 'string',
+      description:
+        'What must be looked at in a running app for this change to count as verified (AGENTS.md step 3) — e.g. "open a canvas, drag a node, watch the edge re-route". Answer "none: <reason>" when tests alone settle it (a pure helper, a server-side path, a docs change).',
+    },
   },
   required: ['completionCriteria', 'scope', 'testScenarios', 'properties', 'blastRadius', 'userReach'],
 }
@@ -84,6 +92,7 @@ const ALLOWED_TOP_LEVEL_KEYS = [
   'properties',
   'blastRadius',
   'userReach',
+  'manualVerification',
 ]
 const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
 
@@ -112,6 +121,7 @@ export function isValidDesignShape(d) {
   if (!isNonBlankList(d.properties)) return false
   if (!isNonBlankList(d.blastRadius)) return false
   if (!isNonBlankList(d.userReach)) return false
+  if (d.manualVerification !== undefined && typeof d.manualVerification !== 'string') return false
   return true
 }
 

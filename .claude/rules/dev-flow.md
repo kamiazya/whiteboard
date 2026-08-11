@@ -8,6 +8,20 @@ Always-on map of how work runs in this repo. Day-to-day development goes through
 
 Small change? Skip planning and go straight to `dev-loop`. Periodic product check? `dogfood-triage`. Periodic **codebase-health** check (standing problems a diff never shows — unwired/incomplete features, architecture/maintainability debt, contract drift, test gaps, onboarding friction)? `audit-triage` → integrator files survivors into Tasks / whiteboard canvases. Run it after each substantial fold, weekly, or pre-milestone.
 
+**Execution mode is chosen up front — the checkpoints are the invariant, who runs them is not.**
+
+| mode | for | verifying in a running app |
+|---|---|---|
+| `dev-loop` workflow | scope-disjoint parallel work, non-UI, a spec that will not move mid-flight | **impossible** — the `developer` agent has Read/Edit/Write/Bash/Glob/Grep and no browser |
+| main session, inline | UI/interaction work; exploratory work whose spec changes as you learn; anything needing judgement mid-course | native |
+| hybrid — **the default for UI** | implement inline, then run `review.workflow.mjs` over the diff | native, plus independent review |
+
+Choose as early as possible, and switch when investigation says otherwise: a dev-loop design that answers `manualVerification` with anything but `none:` stops **before** Implement and returns the approved design plus a recommendation, so the main session resumes from the plan instead of restarting. Passing `dogfood:true` + `appUrl` keeps the run instead.
+
+Inline work is held to the same design checkpoints by `node .claude/scripts/check-design.mjs <design.json>`, which lists the unmet ones individually rather than answering yes/no.
+
+Never drop the review lanes just because implementation moved inline. Adversarial verify and an independent QA agent catch what self-review structurally cannot — reviewing your own work is weakest at exactly the self-skepticism those lanes supply.
+
 **Parallelism — don't serialize development.** Independent items run as **concurrent dev-loops, each in its own worktree** so none contends on the main working tree. Create a ready worktree with `node .claude/scripts/new-worktree.mjs <name>` (`git worktree add` + `pnpm install`, ~6s), launch a `dev-loop` with `cwd=<worktree>`, run several at once, then `reconcile` and fold in dependency order. The main session orchestrates from repo root and never `cd`s away while workflows run (relative `scriptPath` would break).
 
 **The only constraint is write-scope disjointness — lane *count* is not.** Launch as many concurrent dev-loops as you have scope-disjoint work for; do not self-impose a lane cap. The gate per item is: its owned/edited files do not overlap another in-flight lane's (different files in the same dir are fine — git merges per file; a *shared* file means sequence them). Tests-only additions (new `*.test.ts`) are almost always disjoint and safe to fan out widely. Fold/`reconcile` cost is the only real ceiling, and it is cheap relative to idle capacity.
