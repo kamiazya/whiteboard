@@ -318,9 +318,17 @@ export function BrowserLocalCanvasPage({
   // selected id changes synchronously on switch/create. Synthesize a
   // fallback option for the gap between those two so the controlled
   // <select>'s value always matches one of its own options.
+  //
+  // The open canvas's own row is always taken from the loaded snapshot rather
+  // than from the list: the list read races the save that a rename queues, and
+  // a read that resolves first pins the pre-rename name with nothing left to
+  // schedule another refresh. The snapshot is this canvas's live truth; the
+  // list is only the copy the switcher reads for the OTHER canvases.
   const switcherOptions =
-    pageState.kind === 'editing' && !canvases.some((c) => c.id === pageState.snapshot.id)
-      ? [...canvases, pageState.snapshot]
+    pageState.kind === 'editing'
+      ? canvases.some((c) => c.id === pageState.snapshot.id)
+        ? canvases.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
+        : [...canvases, pageState.snapshot]
       : canvases
 
   if (pageState.kind === 'load-degraded') {
