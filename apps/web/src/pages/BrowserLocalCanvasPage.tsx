@@ -8,12 +8,6 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -28,6 +22,12 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
