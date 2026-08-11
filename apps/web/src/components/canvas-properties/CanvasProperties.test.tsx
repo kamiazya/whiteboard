@@ -112,3 +112,34 @@ describe('CanvasProperties', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+describe('CanvasProperties title typing (controlled-input round trip)', () => {
+  // The input is controlled from `meta.title`, so whatever `withTitle`
+  // returns is what the box shows on the very next render. Trimming there
+  // erases a space the moment it is typed: the user cannot put one in.
+  it('lets a space be typed in the middle of a title', () => {
+    let current: CanvasCoreMeta = { type: 'markdown' }
+    const onChange = vi.fn((next: CanvasCoreMeta) => {
+      current = next
+    })
+    const { rerender } = render(<CanvasProperties meta={current} onChange={onChange} />)
+
+    // Each keystroke APPENDS to whatever the box currently holds, which is
+    // what a browser does — feeding a hand-written "Release p" instead would
+    // supply a value the real DOM can never have once the space is swallowed.
+    for (const key of [...'Release plan']) {
+      const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+      fireEvent.change(box, { target: { value: box.value + key } })
+      rerender(<CanvasProperties meta={current} onChange={onChange} />)
+    }
+
+    expect(current.title).toBe('Release plan')
+  })
+
+  it('still drops the field for a whitespace-only title', () => {
+    const onChange = vi.fn()
+    render(<CanvasProperties meta={{ type: 'markdown', title: 'old' }} onChange={onChange} />)
+    fireEvent.change(screen.getByRole('textbox', { name: /title/i }), { target: { value: '   ' } })
+    expect(onChange).toHaveBeenCalledWith({ type: 'markdown' })
+  })
+})

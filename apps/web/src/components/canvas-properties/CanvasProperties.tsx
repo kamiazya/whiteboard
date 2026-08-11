@@ -44,10 +44,17 @@ export function CanvasProperties({
   // An absent optional field and an empty one are different documents in
   // OKF: `title: ''` round-trips as an empty frontmatter value, while a
   // dropped key is simply untitled. Blank input means the latter.
+  //
+  // Only PRESENCE is decided by the trimmed form — the stored value stays
+  // raw. The box is controlled from `meta.title`, so trimming here is not a
+  // tidy-up, it is destructive: a trailing space is erased on the very
+  // keystroke that types it, the input re-renders without it, and the next
+  // character lands flush against the previous word ("Release plan" typed
+  // one key at a time arrives as "Releaseplan"). `onBlur` does the tidying
+  // instead, once the edit is finished.
   const withTitle = (raw: string): CanvasCoreMeta => {
-    const title = raw.trim()
     const { title: _dropped, ...rest } = meta
-    return title === '' ? rest : { ...rest, title }
+    return raw.trim() === '' ? rest : { ...rest, title: raw }
   }
 
   const withTags = (next: readonly string[]): CanvasCoreMeta => {
@@ -74,6 +81,10 @@ export function CanvasProperties({
           id={`${suggestionsId}-title`}
           value={meta.title ?? ''}
           onChange={(event) => onChange(withTitle(event.target.value))}
+          onBlur={() => {
+            const tidied = withTitle((meta.title ?? '').trim())
+            if (tidied.title !== meta.title) onChange(tidied)
+          }}
           placeholder="Untitled"
           className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-base font-medium outline-none"
         />

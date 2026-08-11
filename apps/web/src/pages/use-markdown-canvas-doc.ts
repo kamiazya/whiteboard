@@ -77,8 +77,20 @@ export function useMarkdownCanvasDoc(
     })
     return () => {
       cancelled = true
-      if (timerRef.current !== null) clearTimeout(timerRef.current)
-      timerRef.current = null
+      // FLUSH, not cancel. A pending debounce holds edits that are already in
+      // the document and already on screen; dropping it loses whatever was
+      // typed in the last 500ms before a canvas switch or unmount. For the
+      // title that is worse than lost text: `renameCanvas` writes the
+      // snapshot name immediately, so a cancelled facet save leaves the list
+      // name and the OKF title disagreeing about what the document is called.
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+        const doc = docRef.current
+        if (doc !== null && canvasId !== null) {
+          void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
+        }
+      }
     }
   }, [canvasId, enabled])
 

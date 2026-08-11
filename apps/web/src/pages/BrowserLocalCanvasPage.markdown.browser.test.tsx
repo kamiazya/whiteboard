@@ -176,6 +176,34 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     )
   })
 
+  it('flushes a title edit that is still debounced when the page goes away', async () => {
+    const store = new IndexedDBStore()
+    const first = render(<BrowserLocalCanvasPage store={store} />)
+
+    await screen.findByTestId('mock-spatial-editor')
+    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    await userEvent.click(switcher)
+    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+
+    const title = await screen.findByRole('textbox', { name: /title/i })
+    await userEvent.click(title)
+    await userEvent.keyboard('Fast switch')
+    await waitFor(() => {
+      expect((title as HTMLInputElement).value).toBe('Fast switch')
+    })
+
+    // Unmount INSIDE the save debounce. `renameCanvas` has already written the
+    // snapshot name, so a cancelled facet save would leave the list name and
+    // the OKF title permanently disagreeing.
+    first.unmount()
+
+    render(<BrowserLocalCanvasPage store={store} />)
+    await waitFor(() => {
+      const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+      expect(restored.value).toBe('Fast switch')
+    })
+  })
+
   it('spatial canvases still open the spatial editor after a markdown note exists', async () => {
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is
