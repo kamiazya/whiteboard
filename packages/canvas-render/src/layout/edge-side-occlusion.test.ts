@@ -173,3 +173,45 @@ describe('rectilinear alignment of the clean end', () => {
     expect(beforeLast).toEqual({ x: 540, y: 90 })
   })
 })
+
+describe('tight gaps narrower than the routing margin', () => {
+  const crossesRect = (
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    r: { x: number; y: number; w: number; h: number },
+  ) => {
+    let enter = 0
+    let exit = 1
+    for (const [delta, near, far] of [
+      [b.x - a.x, r.x - a.x, r.x + r.w - a.x],
+      [b.y - a.y, r.y - a.y, r.y + r.h - a.y],
+    ] as const) {
+      if (delta === 0) {
+        if (near > 0 || far < 0) return false
+        continue
+      }
+      const t0 = Math.min(near / delta, far / delta)
+      const t1 = Math.max(near / delta, far / delta)
+      enter = Math.max(enter, t0)
+      exit = Math.min(exit, t1)
+      if (enter >= exit) return false
+    }
+    return exit > enter
+  }
+
+  it('never tunnels through a node whose gap to the anchor is under the margin', () => {
+    // F sits 5px right of a's anchor — inside a's margin band. F must stay
+    // an obstacle for its RAW body: the route may cross the margin band to
+    // escape the tight spot, but never F itself.
+    const F = { x: 105, y: 0, w: 100, h: 100 }
+    const nodes = [
+      node('a', 0, 0, 100, 100),
+      node('F', F.x, F.y, F.w, F.h),
+      node('b', 400, 0, 100, 100),
+    ]
+    const routed = routeEdge(nodes, edge('a', 'b'), 'straight')
+    for (let i = 1; i < routed.path.length; i++) {
+      expect(crossesRect(routed.path[i - 1]!, routed.path[i]!, F)).toBe(false)
+    }
+  })
+})

@@ -361,10 +361,25 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
-/** The candidate that clears every obstacle, shortest first; the shortest overall if none does. */
-function bestCandidate(candidates: readonly Point[][], obstacles: readonly Rect[]): Point[] {
+/**
+ * The best candidate by a two-tier clearance ranking, shortest first:
+ * clear of the inflated obstacles (full margin kept), else clear of the
+ * RAW node bodies (an anchor boxed inside a neighbour's margin band has
+ * to cross the band to escape — that is acceptable; crossing the node
+ * itself is not), else the shortest overall (layout has to return
+ * SOMETHING).
+ */
+function bestCandidate(
+  candidates: readonly Point[][],
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+): Point[] {
   const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
-  return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
+  return (
+    byLength.find((path) => pathIsClear(path, inflated)) ??
+    byLength.find((path) => pathIsClear(path, raw)) ??
+    (byLength[0] as Point[])
+  )
 }
 
 /** Ways past a blocking region: over it, under it, left of it, right of it. */
@@ -386,10 +401,15 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
   return unionRect(obstacles.filter((rect) => segmentCrossesRect(start, end, rect)))
 }
 
-function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
-  const region = blockingRegion(start, end, obstacles)
+function routeStraight(
+  start: Point,
+  end: Point,
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+): Point[] {
+  const region = blockingRegion(start, end, inflated)
   if (region === undefined) return [start, end]
-  return bestCandidate(detourCandidates(start, end, region), obstacles)
+  return bestCandidate(detourCandidates(start, end, region), inflated, raw)
 }
 
 /**
@@ -452,28 +472,29 @@ function routeStraightWithApproach(
   toSide: Side,
   fromRect: Rect,
   toRect: Rect,
-  obstacles: readonly Rect[],
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
 ): Point[] {
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
-  if (!fromSideways && !toSideways) return routeStraight(start, end, obstacles)
+  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
   if (toSideways && !fromSideways) {
     const entry = stubFrom(end, toSide)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
     if (slid !== undefined) {
-      return withoutRepeats([...routeStraight(slid, entry, obstacles), end])
+      return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
     }
   }
   if (fromSideways && !toSideways) {
     const exit = stubFrom(start, fromSide)
     const slid = slideAlongSide(end, toRect, toSide, exit)
     if (slid !== undefined) {
-      return withoutRepeats([start, ...routeStraight(exit, slid, obstacles)])
+      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
     }
   }
   const exit = fromSideways ? stubFrom(start, fromSide) : start
   const entry = toSideways ? stubFrom(end, toSide) : end
-  return withoutRepeats([start, ...routeStraight(exit, entry, obstacles), end])
+  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
 }
 
 /** How far an orthogonal edge travels straight out of a node before turning. */
@@ -527,7 +548,8 @@ function routeOrthogonal(
   end: Point,
   fromSide: Side,
   toSide: Side,
-  obstacles: readonly Rect[],
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
 ): Point[] {
   const exit = stubFrom(start, fromSide)
   const entry = stubFrom(end, toSide)
@@ -535,8 +557,8 @@ function routeOrthogonal(
     withoutRepeats([start, exit, ...middles, entry, end])
 
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
-  if (elbows.some((path) => pathIsClear(path, obstacles))) {
-    return bestCandidate(elbows, obstacles)
+  if (elbows.some((path) => pathIsClear(path, inflated))) {
+    return bestCandidate(elbows, inflated, raw)
   }
 
   // Detours are needed when the paths this style actually travels are
@@ -544,7 +566,7 @@ function routeOrthogonal(
   // edge never travels it. Two obstacles can sit on the two elbows while
   // leaving that diagonal clear.
   const region = unionRect(
-    obstacles.filter((rect) =>
+    inflated.filter((rect) =>
       elbows.some((path) =>
         path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
       ),
@@ -557,7 +579,7 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, obstacles)
+  return bestCandidate(candidates, inflated, raw)
 }
 
 /**
@@ -632,22 +654,23 @@ export function routeEdge(
   // detour still has to reach the point inside it — so it is not an
   // obstacle. This is what lets an edge between two members of a group run
   // inside the group's frame instead of detouring around it.
-  // Obstacles are inflated by the routing margin so a route keeps visible
-  // clearance from foreign borders instead of shaving past within a pixel
-  // or two of them. The endpoint-containment exclusion tests the SAME
-  // inflated rect: an anchor already inside a neighbour's margin band
-  // cannot detour out of it, so that neighbour degrades to a non-obstacle
-  // rather than making the edge unroutable.
-  const obstacles = nodes
+  // Endpoint containment excludes an obstacle on its RAW bounds — a node
+  // whose margin band merely brushes an anchor must still block the route
+  // from crossing its body. Routing then tests the margin-inflated rects
+  // so a route keeps visible clearance from foreign borders; when an
+  // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
+  // second tier accepts a band crossing to escape rather than tunnelling
+  // through the node itself.
+  const rawObstacles = nodes
     .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
     .map(rectOf)
-    .map((rect) => ({
-      x: rect.x - ROUTE_MARGIN_PX,
-      y: rect.y - ROUTE_MARGIN_PX,
-      w: rect.w + 2 * ROUTE_MARGIN_PX,
-      h: rect.h + 2 * ROUTE_MARGIN_PX,
-    }))
     .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const obstacles = rawObstacles.map((rect) => ({
+    x: rect.x - ROUTE_MARGIN_PX,
+    y: rect.y - ROUTE_MARGIN_PX,
+    w: rect.w + 2 * ROUTE_MARGIN_PX,
+    h: rect.h + 2 * ROUTE_MARGIN_PX,
+  }))
 
   return {
     kind: 'edge',
@@ -659,8 +682,17 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraightWithApproach(start, end, fromSide, toSide, fromRect, toRect, obstacles)
-        : routeOrthogonal(start, end, fromSide, toSide, obstacles),
+        ? routeStraightWithApproach(
+            start,
+            end,
+            fromSide,
+            toSide,
+            fromRect,
+            toRect,
+            obstacles,
+            rawObstacles,
+          )
+        : routeOrthogonal(start, end, fromSide, toSide, obstacles, rawObstacles),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,
