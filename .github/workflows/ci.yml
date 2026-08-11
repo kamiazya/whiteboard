@@ -21,11 +21,9 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm
 
-      - name: Validate PR title
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: pnpm check:pr-title -- "$PR_TITLE"
+      # PR-title validation lives in pr-title.yml: it must re-run when the
+      # title is EDITED, and adding `edited` here would re-run this whole
+      # workflow (build + every test suite) on every PR body edit instead.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
