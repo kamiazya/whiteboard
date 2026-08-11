@@ -21,11 +21,18 @@
 // bare name on darwin (PATH-resolved), so a fake `open` script placed first
 // on PATH is invoked directly. On Linux it prefers its own bundled
 // `xdg-open` script (an absolute path, NOT PATH-resolved) UNLESS that
-// bundled copy is missing or non-executable — but that bundled script
-// itself honors the `$BROWSER` environment variable ahead of any
-// desktop-specific detection, so setting `BROWSER=<fake command name>` (in
-// addition to the PATH shim) reaches the same fake executable on both
-// platforms without touching node_modules.
+// bundled copy is missing or non-executable. That bundled script only
+// reads `$BROWSER` from its `open_generic()` branch, which `detectDE()`
+// reaches ONLY when it fails to recognize a desktop environment — on a
+// real desktop session (`XDG_CURRENT_DESKTOP` set, or a live `$DISPLAY`/
+// `$WAYLAND_DISPLAY`) it instead dispatches to a real DE-specific opener
+// (e.g. `kde-open5`), bypassing `$BROWSER` entirely and never touching the
+// fake opener. `detectDE()`'s `X-Generic` case short-circuits straight to
+// `open_generic`, so the child env below pins
+// `XDG_CURRENT_DESKTOP=X-Generic` and drops `DISPLAY`/`WAYLAND_DISPLAY`
+// (whose presence alone routes `open_generic` to a real browser launch
+// ahead of `$BROWSER` — see `has_display()`), making `$BROWSER` reach the
+// fake executable regardless of the host desktop session.
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -59,6 +66,16 @@ function makeTempDir(prefix: string): string {
   tempDirs.push(dir)
   return dir
 }
+
+/** Overrides that stop the vendored `xdg-open`'s `detectDE()`/`has_display()`
+ * from routing to a real desktop opener ahead of `$BROWSER` — see the file
+ * header comment. Spread into every test's child env so the host desktop
+ * session can't change the outcome of the guard under test. */
+const NEUTRALIZED_DESKTOP_ENV = {
+  XDG_CURRENT_DESKTOP: 'X-Generic',
+  DISPLAY: undefined,
+  WAYLAND_DISPLAY: undefined,
+} as const
 
 /** A fake `open`/`xdg-open`/$BROWSER opener that records its single argv URL. */
 function makeFakeOpenBin(): { binDir: string; recordFile: string } {
@@ -151,6 +168,32 @@ async function launchDaemonInPty(args: {
   return { readyLine: winner, pid, closed }
 }
 
+/** The opener's record file, or `''` while it has never been invoked. */
+function readRecord(recordFile: string): string {
+  try {
+    return readFileSync(recordFile, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** Polls `recordFile` until it has at least one line or `deadlineMs` elapses.
+ * Deterministic stand-in for a fixed sleep: the positive assertion's outcome
+ * must not depend on how long the harness happens to wait past the first
+ * write. */
+async function pollForRecordedLines(recordFile: string, deadlineMs: number): Promise<string[]> {
+  const start = Date.now()
+  for (;;) {
+    const lines = readRecord(recordFile)
+      .split('\n')
+      .filter((l) => l.length > 0)
+    if (lines.length > 0 || Date.now() - start >= deadlineMs) {
+      return lines
+    }
+    await delay(50)
+  }
+}
+
 async function killAndWait(pid: number, closed: Promise<unknown>): Promise<void> {
   try {
     process.kill(pid, 'SIGTERM')
@@ -179,116 +222,103 @@ afterEach(async () => {
   }
 })
 
-describe.skipIf(!hasWorkingPty)('daemon run auto-open: real process launch', () => {
-  it(
-    'invokes the fake opener with the hosted app URL exactly once when every guard passes',
-    async () => {
-      const port = await findAvailablePort(4310)
-      const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-      const { recordFile } = makeFakeOpenBin()
-      const binDir = dirname(recordFile)
+// A CI runner is expected to always have python3/forkpty (see the file
+// header). Skipping there too would let the suite vanish silently instead
+// of failing loudly if a runner image ever lost it; a dev machine without a
+// working pty still skips.
+describe.skipIf(!hasWorkingPty && !process.env.CI)(
+  'daemon run auto-open: real process launch',
+  () => {
+    it(
+      'invokes the fake opener with the hosted app URL exactly once when every guard passes',
+      async () => {
+        const port = await findAvailablePort(4310)
+        const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
+        const { binDir, recordFile } = makeFakeOpenBin()
 
-      const { pid, closed } = await launchDaemonInPty({
-        port,
-        dataDir,
-        extraEnv: {
-          PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
-          BROWSER: FAKE_BROWSER_COMMAND,
-          CI: undefined,
-          container: undefined,
-        },
-      })
+        const { pid, closed } = await launchDaemonInPty({
+          port,
+          dataDir,
+          extraEnv: {
+            PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
+            BROWSER: FAKE_BROWSER_COMMAND,
+            CI: undefined,
+            container: undefined,
+            ...NEUTRALIZED_DESKTOP_ENV,
+          },
+        })
 
-      // The open() call is awaited before the dispatcher's never-resolving
-      // keep-alive promise, but the fake opener's own exit still round-trips
-      // through a real subprocess spawn — give it a moment to land on disk.
-      await delay(OPEN_SETTLE_MS)
+        // The open() call is awaited before the dispatcher's never-resolving
+        // keep-alive promise, but the fake opener's own exit still round-trips
+        // through a real subprocess spawn.
+        const lines = await pollForRecordedLines(recordFile, OPEN_SETTLE_MS)
 
-      let recorded: string
-      try {
-        recorded = readFileSync(recordFile, 'utf8')
-      } catch {
-        recorded = ''
-      }
-      const lines = recorded.split('\n').filter((l) => l.length > 0)
+        await killAndWait(pid, closed)
+        liveChildren.splice(0, liveChildren.length)
 
-      await killAndWait(pid, closed)
-      liveChildren.splice(0, liveChildren.length)
+        expect(lines).toEqual(['https://kamiazya-whiteboard.pages.dev/'])
+      },
+      READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
+    )
 
-      expect(lines).toEqual(['https://kamiazya-whiteboard.pages.dev/'])
-    },
-    READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
-  )
+    it(
+      'never invokes the opener when CI=true, even with a real TTY',
+      async () => {
+        const port = await findAvailablePort(4311)
+        const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
+        const { binDir, recordFile } = makeFakeOpenBin()
 
-  it(
-    'never invokes the opener when CI=true, even with a real TTY',
-    async () => {
-      const port = await findAvailablePort(4311)
-      const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-      const { recordFile } = makeFakeOpenBin()
-      const binDir = dirname(recordFile)
+        const { pid, closed } = await launchDaemonInPty({
+          port,
+          dataDir,
+          extraEnv: {
+            PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
+            BROWSER: FAKE_BROWSER_COMMAND,
+            CI: 'true',
+            ...NEUTRALIZED_DESKTOP_ENV,
+          },
+        })
 
-      const { pid, closed } = await launchDaemonInPty({
-        port,
-        dataDir,
-        extraEnv: {
-          PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
-          BROWSER: FAKE_BROWSER_COMMAND,
-          CI: 'true',
-        },
-      })
+        await delay(OPEN_SETTLE_MS)
+        const recorded = readRecord(recordFile)
 
-      await delay(OPEN_SETTLE_MS)
+        await killAndWait(pid, closed)
+        liveChildren.splice(0, liveChildren.length)
 
-      let recorded: string
-      try {
-        recorded = readFileSync(recordFile, 'utf8')
-      } catch {
-        recorded = ''
-      }
+        expect(recorded).toBe('')
+      },
+      READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
+    )
 
-      await killAndWait(pid, closed)
-      liveChildren.splice(0, liveChildren.length)
+    it(
+      'never invokes the opener when --no-open is passed, even with a real TTY',
+      async () => {
+        const port = await findAvailablePort(4312)
+        const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
+        const { binDir, recordFile } = makeFakeOpenBin()
 
-      expect(recorded).toBe('')
-    },
-    READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
-  )
+        const { pid, closed } = await launchDaemonInPty({
+          port,
+          dataDir,
+          extraArgs: ['--no-open'],
+          extraEnv: {
+            PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
+            BROWSER: FAKE_BROWSER_COMMAND,
+            CI: undefined,
+            container: undefined,
+            ...NEUTRALIZED_DESKTOP_ENV,
+          },
+        })
 
-  it(
-    'never invokes the opener when --no-open is passed, even with a real TTY',
-    async () => {
-      const port = await findAvailablePort(4312)
-      const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-      const { recordFile } = makeFakeOpenBin()
-      const binDir = dirname(recordFile)
+        await delay(OPEN_SETTLE_MS)
+        const recorded = readRecord(recordFile)
 
-      const { pid, closed } = await launchDaemonInPty({
-        port,
-        dataDir,
-        extraArgs: ['--no-open'],
-        extraEnv: {
-          PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
-          BROWSER: FAKE_BROWSER_COMMAND,
-          CI: undefined,
-          container: undefined,
-        },
-      })
+        await killAndWait(pid, closed)
+        liveChildren.splice(0, liveChildren.length)
 
-      await delay(OPEN_SETTLE_MS)
-
-      let recorded: string
-      try {
-        recorded = readFileSync(recordFile, 'utf8')
-      } catch {
-        recorded = ''
-      }
-
-      await killAndWait(pid, closed)
-      liveChildren.splice(0, liveChildren.length)
-
-      expect(recorded).toBe('')
-    },
-    READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
-  )
-})
+        expect(recorded).toBe('')
+      },
+      READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
+    )
+  },
+)
