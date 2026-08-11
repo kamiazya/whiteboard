@@ -59,6 +59,13 @@ const DOGFOOD_PERSONAS = typeof A.dogfoodPersonas === 'number' ? A.dogfoodPerson
 // codex: add a Codex second-opinion review lane (gate decisions). Unavailable runtime → dropped.
 const CODEX = !!A.codex
 
+// An unavailable Codex is "no second opinion", never a failed dimension. `agent()` resolves to
+// null when a subagent dies, but an agentType the host has no plugin for REJECTS instead — which
+// pipeline() would turn into a dropped lane, silently reporting the codex lane as run-with-no-
+// findings instead of unavailable. Normalize both failure shapes to null so the lane below sees
+// one case.
+const optionalLane = (run) => run().catch(() => null)
+
 const scopeHint = FILES
   ? `Scope: the following files only — ${FILES.join(', ')}.`
   : `Scope: discover the changed files yourself with \`${GIT} diff --name-only ${RANGE}\`.`
@@ -149,12 +156,14 @@ const notApplicableDimensions = []
 const reviewed = await pipeline(
   REVIEW_LANES,
   (lane) =>
-    agent(lane.prompt, {
-      label: `review:${lane.key}`,
-      phase: 'Review',
-      agentType: lane.agentType,
-      schema: FINDINGS_SCHEMA,
-    }).then((r) => {
+    optionalLane(() =>
+      agent(lane.prompt, {
+        label: `review:${lane.key}`,
+        phase: 'Review',
+        agentType: lane.agentType,
+        schema: FINDINGS_SCHEMA,
+      }),
+    ).then((r) => {
       if (!r) {
         if (lane.key === 'codex' && !lane.partition) {
           codexUnavailable = true

@@ -40,6 +40,12 @@ const APP_URL = A.appUrl || null
 // codex: add a Codex second-opinion at gate decisions (plan gate + review gate). Default on
 // (codex CLI present); set codex:false to disable. Codex unavailable at runtime never blocks.
 const CODEX = A.codex !== false
+
+// An unavailable Codex is "no second opinion", never a gate failure. `agent()` resolves to null
+// when a subagent dies, but an agentType the host has no plugin for REJECTS instead — so without
+// this the whole workflow aborts on any machine where the Codex plugin isn't installed, which is
+// the opposite of the "Codex unavailable never blocks" rule it is supposed to implement.
+const optionalLane = (run) => run().catch(() => null)
 // docs: run a technical-writer docs-sync pass on the increment (commits doc files). Opt-in —
 // enable when the change is user-visible or alters an API/contract/config.
 const DOCS = !!A.docs
@@ -266,7 +272,7 @@ if (design) {
   const runGate = async () => {
     const [mine, codex] = await Promise.all([
       reviewDesign(),
-      CODEX ? codexReviewDesign() : Promise.resolve(null),
+      CODEX ? optionalLane(codexReviewDesign) : Promise.resolve(null),
     ])
     codexPlanVerdict = codex
     const pass = !!(mine && mine.pass) && (codex ? codex.pass : true)
