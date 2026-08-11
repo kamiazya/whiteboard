@@ -168,6 +168,9 @@ function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
 export interface EdgeAnchorPair {
   readonly from?: Point
   readonly to?: Point
+  /** Stub depth for each end, when its (node, side) group assigned a lane. */
+  readonly fromLaneDepth?: number
+  readonly toLaneDepth?: number
 }
 
 /** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
@@ -257,7 +260,10 @@ export function assignEdgeAnchors(
     }
   })
 
-  const anchors = new Map<string, { from?: Point; to?: Point }>()
+  const anchors = new Map<
+    string,
+    { from?: Point; to?: Point; fromLaneDepth?: number; toLaneDepth?: number }
+  >()
   for (const group of groups.values()) {
     group.sort(
       (a, b) =>
@@ -267,10 +273,13 @@ export function assignEdgeAnchors(
     )
     group.forEach((end, i) => {
       const point = sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))
+      const depth = ORTHOGONAL_STUB_PX + i * STUB_LANE_STEP_PX
       const entry = anchors.get(end.edgeId) ?? {}
       anchors.set(
         end.edgeId,
-        end.role === 'from' ? { ...entry, from: point } : { ...entry, to: point },
+        end.role === 'from'
+          ? { ...entry, from: point, fromLaneDepth: depth }
+          : { ...entry, to: point, toLaneDepth: depth },
       )
     })
   }
@@ -472,6 +481,8 @@ function routeStraightWithApproach(
   toSide: Side,
   fromRect: Rect,
   toRect: Rect,
+  fromDepth: number,
+  toDepth: number,
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
@@ -479,26 +490,35 @@ function routeStraightWithApproach(
   const toSideways = approachesSideways(end, start, toSide)
   if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
   if (toSideways && !fromSideways) {
-    const entry = stubFrom(end, toSide)
+    const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
     if (slid !== undefined) {
       return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
     }
   }
   if (fromSideways && !toSideways) {
-    const exit = stubFrom(start, fromSide)
+    const exit = stubFrom(start, fromSide, fromDepth)
     const slid = slideAlongSide(end, toRect, toSide, exit)
     if (slid !== undefined) {
       return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
     }
   }
-  const exit = fromSideways ? stubFrom(start, fromSide) : start
-  const entry = toSideways ? stubFrom(end, toSide) : end
+  const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
+  const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
 }
 
 /** How far an orthogonal edge travels straight out of a node before turning. */
 const ORTHOGONAL_STUB_PX = 20
+/** Extra stub depth per additional member of a shared (node, side) group,
+ * so ends sharing a side leave through parallel DISTINCT corridors instead
+ * of one collinear overlap that a line jump cannot express. One-sided and
+ * strictly additive: lane 0 keeps the exact base depth (unshared canvases
+ * are byte-identical), deeper lanes only ever move AWAY from their node.
+ * ponytail: depth grows unbounded with group size — a ~15-edge side pushes
+ * the deepest stub ~200px out; cap distinct lanes and share the outermost
+ * if that ever hurts. */
+const STUB_LANE_STEP_PX = 12
 
 /** The direction a side faces, away from the node's interior. */
 function outwardNormal(side: Side): Point {
@@ -514,11 +534,11 @@ function outwardNormal(side: Side): Point {
   }
 }
 
-function stubFrom(point: Point, side: Side): Point {
+function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {
-    x: point.x + normal.x * ORTHOGONAL_STUB_PX,
-    y: point.y + normal.y * ORTHOGONAL_STUB_PX,
+    x: point.x + normal.x * depth,
+    y: point.y + normal.y * depth,
   }
 }
 
@@ -550,6 +570,8 @@ function routeOrthogonal(
   toSide: Side,
   fromRect: Rect,
   toRect: Rect,
+  fromDepth: number,
+  toDepth: number,
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
@@ -600,8 +622,8 @@ function routeOrthogonal(
       }
     }
   }
-  const exit = stubFrom(start, fromSide)
-  const entry = stubFrom(end, toSide)
+  const exit = stubFrom(start, fromSide, fromDepth)
+  const entry = stubFrom(end, toSide, toDepth)
   const between = (middles: readonly Point[]) =>
     withoutRepeats([start, exit, ...middles, entry, end])
 
@@ -738,10 +760,23 @@ export function routeEdge(
             toSide,
             fromRect,
             toRect,
+            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
+            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
             obstacles,
             rawObstacles,
           )
-        : routeOrthogonal(start, end, fromSide, toSide, fromRect, toRect, obstacles, rawObstacles),
+        : routeOrthogonal(
+            start,
+            end,
+            fromSide,
+            toSide,
+            fromRect,
+            toRect,
+            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
+            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
+            obstacles,
+            rawObstacles,
+          ),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,
