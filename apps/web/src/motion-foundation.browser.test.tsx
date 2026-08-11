@@ -47,6 +47,22 @@ describe('motion foundation', () => {
     expect(styles.getPropertyValue('--motion-ease-out').trim()).toContain('cubic-bezier')
   })
 
+  it('keeps skeletons invisible for a 300ms DELAY (computed style, not just the shorthand)', () => {
+    // Computed values, so a refactor that turns 300ms into the duration
+    // instead of the delay (letting the fade start immediately) fails here.
+    const el = document.createElement('div')
+    el.className = 'skeleton-appear'
+    document.body.appendChild(el)
+    try {
+      const cs = getComputedStyle(el)
+      expect(cs.animationDelay).toBe('0.3s')
+      expect(cs.opacity).toBe('0')
+      expect(cs.animationFillMode).toBe('forwards')
+    } finally {
+      el.remove()
+    }
+  })
+
   it('ships a prefers-reduced-motion guard neutralizing animations and transitions', () => {
     const css = collectCssText()
     const mediaIdx = css.indexOf('prefers-reduced-motion: reduce')

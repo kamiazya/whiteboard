@@ -7,6 +7,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
+import { dismissBootSplash } from './boot-splash.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
 import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
@@ -45,4 +46,10 @@ function renderApp(root: HTMLElement): void {
 // indefinitely — first paint then proceeds with fallback system-font
 // metrics and self-corrects once the font finishes loading in the
 // background (see CanvasViewer's useViewerFontReady for that path).
-void ensureViewerFontLoaded().then(() => renderApp(rootEl))
+//
+// dismissBootSplash then paces the index.html splash: the app is ready at
+// this point, but the splash stays up until its draw animation lands plus
+// a beat, and fades out before React's first commit replaces it.
+void ensureViewerFontLoaded()
+  .then(() => dismissBootSplash())
+  .then(() => renderApp(rootEl))

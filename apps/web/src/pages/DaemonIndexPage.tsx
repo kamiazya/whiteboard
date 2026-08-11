@@ -408,7 +408,7 @@ export function DaemonIndexPage({
           <div
             role="status"
             aria-label="Loading canvases"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+            className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
           >
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse rounded-lg border p-2">

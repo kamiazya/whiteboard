@@ -93,12 +93,22 @@ try {
   const pairUrl = `${daemonBaseUrl}/pair?origin=${encodeURIComponent(
     'https://app.example',
   )}&challenge=smoke-challenge&state=smoke-state`
-  await page.goto(pairUrl, { waitUntil: 'networkidle' })
+  // 'load', not 'networkidle': the service worker's precache traffic can
+  // keep the network busy past the goto timeout, and every assertion below
+  // waits explicitly anyway.
+  await page.goto(pairUrl, { waitUntil: 'load' })
 
+  // waitFor, not isVisible: isVisible ignores its timeout and reports the
+  // instantaneous state, which races the boot splash's deliberate hold
+  // (apps/web/src/boot-splash.ts) — the app renders ~1.7s after load.
   const consentHeading = page.getByRole('heading', {
     name: /allow this web app to use your local daemon/i,
   })
-  if (await consentHeading.isVisible({ timeout: 10_000 }).catch(() => false)) {
+  const consentVisible = await consentHeading
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (consentVisible) {
     console.log('  pass  /pair renders the consent page from the built bundle')
   } else {
     console.error('  FAIL  /pair did not render the consent heading')
