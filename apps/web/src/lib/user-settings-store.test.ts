@@ -253,3 +253,35 @@ describe('createUserSettingsStore — blocked storage (SecurityError)', () => {
     }
   })
 })
+
+describe('appearance settings', () => {
+  it('round-trips faviconStyle', () => {
+    const store = createUserSettingsStore()
+    store.update((s) => ({ ...s, appearance: { faviconStyle: 'dot' } }))
+    expect(store.load().appearance?.faviconStyle).toBe('dot')
+  })
+
+  it('parses a stored payload from before the appearance section existed', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, storage: {}, migration: {}, capabilities: {} }),
+    )
+    const settings = createUserSettingsStore().load()
+    expect(settings.version).toBe(1)
+    expect(settings.appearance?.faviconStyle).toBeUndefined()
+  })
+
+  it('rejects an unknown appearance value (falls back to defaults)', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: {},
+        migration: {},
+        capabilities: {},
+        appearance: { faviconStyle: 'sparkles' },
+      }),
+    )
+    expect(createUserSettingsStore().load().appearance).toEqual({})
+  })
+})

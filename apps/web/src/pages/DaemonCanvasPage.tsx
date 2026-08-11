@@ -19,6 +19,8 @@ import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useDirtyState } from '../hooks/useDirtyState.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
@@ -26,6 +28,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -256,6 +259,29 @@ export function DaemonCanvasPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
+  // Tab favicon: sync state as the status dot, scene content as the
+  // minimap (style user-selectable in SettingsPanel, reactive like
+  // webMcpEnabled above).
+  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
+    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
+  )
+  const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.slug ?? '')
+  useFavicon({
+    style: faviconStyle,
+    status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
+    rects: useMemo(
+      () =>
+        canvasValue.nodes.map((n) => ({
+          x: n.x,
+          y: n.y,
+          w: n.width,
+          h: n.height,
+          color: resolveRectColor(n.color),
+        })),
+      [canvasValue.nodes],
+    ),
+  })
 
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
@@ -634,6 +660,7 @@ export function DaemonCanvasPage({
           onThemeChange={setTheme}
           webMcpEnabled={webMcpEnabled}
           onWebMcpChange={setWebMcpEnabled}
+          onFaviconStyleChange={setFaviconStyle}
         />
       </main>
     </DaemonApiContext.Provider>

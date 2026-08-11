@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!--
+    Static favicon: the logo mark (board + squiggle). The canvas pages swap
+    in a dynamically rendered icon (lib/favicon.ts) and restore this one on
+    unmount; it is also what non-canvas surfaces and browsers that ignore
+    dynamic favicons (Safari) show. Mid-gray strokes read on both light and
+    dark tab strips.
+  -->
+  <rect x="1.6" y="4.4" width="28.8" height="23.2" rx="5" fill="none" stroke="#9ca3af" stroke-opacity="0.62" stroke-width="2.4"/>
+  <path d="M8.1 17.6 C 10.4 10.4, 13.7 10.4, 16 14 S 20.6 19.6, 23.9 11.4" fill="none" stroke="#909090" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

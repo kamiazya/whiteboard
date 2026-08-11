@@ -100,3 +100,62 @@ describe('SettingsPanel', () => {
     expect(screen.queryByText('Settings')).toBeNull()
   })
 })
+
+describe('SettingsPanel — favicon style', () => {
+  test('renders both style options with minimap as the default selection', () => {
+    render(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+      />,
+    )
+    const minimap = screen.getByRole('radio', { name: /minimap/i })
+    const dot = screen.getByRole('radio', { name: /dot/i })
+    expect(minimap.getAttribute('aria-checked')).toBe('true')
+    expect(dot.getAttribute('aria-checked')).toBe('false')
+  })
+
+  test('selecting Dot persists to user-settings and notifies the parent', () => {
+    const onFaviconStyleChange = vi.fn()
+    render(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+        onFaviconStyleChange={onFaviconStyleChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('radio', { name: /dot/i }))
+    expect(onFaviconStyleChange).toHaveBeenCalledWith('dot')
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.appearance?.faviconStyle).toBe('dot')
+  })
+
+  test('reflects a persisted dot preference on open', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: {},
+        migration: {},
+        capabilities: {},
+        appearance: { faviconStyle: 'dot' },
+      }),
+    )
+    render(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+      />,
+    )
+    expect(screen.getByRole('radio', { name: /dot/i }).getAttribute('aria-checked')).toBe('true')
+  })
+})
