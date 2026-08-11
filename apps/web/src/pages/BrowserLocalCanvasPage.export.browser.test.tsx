@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import '../index.css'
 
@@ -136,6 +137,15 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     const blob = blobs[blobs.length - 1]!
     expect(blob.type).toBe('image/png')
     expect(blob.size).toBeGreaterThan(0)
+
+    // Editable PNG: the file carries its own JSON Canvas document (the
+    // draw.io pattern), so a shared export IS the canvas — coordinates
+    // included — not just pixels of it.
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const embedded = extractTextFromPng(bytes, 'whiteboard')
+    expect(embedded).not.toBeNull()
+    const parsed = JSON.parse(embedded as string) as { nodes: { id: string }[] }
+    expect(Array.isArray(parsed.nodes)).toBe(true)
   })
 
   // The menu must only offer formats `exportScene` (SceneExportFormat) can

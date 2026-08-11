@@ -12,6 +12,18 @@ the canvas's persisted document — none of them require a connected browser cli
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+## Web app exports
+
+The web editor's canvas row (More actions → Export) saves the current canvas as
+SVG or PNG, rendered with the light theme regardless of the UI theme so an
+export's bytes never depend on a display preference.
+
+**PNG exports are editable images**: the file embeds the canvas's JSON Canvas
+document (extended mode, `x-whiteboard` included) in a PNG `iTXt` chunk under
+the `whiteboard` keyword — the same pattern draw.io uses. A shared PNG
+therefore carries its exact node coordinates and edges, not just pixels; any
+PNG chunk reader can recover the document, and image viewers ignore the chunk.
+
 There is currently no raster (PNG) export tool and no tool that returns image
 bytes as MCP `ImageContent` — `canvas_render_svg` is the closest equivalent for
 handing a rendered canvas back to an LLM.
