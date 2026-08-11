@@ -60,6 +60,14 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
     const params = validatePathParams(c)
     if (params instanceof Response) return params
     const { workspaceId, slug } = params
+    // getDoc()'s lazy-create would otherwise silently hand back an empty
+    // doc for a canvas that does not exist — indistinguishable from a
+    // never-created OR just-deleted canvas. Same problem-details { title }
+    // shape as DELETE, deliberately not thumbnails/restore's { error,
+    // message }: the client parses problem-details for both routes.
+    if (!(await canvasExists(workspaceId, slug))) {
+      return c.json({ title: `Canvas "${slug}" not found` }, 404)
+    }
     const doc = await getDoc(workspaceId, slug)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, {

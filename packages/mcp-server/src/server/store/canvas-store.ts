@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
@@ -17,6 +17,7 @@ import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import type { VersionStore } from './version-store.js'
+import { thumbnailPath } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
@@ -232,6 +233,67 @@ export async function canvasExists(workspaceId: string, slug: string): Promise<b
   const db = await dbReady()
   const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
   return canvasId !== null
+}
+
+async function unlinkIfExists(path: string): Promise<void> {
+  try {
+    await unlink(path)
+  } catch (error) {
+    if (!isMissingFileError(error)) throw error
+  }
+}
+
+// ── delete a canvas and every file it owns ──
+// Returns false (never throws) for a missing canvas so callers can treat
+// "already gone" and "just deleted" the same way an idempotent DELETE
+// should.
+//
+// Order matters for the crash-safety story: the DB row goes first, so a
+// crash between the row delete and the file unlinks below leaves orphan
+// blob/thumbnail files (invisible — nothing lists the deleted canvasId
+// anymore) rather than the reverse — a listed canvas whose content is
+// already gone.
+// ponytail: orphaned files from that crash window are not swept by
+// file-gc (its collectReferencedFileIds targets uploaded images, not these
+// canvas/version blobs); revisit if orphan blobs start showing up in the
+// storage report.
+export async function deleteCanvas(workspaceId: string, slug: string): Promise<boolean> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const db = await dbReady()
+    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!canvasId) return false
+
+    // Collect version ids before the row delete — the versions rows are
+    // gone the instant the cascade fires, so their ids must be captured
+    // first to know which thumbnail files to unlink.
+    const versionRows = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('canvasId', '=', canvasId)
+      .execute()
+
+    // branches/versions rows cascade via the ON DELETE CASCADE FKs
+    // declared in migration 0001 (PRAGMA foreign_keys=ON is set per
+    // connection in db/index.ts).
+    await db.deleteFrom('canvases').where('id', '=', canvasId).execute()
+
+    const path = canvasBlobPath(workspaceId, canvasId)
+    await unlinkIfExists(path)
+    await unlinkIfExists(`${path}.pre-migrate-bak`)
+    for (const { id: versionId } of versionRows) {
+      await unlinkIfExists(thumbnailPath(workspaceId, versionId))
+    }
+
+    // Force the next getDoc() to reload from disk (there is nothing left to
+    // reload from — a fresh create should not inherit a doc instance that
+    // still holds the deleted canvas's history).
+    const { evictDoc } = await import('./doc-cache.js')
+    evictDoc(workspaceId, slug)
+
+    return true
+  })
 }
 
 // Returns null when the canvas does not exist, so callers can distinguish

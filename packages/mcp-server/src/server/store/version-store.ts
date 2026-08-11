@@ -101,7 +101,9 @@ function versionsBlobDir(workspaceId: string): string {
   return assertPathWithinDir(dir, blobsRoot(), 'version path')
 }
 
-function thumbnailPath(workspaceId: string, id: string): string {
+// Exported so canvas-store's deleteCanvas can unlink a canvas's version
+// thumbnails without duplicating this path join.
+export function thumbnailPath(workspaceId: string, id: string): string {
   validateVersionId(id)
   const dir = versionsBlobDir(workspaceId)
   return assertPathWithinDir(join(dir, `${id}.png`), dir, 'version path')

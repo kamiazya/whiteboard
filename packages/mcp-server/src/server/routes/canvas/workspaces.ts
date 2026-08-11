@@ -4,12 +4,14 @@ import type { z } from 'zod'
 import {
   type CreateCanvasResponse,
   createCanvasRequestSchema,
+  type DeleteCanvasResponse,
   type ListCanvasesResponse,
   type ListWorkspacesResponse,
 } from '../../../shared/api-contracts/canvas.js'
 import { getLogger } from '../../log.js'
 import {
   ConflictError,
+  deleteCanvas,
   listCanvases,
   listWorkspaces,
   saveCanvas,
@@ -107,6 +109,34 @@ export function createWorkspacesRouter() {
       }
       getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' }, 500)
+    }
+  })
+
+  // Delete a canvas: row (branches/versions cascade via FK), .loro blob,
+  // version thumbnails, and doc-cache entry. Idempotent-shaped 404 for a
+  // missing canvas rather than a throw.
+  app.delete('/api/workspaces/:workspaceId/canvases/:slug', async (c) => {
+    const { workspaceId, slug } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+      validateSlug(slug)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json({ title: body.message }, 400)
+      throw err
+    }
+    try {
+      const deleted = await deleteCanvas(workspaceId, slug)
+      if (!deleted) {
+        return c.json({ title: `Canvas "${slug}" not found` }, 404)
+      }
+      const response: DeleteCanvasResponse = { ok: true }
+      return c.json(response)
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      getLogger('canvas').error({ err: err as Error }, 'deleteCanvas failed unexpectedly')
+      return c.json({ title: 'Failed to delete canvas.' }, 500)
     }
   })
 
