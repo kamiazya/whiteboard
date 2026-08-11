@@ -18,7 +18,7 @@ interface MockRoutes {
     string,
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
   >
-  onCreateCanvas?: (workspaceId: string, slug: string) => void
+  onCreateCanvas?: (workspaceId: string, slug: string, kind?: string) => void
   snapshotByCanvas?: Record<string, Uint8Array>
   onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
   onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
@@ -43,8 +43,8 @@ function installFetchMock(routes: MockRoutes) {
     }
     if (canvasesMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(canvasesMatch[1])
-      const body = JSON.parse(String(init.body)) as { slug: string }
-      routes.onCreateCanvas?.(workspaceId, body.slug)
+      const body = JSON.parse(String(init.body)) as { slug: string; kind?: string }
+      routes.onCreateCanvas?.(workspaceId, body.slug, body.kind)
       return Promise.resolve(jsonResponse({ slug: body.slug }))
     }
     const namesMatch = url.match(/\/api\/workspaces\/([^/]+)\/names$/)
@@ -98,6 +98,16 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// The toolbar's + is a kind menu (spatial / markdown), not a direct create
+// button: creating means opening the menu and picking an entry. Radix menus
+// activate on pointerDown (trigger) + pointerUp (item) in jsdom.
+async function createViaMenu(itemName: string | RegExp = 'New canvas') {
+  const trigger = screen.getByRole('button', { name: 'New canvas' })
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+  const item = await screen.findByRole('menuitem', { name: itemName })
+  fireEvent.pointerUp(item)
+}
+
 describe('DaemonIndexPage', () => {
   it('renders one card per canvas of the selected workspace with display name and relative updatedAt', async () => {
     installFetchMock({
@@ -127,10 +137,10 @@ describe('DaemonIndexPage', () => {
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
 
-    const card = await screen.findByTestId('daemon-index-canvas-card')
-    const grid = card.parentElement as HTMLElement
-    expect(grid.className).toMatch(/\banimate-in\b/)
-    expect(grid.className).toMatch(/\bfade-in-0\b/)
+    const card = await screen.findByTestId('canvas-list-card')
+    const wrapper = card.closest('.animate-in') as HTMLElement | null
+    expect(wrapper).not.toBeNull()
+    expect(wrapper?.className).toMatch(/\bfade-in-0\b/)
   })
 
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
@@ -257,9 +267,11 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
     await screen.findByText('pinned-one')
 
-    const cards = screen.getAllByTestId('daemon-index-canvas-card')
-    const slugs = cards.map((c) => within(c).getByTestId('canvas-slug').textContent)
-    expect(slugs).toEqual(['pinned-one', 'new', 'old'])
+    const cards = screen.getAllByTestId('canvas-list-card')
+    expect(cards).toHaveLength(3)
+    expect(within(cards[0]!).getByText('pinned-one')).toBeTruthy()
+    expect(within(cards[1]!).getByText('new')).toBeTruthy()
+    expect(within(cards[2]!).getByText('old')).toBeTruthy()
   })
 
   it('filters cards by search input matching slug or display name', async () => {
@@ -362,7 +374,7 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    const card = await screen.findByTestId('daemon-index-canvas-card')
+    const card = await screen.findByTestId('canvas-list-card')
     fireEvent.click(card)
 
     expect(onOpenCanvas).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
@@ -546,22 +558,45 @@ describe('DaemonIndexPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates a canvas via New canvas and opens it, with no name typed first', async () => {
+  it('creates a canvas via the New canvas menu and opens it, with no name typed first', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [] },
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'existing', updatedAt: new Date().toISOString() }],
+      },
       onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
     })
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
+    await screen.findByText('existing')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await createViaMenu()
 
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled']])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('creates a markdown canvas when the menu entry is picked, sending kind to the daemon', async () => {
+    const created: Array<[string, string, string | undefined]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'existing', updatedAt: new Date().toISOString() }],
+      },
+      onCreateCanvas: (workspaceId, slug, kind) => created.push([workspaceId, slug, kind]),
+    })
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await screen.findByText('existing')
+
+    await createViaMenu('New markdown note')
+
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(created).toEqual([['ws-a', 'untitled', 'markdown']])
   })
 
   it('derives a unique slug from the loaded rows, skipping an already-used "untitled"', async () => {
@@ -578,7 +613,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
     await screen.findByText('untitled')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await createViaMenu()
 
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2'))
     expect(created).toEqual([['ws-a', 'untitled-2']])
@@ -602,9 +637,8 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
-
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    // Empty workspace: the empty state's create action is the entry point.
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a canvas' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('Request failed (500).')
     expect(screen.queryByText(/boom/)).toBeNull()
@@ -635,7 +669,10 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    const button = await screen.findByRole('button', { name: 'New canvas' })
+    // Empty workspace: the empty state's create action is the direct-click
+    // entry point (the toolbar + goes through a menu, which cannot fire
+    // twice in one tick — its item unmounts on the first select).
+    const button = await screen.findByRole('button', { name: 'Create a canvas' })
 
     // No await between them: React has not re-rendered, so `disabled` is not yet set.
     fireEvent.click(button)
@@ -647,11 +684,52 @@ describe('DaemonIndexPage', () => {
 
   // Mirrors the Duplicate action's own in-flight test above: the slug is derived from the loaded
   // rows, so two creates racing on the same rows derive the SAME slug and the loser 409s. Covers
-  // both entry points — the empty state's button shares one `creating` flag with the toolbar's.
-  it.each([
-    ['toolbar', 'New canvas'],
-    ['empty state', 'Create a canvas'],
-  ])('disables the %s create button while in flight, and double-clicking creates exactly one', async (_label, name) => {
+  // both entry points — the empty state's button shares one `creating` flag with the toolbar's
+  // menu trigger.
+  it('disables the toolbar create menu while a create is in flight', async () => {
+    let resolveCreate: ((res: Response) => void) | undefined
+    const created: string[] = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        created.push(JSON.parse(String(init.body)).slug as string)
+        return new Promise<Response>((resolve) => {
+          resolveCreate = resolve
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'existing', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await screen.findByText('existing')
+
+    await createViaMenu()
+    await waitFor(() => expect(created).toEqual(['untitled']))
+    // The create is still in flight: the trigger is disabled AND the menu
+    // items (still mounted if the menu stayed open) are dead, so a second
+    // create cannot start from either path.
+    const trigger = screen.getByRole('button', { name: 'New canvas' })
+    await waitFor(() => expect(trigger.hasAttribute('disabled')).toBe(true))
+    const item = screen.queryByRole('menuitem', { name: 'New canvas' })
+    if (item) fireEvent.pointerUp(item)
+    expect(created).toEqual(['untitled'])
+
+    resolveCreate?.(jsonResponse({ slug: 'untitled' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    expect(created).toEqual(['untitled'])
+  })
+
+  it('disables the empty state create button while in flight, and double-clicking creates exactly one', async () => {
     let resolveCreate: ((res: Response) => void) | undefined
     const created: string[] = []
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -674,7 +752,7 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    const button = await screen.findByRole('button', { name })
+    const button = await screen.findByRole('button', { name: 'Create a canvas' })
 
     fireEvent.click(button)
     await waitFor(() => expect(created).toEqual(['untitled']))
@@ -725,18 +803,20 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
-
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    // The list starts empty, so the first create goes through the empty state.
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a canvas' }))
     expect((await screen.findByRole('alert')).textContent).toContain('already exists')
 
-    // The retry must not repeat the losing slug.
+    // The failed create re-reads the list, which now shows the colliding
+    // canvas — so the retry entry point is the toolbar menu, and it must not
+    // repeat the losing slug.
+    await screen.findByText('untitled')
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'New canvas' })?.hasAttribute('disabled')).toBe(
+      expect(screen.getByRole('button', { name: 'New canvas' }).hasAttribute('disabled')).toBe(
         false,
       ),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await createViaMenu()
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
 
     expect(created).toEqual(['untitled', 'untitled-2'])
@@ -761,7 +841,7 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('Storage usage')).toBeTruthy()
     expect(screen.getByText('Paired web apps')).toBeTruthy()
     // The canvas grid stays mounted behind the dialog.
-    expect(screen.getByTestId('daemon-index-canvas-card')).toBeTruthy()
+    expect(screen.getByTestId('canvas-list-card')).toBeTruthy()
   })
 
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {

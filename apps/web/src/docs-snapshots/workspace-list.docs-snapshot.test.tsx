@@ -95,7 +95,7 @@ describe('docs snapshot — workspace list', () => {
     // canvases + names fetches both resolved) AND for each card's
     // CanvasThumb to have fired its own latest-thumbnail fetch.
     await waitFor(() => {
-      const cards = container.querySelectorAll('[data-testid="daemon-index-canvas-card"]')
+      const cards = container.querySelectorAll('[data-testid="canvas-list-card"]')
       if (cards.length !== 3) throw new Error('canvas grid not yet rendered')
       if (thumbnailFetchCount < 3) throw new Error('thumbnail fetches not yet started')
     })
