@@ -177,6 +177,20 @@ describe('createCanvas', () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
     await expect(createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
   })
+
+  it('sends kind in the POST body when given, omits it otherwise', async () => {
+    const sentBody = (fetchFn: ReturnType<typeof vi.fn>) => {
+      const init = fetchFn.mock.calls[0]![1] as RequestInit
+      return JSON.parse(init.body as string)
+    }
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ slug: 'x' }))
+    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
+    expect(sentBody(fetchFn)).toEqual({ slug: 'x', kind: 'markdown' })
+    fetchFn.mockClear()
+    fetchFn.mockResolvedValue(jsonResponse({ slug: 'y' }))
+    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
+    expect(sentBody(fetchFn)).toEqual({ slug: 'y' })
+  })
 })
 
 describe('getCanvasSnapshot', () => {

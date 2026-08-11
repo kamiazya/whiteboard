@@ -1,3 +1,4 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
@@ -76,6 +77,7 @@ export function createCanvas(
   daemonBaseUrl: string,
   workspaceId: string,
   slug: string,
+  kind?: CanvasKind,
 ): Promise<CreateCanvasResponse> {
   return fetchAndParse(
     fetchFn,
@@ -84,7 +86,9 @@ export function createCanvas(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug }),
+      // Omitted kind stays omitted (not null) so an older daemon that
+      // rejects unknown fields never sees one it can't parse.
+      body: JSON.stringify(kind === undefined ? { slug } : { slug, kind }),
     },
   )
 }
