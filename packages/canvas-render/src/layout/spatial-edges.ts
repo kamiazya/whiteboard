@@ -1,5 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
+import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 type Side = 'top' | 'right' | 'bottom' | 'left'
 type Point = { readonly x: number; readonly y: number }
@@ -288,10 +289,24 @@ function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
  * Edges with a missing endpoint get no entry — `routeEdge` already
  * degrades those to a zero-length path on its own.
  */
-export function assignEdgeAnchors(
+/** A resolved side pair for one edge, as consumed by `edgeSideOverrides`. */
+export interface EdgeSides {
+  readonly fromSide: Side
+  readonly toSide: Side
+}
+
+type SidePair = EdgeSides
+
+/**
+ * The heuristic side choice per edge — authored sides applied, self-edges
+ * pinned to their loop side, crowd-aware pair ranking for the rest. This
+ * is the INITIAL configuration; `optimizeSideChoices` may re-side edges
+ * whose guesses produce crossings or overlaps.
+ */
+function initialSideChoices(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
-): ReadonlyMap<string, EdgeAnchorPair> {
+): Map<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   // Crowding estimate per (node, side): every edge end's PROSPECTIVE side
   // (authored, or the plain dominant-axis facing side — deliberately NOT
@@ -299,7 +314,7 @@ export function assignEdgeAnchors(
   // prefer a side other edges have not already claimed, deterministically
   // and independent of edge order.
   const crowdCounts = new Map<string, number>()
-  const prospective = new Map<string, { fromSide: Side; toSide: Side }>()
+  const prospective = new Map<string, SidePair>()
   for (const edge of edges) {
     const fromNode = byId.get(edge.fromNode)
     const toNode = byId.get(edge.toNode)
@@ -322,19 +337,11 @@ export function assignEdgeAnchors(
       (crowdCounts.get(`${edge.toNode} ${sides.toSide}`) ?? 0) + 1,
     )
   }
-  type End = {
-    readonly edgeId: string
-    readonly edgeIndex: number
-    readonly role: 'from' | 'to'
-    readonly rect: Rect
-    readonly side: Side
-    readonly farCenter: Point
-  }
-  const groups = new Map<string, End[]>()
-  edges.forEach((edge, edgeIndex) => {
+  const choices = new Map<string, SidePair>()
+  for (const edge of edges) {
     const fromNode = byId.get(edge.fromNode)
     const toNode = byId.get(edge.toNode)
-    if (fromNode === undefined || toNode === undefined) return
+    if (fromNode === undefined || toNode === undefined) continue
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
     const own = prospective.get(edge.id)
@@ -348,13 +355,44 @@ export function assignEdgeAnchors(
       edge.fromNode === edge.toNode
         ? { fromSide: 'right' as Side, toSide: 'right' as Side }
         : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
+    choices.set(edge.id, {
+      fromSide: edge.fromSide ?? derived.fromSide,
+      toSide: edge.toSide ?? derived.toSide,
+    })
+  }
+  return choices
+}
+
+/** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
+function computeAnchorsFor(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  sides: ReadonlyMap<string, SidePair>,
+): ReadonlyMap<string, EdgeAnchorPair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  type End = {
+    readonly edgeId: string
+    readonly edgeIndex: number
+    readonly role: 'from' | 'to'
+    readonly rect: Rect
+    readonly side: Side
+    readonly farCenter: Point
+  }
+  const groups = new Map<string, End[]>()
+  edges.forEach((edge, edgeIndex) => {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    const chosen = sides.get(edge.id)
+    if (fromNode === undefined || toNode === undefined || chosen === undefined) return
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
     const ends: End[] = [
       {
         edgeId: edge.id,
         edgeIndex,
         role: 'from',
         rect: fromRect,
-        side: edge.fromSide ?? derived.fromSide,
+        side: chosen.fromSide,
         farCenter: centerOf(toRect),
       },
       {
@@ -362,7 +400,7 @@ export function assignEdgeAnchors(
         edgeIndex,
         role: 'to',
         rect: toRect,
-        side: edge.toSide ?? derived.toSide,
+        side: chosen.toSide,
         farCenter: centerOf(fromRect),
       },
     ]
@@ -421,6 +459,271 @@ export function assignEdgeAnchors(
     }
   }
   return anchors
+}
+
+/** Quarter-pixel quantization: every cost term is integral, so candidate
+ * comparison is exact integer arithmetic — no float tie can differ between
+ * platforms. */
+const COST_QUANTUM = 4
+
+type ConfigCost = readonly [overlap: number, illegible: number, crossings: number]
+
+function lessCost(a: ConfigCost, b: ConfigCost): boolean {
+  if (a[0] !== b[0]) return a[0] < b[0]
+  if (a[1] !== b[1]) return a[1] < b[1]
+  return a[2] < b[2]
+}
+
+/**
+ * Global legibility cost of a routed configuration, as a lexicographic
+ * integer tuple: total collinear axis-aligned overlap length (a parallel
+ * overlap has no crossing point, so a line jump cannot express it —
+ * heaviest), crossings too close to a segment end to render their jump
+ * arc, then total crossings. Bends and length are deliberately NOT part
+ * of the cost: they are governed by the per-edge pair ranking, and letting
+ * them drive re-siding would let the optimizer reshuffle crossing-free
+ * canvases that nothing is wrong with.
+ */
+function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  let overlap = 0
+  let illegible = 0
+  let crossings = 0
+  const clearance = EDGE_JUMP_RADIUS_PX + 1
+  for (let ai = 1; ai < a.length; ai++) {
+    const a1 = a[ai - 1]!
+    const a2 = a[ai]!
+    for (let bi = 1; bi < b.length; bi++) {
+      const b1 = b[bi - 1]!
+      const b2 = b[bi]!
+      // Collinear axis-aligned overlap.
+      if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
+        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
+        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+        if (hi > lo) overlap += hi - lo
+        continue
+      }
+      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
+        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
+        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+        if (hi > lo) overlap += hi - lo
+        continue
+      }
+      // Proper transversal crossing.
+      const dax = a2.x - a1.x
+      const day = a2.y - a1.y
+      const dbx = b2.x - b1.x
+      const dby = b2.y - b1.y
+      const denom = dax * dby - day * dbx
+      if (denom === 0) continue
+      const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom
+      const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
+      if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue
+      crossings++
+      const lenA = Math.hypot(dax, day)
+      const lenB = Math.hypot(dbx, dby)
+      if (
+        t * lenA < clearance ||
+        (1 - t) * lenA < clearance ||
+        u * lenB < clearance ||
+        (1 - u) * lenB < clearance
+      ) {
+        illegible++
+      }
+    }
+  }
+  return [overlap, illegible, crossings]
+}
+
+function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
+  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2]]
+}
+
+/**
+ * Edge-count gate for the improvement pass. Trials evaluate incrementally
+ * (only changed-anchor edges re-route; the pairwise matrix is patched),
+ * but the initial matrix build is O(E^2) segment pairs and a committed
+ * render pays the loop on every edit, so the bound keeps worst-case work
+ * small (~24ms at the gate on a dev machine; per-frame surfaces opt out
+ * entirely via edgeSideOverrides). ponytail: a sweepline pair scan is the
+ * next rung if this gate ever needs raising.
+ */
+const CROSSING_OPT_MAX_EDGES = 40
+const CROSSING_OPT_MAX_PASSES = 2
+
+/**
+ * Bounded global improvement over per-edge side choices: iterate edges in
+ * document order; adopt an alternative ranked pair only when the WHOLE
+ * configuration's cost strictly decreases (lexicographic integer compare —
+ * deterministic, monotone, so the loop cannot oscillate). A crossing-free,
+ * overlap-free configuration short-circuits without evaluating a single
+ * candidate, which keeps the common case at one scoring sweep.
+ */
+function optimizeSideChoices(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle,
+  initial: ReadonlyMap<string, SidePair>,
+): ReadonlyMap<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
+    a?.from?.x === b?.from?.x &&
+    a?.from?.y === b?.from?.y &&
+    a?.to?.x === b?.to?.x &&
+    a?.to?.y === b?.to?.y &&
+    a?.fromLaneDepth === b?.fromLaneDepth &&
+    a?.toLaneDepth === b?.toLaneDepth &&
+    a?.fromSide === b?.fromSide &&
+    a?.toSide === b?.toSide
+
+  // Incremental state: per-edge routed paths, the pairwise score matrix,
+  // and the aggregate cost. A trial re-sides ONE edge; only the edges
+  // whose anchor entries actually changed (the trial edge plus members of
+  // the anchor groups it left and joined) re-route and re-score their
+  // pairs — everything else is carried over. This is what keeps a trial
+  // O(affected * E) instead of O(E^2).
+  let current = new Map(initial)
+  let anchors = computeAnchorsFor(nodes, edges, current)
+  let paths: (readonly Point[])[] = edges.map(
+    (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
+  )
+  const pairKey = (i: number, j: number) => i * edges.length + j
+  const matrix = new Map<number, ConfigCost>()
+  let currentCost: ConfigCost = [0, 0, 0]
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      const score = pairScore(paths[i]!, paths[j]!)
+      matrix.set(pairKey(i, j), score)
+      currentCost = addCost(currentCost, score, 1)
+    }
+  }
+  if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+
+  const evaluateTrial = (
+    trialSides: ReadonlyMap<string, SidePair>,
+  ): {
+    cost: ConfigCost
+    anchors: ReadonlyMap<string, EdgeAnchorPair>
+    paths: (readonly Point[])[]
+    touched: number[]
+    updates: Map<number, ConfigCost>
+  } => {
+    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides)
+    const touched: number[] = []
+    for (let i = 0; i < edges.length; i++) {
+      if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
+    }
+    const trialPaths = paths.slice()
+    for (const i of touched) {
+      trialPaths[i] = routeEdge(nodes, edges[i]!, style, trialAnchors.get(edges[i]!.id)).path
+    }
+    const touchedSet = new Set(touched)
+    let cost = currentCost
+    const updates = new Map<number, ConfigCost>()
+    for (const i of touched) {
+      for (let j = 0; j < edges.length; j++) {
+        if (j === i) continue
+        const [lo, hi] = i < j ? [i, j] : [j, i]
+        const key = pairKey(lo, hi)
+        if (updates.has(key)) continue
+        // A pair between two touched edges is visited once thanks to the
+        // updates map; a pair with an untouched edge reuses its cached path.
+        if (touchedSet.has(j) && j < i) continue
+        const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
+        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0], -1)
+        cost = addCost(cost, next, 1)
+        updates.set(key, next)
+      }
+    }
+    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates }
+  }
+
+  const candidatesFor = (edge: CanvasEdge): SidePair[] => {
+    if (edge.fromNode === edge.toNode) return []
+    if (edge.fromSide !== undefined && edge.toSide !== undefined) return []
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) return []
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const fromCenter = centerOf(fromRect)
+    const toCenter = centerOf(toRect)
+    const pairs = rankedSidePairs(
+      toCenter.x - fromCenter.x,
+      toCenter.y - fromCenter.y,
+      fromRect,
+      toRect,
+      () => 0,
+    )
+    const seen = new Set<string>()
+    return pairs
+      .map((pair) => ({
+        fromSide: edge.fromSide ?? pair.fromSide,
+        toSide: edge.toSide ?? pair.toSide,
+      }))
+      .filter((pair) => {
+        const key = `${pair.fromSide} ${pair.toSide}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }
+
+  for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
+    let improved = false
+    for (const edge of edges) {
+      const chosen = current.get(edge.id)
+      if (chosen === undefined) continue
+      for (const candidate of candidatesFor(edge)) {
+        if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
+        const trial = new Map(current)
+        trial.set(edge.id, candidate)
+        const evaluated = evaluateTrial(trial)
+        if (lessCost(evaluated.cost, currentCost)) {
+          current = trial
+          currentCost = evaluated.cost
+          anchors = evaluated.anchors
+          paths = evaluated.paths
+          for (const [key, score] of evaluated.updates) matrix.set(key, score)
+          improved = true
+          break
+        }
+      }
+      if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+    }
+    if (!improved) break
+  }
+  return current
+}
+
+export function assignEdgeAnchors(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle = 'straight',
+  // FROZEN side choices for the listed edges: the caller opts out of the
+  // optimization pass wholesale (a per-frame surface like the live drag
+  // overlay wants route STABILITY over optimality mid-gesture, and cannot
+  // afford the improvement loop each frame). Sides settle again on the
+  // next committed render.
+  sideOverrides?: ReadonlyMap<string, EdgeSides>,
+): ReadonlyMap<string, EdgeAnchorPair> {
+  let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
+  if (sideOverrides !== undefined) {
+    const merged = new Map(sides)
+    for (const [id, pair] of sideOverrides) {
+      const edge = edges.find((e) => e.id === id)
+      if (edge === undefined || merged.get(id) === undefined) continue
+      merged.set(id, {
+        fromSide: edge.fromSide ?? pair.fromSide,
+        toSide: edge.toSide ?? pair.toSide,
+      })
+    }
+    return computeAnchorsFor(nodes, edges, merged)
+  }
+  if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
+    sides = optimizeSideChoices(nodes, edges, style, sides)
+  }
+  return computeAnchorsFor(nodes, edges, sides)
 }
 
 /** How close a route may pass to a foreign node's border, in px. */

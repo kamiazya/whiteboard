@@ -15,7 +15,7 @@
  * YAGNI + zod-schema-discipline this type deliberately carries no Zod schema.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { assignEdgeAnchors, routeEdge } from '@kamiazya/whiteboard-canvas-render'
+import { assignEdgeAnchors, type EdgeSides, routeEdge } from '@kamiazya/whiteboard-canvas-render'
 import type { Box, NodeBox } from './geometry.js'
 import { hitTest, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
@@ -35,6 +35,13 @@ export type DragPreview =
 export interface ConnectPreviewContext {
   readonly canvas: SpatialCanvas
   readonly selectableBoxes: readonly NodeBox[]
+  /**
+   * Committed side choices for existing edges, frozen for the gesture:
+   * the tentative edge derives its own sides fresh each frame, but the
+   * rest of the canvas must not re-optimize (and pay the improvement
+   * loop) on every pointer move.
+   */
+  readonly frozenEdgeSides?: ReadonlyMap<string, EdgeSides>
 }
 
 /**
@@ -117,7 +124,12 @@ export function computeDragPreview(
         fromNode: gestureState.fromNodeId,
         toNode: targetId,
       }
-      const anchors = assignEdgeAnchors(nodes, [...canvas.edges, tentative])
+      const anchors = assignEdgeAnchors(
+        nodes,
+        [...canvas.edges, tentative],
+        canvas['x-whiteboard']?.edgeRouting?.style,
+        connect.frozenEdgeSides,
+      )
       const routed = routeEdge(
         nodes,
         tentative,

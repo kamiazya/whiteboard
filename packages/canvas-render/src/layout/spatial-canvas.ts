@@ -40,7 +40,12 @@ import { computeEdgeJumps } from './edge-jumps.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import { assignEdgeAnchors, type EdgeAnchorPair, routeEdge } from './spatial-edges.js'
+import {
+  assignEdgeAnchors,
+  type EdgeAnchorPair,
+  type EdgeSides,
+  routeEdge,
+} from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
 
 /**
@@ -76,6 +81,14 @@ export interface SpatialLayoutOptions {
    * constant.
    */
   readonly geometry?: SpatialGeometry
+  /**
+   * Frozen edge-side choices, threaded to `assignEdgeAnchors`: the caller
+   * trades crossing optimization for route stability (the live drag
+   * overlay pins the committed sides so routes do not flip mid-gesture and
+   * pointer frames skip the improvement loop). Absent means sides settle
+   * through the full pipeline.
+   */
+  readonly edgeSideOverrides?: ReadonlyMap<string, EdgeSides>
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * Human-readable label for a file node's reference. A composition root
@@ -549,7 +562,12 @@ function composeEdgesAndLabels(
 ): SceneNode[] {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
-  const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges)
+  const anchors = assignEdgeAnchors(
+    canvas.nodes,
+    canvas.edges,
+    canvas['x-whiteboard']?.edgeRouting?.style,
+    resolved.edgeSideOverrides,
+  )
   const routedEdges = canvas.edges.map((edge) =>
     composeEdge(canvas, edge, resolved, anchors.get(edge.id)),
   )
