@@ -1,0 +1,116 @@
+# ADR-0007: Canvas identity and the daemon's two-store split
+
+**Status:** Accepted
+
+## Context
+
+The daemon holds "canvases" in two representations that share one SQLite
+file and nothing else:
+
+- **Workspace/slug store.** Identity is `(workspaceId, slug)` (unique
+  constraint `canvases_ws_slug_unq`); rows carry `displayName`, `kind`,
+  pins, and branch/version linkage; canvas bytes live as Loro snapshots
+  on the filesystem under `blobs/<workspaceId>/canvas/`. Written only by
+  the daemon's HTTP API (`/api/workspaces/*`, `/api/canvas/*`), read only
+  by `apps/web`. The internal row PK is a nanoid the wire never sees.
+- **OpenCanvas doc store.** Identity is a ULID `canvasId` plus a
+  `segment` unique among siblings; the human-readable `alias` path is
+  derived from segments at read time and never persisted. Canvases and
+  the per-workspace tree are Loro docs chunked into SQLite
+  (`canvasDocSnapshots*`). Written by every registered MCP tool
+  (`wb_canvas_*`, `canvas_import_okf`, node/edge/facet/body patches) and
+  by the identical `/api/v1` routes; read by the gallery's tree view.
+
+There is **no bridge by construction**: neither store's write path
+touches the other's tables, `server-core` imports nothing from the
+legacy store, and no reconcile job exists (`reindexAllWorkspaces` has no
+production caller). Empirically: `wb_canvas_create` with
+`createWorkspace: true` yields a canvas invisible to
+`GET /api/workspaces`, and a canvas created from the web UI is invisible
+to `wb_canvas_list`. The only shared token is the raw `workspaceId`
+string, which is authoritative in neither.
+
+Meanwhile the third runtime, browser-local, identifies canvases by a
+random UUID with no slug and no workspace, and the UI-unification work
+(shared canvas list, ADR-0006 creation flow) needed a decided identity
+story to build on.
+
+## Decision
+
+1. **`(workspaceId, slug)` is the canonical user-facing canvas identity.**
+   URLs, sync, versions, branches, and the shared canvas list all address
+   canvases by slug. A ULID/opaque-id-canonical model was considered and
+   explicitly not chosen (product decision, 2026-08-11): slugs are what
+   users see, share, and reason about, and the daemon's storage already
+   enforces their uniqueness per workspace.
+2. **Slugs are assigned at creation and are immutable for now — rename is
+   deliberately OPEN, not decided.** Creation collects no name up front
+   (ADR-0006), so slugs derive automatically (`untitled`, `untitled-2`,
+   …) and naming happens afterwards via display names. Making slugs
+   renamable is attractive but changes what sync, branches, versions, and
+   bookmarks key on; it is deferred pending the slug-as-storage-key spike
+   and must not be treated as settled by this ADR.
+3. **Browser-local models "exactly one workspace that is always present",
+   not the absence of workspaces.** Its canvases keep UUID identity with
+   a *derived, cosmetic* display slug that matches the daemon slug
+   charset, so a later promotion to real slugs needs no re-derivation.
+4. **The two daemon stores are recorded as a known split with a named
+   convergence direction: converge on the user-facing world.** The
+   workspace/slug store is what users see and what the canonical identity
+   (point 1) lives in; the OpenCanvas doc store's agent surface must
+   eventually read and write canvases users can see, rather than a
+   parallel population. The concrete mechanism (adapter, migration, or
+   replacement of the legacy store's internals under the same identity)
+   is not chosen here — but any step that widens the split (new features
+   landing in only one store's world without a plan to meet the other) now
+   requires justification against this ADR.
+5. **Prose must stop calling two different things "canvasId".** The
+   legacy store's internal nanoid row PK is a storage detail; the ULID in
+   the OpenCanvas store is the `canvasId`. Docs and code comments should
+   say "canvas row id" for the former.
+
+## Consequences
+
+- The shared `CanvasListView` and both list pages (daemon gallery,
+  browser-local) are built on slug-shaped identity, consistent with
+  point 1 and 3.
+- The gallery's grid and its tree view render **different populations**
+  today: the workspace picker lists workspace/slug-store workspaces, and
+  feeding one into the tree view silently renders an empty tree when that
+  workspace exists only in the legacy store (the tree loader falls back
+  to an empty tree instead of failing). A v1-only workspace never appears
+  in the picker at all. This is the split made visible, and it is the
+  first UX debt the convergence direction (point 4) is expected to pay
+  down.
+- The `workspaceIndex*` tables are write-only in production (their query
+  surface has no caller); they must not be described or relied upon as a
+  lookup path until something consumes them.
+- The slug-rename question stays open with a recorded owner: the
+  slug-as-storage-key spike informs it. Anything that would make rename
+  harder (new slug-keyed persistence) should be flagged in review.
+- Agent/human collaboration on one canvas currently requires both sides
+  to use the same surface; documentation states this plainly
+  ([domain model](../../explanation/domain-model.md)) rather than
+  implying the MCP tools operate on the gallery's canvases.
+
+## Alternatives considered
+
+**Opaque id (ULID) as the canonical identity with slugs as mutable
+labels.** Rejected by product decision: it makes rename trivial but
+demotes the identifier users actually see and share; every user-facing
+surface would need a second lookup step, and the existing daemon
+storage, sync, and URL scheme are already slug-keyed.
+
+**Declare the OpenCanvas doc store the canonical world and migrate the
+web app onto `/api/v1`.** Not chosen now: the user-facing feature set
+(names, pins, kinds, branches, versions, thumbnails, sync) lives in the
+workspace/slug store, and the v1 world lacks equivalents; converging by
+moving the smaller, newer surface toward the identity users already hold
+is the cheaper direction. This remains the plausible long-term shape
+*under the same slug identity* — the ADR fixes the identity, not the
+final storage engine.
+
+**Build an immediate two-way sync bridge between the stores.** Rejected:
+a background reconciler between two live CRDT-backed stores with
+different identity schemes is the most complex option and would ossify
+the split instead of removing it.
