@@ -161,14 +161,14 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
-import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
-import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import {
   EMPTY_SELECTION,
   reduceSelection,
   type SelectionEvent,
   type SelectionState,
 } from './selection.js'
+import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
+import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
