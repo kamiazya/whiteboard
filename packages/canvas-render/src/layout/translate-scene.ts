@@ -61,6 +61,15 @@ function translateNode(
     return {
       ...node,
       path: node.path.map((point) => ({ x: point.x + appliedDx, y: point.y + dy })),
+      ...(node.jumps !== undefined
+        ? {
+            jumps: node.jumps.map((jump) => ({
+              ...jump,
+              x: jump.x + appliedDx,
+              y: jump.y + dy,
+            })),
+          }
+        : {}),
     }
   }
 
