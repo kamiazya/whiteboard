@@ -69,15 +69,13 @@ function makeTempDir(prefix: string): string {
 
 /** Overrides that stop the vendored `xdg-open`'s `detectDE()`/`has_display()`
  * from routing to a real desktop opener ahead of `$BROWSER` — see the file
- * header comment. Shared by every test in this suite so the child env is
- * neutralized identically regardless of the guard under test. */
-function neutralizedDesktopEnv(): Readonly<Record<string, string | undefined>> {
-  return {
-    XDG_CURRENT_DESKTOP: 'X-Generic',
-    DISPLAY: undefined,
-    WAYLAND_DISPLAY: undefined,
-  }
-}
+ * header comment. Spread into every test's child env so the host desktop
+ * session can't change the outcome of the guard under test. */
+const NEUTRALIZED_DESKTOP_ENV = {
+  XDG_CURRENT_DESKTOP: 'X-Generic',
+  DISPLAY: undefined,
+  WAYLAND_DISPLAY: undefined,
+} as const
 
 /** A fake `open`/`xdg-open`/$BROWSER opener that records its single argv URL. */
 function makeFakeOpenBin(): { binDir: string; recordFile: string } {
@@ -170,6 +168,15 @@ async function launchDaemonInPty(args: {
   return { readyLine: winner, pid, closed }
 }
 
+/** The opener's record file, or `''` while it has never been invoked. */
+function readRecord(recordFile: string): string {
+  try {
+    return readFileSync(recordFile, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
 /** Polls `recordFile` until it has at least one line or `deadlineMs` elapses.
  * Deterministic stand-in for a fixed sleep: the positive assertion's outcome
  * must not depend on how long the harness happens to wait past the first
@@ -177,13 +184,9 @@ async function launchDaemonInPty(args: {
 async function pollForRecordedLines(recordFile: string, deadlineMs: number): Promise<string[]> {
   const start = Date.now()
   for (;;) {
-    let recorded: string
-    try {
-      recorded = readFileSync(recordFile, 'utf8')
-    } catch {
-      recorded = ''
-    }
-    const lines = recorded.split('\n').filter((l) => l.length > 0)
+    const lines = readRecord(recordFile)
+      .split('\n')
+      .filter((l) => l.length > 0)
     if (lines.length > 0 || Date.now() - start >= deadlineMs) {
       return lines
     }
@@ -231,8 +234,7 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
       async () => {
         const port = await findAvailablePort(4310)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-        const { recordFile } = makeFakeOpenBin()
-        const binDir = dirname(recordFile)
+        const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
           port,
@@ -242,15 +244,13 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
             BROWSER: FAKE_BROWSER_COMMAND,
             CI: undefined,
             container: undefined,
-            ...neutralizedDesktopEnv(),
+            ...NEUTRALIZED_DESKTOP_ENV,
           },
         })
 
         // The open() call is awaited before the dispatcher's never-resolving
         // keep-alive promise, but the fake opener's own exit still round-trips
-        // through a real subprocess spawn — poll for the write instead of a
-        // fixed sleep so the assertion doesn't depend on how long we happen to
-        // wait past the first observation.
+        // through a real subprocess spawn.
         const lines = await pollForRecordedLines(recordFile, OPEN_SETTLE_MS)
 
         await killAndWait(pid, closed)
@@ -266,8 +266,7 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
       async () => {
         const port = await findAvailablePort(4311)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-        const { recordFile } = makeFakeOpenBin()
-        const binDir = dirname(recordFile)
+        const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
           port,
@@ -276,18 +275,12 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
             PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
             BROWSER: FAKE_BROWSER_COMMAND,
             CI: 'true',
-            ...neutralizedDesktopEnv(),
+            ...NEUTRALIZED_DESKTOP_ENV,
           },
         })
 
         await delay(OPEN_SETTLE_MS)
-
-        let recorded: string
-        try {
-          recorded = readFileSync(recordFile, 'utf8')
-        } catch {
-          recorded = ''
-        }
+        const recorded = readRecord(recordFile)
 
         await killAndWait(pid, closed)
         liveChildren.splice(0, liveChildren.length)
@@ -302,8 +295,7 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
       async () => {
         const port = await findAvailablePort(4312)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
-        const { recordFile } = makeFakeOpenBin()
-        const binDir = dirname(recordFile)
+        const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
           port,
@@ -314,18 +306,12 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
             BROWSER: FAKE_BROWSER_COMMAND,
             CI: undefined,
             container: undefined,
-            ...neutralizedDesktopEnv(),
+            ...NEUTRALIZED_DESKTOP_ENV,
           },
         })
 
         await delay(OPEN_SETTLE_MS)
-
-        let recorded: string
-        try {
-          recorded = readFileSync(recordFile, 'utf8')
-        } catch {
-          recorded = ''
-        }
+        const recorded = readRecord(recordFile)
 
         await killAndWait(pid, closed)
         liveChildren.splice(0, liveChildren.length)
