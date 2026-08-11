@@ -142,11 +142,9 @@ export function DaemonCanvasPage({
 
   const [authError, setAuthError] = useState(false)
   // Disables the empty-state "Create a canvas" control while a create is in
-  // flight. `disabled` is the whole mechanism, deliberately with no
-  // `if (creating) return` guard inside the handler — see
-  // DaemonIndexPage.tsx's own `creating` state for why that guard was tried
-  // and removed there (stale closure read in the same-tick double-press
-  // case it exists to catch).
+  // flight. `disabled` is the whole mechanism: an in-handler
+  // `if (creating) return` reads the render closure, so it is stale in exactly
+  // the same-tick double-press case it would have to catch.
   const [creating, setCreating] = useState(false)
   // Bumped on an externally observed HEAD change (another client, an MCP
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
@@ -263,10 +261,9 @@ export function DaemonCanvasPage({
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
 
-  // Creation is immediate — no name is collected up front (ADR-0006 point
-  // 3). A slug is derived from the loaded canvases so it never collides with
-  // one already in this workspace; naming happens afterwards, in the opened
-  // canvas's own top bar. Mirrors DaemonIndexPage.tsx's empty-state handler.
+  // Creation is immediate — no name is collected up front (ADR-0006 point 3).
+  // The slug is derived from the loaded canvases so it never collides with one
+  // already in this workspace; naming happens afterwards in the canvas's top bar.
   const handleCreateCanvas = async (): Promise<void> => {
     setCreating(true)
     try {
@@ -561,9 +558,8 @@ export function DaemonCanvasPage({
               </div>
             )}
             {/* An empty state is a reading surface, not a dense toolbar strip
-                (ADR-0006 point 4) — the control keeps its text label rather
-                than becoming an icon-only "+", matching DaemonIndexPage's
-                own empty-state "Create a canvas" button. */}
+                (ADR-0006 point 4), so the control keeps its text label rather
+                than becoming an icon-only "+". */}
             <Button
               type="button"
               variant="outline"
