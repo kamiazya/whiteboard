@@ -126,6 +126,62 @@ it('dragging one member moves every member by the same delta', async () => {
   })
 })
 
+// Grabbing a NON-primary member must carry the whole selection — the primary
+// used to be left behind, so a three-node selection dragged by an extra moved
+// only two nodes.
+it('dragging a non-primary member moves the primary too', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  press(root, 150, 130)
+  await frame()
+  press(root, 350, 130, { shift: true })
+  await frame()
+  press(root, 550, 130, { shift: true })
+  await frame()
+
+  // Drag extra member b by (+40, +20); primary is a.
+  const r = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      bubbles: true,
+      clientX: r.left + 350,
+      clientY: r.top + 130,
+      pointerId: 6,
+      button: 0,
+    }),
+  )
+  await frame()
+  root.dispatchEvent(
+    new PointerEvent('pointermove', {
+      bubbles: true,
+      clientX: r.left + 390,
+      clientY: r.top + 150,
+      pointerId: 6,
+    }),
+  )
+  await frame()
+  root.dispatchEvent(
+    new PointerEvent('pointerup', {
+      bubbles: true,
+      clientX: r.left + 390,
+      clientY: r.top + 150,
+      pointerId: 6,
+    }),
+  )
+
+  await vi.waitFor(() => {
+    const a = latest.nodes.find((n) => n.id === 'a')
+    const b = latest.nodes.find((n) => n.id === 'b')
+    const c = latest.nodes.find((n) => n.id === 'c')
+    expect({ a: [a?.x, a?.y], b: [b?.x, b?.y], c: [c?.x, c?.y] }).toEqual({
+      a: [140, 120],
+      b: [340, 120],
+      c: [540, 120],
+    })
+  })
+})
+
 it('Delete removes every member of the multi-selection', async () => {
   const { container } = render(<Host />)
   const root = rootOf(container)

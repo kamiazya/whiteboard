@@ -1184,6 +1184,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // on a member keeps it (that press starts a group move).
       if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
         setExtraIds(new Set())
+      } else if (hitId !== undefined && extraIds.has(hitId)) {
+        // Grabbing an EXTRA promotes it to primary (the reducer selects the
+        // pressed node), so the old primary must swap into the extras — same
+        // promotion the context-menu path does. Without it the old primary
+        // silently drops out of the selection and stays behind on a group
+        // move.
+        setExtraIds((prev) => {
+          const next = new Set(prev)
+          next.delete(hitId)
+          if (selectedId !== null && selectedId !== hitId) next.add(selectedId)
+          return next
+        })
       }
       setSelectedEdgeId(null)
       // Connect tool: the FIRST node press arms the connect (the same
