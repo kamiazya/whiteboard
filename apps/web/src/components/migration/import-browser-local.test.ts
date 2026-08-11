@@ -100,7 +100,12 @@ describe('importOneCanvas', () => {
     const encodedWs = encodeURIComponent('ws 1#x')
     const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(createUrl).toBe(`http://127.0.0.1:3099/api/workspaces/${encodedWs}/canvases`)
-    expect(JSON.parse(createInit.body as string)).toEqual({ slug: 'my-canvas' })
+    // createCanvasRequestSchema.parse fills in the default kind: 'spatial' —
+    // browser-local canvases migrating in are always spatial.
+    expect(JSON.parse(createInit.body as string)).toEqual({
+      slug: 'my-canvas',
+      kind: 'spatial',
+    })
 
     const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit]
     expect(updateUrl).toBe(`http://127.0.0.1:3099/api/canvas/${encodedWs}/my-canvas/update`)

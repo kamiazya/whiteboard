@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { CANVAS_SCHEMA_VERSION, canvasMetaSchema } from './meta.js'
+import { CANVAS_SCHEMA_VERSION, canvasKindSchema, canvasMetaSchema } from './meta.js'
+
+describe('canvasKindSchema', () => {
+  it('accepts spatial and markdown', () => {
+    expect(canvasKindSchema.safeParse('spatial').success).toBe(true)
+    expect(canvasKindSchema.safeParse('markdown').success).toBe(true)
+  })
+
+  it('rejects an unknown kind', () => {
+    expect(canvasKindSchema.safeParse('html').success).toBe(false)
+  })
+})
 
 describe('canvasMetaSchema', () => {
   it('accepts a markdown canvas meta at the current schema version', () => {

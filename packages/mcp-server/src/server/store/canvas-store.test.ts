@@ -295,6 +295,25 @@ describe('listCanvases', () => {
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
+  it('persists kind: markdown and lists it back', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+  })
+
+  it('lists kind: spatial when saveCanvas is called without a kind option (back-compat)', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'canvas-a')?.kind).toBe('spatial')
+  })
+
+  it('does not reset kind on an overwrite:true re-save', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    await saveCanvas('session1', 'note', new LoroDoc(), { overwrite: true })
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+  })
+
   it('recursively lists nested slugs as session-relative paths', async () => {
     await saveCanvas('session1', 'top-level', new LoroDoc())
     await saveCanvas('session1', '621/header', new LoroDoc())

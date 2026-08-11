@@ -148,6 +148,55 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
+  it('creates a kind:markdown canvas, and the list carries it back', async () => {
+    const app = createCanvasRouter()
+    const createRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'note', kind: 'markdown' }),
+    })
+    expect(createRes.status).toBe(200)
+    // Response body stays exactly { slug } — kind is not echoed back.
+    expect(await createRes.json()).toEqual({ slug: 'note' })
+
+    const listRes = await app.request('/api/workspaces/ws1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string; kind: string }[] }
+    const created = listJson.canvases.find((c) => c.slug === 'note')
+    expect(created?.kind).toBe('markdown')
+
+    // The empty LoroDoc a markdown-kind create saves loads without error —
+    // an empty doc is a valid initial document for either kind.
+    const snapshotRes = await app.request('/api/canvas/ws1/note/snapshot')
+    expect(snapshotRes.status).toBe(200)
+  })
+
+  it('creates a canvas without kind — response and list stay byte-identical to spatial back-compat', async () => {
+    const app = createCanvasRouter()
+    const createRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'legacy' }),
+    })
+    expect(createRes.status).toBe(200)
+    expect(await createRes.json()).toEqual({ slug: 'legacy' })
+
+    const listRes = await app.request('/api/workspaces/ws1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string; kind: string }[] }
+    expect(listJson.canvases.find((c) => c.slug === 'legacy')?.kind).toBe('spatial')
+  })
+
+  it('returns 400 with Problem Details title on an invalid kind', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'bad-kind', kind: 'bogus' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+  })
+
   it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/bad.workspace/canvases', {

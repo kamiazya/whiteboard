@@ -142,7 +142,12 @@ describe('listCanvases', () => {
       .fn()
       .mockResolvedValue(jsonResponse({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] }))
     const result = await listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')
-    expect(result).toEqual({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] })
+    // kind is absent from the mocked daemon response (pre-change shape) and
+    // defaults to 'spatial' — the back-compat rule that lets a new client
+    // parse an old daemon's kind-less list.
+    expect(result).toEqual({
+      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    })
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {

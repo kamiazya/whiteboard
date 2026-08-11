@@ -62,7 +62,7 @@ export async function saveCanvas(
   workspaceId: string,
   slug: string,
   doc: LoroDoc,
-  options: { overwrite?: boolean } = {},
+  options: { overwrite?: boolean; kind?: 'spatial' | 'markdown' } = {},
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
@@ -111,6 +111,10 @@ export async function saveCanvas(
           currentBranch: 'main',
           createdAt: now,
           updatedAt: now,
+          // Written only on insert — an overwrite:true re-save (the
+          // onConflict branch below, and the update branch above) must
+          // never mutate a stored canvas's kind.
+          kind: options.kind ?? null,
         })
         .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
         .execute()
@@ -447,16 +451,17 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<{ slug: string; updatedAt: string }[]> {
+): Promise<{ slug: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
     .selectFrom('canvases')
-    .select(['slug', 'updatedAt'])
+    .select(['slug', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   return rows.map((r) => ({
     slug: r.slug,
     updatedAt: new Date(r.updatedAt).toISOString(),
+    kind: r.kind ?? 'spatial',
   }))
 }

@@ -70,7 +70,9 @@ describe('DaemonCanvasPage thumbnail wiring', () => {
   beforeEach(() => {
     capturedProps.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] })
+    mockListCanvases.mockResolvedValue({
+      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    })
   })
   afterEach(() => {
     cleanup()

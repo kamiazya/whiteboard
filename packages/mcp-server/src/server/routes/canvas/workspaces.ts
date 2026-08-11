@@ -85,7 +85,7 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(workspaceId, slug, doc, { overwrite: false })
+      await saveCanvas(workspaceId, slug, doc, { overwrite: false, kind: parsed.data.kind })
       const response: CreateCanvasResponse = { slug }
       return c.json(response)
     } catch (err) {

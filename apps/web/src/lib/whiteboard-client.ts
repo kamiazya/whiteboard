@@ -1,3 +1,4 @@
+import { canvasKindSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 
 /**
@@ -15,7 +16,7 @@ export const canvasSnapshotSchema = z.object({
    * Content stays in the Loro doc either way (spatial: nodes/edges maps;
    * markdown: a 'body' text container) — this is still metadata only.
    */
-  kind: z.enum(['spatial', 'markdown']).default('spatial'),
+  kind: canvasKindSchema.default('spatial'),
 })
 
 export type CanvasSnapshot = z.infer<typeof canvasSnapshotSchema>
