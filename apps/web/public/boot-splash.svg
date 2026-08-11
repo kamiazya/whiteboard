@@ -1,45 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="176" height="168" viewBox="0 0 88 84" role="img" aria-label="Whiteboard">
   <title>Whiteboard</title>
   <!--
-    The boot-splash mark: a pen stroke drawing itself onto a whiteboard,
-    looping. Self-contained (CSS animation inside the SVG) so the same file
-    serves the index.html splash and the README, where it renders inside an
-    <img> and can inherit nothing from the page. Colors are mid-grays chosen
-    to read on both light and dark grounds for the same reason.
+    The boot-splash mark: a pen stroke draws itself onto the whiteboard
+    ONCE, then the mark settles into a slow breathing loop — a standing
+    redraw loop reads as noise in the README. Self-contained (CSS animation
+    inside the SVG) so the same file serves the index.html splash and the
+    README, where it renders inside an <img> and can inherit nothing from
+    the page. Colors are mid-grays chosen to read on both light and dark
+    grounds for the same reason.
   -->
   <style>
+    .mark {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: wb-breathe 3.2s ease-in-out 1.2s infinite;
+    }
     .stroke {
       stroke-dasharray: 80;
       stroke-dashoffset: 0;
-      animation: wb-draw 2s ease-in-out infinite;
+      animation: wb-draw 1.2s ease-out;
     }
     @keyframes wb-draw {
-      0% {
+      from {
         stroke-dashoffset: 80;
-        opacity: 1;
-      }
-      55% {
-        stroke-dashoffset: 0;
-        opacity: 1;
-      }
-      80% {
-        stroke-dashoffset: 0;
-        opacity: 0;
-      }
-      100% {
-        stroke-dashoffset: 80;
-        opacity: 0;
       }
     }
-    /* One-shot lands on the fully drawn stroke (the base state above),
-       never a blank board. */
+    @keyframes wb-breathe {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.72;
+        transform: scale(0.985);
+      }
+    }
+    /* Static, fully drawn mark — the base states above are the final frame. */
     @media (prefers-reduced-motion: reduce) {
+      .mark,
       .stroke {
-        animation: wb-draw 0.01ms 1;
+        animation: none;
       }
     }
   </style>
-  <rect x="2" y="2" width="84" height="62" rx="10" fill="none" stroke="#9ca3af" stroke-opacity="0.55" stroke-width="3"/>
-  <path class="stroke" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" fill="none" stroke="#909090" stroke-width="3.5" stroke-linecap="round"/>
+  <g class="mark">
+    <rect x="2" y="2" width="84" height="62" rx="10" fill="none" stroke="#9ca3af" stroke-opacity="0.55" stroke-width="3"/>
+    <path class="stroke" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" fill="none" stroke="#909090" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
   <text x="44" y="80" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="9" letter-spacing="0.4" fill="#909090">Whiteboard</text>
 </svg>

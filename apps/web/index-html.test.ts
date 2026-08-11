@@ -27,14 +27,19 @@ describe('index.html boot splash', () => {
 })
 
 describe('public/boot-splash.svg', () => {
-  it('loops its draw animation', () => {
-    expect(svg).toMatch(/animation:[^;]*infinite/)
+  it('draws the stroke ONCE (no redraw loop)', () => {
+    expect(svg).toMatch(/animation:[^;]*wb-draw/)
+    expect(svg).not.toMatch(/animation:[^;]*wb-draw[^;]*infinite/)
   })
 
-  it('neutralizes the animation under prefers-reduced-motion', () => {
+  it('settles into an infinite breathing loop after the draw', () => {
+    expect(svg).toMatch(/animation:[^;]*wb-breathe[^;]*infinite/)
+  })
+
+  it('neutralizes all animation under prefers-reduced-motion', () => {
     const idx = svg.indexOf('prefers-reduced-motion: reduce')
     expect(idx).toBeGreaterThan(-1)
-    expect(svg.slice(idx)).toMatch(/animation:[^;]*0\.01ms/)
+    expect(svg.slice(idx)).toContain('animation: none')
   })
 
   it('is self-contained (no external references, CSP-safe inside <img>)', () => {

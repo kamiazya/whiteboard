@@ -7,9 +7,9 @@
  * splash. Timings mirror the wb-boot-draw keyframes in index.html.
  */
 
-// One draw cycle reaches the fully drawn stroke at 55% of 2s (1100ms) and
-// starts fading it at 80% (1600ms); handing off inside that window means
-// the user sees the completed stroke plus a beat, never a blank board.
+// The stroke finishes drawing at 1.2s (wb-draw in public/boot-splash.svg);
+// holding to 1.5s means the user sees the completed stroke plus a beat —
+// the mark's slow breathing loop then carries any longer wait.
 export const SPLASH_MIN_VISIBLE_MS = 1500
 export const SPLASH_FADE_MS = 200
 
