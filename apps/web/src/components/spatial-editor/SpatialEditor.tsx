@@ -797,8 +797,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
      */
     const dragStatic = useMemo(() => {
-      if (gestureState.kind !== 'moving') return undefined
-      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+      if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
+      const carried =
+        gestureState.kind === 'moving'
+          ? carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+          : new Set([gestureState.nodeId])
       const base: SpatialCanvas = {
         ...canvas,
         nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
@@ -922,7 +925,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const liveEdges = useMemo(() => {
       if (
-        gestureState.kind !== 'moving' ||
+        (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') ||
         dragPreview === undefined ||
         dragPreview.kind !== 'box' ||
         dragStatic === undefined ||
@@ -930,11 +933,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         return undefined
       }
-      const dx = dragPreview.box.x - gestureState.startX
-      const dy = dragPreview.box.y - gestureState.startY
-      const liveNodes = canvas.nodes.map((n) =>
-        dragStatic.carried.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
-      )
+      const liveNodes =
+        gestureState.kind === 'moving'
+          ? canvas.nodes.map((n) =>
+              dragStatic.carried.has(n.id)
+                ? {
+                    ...n,
+                    x: n.x + (dragPreview.box.x - gestureState.startX),
+                    y: n.y + (dragPreview.box.y - gestureState.startY),
+                  }
+                : n,
+            )
+          : canvas.nodes.map((n) =>
+              n.id === gestureState.nodeId
+                ? {
+                    ...n,
+                    x: dragPreview.box.x,
+                    y: dragPreview.box.y,
+                    width: dragPreview.box.width,
+                    height: dragPreview.box.height,
+                  }
+                : n,
+            )
       // Sides FROZEN at their committed choices for the whole gesture:
       // per-frame crossing optimization would both blow the frame budget
       // and let routes flip sides mid-drag. Anchors and lanes still track
@@ -962,6 +982,63 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         bounds: liveBounds,
       }
     }, [gestureState, dragPreview, dragStatic, canvas, theme, scene])
+
+    /**
+     * The resized node's own content, re-rendered at its PREVIEW size each
+     * frame — a resize changes geometry, so the move ghost's render-once-
+     * transform-per-frame trick cannot apply. Affordable because it is one
+     * node (~0.4ms) and `dragStatic.measure` memoizes text metrics for the
+     * gesture: the first frame warms the cache and later frames re-wrap
+     * with zero new measure calls.
+     *
+     * File-node LOD (card vs inline embed) deliberately stays at its
+     * COMMITTED decision for the whole gesture — the same freeze-then-
+     * settle rule edge sides follow: a mid-gesture card/embed swap is
+     * exactly the kind of flicker the freeze exists to prevent, and the
+     * expansion hysteresis is stateful over the committed canvas. The
+     * crossing of a size threshold takes effect on release.
+     */
+    const liveNode = useMemo(() => {
+      if (
+        gestureState.kind !== 'resizing' ||
+        dragPreview === undefined ||
+        dragPreview.kind !== 'box' ||
+        dragStatic === undefined
+      ) {
+        return undefined
+      }
+      const node = canvas.nodes.find((n) => n.id === gestureState.nodeId)
+      if (node === undefined) return undefined
+      const resized = {
+        ...node,
+        x: dragPreview.box.x,
+        y: dragPreview.box.y,
+        width: dragPreview.box.width,
+        height: dragPreview.box.height,
+      }
+      const rendered = renderCanvasToSvg(
+        { nodes: [resized], edges: [] },
+        {
+          measure: dragStatic.measure,
+          theme,
+          resolveFileLabel,
+          resolveFileCanvas,
+          expandFileNode,
+          resolveFileImage,
+        },
+      )
+      return { svg: rendered.svg, bounds: rendered.bounds }
+    }, [
+      gestureState,
+      dragPreview,
+      dragStatic,
+      canvas,
+      theme,
+      resolveFileLabel,
+      resolveFileCanvas,
+      expandFileNode,
+      resolveFileImage,
+    ])
 
     /**
      * How far a snap guide extends, in canvas space: across all content plus
@@ -3526,6 +3603,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
               dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
+            />
+          )}
+          {liveNode !== undefined && (
+            <div
+              data-testid="live-node"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: liveNode.bounds.x,
+                top: liveNode.bounds.y,
+                pointerEvents: 'none',
+              }}
+              // Same trusted producer as the committed scene (canvas-render's
+              // escaping serializer).
+              dangerouslySetInnerHTML={{ __html: liveNode.svg }}
             />
           )}
           {/* Editor-only iframe embeds for link nodes (never in exports).
