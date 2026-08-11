@@ -358,8 +358,24 @@ export function DaemonIndexPage({
             <p className="text-sm text-muted-foreground">No workspace selected.</p>
           )
         ) : loadError ? (
-          <div role="alert" className="text-sm text-destructive">
-            {loadError}
+          // A failed list load must not dead-end the page: the POST needs no
+          // rows and success navigates away, so creating remains a recovery
+          // path around the broken list. The transient loading state below
+          // deliberately has no create control — deriving a slug from rows
+          // that are still in flight invites a collision the loaded states
+          // cannot produce.
+          <div className="flex flex-col items-start gap-3">
+            <div role="alert" className="text-sm text-destructive">
+              {loadError}
+            </div>
+            <button
+              type="button"
+              disabled={creating}
+              onClick={() => void handleCreate('spatial')}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Create a canvas
+            </button>
           </div>
         ) : !loaded ? (
           <div

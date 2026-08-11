@@ -13,7 +13,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 interface MockRoutes {
   workspaces: Array<{ workspaceId: string }>
-  canvasesByWorkspace: Record<string, Array<{ slug: string; updatedAt: string }>>
+  canvasesByWorkspace: Record<string, Array<{ slug: string; updatedAt: string; kind?: string }>>
   namesByWorkspace?: Record<
     string,
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
@@ -125,6 +125,52 @@ describe('DaemonIndexPage', () => {
 
     expect(await screen.findByText('Alpha Board')).toBeTruthy()
     expect(screen.queryByText('beta')).toBeNull()
+  })
+
+  it('marks a markdown row from the daemon list response as markdown on its card', async () => {
+    // The read direction of `kind`: the daemon's canvases-list response maps
+    // into CanvasRow and reaches the card's text marker. The create/POST
+    // direction is covered separately; without this test every page-level
+    // mock defaults to spatial and the mapping could silently drop kind.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [
+          { slug: 'note', updatedAt: new Date().toISOString(), kind: 'markdown' },
+          { slug: 'board', updatedAt: new Date().toISOString() },
+        ],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    await screen.findByText('note')
+
+    const cards = screen.getAllByTestId('canvas-list-card')
+    const noteCard = cards.find((c) => within(c).queryByText('note'))!
+    const boardCard = cards.find((c) => within(c).queryByText('board'))!
+    expect(within(noteCard).getByText(/markdown/i)).toBeTruthy()
+    expect(within(boardCard).queryByText(/markdown/i)).toBeNull()
+  })
+
+  it('keeps a create entry point when the canvas list fails to load', async () => {
+    // A failed listCanvases must not dead-end the page: creating routes
+    // around the broken list (the POST needs no rows, and success navigates
+    // away), so the error state keeps the same recovery path the toolbar
+    // used to provide.
+    const created: Array<[string, string]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {},
+      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+    })
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    expect(await screen.findByRole('alert')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(created).toEqual([['ws-a', 'untitled']])
   })
 
   it('fades the loaded grid in for skeleton-to-content continuity', async () => {
