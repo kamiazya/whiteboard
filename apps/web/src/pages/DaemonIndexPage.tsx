@@ -136,8 +136,11 @@ export function DaemonIndexPage({
   // card's button (a second click during the async read-then-write must not
   // start a second copy) rather than a page-wide boolean.
   const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null)
-  // Mirrors duplicatingSlug: one create in flight at a time, so a double press cannot send two
-  // POSTs deriving the identical slug from the same rows.
+  // Disables both create controls while one is in flight, so a second press cannot send another
+  // POST deriving the identical slug from the same rows. The `disabled` attribute is the whole
+  // mechanism — an early `if (creating) return` inside the handler was also tried and removed: it
+  // reads `creating` from the render closure, so it is stale in exactly the same-tick case it
+  // would have to catch, and no test could distinguish its presence from its absence.
   const [creating, setCreating] = useState(false)
 
   // Always-current mirror of selectedWorkspace for handleDuplicate's async
@@ -225,7 +228,7 @@ export function DaemonIndexPage({
   // canvas already in the list; naming happens afterwards, in the opened
   // canvas's own top bar.
   const handleCreate = useCallback(async () => {
-    if (!selectedWorkspace || creating) return
+    if (!selectedWorkspace) return
     const workspaceAtStart = selectedWorkspace
     setCreating(true)
     setCreateError(null)
@@ -245,7 +248,7 @@ export function DaemonIndexPage({
     } finally {
       setCreating(false)
     }
-  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas, creating, loadWorkspace])
+  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas, loadWorkspace])
 
   // Client-side copy through EXISTING daemon HTTP endpoints only (read
   // snapshot -> create canvas -> write snapshot -> rename), matching the
@@ -422,7 +425,13 @@ export function DaemonIndexPage({
             <p className="text-sm text-muted-foreground">
               Create a canvas and it opens ready to draw.
             </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => void handleCreate()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={creating}
+              onClick={() => void handleCreate()}
+            >
               Create a canvas
             </Button>
           </div>

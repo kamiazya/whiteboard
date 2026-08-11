@@ -611,6 +611,83 @@ describe('DaemonIndexPage', () => {
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
+  // The `disabled` attribute only protects AFTER React re-renders. Two presses inside one tick
+  // (a real double-click, or Enter held down) both run the handler, and a guard that reads
+  // `creating` from the render closure still sees `false` in the second — so it must not be the
+  // only defence. Two POSTs deriving the same slug means the loser 409s.
+  it('sends one create for two presses inside a single tick', async () => {
+    const created: string[] = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        created.push(JSON.parse(String(init.body)).slug as string)
+        return Promise.resolve(jsonResponse({ slug: 'untitled' }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(jsonResponse({ canvases: [] }))
+      }
+      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    const button = await screen.findByRole('button', { name: 'New canvas' })
+
+    // No await between them: React has not re-rendered, so `disabled` is not yet set.
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+    expect(created).toEqual(['untitled'])
+  })
+
+  // Mirrors the Duplicate action's own in-flight test above: the slug is derived from the loaded
+  // rows, so two creates racing on the same rows derive the SAME slug and the loser 409s. Covers
+  // both entry points — the empty state's button shares one `creating` flag with the toolbar's.
+  it.each([
+    ['toolbar', 'New canvas'],
+    ['empty state', 'Create a canvas'],
+  ])('disables the %s create button while in flight, and double-clicking creates exactly one', async (_label, name) => {
+    let resolveCreate: ((res: Response) => void) | undefined
+    const created: string[] = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        created.push(JSON.parse(String(init.body)).slug as string)
+        return new Promise<Response>((resolve) => {
+          resolveCreate = resolve
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(jsonResponse({ canvases: [] }))
+      }
+      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    const button = await screen.findByRole('button', { name })
+
+    fireEvent.click(button)
+    await waitFor(() => expect(created).toEqual(['untitled']))
+    // The create is still in flight: the control must be disabled AND a second press a no-op.
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(true))
+    fireEvent.click(button)
+    expect(created).toEqual(['untitled'])
+
+    resolveCreate?.(jsonResponse({ slug: 'untitled' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    expect(created).toEqual(['untitled'])
+  })
+
   // Reproduces the defect the dev-loop's QA agent found: after a failed create the list was never
   // re-fetched, so the next click re-derived the SAME slug from stale rows and collided again,
   // deterministically, until the user reloaded the page.
