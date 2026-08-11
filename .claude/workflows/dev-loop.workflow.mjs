@@ -127,6 +127,14 @@ const DESIGN_SCHEMA = {
       description:
         'The concrete path by which a user reaches this change, naming the entry point that makes it reachable and confirming this increment adds it (e.g. "registered via registerToolWithAnnotations + called by smoke:e2e"; "rendered by CanvasList, reachable from /w/:ws"; "mounted on the Hono app in createServer"). Never empty. When the increment deliberately lands unwired, supply exactly one entry "foundation: <reason> — wired by <named follow-up>"; an unwired slice with no named follow-up is not an acceptable answer.',
     },
+    // Optional by design: an absent answer preserves the previous behaviour. When present and not
+    // `none:`, dev-loop hands the design back to the main session BEFORE implementing, because the
+    // `developer` agent has no browser and can only report the unmet step afterwards.
+    manualVerification: {
+      type: 'string',
+      description:
+        'What must be looked at in a running app for this change to count as verified (AGENTS.md step 3) — e.g. "open a canvas, drag a node, watch the edge re-route". Answer "none: <reason>" when tests alone settle it (a pure helper, a server-side path, a docs change).',
+    },
   },
   required: ['completionCriteria', 'scope', 'testScenarios', 'properties', 'blastRadius', 'userReach'],
 }
@@ -200,6 +208,7 @@ const ALLOWED_TOP_LEVEL_KEYS = [
   'properties',
   'blastRadius',
   'userReach',
+  'manualVerification',
 ]
 const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
 
@@ -226,6 +235,7 @@ function isValidDesignShape(d) {
   if (!isNonBlankList(d.properties)) return false
   if (!isNonBlankList(d.blastRadius)) return false
   if (!isNonBlankList(d.userReach)) return false
+  if (d.manualVerification !== undefined && typeof d.manualVerification !== 'string') return false
   return true
 }
 
@@ -236,6 +246,27 @@ function isValidDesignShape(d) {
 function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedDesign }) {
   if (hasDesign) return false
   return !skipDesign || !!discardedInvalidProvidedDesign
+}
+
+// Mirrors .claude/workflows/lib/explain-design.mjs (unit-tested via node:test — the workflow
+// sandbox has no module resolution, so it is duplicated rather than imported; keep both in sync).
+// The `developer` agent has no browser, so it cannot perform AGENTS.md step 3 and can only report
+// the debt afterwards. When the design says a running app must be looked at, the cheapest moment
+// to switch execution mode is here — the design is written and reviewed, so the main session
+// resumes from an approved plan instead of restarting.
+function shouldHandBackForLiveVerification({ manualVerification, dogfood }) {
+  const answer = typeof manualVerification === 'string' ? manualVerification.trim() : ''
+  if (answer === '' || answer.startsWith('none:') || dogfood) {
+    return { handBack: false, recommendation: '' }
+  }
+  return {
+    handBack: true,
+    recommendation:
+      `This change needs verifying in a running app (${answer}), which no pipeline agent can do. ` +
+      'Recommend implementing it from the main session, which has the browser tools, then running ' +
+      'review.workflow.mjs over the resulting diff for the independent dimensions and QA. ' +
+      'Re-run this dev-loop with dogfood:true + appUrl instead if a persona pass is enough.',
+  }
 }
 
 // Gates the Implement phase on the PlanReview gate's final verdict. A failed gate ALWAYS blocks:
@@ -258,7 +289,7 @@ if (design && !isValidDesignShape(design)) {
 if (shouldGenerateDesign({ hasDesign: !!design, skipDesign: SKIP_DESIGN, discardedInvalidProvidedDesign })) {
   phase('Design')
   design = await agent(
-    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, \`properties\`, and \`blastRadius\`.\n\n\`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). Never empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead.\n\n\`blastRadius\` — who ELSE this change reaches, which \`scope\` does not answer. Enumerate the existing call sites/consumers of every symbol you plan to change, and flag each one with whether a test would fail if the change broke it; a caller with NO covering test is the finding this field exists to surface. Prefer an impact-graph MCP tool when one is connected (e.g. code-review-graph's \`get_impact_radius_tool\`/\`query_graph_tool\`, after a \`build_or_update_graph_tool\` refresh); otherwise fall back to grep over the symbol names. Never empty: supply exactly one entry \`"none: <reason>"\` for a genuine leaf change with no existing callers, or \`"unavailable: <reason>"\` if no impact tool is connected AND grep is not workable here — do not stall the gate over it.\n\n\`userReach\` — how a USER reaches this, which \`blastRadius\` does not answer. Name the concrete entry point that makes the change reachable and confirm THIS increment adds it: the MCP tool registration (+ the \`smoke:e2e\` step that calls it), the Hono route mounted on the app, the parent that renders the component on a real screen, the flag that is not only parsed but read. A slice that builds, typechecks and passes its tests while nothing registers/mounts/renders it delivers nothing and comes back as rework — its tests pass precisely because they call the new code directly. Never empty: if this increment deliberately lands unwired, supply exactly one entry \`"foundation: <reason> — wired by <named follow-up>"\`. An unwired slice with no named follow-up is not an acceptable answer; either wire it here or name what wires it.\n\nIf and only if this change touches a UI surface (\`apps/web\`, \`canvas-viewer\`, or anything rendered to a user), read \`.claude/skills/review-gate/resources/accessibility.md\` and fold its constraints into the design and into \`testScenarios\` — accessible names, keyboard reachability, focus behavior around anything that opens, and whether an affordance you are adding is pointer-only. Those are the criteria the \`accessibility\` review dimension judges the built result by, so meeting them here costs a sentence instead of a rewrite. Skip this entirely for non-UI changes.\n\nDo NOT write code yet.`,
+    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, \`properties\`, and \`blastRadius\`.\n\n\`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). Never empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead.\n\n\`blastRadius\` — who ELSE this change reaches, which \`scope\` does not answer. Enumerate the existing call sites/consumers of every symbol you plan to change, and flag each one with whether a test would fail if the change broke it; a caller with NO covering test is the finding this field exists to surface. Prefer an impact-graph MCP tool when one is connected (e.g. code-review-graph's \`get_impact_radius_tool\`/\`query_graph_tool\`, after a \`build_or_update_graph_tool\` refresh); otherwise fall back to grep over the symbol names. Never empty: supply exactly one entry \`"none: <reason>"\` for a genuine leaf change with no existing callers, or \`"unavailable: <reason>"\` if no impact tool is connected AND grep is not workable here — do not stall the gate over it.\n\n\`userReach\` — how a USER reaches this, which \`blastRadius\` does not answer. Name the concrete entry point that makes the change reachable and confirm THIS increment adds it: the MCP tool registration (+ the \`smoke:e2e\` step that calls it), the Hono route mounted on the app, the parent that renders the component on a real screen, the flag that is not only parsed but read. A slice that builds, typechecks and passes its tests while nothing registers/mounts/renders it delivers nothing and comes back as rework — its tests pass precisely because they call the new code directly. Never empty: if this increment deliberately lands unwired, supply exactly one entry \`"foundation: <reason> — wired by <named follow-up>"\`. An unwired slice with no named follow-up is not an acceptable answer; either wire it here or name what wires it.\n\nIf and only if this change touches a UI surface (\`apps/web\`, \`canvas-viewer\`, or anything rendered to a user), read \`.claude/skills/review-gate/resources/accessibility.md\` and fold its constraints into the design and into \`testScenarios\` — accessible names, keyboard reachability, focus behavior around anything that opens, and whether an affordance you are adding is pointer-only. Those are the criteria the \`accessibility\` review dimension judges the built result by, so meeting them here costs a sentence instead of a rewrite. Skip this entirely for non-UI changes.\n\n`manualVerification` — what must be looked at in a RUNNING app for this to count as verified (AGENTS.md step 3). Be concrete: "open a canvas, drag a node, watch the edge re-route". Answer `"none: <reason>"` when tests alone settle it (a pure helper, a server-side path, a docs change). Answer honestly: no pipeline agent has a browser, so a non-`none:` answer stops this run and hands the design back to the main session to implement with real browser tools — that is the intended outcome, not a failure.\n\nDo NOT write code yet.`,
     { label: 'design', phase: 'Design', schema: DESIGN_SCHEMA },
   )
 }
@@ -322,6 +353,28 @@ if (shouldBlockOnFailedPlanReview({ pass: planVerdict.pass })) {
     openFollowups: [],
     needsHumanGate: true,
     note: `PlanReview did not pass after ${MAX_PLAN_REV} revision(s); returning to the integrator instead of implementing a rejected design. mustFix: ${(planVerdict.mustFix || []).join('; ')}`,
+  }
+}
+
+const liveVerification = shouldHandBackForLiveVerification({
+  manualVerification: design && design.manualVerification,
+  dogfood: DOGFOOD,
+})
+if (liveVerification.handBack) {
+  log(`handing back before Implement: ${liveVerification.recommendation}`)
+  return {
+    taskTitle: TASK,
+    baseRef: BASE,
+    cwd: CWD,
+    design,
+    planVerdict,
+    codexPlanVerdict,
+    implReport: null,
+    review: null,
+    openFollowups: [],
+    needsHumanGate: true,
+    recommendation: liveVerification.recommendation,
+    note: 'Design approved but NOT implemented: it needs verification in a running app, which no pipeline agent can perform. The design is returned intact so the main session can implement from it.',
   }
 }
 
