@@ -103,6 +103,79 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
   })
 
+  it('the title survives a remount and renames the canvas in the switcher', async () => {
+    const store = new IndexedDBStore()
+    const first = render(<BrowserLocalCanvasPage store={store} />)
+
+    await screen.findByTestId('mock-spatial-editor')
+    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    await userEvent.click(switcher)
+    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+
+    const title = await screen.findByRole('textbox', { name: /title/i })
+    await userEvent.click(title)
+    await userEvent.keyboard('リリース計画')
+    await waitFor(() => {
+      expect((title as HTMLInputElement).value).toBe('リリース計画')
+    })
+
+    // title and the canvas name are one concept: the switcher label is the
+    // snapshot row, written from the same edit as the OKF core facet.
+    await screen.findByRole('button', { name: 'リリース計画' }, { timeout: 10_000 })
+
+    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    first.unmount()
+
+    // The facet itself round-trips through the Loro 'core' map, so the
+    // title comes back even though the switcher could have supplied a name.
+    render(<BrowserLocalCanvasPage store={store} />)
+    await waitFor(() => {
+      const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+      expect(restored.value).toBe('リリース計画')
+    })
+  })
+
+  it('keeps the body when core facets are written, and vice versa', async () => {
+    const store = new IndexedDBStore()
+    const first = render(<BrowserLocalCanvasPage store={store} />)
+
+    await screen.findByTestId('mock-spatial-editor')
+    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    await userEvent.click(switcher)
+    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+
+    const editable = await waitFor(() => {
+      const el = document.querySelector('[contenteditable="true"]')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    })
+    await waitFor(() => {
+      expect(editable.closest('.cm-editor')?.contains(document.activeElement)).toBe(true)
+    })
+    await userEvent.keyboard('body first')
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('body first')
+    })
+
+    // Body and facets are containers of ONE document saved as a whole
+    // snapshot; writing facets after the body must not export a document
+    // that has lost the body (and the reverse must hold too).
+    const title = screen.getByRole('textbox', { name: /title/i })
+    await userEvent.click(title)
+    await userEvent.keyboard('Titled')
+
+    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    first.unmount()
+
+    render(<BrowserLocalCanvasPage store={store} />)
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toContain('body first')
+    })
+    expect((screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement).value).toBe(
+      'Titled',
+    )
+  })
+
   it('spatial canvases still open the spatial editor after a markdown note exists', async () => {
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is

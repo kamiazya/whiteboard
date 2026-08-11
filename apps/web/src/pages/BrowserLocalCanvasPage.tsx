@@ -2,6 +2,7 @@ import { Copy, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
+import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
@@ -40,7 +41,7 @@ import {
   type LoroStoreLike,
   useBrowserLocalCanvasController,
 } from './use-browser-local-canvas-controller.js'
-import { useMarkdownBody } from './use-markdown-body.js'
+import { useMarkdownCanvasDoc } from './use-markdown-canvas-doc.js'
 
 // React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
 // that would otherwise ship in the entry chunk, which is already close to
@@ -163,7 +164,7 @@ export function BrowserLocalCanvasPage({
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
-  const markdownBody = useMarkdownBody(resolvedLoro, canvasId, canvasKind === 'markdown')
+  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
@@ -474,20 +475,44 @@ export function BrowserLocalCanvasPage({
         </div>
       </div>
       {/* The snapshot's kind picks the editor: markdown canvases open the
-          markdown editor (body persisted as a Loro 'body' text container
-          through the same store — see use-markdown-body.ts), everything
+          markdown editor (body and OKF core facets persisted as containers
+          of one Loro document — see use-markdown-canvas-doc.ts), everything
           else the spatial editor. */}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
         {canvasKind === 'markdown' ? (
-          markdownBody.body !== null && (
-            <MarkdownEditor
-              key={canvasId ?? 'no-canvas'}
-              value={markdownBody.body}
-              onChange={markdownBody.setBody}
-              autoFocus
-              className="h-full"
-              theme={resolvedTheme}
-            />
+          markdownDoc.body !== null &&
+          markdownDoc.coreMeta !== null && (
+            <div className="flex h-full min-h-0 flex-col">
+              <CanvasProperties
+                key={canvasId ?? 'no-canvas'}
+                meta={markdownDoc.coreMeta}
+                onChange={(next) => {
+                  markdownDoc.setCoreMeta(next)
+                  // title and the canvas name are ONE concept: the facet is
+                  // the document's own truth, the snapshot row is the copy
+                  // the canvas list reads without loading every document.
+                  // `renameCanvas` normalises a cleared title to 'untitled',
+                  // which is exactly what an absent facet should list as.
+                  if (next.title !== markdownDoc.coreMeta?.title) {
+                    void renameCanvas(next.title ?? '').catch(() => {
+                      // The rename surfaces its own failure through
+                      // persistence state; the facet write is independent
+                      // and has already landed in the document.
+                    })
+                  }
+                }}
+              />
+              <div className="min-h-0 flex-1">
+                <MarkdownEditor
+                  key={canvasId ?? 'no-canvas'}
+                  value={markdownDoc.body}
+                  onChange={markdownDoc.setBody}
+                  autoFocus
+                  className="h-full"
+                  theme={resolvedTheme}
+                />
+              </div>
+            </div>
           )
         ) : (
           // Keyed on canvas identity: the editor's pan/zoom, in-flight
