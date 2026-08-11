@@ -34,6 +34,22 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // App-mounting browser tests reach DaemonCanvasPage's transport imports
+      // through Vite's dependency scan even though the page itself is lazy —
+      // resolved from source like the entries above, or the scan fails on a
+      // checkout that has not run `pnpm build`.
+      '@kamiazya/whiteboard-mcp/select-canvas-transport': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/select-canvas-transport.ts',
+      ),
+      '@kamiazya/whiteboard-mcp/sse-backend': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/sse-backend.ts',
+      ),
+      '@kamiazya/whiteboard-mcp/sse-stream-hub': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/sse-stream-hub.ts',
+      ),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(

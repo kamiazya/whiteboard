@@ -54,6 +54,16 @@ vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
   },
 }))
 
+// Captures the open callback so a test can drive list -> editor navigation
+// without rendering the real list (which would pull in the store's IDB path).
+let receivedIndexPageOnOpenCanvas: ((id: string) => void) | undefined
+vi.mock('./pages/BrowserLocalIndexPage.js', () => ({
+  BrowserLocalIndexPage: ({ onOpenCanvas }: { onOpenCanvas: (id: string) => void }) => {
+    receivedIndexPageOnOpenCanvas = onOpenCanvas
+    return <div data-testid="browser-local-index-page" />
+  },
+}))
+
 // useDaemonConnection is a module-level singleton (see its own test file for
 // why) — mocked here so App routing tests control its result directly
 // instead of round-tripping through window.location.hash.
@@ -181,7 +191,7 @@ describe('silent renewal on a hosted origin', () => {
       )
     })
 
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-index-page')
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
   })
 
@@ -205,7 +215,7 @@ describe('silent renewal on a hosted origin', () => {
     })
 
     // Fail closed: stays on browser-local AND tells the user why.
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-index-page')
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toMatch(/identity changed/i)
   })
@@ -219,7 +229,7 @@ describe('silent renewal on a hosted origin', () => {
       )
     })
 
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-index-page')
     expect(renewPairingTokenMock).not.toHaveBeenCalled()
   })
 })
@@ -332,7 +342,7 @@ describe('App backend configuration chip', () => {
     expect(document.body.textContent).not.toMatch(/https?:\/\//)
   })
 
-  it('lets the browser-local escape override invalid-config after a failed pairing', () => {
+  it('lets the browser-local escape override invalid-config after a failed pairing', async () => {
     // A pairing error can coexist with an invalid runtime config; clicking
     // "Continue in browser-local" must land on the browser-local page, not
     // bounce the user onto the invalid-config error page.
@@ -344,7 +354,7 @@ describe('App backend configuration chip', () => {
         </MemoryRouter>,
       )
       fireEvent.click(screen.getByRole('button', { name: /continue in browser-local/i }))
-      expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+      expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
       expect(screen.queryByText('Runtime configuration is invalid.')).toBeNull()
     } finally {
       mockDaemonConnectionResult = { status: 'none' }
@@ -357,33 +367,49 @@ describe('App capability wiring', () => {
     receivedCapabilities = undefined
   })
 
-  it('passes the browser-local capabilities down to BrowserLocalCanvasPage', () => {
+  it('passes the browser-local capabilities down to BrowserLocalCanvasPage', async () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/local/c1']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
+    await screen.findByTestId('browser-local-canvas-page')
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialCanvasId from a /local/:canvasId cold-load URL', () => {
+  it('derives initialCanvasId from a /local/:canvasId cold-load URL', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/local/c2']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
+    await screen.findByTestId('browser-local-canvas-page')
     expect(receivedInitialCanvasId).toBe('c2')
   })
 
-  it('leaves initialCanvasId undefined for a plain "/" cold load', () => {
+  it('lands a plain "/" cold load on the canvas list, not the editor', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+  })
+
+  it('opening a canvas from the list mounts the editor on that canvas', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    expect(receivedInitialCanvasId).toBeUndefined()
+    await screen.findByTestId('browser-local-index-page')
+    expect(receivedIndexPageOnOpenCanvas).toBeDefined()
+    act(() => receivedIndexPageOnOpenCanvas?.('c9'))
+    expect(await screen.findByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(receivedInitialCanvasId).toBe('c9')
   })
 })
 
@@ -457,7 +483,7 @@ describe('App daemon-pairing routing', () => {
     expect(receivedDaemonPageProps?.token).toBe('tok')
   })
 
-  it('renders a role=alert error UI with a browser-local escape hatch on error', () => {
+  it('renders a role=alert error UI with a browser-local escape hatch on error', async () => {
     mockDaemonConnectionResult = { status: 'error', detail: 'malformed fragment' }
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -468,17 +494,17 @@ describe('App daemon-pairing routing', () => {
     const button = screen.getByRole('button', { name: /continue in browser-local/i })
     expect(button).toBeTruthy()
     fireEvent.click(button)
-    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
   })
 
-  it('falls through to existing provider-state resolution unchanged when there is no fragment', () => {
+  it('falls through to existing provider-state resolution unchanged when there is no fragment', async () => {
     mockDaemonConnectionResult = { status: 'none' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
   })
 })
@@ -718,8 +744,11 @@ describe('App local-daemon provider state', () => {
     act(() => {
       onContinueBrowserLocal()
     })
-    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    // Capabilities flow to the editor: open a canvas from the escaped list.
+    act(() => receivedIndexPageOnOpenCanvas?.('c1'))
+    await screen.findByTestId('browser-local-canvas-page')
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_CAPABILITIES)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
     expect(
@@ -941,15 +970,15 @@ describe('App error boundary', () => {
     throwInBrowserLocalCanvasPage = false
   })
 
-  it('catches a render error from the active page and shows the fallback instead of crashing the app', () => {
+  it('catches a render error from the active page and shows the fallback instead of crashing the app', async () => {
     throwInBrowserLocalCanvasPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/local/c1']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     expect(reportSpy).toHaveBeenCalled()
     reportSpy.mockRestore()
