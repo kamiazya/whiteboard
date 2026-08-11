@@ -227,7 +227,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(title)
     await userEvent.keyboard('{Control>}a{/Control}')
     await userEvent.keyboard('Architecture map')
-    await screen.findByRole('button', { name: 'Architecture map' }, { timeout: 10_000 })
+    // Regex rather than an exact name: the switcher's accessible name carries
+    // more than its label text, so a full-string match asserts the wrong thing.
+    await screen.findByRole('button', { name: /Architecture map/ }, { timeout: 10_000 })
 
     await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
     first.unmount()
