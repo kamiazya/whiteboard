@@ -136,6 +136,9 @@ export function DaemonIndexPage({
   // card's button (a second click during the async read-then-write must not
   // start a second copy) rather than a page-wide boolean.
   const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null)
+  // Mirrors duplicatingSlug: one create in flight at a time, so a double press cannot send two
+  // POSTs deriving the identical slug from the same rows.
+  const [creating, setCreating] = useState(false)
 
   // Always-current mirror of selectedWorkspace for handleDuplicate's async
   // completion check below: a plain ref write during render (not inside an
@@ -222,18 +225,27 @@ export function DaemonIndexPage({
   // canvas already in the list; naming happens afterwards, in the opened
   // canvas's own top bar.
   const handleCreate = useCallback(async () => {
-    if (!selectedWorkspace) return
+    if (!selectedWorkspace || creating) return
+    const workspaceAtStart = selectedWorkspace
+    setCreating(true)
     setCreateError(null)
     try {
       const slug = deriveNewCanvasSlug(rows.map((r) => r.slug))
-      const created = await createCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, slug)
-      onOpenCanvas(selectedWorkspace, created.slug)
+      const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, slug)
+      onOpenCanvas(workspaceAtStart, created.slug)
     } catch (err) {
       // daemon-api-client errors are already sanitized (Problem Details
       // title or a generic status message) — safe to surface directly.
       setCreateError(err instanceof Error ? err.message : 'Failed to create canvas.')
+      // The slug is derived from `rows`, so a failure caused by a name this list has not seen
+      // (another tab, a lost race) would otherwise re-derive the SAME slug on every retry and
+      // collide forever. Re-read the list so the next derive skips what is actually taken.
+      const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+      if (!isStale()) await loadWorkspace(workspaceAtStart, isStale)
+    } finally {
+      setCreating(false)
     }
-  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas])
+  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas, creating, loadWorkspace])
 
   // Client-side copy through EXISTING daemon HTTP endpoints only (read
   // snapshot -> create canvas -> write snapshot -> rename), matching the
@@ -313,6 +325,7 @@ export function DaemonIndexPage({
                   <button
                     type="button"
                     aria-label="New canvas"
+                    disabled={creating}
                     onClick={() => void handleCreate()}
                     className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                   >

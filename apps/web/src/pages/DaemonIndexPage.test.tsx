@@ -611,6 +611,61 @@ describe('DaemonIndexPage', () => {
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
+  // Reproduces the defect the dev-loop's QA agent found: after a failed create the list was never
+  // re-fetched, so the next click re-derived the SAME slug from stale rows and collided again,
+  // deterministically, until the user reloaded the page.
+  it('re-reads the list after a failed create so the retry does not repeat the same slug', async () => {
+    const created: string[] = []
+    let serverSlugs: string[] = ['untitled']
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        const slug = JSON.parse(String(init?.body ?? '{}')).slug as string
+        created.push(slug)
+        if (serverSlugs.includes(slug)) {
+          return Promise.resolve(jsonResponse({ title: `Canvas "${slug}" already exists` }, 409))
+        }
+        serverSlugs = [...serverSlugs, slug]
+        return Promise.resolve(jsonResponse({ slug }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        // The list starts EMPTY (a second tab created "untitled"), so the first derive collides.
+        return Promise.resolve(
+          jsonResponse({
+            canvases:
+              created.length === 0
+                ? []
+                : serverSlugs.map((slug) => ({ slug, updatedAt: new Date().toISOString() })),
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ names: {} }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('already exists')
+
+    // The retry must not repeat the losing slug.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'New canvas' })?.hasAttribute('disabled')).toBe(
+        false,
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+
+    expect(created).toEqual(['untitled', 'untitled-2'])
+    expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2')
+  })
+
   it('has no Storage tab — storage and pairing live in Settings (design refactor D2)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
