@@ -26,6 +26,30 @@ describe('index.html boot splash', () => {
   })
 })
 
+describe('index.html social & browser-chrome meta', () => {
+  // Link previews (Slack/X/Discord) render from these; without them a
+  // shared URL shows as a bare link.
+  it('declares Open Graph and Twitter card tags with an absolute og:image', () => {
+    expect(html).toContain('property="og:title"')
+    expect(html).toContain('property="og:description"')
+    expect(html).toMatch(/property="og:image"\s+content="https:\/\/[^"]+og-image\.png"/)
+    expect(html).toContain('name="twitter:card"')
+    expect(html).toContain('summary_large_image')
+  })
+
+  it('declares a meta description', () => {
+    expect(html).toMatch(/name="description"\s+content=".{20,}"/)
+  })
+
+  // Mobile browser chrome tint follows the app ground per scheme — not the
+  // pre-design-refactor navy.
+  it('sets theme-color for both color schemes and drops the navy', () => {
+    expect(html).toMatch(/name="theme-color"[^>]*media="\(prefers-color-scheme: light\)"/)
+    expect(html).toMatch(/name="theme-color"[^>]*media="\(prefers-color-scheme: dark\)"/)
+    expect(html).not.toContain('#0f172a')
+  })
+})
+
 describe('public/boot-splash.svg', () => {
   it('draws the stroke ONCE (no redraw loop)', () => {
     expect(svg).toMatch(/animation:[^;]*wb-draw/)
