@@ -94,9 +94,16 @@ export async function saveCanvas(
     await writeFile(path, snapshot)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingCanvasId) {
+      // A plain re-save (WS updates, applyAndPersist, compactCanvas) omits
+      // `kind` and must never touch the stored value. An explicit `kind` is
+      // an intentional sync request (e.g. restore reconciling a different-
+      // kind source's content onto an existing target) and is honored.
       await db
         .updateTable('canvases')
-        .set({ updatedAt: Date.now() })
+        .set({
+          updatedAt: Date.now(),
+          ...(options.kind !== undefined ? { kind: options.kind } : {}),
+        })
         .where('id', '=', canvasId)
         .execute()
     } else {
@@ -113,9 +120,11 @@ export async function saveCanvas(
           currentBranch: 'main',
           createdAt: now,
           updatedAt: now,
-          // Written only on insert — an overwrite:true re-save (the
-          // onConflict branch below, and the update branch above) must
-          // never mutate a stored canvas's kind.
+          // Written on insert. The update branch above honors an explicit
+          // `kind` too (a plain re-save omits it and leaves the stored value
+          // untouched); the onConflict branch below is the rare
+          // insert-raced-with-a-concurrent-insert fallback and, like a plain
+          // re-save, does not touch `kind`.
           kind: options.kind ?? null,
         })
         .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))

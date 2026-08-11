@@ -1,3 +1,4 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
@@ -32,6 +33,7 @@ async function reconcileCommitSaveBroadcast(
   doc: LoroDoc,
   past: LoroDoc,
   label: string | undefined,
+  kind: CanvasKind | null = null,
 ): Promise<void> {
   const { sendRestoreEvent } = await import('../ws.js')
   sendRestoreEvent(workspaceId, targetSlug, 'started', label)
@@ -40,7 +42,10 @@ async function reconcileCommitSaveBroadcast(
     try {
       doc.import(past.export({ mode: 'snapshot' }))
       doc.commit()
-      await saveCanvas(workspaceId, targetSlug, doc, { overwrite: true })
+      await saveCanvas(workspaceId, targetSlug, doc, {
+        overwrite: true,
+        ...(kind !== null ? { kind } : {}),
+      })
     } catch (err) {
       // doc.import mutates the cached doc in place before commit/save
       // run, so any failure in this block leaves the cache ahead of
@@ -150,7 +155,20 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           const all = await versionStore.list(workspaceId, slug)
           const label = all.find((v) => v.id === id)?.label
           const targetDoc = await getDoc(workspaceId, targetSlug)
-          await reconcileCommitSaveBroadcast(workspaceId, targetSlug, targetDoc, past, label)
+          // The merged content is the source's own shape (spatial nodes/edges
+          // vs. a markdown body), same reasoning as the new-canvas branch
+          // below — the target's stored kind must follow it or a kind-aware
+          // consumer (editor routing) opens the overwritten canvas with the
+          // wrong editor.
+          const sourceKind = await getCanvasKind(workspaceId, slug)
+          await reconcileCommitSaveBroadcast(
+            workspaceId,
+            targetSlug,
+            targetDoc,
+            past,
+            label,
+            sourceKind,
+          )
           return c.json({
             canvasId: `${workspaceId}/${targetSlug}`,
             elementCount: countElements(targetDoc),
