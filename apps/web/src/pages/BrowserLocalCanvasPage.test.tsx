@@ -659,10 +659,13 @@ describe('BrowserLocalCanvasPage', () => {
     // Resolve generation 3 (fresh, matches the final c1 state) BEFORE
     // generation 2 (stale, superseded) — the out-of-order case the
     // generation guard exists to handle.
+    // The fresh marker rides a row OTHER than the open canvas: the open
+    // canvas's own label comes from the loaded snapshot, not from the list.
     const freshList: CanvasSnapshot[] = [
+      snap,
       {
-        id: 'c1',
-        name: 'untitled (fresh)',
+        id: 'c3',
+        name: 'Other canvas (fresh)',
         updatedAt: '2026-05-26T00:00:00.000Z',
         kind: 'spatial' as const,
       },
@@ -684,10 +687,54 @@ describe('BrowserLocalCanvasPage', () => {
 
     // The stale (generation 2) resolution must not clobber the fresh one:
     // opening the switcher again must show only the fresh name.
-    const switcherButton = await screen.findByRole('button', { name: 'untitled (fresh)' })
+    const switcherButton = await screen.findByRole('button', { name: 'untitled' })
     fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-canvas-menu-item')
+    await screen.findByText('Other canvas (fresh)')
     expect(screen.queryByText('Other canvas (stale)')).toBeNull()
+  })
+
+  it('shows the renamed canvas in the switcher even when the list read wins the race against the save', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+
+    const resolvers: Array<(list: CanvasSnapshot[]) => void> = []
+    const controllableStore: BrowserLocalStore = {
+      getDefaultCanvasId: store.getDefaultCanvasId.bind(store),
+      setDefaultCanvasId: store.setDefaultCanvasId.bind(store),
+      load: store.load.bind(store),
+      save: store.save.bind(store),
+      del: store.del.bind(store),
+      generateId: store.generateId.bind(store),
+      listCanvases: () => new Promise((resolve) => resolvers.push(resolve)),
+    }
+
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={controllableStore} loro={new FakeLoroStore()} />)
+    })
+    await act(async () => {
+      resolvers[0]!([snap])
+    })
+
+    const canvasActions = await screen.findByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    fireEvent.pointerUp(await screen.findByText('Rename canvas'))
+    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
+    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
+    })
+
+    // The rename's list refresh resolves with the PRE-rename row: the store
+    // read raced the still-in-flight save and lost. Nothing schedules another
+    // refresh afterwards, so a list-only switcher label would stay stale
+    // forever — the current canvas's row must come from the loaded snapshot.
+    await act(async () => {
+      resolvers[resolvers.length - 1]!([snap])
+    })
+    expect(screen.getByRole('button', { name: 'Renamed canvas' })).toBeTruthy()
   })
 
   it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
