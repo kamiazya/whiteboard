@@ -78,6 +78,9 @@ export interface ContextMenuProps {
   readonly y: number
   readonly items: readonly ContextMenuItem[]
   readonly onClose: () => void
+  /** Overrides for a second, non-context use of this surface (e.g. the canvas settings popover). */
+  readonly testId?: string
+  readonly ariaLabel?: string
 }
 
 /**
@@ -118,7 +121,7 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, testId, ariaLabel }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so the requested position is nudged back inside once the real menu size
@@ -163,9 +166,9 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       ref={menuRef}
       data-editor-overlay
       data-context-menu
-      data-testid="context-menu"
+      data-testid={testId ?? 'context-menu'}
       role="menu"
-      aria-label="Canvas actions"
+      aria-label={ariaLabel ?? 'Canvas actions'}
       tabIndex={-1}
       className="min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none"
       // Positioning (incl. stacking) is inline, not utility classes: the

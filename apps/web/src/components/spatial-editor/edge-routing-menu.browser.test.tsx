@@ -1,9 +1,8 @@
-// Provisional UI for the canvas-wide routing style.
+// Canvas-wide routing style, set from the dock's settings popover.
 //
-// It lives on empty space because empty space IS the canvas, and the recorded
-// OOUI rule puts actions on an existing object with that object — the dock's
-// "+" menu stays for things that do not exist yet. Placement is provisional;
-// the rule it follows is not.
+// The rendering assertions are the point here: a pick must not just record
+// the extension on the canvas, it must change what the scene draws. The
+// popover wiring itself is pinned in canvas-settings.browser.test.tsx.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -39,33 +38,23 @@ function makeHost() {
   return { Host, latest }
 }
 
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
-function openCanvasMenu(root: HTMLElement) {
-  const r = root.getBoundingClientRect()
-  root.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + 700,
-      clientY: r.top + 560,
-      button: 2,
-    }),
-  )
+function openSettings(container: HTMLElement) {
+  const gear = container.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
+  gear.click()
 }
 
 const optionButton = (container: HTMLElement, label: string) =>
-  [...container.querySelectorAll('[data-testid="context-menu"] button')].find(
+  [...container.querySelectorAll('[data-testid="canvas-settings-menu"] button')].find(
     (button) => button.textContent?.trim() === label,
   ) as HTMLButtonElement | undefined
 
-it('offers the routing style from the canvas itself, not the creation menu', async () => {
+it('offers the routing style from the settings popover, not the creation menu', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
 
   await vi.waitFor(() => {
-    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="canvas-settings-menu"]')).not.toBeNull()
   })
   expect(container.textContent).toContain('Edge routing')
   expect(optionButton(container, 'Orthogonal')).toBeDefined()
@@ -83,7 +72,7 @@ it('offers the routing style from the canvas itself, not the creation menu', asy
 it('records the choice on the canvas and bends the edge', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()
@@ -104,14 +93,14 @@ it('drops the setting again when the style returns to straight', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()
   await vi.waitFor(() =>
     expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal'),
   )
 
-  openCanvasMenu(rootOf(container))
+  // The popover stays open after a pick — flip straight from the same surface.
   await vi.waitFor(() => expect(optionButton(container, 'Straight')).toBeDefined())
   optionButton(container, 'Straight')?.click()
 
@@ -126,7 +115,7 @@ it('drops the setting again when the style returns to straight', async () => {
 it('draws a curve when the canvas asks for one', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Curved')).toBeDefined())
   optionButton(container, 'Curved')?.click()
@@ -172,7 +161,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     )
   }
   const { container } = render(<CrossHost />)
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'On')).toBeDefined())
   optionButton(container, 'On')?.click()
@@ -188,8 +177,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     expect(arcPath).toBeDefined()
   })
 
-  // Off leaves no trace on the canvas.
-  openCanvasMenu(rootOf(container))
+  // Off leaves no trace on the canvas (same open popover).
   await vi.waitFor(() => expect(optionButton(container, 'Off')).toBeDefined())
   optionButton(container, 'Off')?.click()
   await vi.waitFor(() => {
@@ -222,7 +210,7 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
     )
   }
   const { container } = render(<DeferredHost />)
-  openCanvasMenu(rootOf(container))
+  openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()

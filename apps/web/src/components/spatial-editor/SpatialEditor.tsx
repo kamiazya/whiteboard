@@ -110,6 +110,7 @@ import {
   Pencil,
   Scissors,
   SendToBack,
+  SlidersHorizontal,
   Sparkles,
   SquareDashed,
   StickyNote,
@@ -479,6 +480,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // deliberately NOT a mode — the palette's Add note works in every mode.
     const [tool, setTool] = useState<EditorTool>(defaultTool)
     /** Open right-click menu: screen position (root-relative) + hit target. */
+    // Canvas-wide display settings popover, anchored at the dock's gear.
+    const [settingsMenu, setSettingsMenu] = useState<{ x: number; y: number } | null>(null)
     const [contextMenu, setContextMenu] = useState<{
       x: number
       y: number
@@ -1752,6 +1755,48 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
+     * Canvas-wide display settings, shown in the dock's settings popover.
+     * Option rows apply immediately and keep the popover open (the shared
+     * ContextMenu option-row contract), eager on canvasRef like every other
+     * command path so a second pick chains off the first.
+     */
+    const canvasSettingsItems = (): ContextMenuItem[] => {
+      const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
+      const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+      const run = (command: EditorCommand) => {
+        const running = applyCommand(canvasRef.current, command)
+        canvasRef.current = running
+        onChange(running, command)
+      }
+      return [
+        {
+          kind: 'options',
+          label: 'Edge routing',
+          options: EDGE_ROUTING_CHOICES.map(({ style, label }) => ({
+            key: style,
+            label,
+            selected: currentRouting === style,
+            onSelect: () => run({ kind: 'set-edge-routing', style }),
+          })),
+        },
+        {
+          kind: 'options',
+          label: 'Line jumps',
+          options: (
+            [
+              { lineJumps: 'none', label: 'Off' },
+              { lineJumps: 'arc', label: 'On' },
+            ] as const
+          ).map(({ lineJumps, label }) => ({
+            label,
+            selected: currentJumps === lineJumps,
+            onSelect: () => run({ kind: 'set-line-jumps', lineJumps }),
+          })),
+        },
+      ]
+    }
+
+    /**
      * Clones the selection as ONE batch command (one undo step): reminted
      * ids via the clipboard-fragment helpers, +16px offset (the standard
      * duplicate-again cascade), edges kept only when both endpoints are
@@ -2828,12 +2873,44 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 }
           }
           tool={tool}
+          trailing={
+            tool === 'hand' ? undefined : (
+              <button
+                type="button"
+                data-testid="canvas-settings-button"
+                aria-label="Canvas settings"
+                aria-haspopup="menu"
+                aria-expanded={settingsMenu !== null}
+                onClick={(e) => {
+                  if (settingsMenu !== null) {
+                    setSettingsMenu(null)
+                    return
+                  }
+                  const root = rootRef.current
+                  if (root === null) return
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const rootRect = root.getBoundingClientRect()
+                  // Anchored at the gear; ContextMenu clamps itself back
+                  // inside the editor, so a dock-adjacent anchor just means
+                  // "as close to the gear as fits".
+                  setSettingsMenu({
+                    x: rect.left - rootRect.left,
+                    y: rect.top - rootRect.top,
+                  })
+                }}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <SlidersHorizontal aria-hidden="true" className="size-4" />
+              </button>
+            )
+          }
           onToolChange={(next) => {
             setTool(next)
             // A context menu is an edit affordance of the mode it was
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.
             setContextMenu(null)
+            setSettingsMenu(null)
             // Entering hand mode drops EVERY edit affordance, not just the
             // menu: a surviving selection would keep Delete/resize/connect
             // handles live, an open editor would keep accepting text, and
@@ -2884,6 +2961,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               addImageFile(file, pendingImagePointRef.current ?? undefined)
               pendingImagePointRef.current = null
             }}
+          />
+        )}
+        {settingsMenu !== null && (
+          <ContextMenu
+            testId="canvas-settings-menu"
+            ariaLabel="Canvas settings"
+            x={settingsMenu.x}
+            y={settingsMenu.y}
+            onClose={() => setSettingsMenu(null)}
+            items={canvasSettingsItems()}
           />
         )}
         {contextMenu !== null && (
@@ -3137,54 +3224,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                       applyBoxMoves(tidyNodes(canvasRef.current.nodes, { locked: isLocked })),
                   })
                 }
-                // Empty space IS the canvas, so canvas-wide settings are acted
-                // on from here — the recorded OOUI rule puts actions on an
-                // existing object with that object, and keeps the dock's "+"
-                // menu for things that do not exist yet.
-                //
-                // Provisional placement: a canvas with several settings wants
-                // its own surface rather than a growing context menu.
-                const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
-                emptyItems.push({ kind: 'separator' })
-                emptyItems.push({
-                  kind: 'options',
-                  label: 'Edge routing',
-                  options: EDGE_ROUTING_CHOICES.map(({ style, label }) => ({
-                    key: style,
-                    label,
-                    selected: currentRouting === style,
-                    onSelect: () => {
-                      const command: EditorCommand = { kind: 'set-edge-routing', style }
-                      const running = applyCommand(canvasRef.current, command)
-                      // Eager, like every other command path: a second pick
-                      // from the same open menu must chain off this result,
-                      // not the stale prop of a parent that has not
-                      // committed yet.
-                      canvasRef.current = running
-                      onChange(running, command)
-                    },
-                  })),
-                })
-                const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
-                emptyItems.push({
-                  kind: 'options',
-                  label: 'Line jumps',
-                  options: (
-                    [
-                      { lineJumps: 'none', label: 'Off' },
-                      { lineJumps: 'arc', label: 'On' },
-                    ] as const
-                  ).map(({ lineJumps, label }) => ({
-                    label,
-                    selected: currentJumps === lineJumps,
-                    onSelect: () => {
-                      const command: EditorCommand = { kind: 'set-line-jumps', lineJumps }
-                      const running = applyCommand(canvasRef.current, command)
-                      canvasRef.current = running
-                      onChange(running, command)
-                    },
-                  })),
-                })
                 return emptyItems
               }
               const items: ContextMenuItem[] = []
