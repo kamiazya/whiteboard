@@ -546,7 +546,7 @@ describe('DaemonIndexPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates a canvas via New canvas and opens it', async () => {
+  it('creates a canvas via New canvas and opens it, with no name typed first', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -556,13 +556,32 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await waitFor(() => expect(screen.getByLabelText('New canvas name')).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
 
-    fireEvent.change(screen.getByLabelText('New canvas name'), { target: { value: 'fresh' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create canvas' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'fresh'))
-    expect(created).toEqual([['ws-a', 'fresh']])
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(created).toEqual([['ws-a', 'untitled']])
+  })
+
+  it('derives a unique slug from the loaded rows, skipping an already-used "untitled"', async () => {
+    const created: Array<[string, string]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'untitled', updatedAt: new Date().toISOString() }],
+      },
+      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+    })
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await screen.findByText('untitled')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2'))
+    expect(created).toEqual([['ws-a', 'untitled-2']])
   })
 
   it('shows an alert when create canvas fails', async () => {
@@ -583,14 +602,145 @@ describe('DaemonIndexPage', () => {
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await waitFor(() => expect(screen.getByLabelText('New canvas name')).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
 
-    fireEvent.change(screen.getByLabelText('New canvas name'), { target: { value: 'fresh' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create canvas' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('Request failed (500).')
     expect(screen.queryByText(/boom/)).toBeNull()
     expect(onOpenCanvas).not.toHaveBeenCalled()
+  })
+
+  // The `disabled` attribute only protects AFTER React re-renders. Two presses inside one tick
+  // (a real double-click, or Enter held down) both run the handler, and a guard that reads
+  // `creating` from the render closure still sees `false` in the second — so it must not be the
+  // only defence. Two POSTs deriving the same slug means the loser 409s.
+  it('sends one create for two presses inside a single tick', async () => {
+    const created: string[] = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        created.push(JSON.parse(String(init.body)).slug as string)
+        return Promise.resolve(jsonResponse({ slug: 'untitled' }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(jsonResponse({ canvases: [] }))
+      }
+      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    const button = await screen.findByRole('button', { name: 'New canvas' })
+
+    // No await between them: React has not re-rendered, so `disabled` is not yet set.
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+    expect(created).toEqual(['untitled'])
+  })
+
+  // Mirrors the Duplicate action's own in-flight test above: the slug is derived from the loaded
+  // rows, so two creates racing on the same rows derive the SAME slug and the loser 409s. Covers
+  // both entry points — the empty state's button shares one `creating` flag with the toolbar's.
+  it.each([
+    ['toolbar', 'New canvas'],
+    ['empty state', 'Create a canvas'],
+  ])('disables the %s create button while in flight, and double-clicking creates exactly one', async (_label, name) => {
+    let resolveCreate: ((res: Response) => void) | undefined
+    const created: string[] = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        created.push(JSON.parse(String(init.body)).slug as string)
+        return new Promise<Response>((resolve) => {
+          resolveCreate = resolve
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(jsonResponse({ canvases: [] }))
+      }
+      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    const button = await screen.findByRole('button', { name })
+
+    fireEvent.click(button)
+    await waitFor(() => expect(created).toEqual(['untitled']))
+    // The create is still in flight: the control must be disabled AND a second press a no-op.
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(true))
+    fireEvent.click(button)
+    expect(created).toEqual(['untitled'])
+
+    resolveCreate?.(jsonResponse({ slug: 'untitled' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    expect(created).toEqual(['untitled'])
+  })
+
+  // Reproduces the defect the dev-loop's QA agent found: after a failed create the list was never
+  // re-fetched, so the next click re-derived the SAME slug from stale rows and collided again,
+  // deterministically, until the user reloaded the page.
+  it('re-reads the list after a failed create so the retry does not repeat the same slug', async () => {
+    const created: string[] = []
+    let serverSlugs: string[] = ['untitled']
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        const slug = JSON.parse(String(init?.body ?? '{}')).slug as string
+        created.push(slug)
+        if (serverSlugs.includes(slug)) {
+          return Promise.resolve(jsonResponse({ title: `Canvas "${slug}" already exists` }, 409))
+        }
+        serverSlugs = [...serverSlugs, slug]
+        return Promise.resolve(jsonResponse({ slug }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        // The list starts EMPTY (a second tab created "untitled"), so the first derive collides.
+        return Promise.resolve(
+          jsonResponse({
+            canvases:
+              created.length === 0
+                ? []
+                : serverSlugs.map((slug) => ({ slug, updatedAt: new Date().toISOString() })),
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ names: {} }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New canvas' })).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('already exists')
+
+    // The retry must not repeat the losing slug.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'New canvas' })?.hasAttribute('disabled')).toBe(
+        false,
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+
+    expect(created).toEqual(['untitled', 'untitled-2'])
+    expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2')
   })
 
   it('has no Storage tab — storage and pairing live in Settings (design refactor D2)', async () => {
@@ -630,7 +780,7 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByLabelText('Workspace')).toBeNull()
   })
 
-  it('labels the new-canvas input with a placeholder instead of floating unlabeled', async () => {
+  it('exposes the New canvas control as an icon-only button whose glyph is aria-hidden', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
@@ -639,7 +789,28 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
     await screen.findByText('alpha')
 
-    expect(screen.getByPlaceholderText('New canvas name…')).toBeTruthy()
+    const button = screen.getByRole('button', { name: 'New canvas' })
+    expect(button.getAttribute('aria-label')).toBe('New canvas')
+    // The only visible content is the aria-hidden glyph — no leaked text name.
+    const svg = button.querySelector('svg')
+    expect(svg?.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('mounts no permanent creation form in the toolbar (ADR-0006)', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create canvas' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tree view' }))
+    expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create canvas' })).toBeNull()
   })
 
   it('shows a loading skeleton before the first load resolves, never a false empty state', async () => {
@@ -665,18 +836,24 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('status', { name: /loading canvases/i })).toBeNull()
   })
 
-  it('empty workspace shows one clear next action that starts canvas creation', async () => {
+  it('empty workspace shows one clear next action that creates and opens a canvas', async () => {
+    const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: { 'ws-a': [] },
+      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
     })
+    const onOpenCanvas = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
 
     expect(await screen.findByText('No canvases yet')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
-    // The action lands the user in the naming input, ready to type.
-    expect(document.activeElement).toBe(screen.getByLabelText('New canvas name'))
+
+    // The action creates immediately — no naming step gates it — and opens
+    // the result, same as the toolbar's "New canvas" control.
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(created).toEqual([['ws-a', 'untitled']])
   })
 
   it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {

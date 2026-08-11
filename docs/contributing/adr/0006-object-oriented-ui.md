@@ -47,15 +47,14 @@ Concretely:
 
 ## Known violation
 
-`DaemonIndexPage.tsx` mounts a permanent creation **form** in the canvas-list
-toolbar: a `New canvas name…` text input plus a `Create canvas` text button.
-It violates points 1, 3, and 4 at once — a verb-first form, always present
-whether or not the user intends to create anything, demanding a name before
-the object exists.
+`DaemonCanvasPage.tsx` mounts a permanent creation **form** in its
+empty-workspace view: a `New canvas name…` text input plus a `Create canvas`
+text button. It violates points 1, 3, and 4 at once — a verb-first form,
+always present whether or not the user intends to create anything, demanding
+a name before the object exists.
 
-`CanvasDropdown.tsx` shows the conforming shape for the same capability: a
-`New canvas…` entry with an icon **and** a label, because a dropdown is a
-reading surface.
+`CanvasDropdown.tsx` shows the conforming shape for the same capability in a
+reading surface: a `New canvas…` entry with an icon **and** a label.
 
 This is recorded rather than quietly fixed so the ADR describes the shipped
 state. Correcting the page is follow-up work, not part of writing this down.
