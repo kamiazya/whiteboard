@@ -14,6 +14,7 @@
  * package-canvas-render.md's "scene graph stays plain TS" decision) — so per
  * YAGNI + zod-schema-discipline this type deliberately carries no Zod schema.
  */
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { Box, NodeBox } from './geometry.js'
 import { resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
@@ -76,6 +77,38 @@ export function computeDragPreview(
     default:
       return undefined
   }
+}
+
+/**
+ * Every node travelling WITH an in-flight move: the grabbed node, the
+ * multi-selection extras, and — when the grabbed node is a group frame —
+ * its geometrically contained members (minus locked ones, which the commit
+ * refuses to move). One producer shared by snapping (which must exclude
+ * carried nodes as attractors), the drag ghost, and the live layers — the
+ * commit path applies the same containment rule to its member moves.
+ */
+export function carriedWithDrag(
+  canvas: SpatialCanvas,
+  gesture: { readonly nodeId: string; readonly startX: number; readonly startY: number },
+  extraIds: ReadonlySet<string>,
+  isLocked: (id: string) => boolean,
+): ReadonlySet<string> {
+  const carried = new Set<string>([gesture.nodeId, ...extraIds])
+  const movingNode = canvas.nodes.find((n) => n.id === gesture.nodeId)
+  if (movingNode?.type === 'group') {
+    for (const n of canvas.nodes) {
+      if (
+        !isLocked(n.id) &&
+        n.x >= gesture.startX &&
+        n.y >= gesture.startY &&
+        n.x + n.width <= gesture.startX + movingNode.width &&
+        n.y + n.height <= gesture.startY + movingNode.height
+      ) {
+        carried.add(n.id)
+      }
+    }
+  }
+  return carried
 }
 
 /**
