@@ -1,6 +1,7 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasCoreMeta, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
+  readCoreFacets,
   readEdgeLocks,
   readNodeLocks,
   readSpatialCanvas,
@@ -8,6 +9,7 @@ import {
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
+  writeCoreFacets,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
@@ -149,6 +151,14 @@ export interface CanvasSyncSession {
   getEdgeLocks(): ReadonlySet<string>
   setEdgeLock(edgeId: string, locked: boolean): void
   subscribeLocks(listener: () => void): () => void
+  // OKF core facets (type/title/tags/facetsRaw) live in the doc's own
+  // sidecar map, exactly like a lock: durable and peer-synced, yet never
+  // part of the canvas value, so a title edit neither reaches an export as
+  // a node nor makes the editor re-render its scene. `undefined` means the
+  // document has never had core meta written.
+  getCoreFacets(): CanvasCoreMeta | undefined
+  setCoreFacets(meta: CanvasCoreMeta): void
+  subscribeCoreFacets(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -321,6 +331,7 @@ export function createCanvasSyncSession(
   let undoManager: UndoManager | null = null
   const historyListeners = new Set<() => void>()
   const lockListeners = new Set<() => void>()
+  const coreFacetListeners = new Set<() => void>()
   // Microtask defer: onPush fires inside Loro's commit, and a listener that
   // synchronously setStates mid-commit would re-enter React from a doc
   // mutation path.
@@ -571,6 +582,8 @@ export function createCanvasSyncSession(
             publishCanvasFromDoc(newDoc)
             // A remote peer may have locked or unlocked something.
             notifyLocksChanged()
+            // ...or retitled the document.
+            notifyCoreFacetsChanged()
           }
         })
 
@@ -578,6 +591,8 @@ export function createCanvasSyncSession(
         // Hydration decides the lock set for this session — without this,
         // a persisted lock reads as absent until the next toggle.
         notifyLocksChanged()
+        // Same for the stored title: absent until the next edit otherwise.
+        notifyCoreFacetsChanged()
       },
 
       onRemoteUpdate(bytes) {
@@ -804,6 +819,31 @@ export function createCanvasSyncSession(
     }
   }
 
+  function getCoreFacets(): CanvasCoreMeta | undefined {
+    return doc === null ? undefined : readCoreFacets(doc)
+  }
+
+  function notifyCoreFacetsChanged(): void {
+    for (const listener of coreFacetListeners) listener()
+  }
+
+  function setCoreFacets(meta: CanvasCoreMeta): void {
+    if (doc === null) return
+    // `writeCoreFacets` REPLACES the stored bucket, so `meta` must already be
+    // complete — including `facetsRaw`. Reaches peers through the doc's own
+    // subscribeLocalUpdates push, like a lock; the canvas VALUE is unchanged,
+    // so subscribers get a facet notification rather than a canvas publish.
+    writeCoreFacets(doc, meta)
+    notifyCoreFacetsChanged()
+  }
+
+  function subscribeCoreFacets(listener: () => void): () => void {
+    coreFacetListeners.add(listener)
+    return () => {
+      coreFacetListeners.delete(listener)
+    }
+  }
+
   return {
     connect,
     dispose,
@@ -822,5 +862,8 @@ export function createCanvasSyncSession(
     getEdgeLocks,
     setEdgeLock,
     subscribeLocks,
+    getCoreFacets,
+    setCoreFacets,
+    subscribeCoreFacets,
   }
 }
