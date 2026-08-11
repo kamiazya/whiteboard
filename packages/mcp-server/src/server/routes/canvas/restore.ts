@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
-import { ConflictError, canvasExists, saveCanvas } from '../../store/canvas-store.js'
+import { ConflictError, canvasExists, getCanvasKind, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import {
@@ -158,9 +158,17 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         }
 
         // Genuinely new canvas: no live doc and no connected clients, so
-        // there is nothing to reconcile against.
+        // there is nothing to reconcile against. The restored content is
+        // whatever the source canvas actually stores (spatial nodes/edges
+        // maps vs. a markdown 'body' text container), so the new row must
+        // carry the source's own kind rather than falling back to the
+        // saveCanvas default.
         try {
-          await saveCanvas(workspaceId, targetSlug, past, { overwrite: false })
+          const sourceKind = await getCanvasKind(workspaceId, slug)
+          await saveCanvas(workspaceId, targetSlug, past, {
+            overwrite: false,
+            ...(sourceKind !== null ? { kind: sourceKind } : {}),
+          })
         } catch (err) {
           if (err instanceof ConflictError) {
             return c.json(

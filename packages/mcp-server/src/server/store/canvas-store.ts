@@ -4,6 +4,7 @@ import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
+import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
@@ -222,6 +223,23 @@ export async function canvasExists(workspaceId: string, slug: string): Promise<b
   const db = await dbReady()
   const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
   return canvasId !== null
+}
+
+// Returns null when the canvas does not exist, so callers can distinguish
+// "no such canvas" from a stored-but-unset kind (which the null-column
+// back-compat default in listCanvases resolves to 'spatial').
+export async function getCanvasKind(workspaceId: string, slug: string): Promise<CanvasKind | null> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('canvases')
+    .select(['kind'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  if (!row) return null
+  return row.kind ?? 'spatial'
 }
 
 export interface CompactResult {
@@ -452,7 +470,7 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<{ slug: string; updatedAt: string; kind: CanvasKind }[]> {
+): Promise<Pick<CanvasSummary, 'slug' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db

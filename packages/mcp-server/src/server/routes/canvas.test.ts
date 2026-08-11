@@ -1136,6 +1136,48 @@ describe('versions API', () => {
       expect(restoreBody.elementCount).toBe(0)
     })
 
+    it('restoring a markdown-kind canvas into a new target slug carries the source kind forward, not the spatial default', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'canvas-a', kind: 'markdown' }),
+      })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      sourceDoc.getText('body').insert(0, 'hello')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-new' }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+
+      const listRes = await app.request('/api/workspaces/session1/canvases')
+      const listBody = (await listRes.json()) as {
+        canvases: { slug: string; kind: string }[]
+      }
+      expect(listBody.canvases.find((c) => c.slug === 'canvas-new')?.kind).toBe('markdown')
+    })
+
     it('restoring into an existing target slug WITHOUT overwrite returns 409 output_exists', async () => {
       const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
