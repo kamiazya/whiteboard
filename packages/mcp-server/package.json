@@ -84,7 +84,7 @@
     "./dist/server/mcp/index.js"
   ],
   "engines": {
-    "node": ">=22"
+    "node": "^22 || ^24 || >=26"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

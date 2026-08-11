@@ -65,7 +65,11 @@ describe('publish contract', () => {
   })
 
   it('declares the public npm publish contract in package metadata', () => {
-    expect(mcpPackage.engines).toEqual({ node: '>=22' })
+    // Mirrors the narrowest engines range among the published runtime deps
+    // (nanoid 6 declares '^22 || ^24 || >=26'). A plain '>=22' would advertise
+    // support for odd non-LTS releases that a dependency then rejects, so the
+    // consumer's install warns instead of the contract being honest up front.
+    expect(mcpPackage.engines).toEqual({ node: '^22 || ^24 || >=26' })
     expect(mcpPackage.publishConfig).toMatchObject({
       registry: 'https://registry.npmjs.org',
       access: 'public',
