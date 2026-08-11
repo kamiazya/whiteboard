@@ -69,10 +69,10 @@ function makeCreateBackend() {
 // Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
 // also contains the canvas slug as a substring, so a loose regex match is
 // ambiguous now that WorkspaceTopBar renders both in the same header.
-async function openCanvasSwitcher(currentLabel: string) {
-  const switcher = screen.getByRole('button', {
-    name: new RegExp(`^${currentLabel}$`),
-  })
+// The trigger names the WORKSPACE, not the open canvas — the canvas's own
+// name moved to the canvas row. Callers no longer pass a canvas label.
+async function openCanvasSwitcher() {
+  const switcher = screen.getByRole('button', { name: /^Workspace:/i })
   fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
   await screen.findByTestId('new-canvas-menu-item')
 }
@@ -122,11 +122,11 @@ describe('DaemonCanvasPage', () => {
     // Hand (view-only) is the default tool; the host history cluster only
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
-    // WorkspaceTopBar's canvas switcher shows the current canvas and lists
-    // every entry from controller.canvases — this pins the CanvasSummary
-    // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping end to end.
-    expect(screen.getByRole('button', { name: /^main$/ })).toBeTruthy()
-    await openCanvasSwitcher('main')
+    // The switcher's trigger names the workspace; the canvas entries appear
+    // in its list. What this pins is still the CanvasSummary
+    // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping, end to end.
+    expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
+    await openCanvasSwitcher()
     expect(screen.getByText('second')).toBeTruthy()
     expect(createdBackends).toHaveLength(1)
     expect(createdBackends[0]?.connectCount).toBe(1)
@@ -238,7 +238,7 @@ describe('DaemonCanvasPage', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /w2-main/i })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
       })
       expect(createdBackends).toHaveLength(2)
       expect(createdBackends[1]?.workspaceId).toBe('w2')
@@ -366,7 +366,7 @@ describe('DaemonCanvasPage', () => {
     const oldBackend = createdBackends[0]!
 
     await act(async () => {
-      await openCanvasSwitcher('main')
+      await openCanvasSwitcher()
       await selectCanvasFromSwitcher('second')
     })
 
@@ -573,7 +573,7 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
 
     await act(async () => {
-      await openCanvasSwitcher('main')
+      await openCanvasSwitcher()
       await selectCanvasFromSwitcher('second')
     })
 

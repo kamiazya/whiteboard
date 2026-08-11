@@ -1,4 +1,4 @@
-import { EllipsisVertical, Maximize2, Settings } from 'lucide-react'
+import { EllipsisVertical, Maximize2, Minimize2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -7,56 +7,52 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { ThemeMode } from '@/hooks/useThemeMode'
-import { ThemeToggleButton } from '../ThemeToggleButton'
-
-// Mirrors ThemeToggleButton's cycle order (system → light → dark → system).
-// Duplicated here — rather than exported from ThemeToggleButton — because the
-// two callers render different UI shapes (icon button vs. menu item); keep
-// this in sync with ThemeToggleButton.tsx's NEXT map if that cycle changes.
-const THEME_CYCLE: Record<ThemeMode, ThemeMode> = {
-  system: 'light',
-  light: 'dark',
-  dark: 'system',
-}
 
 interface TopBarSecondaryActionsProps {
-  theme?: ThemeMode
-  onToggleTheme?: (next: ThemeMode) => void
-  onEnterFullscreen?: () => void
+  /**
+   * Toggles rather than only entering: the fullscreen element is the page's
+   * `<main>`, which CONTAINS this header, so the header stays on screen and
+   * is the only exit affordance there is. Enter-only left no way back.
+   */
+  onToggleFullscreen?: () => void
+  isFullscreen?: boolean
   onOpenSettings?: () => void
 }
 
-// Right side: theme and fullscreen — plus the "View options" kebab that
+// Right side: fullscreen and settings — plus the "View options" kebab that
 // reuses the exact same handlers below 400px so the header never wraps.
-// Version history moved to the canvas's HistoryCluster (bottom-left).
+//
+// Theme deliberately absent: Settings owns the full three-way choice
+// (system/light/dark), and a header button that cycles the same setting is a
+// second control for one piece of state.
 export function TopBarSecondaryActions({
-  theme,
-  onToggleTheme,
-  onEnterFullscreen,
+  onToggleFullscreen,
+  isFullscreen = false,
   onOpenSettings,
 }: TopBarSecondaryActionsProps) {
+  const fullscreenLabel = isFullscreen ? 'Exit fullscreen' : 'Fullscreen'
+  const FullscreenIcon = isFullscreen ? Minimize2 : Maximize2
+
   return (
     <>
       <div
         data-testid="topbar-right-actions-exposed"
         className="flex shrink-0 items-center gap-1 max-[400px]:hidden"
       >
-        {onToggleTheme && theme && <ThemeToggleButton theme={theme} onChange={onToggleTheme} />}
-        {onEnterFullscreen && (
+        {onToggleFullscreen && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
                 className="size-8 p-0"
-                onClick={onEnterFullscreen}
-                aria-label="Fullscreen"
+                onClick={onToggleFullscreen}
+                aria-label={fullscreenLabel}
               >
-                <Maximize2 className="size-3.5" />
+                <FullscreenIcon className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Fullscreen (f)</TooltipContent>
+            <TooltipContent>{fullscreenLabel} (f)</TooltipContent>
           </Tooltip>
         )}
         {onOpenSettings && (
@@ -90,19 +86,10 @@ export function TopBarSecondaryActions({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {onToggleTheme && theme && (
-            <DropdownMenuItem
-              onSelect={() => onToggleTheme(THEME_CYCLE[theme])}
-              className="gap-2"
-              aria-label={`Theme: ${theme}`}
-            >
-              Theme
-            </DropdownMenuItem>
-          )}
-          {onEnterFullscreen && (
-            <DropdownMenuItem onSelect={onEnterFullscreen} className="gap-2">
-              <Maximize2 className="size-3.5" />
-              Fullscreen
+          {onToggleFullscreen && (
+            <DropdownMenuItem onSelect={onToggleFullscreen} className="gap-2">
+              <FullscreenIcon className="size-3.5" />
+              {fullscreenLabel}
             </DropdownMenuItem>
           )}
           {onOpenSettings && (

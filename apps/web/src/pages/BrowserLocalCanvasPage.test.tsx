@@ -496,7 +496,7 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
-    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     // Accessible names must not collide with the operations kebab or the
     // top bar's canvas actions control.
     expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
@@ -519,7 +519,7 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
-    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const otherItem = await screen.findByText('Other canvas')
     fireEvent.pointerUp(otherItem)
@@ -574,7 +574,7 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       rtlRender(<RouterProvider router={router} />)
     })
-    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const otherItem = await screen.findByText('Other canvas')
     fireEvent.pointerUp(otherItem)
@@ -600,7 +600,7 @@ describe('BrowserLocalCanvasPage', () => {
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Diagram A')
 
-    const switcher = await screen.findByRole('button', { name: 'Diagram A' })
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(newItem)
@@ -637,7 +637,7 @@ describe('BrowserLocalCanvasPage', () => {
       render(<BrowserLocalCanvasPage store={failingCreateStore} loro={new FakeLoroStore()} />)
     })
     failNextSave = true
-    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(newItem)
@@ -696,7 +696,7 @@ describe('BrowserLocalCanvasPage', () => {
     // so two stale refreshes (generation 2 for c2, generation 3 for c1) end
     // up in flight at once.
     const switchTo = async (name: string) => {
-      const switcherButton = screen.getByRole('button', { name: /untitled|Other canvas/ })
+      const switcherButton = screen.getByRole('button', { name: /^Workspace:/i })
       fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
       const item = await screen.findByText(name)
       fireEvent.pointerUp(item)
@@ -739,7 +739,7 @@ describe('BrowserLocalCanvasPage', () => {
 
     // The stale (generation 2) resolution must not clobber the fresh one:
     // opening the switcher again must show only the fresh name.
-    const switcherButton = await screen.findByRole('button', { name: 'untitled' })
+    const switcherButton = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
     await screen.findByText('Other canvas (fresh)')
     expect(screen.queryByText('Other canvas (stale)')).toBeNull()
@@ -792,7 +792,7 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       resolvers[resolvers.length - 1]!([snap])
     })
-    expect(screen.getByRole('button', { name: 'Renamed canvas' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
   })
 
   it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
@@ -816,7 +816,7 @@ describe('BrowserLocalCanvasPage', () => {
       assertNoSetStateInRenderWarning(errorSpy)
 
       // Canvas switch re-renders the title with new key/props.
-      const switcher = await screen.findByRole('button', { name: 'untitled' })
+      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
       fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
       const otherItem = await screen.findByText('Other canvas')
       fireEvent.pointerUp(otherItem)
@@ -826,7 +826,7 @@ describe('BrowserLocalCanvasPage', () => {
       assertNoSetStateInRenderWarning(errorSpy)
 
       // Create-canvas flow drives another switch + re-render.
-      const switcher2 = await screen.findByRole('button', { name: 'Other canvas' })
+      const switcher2 = await screen.findByRole('button', { name: /^Workspace:/i })
       fireEvent.pointerDown(switcher2, { button: 0, ctrlKey: false })
       const newItem = await screen.findByTestId('new-canvas-menu-item')
       fireEvent.pointerUp(newItem)
@@ -891,32 +891,6 @@ describe('BrowserLocalCanvasPage', () => {
     })
   })
 
-  describe('theme toggle', () => {
-    afterEach(() => {
-      localStorage.clear()
-      document.documentElement.classList.remove('dark')
-    })
-
-    it('renders a theme toggle that cycles system -> light -> dark on repeated clicks', async () => {
-      const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
-      await store.save(snap)
-      await act(async () => {
-        render(<BrowserLocalCanvasPage store={store} />)
-      })
-      const toggle = screen.getByRole('button', { name: /theme: system/i })
-      await act(async () => {
-        toggle.click()
-      })
-      expect(screen.getByRole('button', { name: /theme: light/i })).toBeTruthy()
-      const lightToggle = screen.getByRole('button', { name: /theme: light/i })
-      await act(async () => {
-        lightToggle.click()
-      })
-      expect(screen.getByRole('button', { name: /theme: dark/i })).toBeTruthy()
-    })
-  })
-
   describe('local mode issues no daemon network requests', () => {
     it('mounting and opening the canvas switcher renders no daemon thumbnail <img>', async () => {
       vi.useRealTimers()
@@ -932,7 +906,7 @@ describe('BrowserLocalCanvasPage', () => {
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
       })
-      const switcher = await screen.findByRole('button', { name: 'untitled' })
+      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
       fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
       await screen.findByText('Other canvas')
       expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)

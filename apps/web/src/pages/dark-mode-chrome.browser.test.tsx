@@ -101,15 +101,15 @@ describe('dark-mode chrome (root token application)', () => {
         workspaceId="sess_1"
         slug="design/login-flow"
         canvases={[{ slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
       />,
     )
 
-    // Await the post-/names-fetch rename ('login-flow' → 'Login flow') so the
-    // async state update settles inside the test instead of warning after it.
-    const leaf = await findByText('Login flow')
-    expect(lightness(getComputedStyle(leaf).color)).toBeGreaterThan(LIGHT)
+    // The subject is COLOUR inheritance, so any chrome text serves. The
+    // switcher names the workspace now, which is the top bar's own label.
+    const label = await findByText('Design review')
+    expect(lightness(getComputedStyle(label).color)).toBeGreaterThan(LIGHT)
   })
 })

@@ -160,6 +160,16 @@ export function BrowserLocalCanvasPage({
   // itself, so there is no App-level state this page needs to share.
   const { theme, resolvedTheme, setTheme } = useThemeMode()
 
+  // Fullscreen can also be left with Escape or the browser's own chrome, so
+  // the button's label follows the DOCUMENT rather than our own click.
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  useEffect(() => {
+    const sync = () => setIsFullscreen(document.fullscreenElement !== null)
+    sync()
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
   // Enumeration is a Promise, not reactive state — refresh whenever the
@@ -169,7 +179,7 @@ export function BrowserLocalCanvasPage({
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
   const listGenerationRef = useRef(0)
-  // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
+  // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
@@ -495,10 +505,13 @@ export function BrowserLocalCanvasPage({
               const created = await createCanvas(undefined, 'markdown')
               await switchCanvas(created.id)
             }}
-            theme={theme}
-            onToggleTheme={setTheme}
-            onEnterFullscreen={() => {
-              void mainRef.current?.requestFullscreen()
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => {
+              // The header lives INSIDE the fullscreen element, so it stays on
+              // screen and is the only way back out — entering without a
+              // matching exit left the user stuck with the Escape key.
+              if (document.fullscreenElement) void document.exitFullscreen()
+              else void mainRef.current?.requestFullscreen()
             }}
             capabilities={{
               versions: capabilities.versions,

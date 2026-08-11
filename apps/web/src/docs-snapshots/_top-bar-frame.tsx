@@ -29,9 +29,7 @@ export function TopBarFrame({ testId, width, height, canvases, scene }: TopBarFr
         slug="design/architecture"
         canvases={canvases}
         onNavigateToCanvas={() => undefined}
-        onEnterFullscreen={() => undefined}
-        theme="light"
-        onToggleTheme={() => undefined}
+        onToggleFullscreen={() => undefined}
       />
       <div style={{ height: `calc(100% - ${TOP_BAR_HEIGHT_PX}px)` }}>
         <CanvasViewer
