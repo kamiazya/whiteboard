@@ -179,6 +179,32 @@ it('Group selection from a multi-selected node frames the selection with padding
   expect(frame).toMatchObject({ type: 'group', x: 96, y: 96, width: 348, height: 208 })
 })
 
+// A member that paints BELOW its frame (member first, frame later in
+// document order) is still fully visible through the unfilled frame, so a
+// press on it must select and move the member — it used to be unreachable,
+// every click resolving to the frame above it.
+it('a member painted below the frame is still selectable and draggable', async () => {
+  const memberBelowFrame: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 120, y: 120, width: 120, height: 60, text: 'A' },
+      { id: 'g1', type: 'group', x: 80, y: 80, width: 360, height: 220, label: 'cluster' },
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(memberBelowFrame)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Press ON the member, drag 40,20 — the member moves, the frame stays.
+  await userEvent.click(root, { position: { x: 180, y: 150 } })
+  fireEvent.pointerDown(root, { pointerId: 1, clientX: 180, clientY: 150, buttons: 1 })
+  fireEvent.pointerMove(root, { pointerId: 1, clientX: 220, clientY: 170, buttons: 1 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: 220, clientY: 170 })
+
+  await vi.waitFor(() => expect(nodeById(latest, 'a')).toMatchObject({ x: 160, y: 140 }))
+  expect(nodeById(latest, 'g1')).toMatchObject({ x: 80, y: 80 })
+})
+
 it('deleting the frame keeps its members', async () => {
   const { Host, latest } = makeHost(grouped)
   const { container } = render(<Host />)

@@ -17,6 +17,8 @@ export interface Box {
 
 export interface NodeBox {
   readonly id: string
+  /** True for container frames (groups) — hit-testing yields them to content nodes. */
+  readonly container?: boolean
   readonly box: Box
 }
 
@@ -24,6 +26,7 @@ export interface NodeBox {
 export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
   return canvas.nodes.map((node) => ({
     id: node.id,
+    ...(node.type === 'group' ? { container: true } : {}),
     box: { x: node.x, y: node.y, width: node.width, height: node.height },
   }))
 }
@@ -44,13 +47,20 @@ export function boxContains(box: Box, point: Point): boolean {
  * nodes draw over earlier ones).
  */
 export function hitTest(boxes: readonly NodeBox[], point: Point): string | undefined {
+  // Container frames (groups) are unfilled, so a content node under the
+  // pointer is fully visible even when the frame paints later — the click
+  // lands on what the user sees. Membership is geometric in this app, so
+  // z-order between a member and its frame carries no occlusion meaning.
+  // A frame is hit only where no content node is (its padding area),
+  // topmost frame first when frames nest.
+  let containerHit: string | undefined
   for (let i = boxes.length - 1; i >= 0; i -= 1) {
     const candidate = boxes[i]
-    if (candidate !== undefined && boxContains(candidate.box, point)) {
-      return candidate.id
-    }
+    if (candidate === undefined || !boxContains(candidate.box, point)) continue
+    if (candidate.container !== true) return candidate.id
+    containerHit ??= candidate.id
   }
-  return undefined
+  return containerHit
 }
 
 export type ResizeHandleKind = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
