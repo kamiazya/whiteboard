@@ -472,3 +472,72 @@ describe('edge routing style from the canvas', () => {
     expect(edgePathOf(canvas(twoNodes, link))).toHaveLength(2)
   })
 })
+
+describe('group background images (JSON Canvas group.background/backgroundStyle)', () => {
+  const groupWithBackground = (backgroundStyle?: 'cover' | 'ratio' | 'repeat'): SpatialCanvas => ({
+    nodes: [
+      {
+        id: 'g1',
+        type: 'group',
+        x: 40,
+        y: 60,
+        width: 400,
+        height: 300,
+        background: 'bg.png',
+        ...(backgroundStyle !== undefined ? { backgroundStyle } : {}),
+      },
+    ],
+    edges: [],
+  })
+  const withImage = (overrides: Partial<SpatialLayoutOptions> = {}) =>
+    baseOptions({ resolveFileImage: (file) => ({ href: `app://${file}` }), ...overrides })
+
+  it('renders the background as a full-frame image between chrome and label', () => {
+    const scene = layoutSpatialCanvas(groupWithBackground(), withImage())
+    const image = scene.nodes.find((n) => n.kind === 'image')
+    expect(image).toMatchObject({
+      kind: 'image',
+      bbox: { x: 40, y: 60, w: 400, h: 300 },
+      href: 'app://bg.png',
+      fit: 'cover',
+    })
+    // Painted after the frame chrome so the stroke stays visible? No — the
+    // image sits INSIDE the frame: chrome first, image second.
+    const kinds = scene.nodes.map((n) => n.kind)
+    expect(kinds.indexOf('shape')).toBeLessThan(kinds.indexOf('image'))
+  })
+
+  it("maps backgroundStyle 'ratio' to contain and default/'cover' to cover", () => {
+    const ratio = layoutSpatialCanvas(groupWithBackground('ratio'), withImage())
+    expect(ratio.nodes.find((n) => n.kind === 'image')).toMatchObject({ fit: 'contain' })
+    const cover = layoutSpatialCanvas(groupWithBackground('cover'), withImage())
+    expect(cover.nodes.find((n) => n.kind === 'image')).toMatchObject({ fit: 'cover' })
+  })
+
+  it("degrades backgroundStyle 'repeat' to cover and reports it", () => {
+    const onDegrade = vi.fn()
+    const scene = layoutSpatialCanvas(groupWithBackground('repeat'), withImage({ onDegrade }))
+    expect(scene.nodes.find((n) => n.kind === 'image')).toMatchObject({ fit: 'cover' })
+    expect(onDegrade).toHaveBeenCalledWith({
+      kind: 'unsupported-background-style',
+      nodeId: 'g1',
+      style: 'repeat',
+    })
+  })
+
+  it('keeps the plain frame when no resolver is supplied or resolution fails', () => {
+    expect(
+      layoutSpatialCanvas(groupWithBackground(), baseOptions()).nodes.some(
+        (n) => n.kind === 'image',
+      ),
+    ).toBe(false)
+    const throwing = baseOptions({
+      resolveFileImage: () => {
+        throw new Error('no store')
+      },
+    })
+    expect(
+      layoutSpatialCanvas(groupWithBackground(), throwing).nodes.some((n) => n.kind === 'image'),
+    ).toBe(false)
+  })
+})

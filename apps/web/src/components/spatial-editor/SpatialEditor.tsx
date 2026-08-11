@@ -93,6 +93,7 @@ import {
   Focus,
   Frame,
   Image as ImageIcon,
+  ImageOff,
   Link,
   Lock as LockIcon,
   LockOpen,
@@ -2306,6 +2307,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const IMAGE_NODE_WIDTH = 240
     const IMAGE_NODE_HEIGHT = 180
     const imageInputRef = useRef<HTMLInputElement | null>(null)
+    /** When set, the next picked image becomes this group's background instead of a new node. */
+    const pendingBackgroundGroupIdRef = useRef<string | null>(null)
     /** Where the pending picker-created image should land; null = viewport center. */
     const pendingImagePointRef = useRef<Point | null>(null)
 
@@ -2701,10 +2704,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onChange={(e) => {
               const file = e.target.files?.[0]
               e.target.value = ''
-              if (file !== undefined) {
-                addImageFile(file, pendingImagePointRef.current ?? undefined)
-                pendingImagePointRef.current = null
+              if (file === undefined) return
+              const backgroundGroupId = pendingBackgroundGroupIdRef.current
+              pendingBackgroundGroupIdRef.current = null
+              if (backgroundGroupId !== null) {
+                if (onAddImage === undefined || !file.type.startsWith('image/')) return
+                void onAddImage(file).then((ref) => {
+                  if (ref !== undefined) {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-group-background', id: backgroundGroupId, background: ref },
+                      ],
+                    })
+                  }
+                })
+                return
               }
+              addImageFile(file, pendingImagePointRef.current ?? undefined)
+              pendingImagePointRef.current = null
             }}
           />
         )}
@@ -2775,6 +2793,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     onSelect: () => apply(entry.key),
                   })),
                 ],
+                // The JSON Canvas color union is presets OR a 6-digit hex;
+                // the native color input covers the hex half the swatches
+                // cannot.
+                customColor: {
+                  value: current !== undefined && current.startsWith('#') ? current : '#808080',
+                  ariaLabel: 'Custom color',
+                  onPick: (hex: string) => apply(hex as CanvasColor),
+                },
               })
               if (node === undefined && edge !== undefined) {
                 // A locked edge offers exactly one action. Everything else in
@@ -2970,6 +2996,53 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   icon: <Tag />,
                   onSelect: () => setGroupLabelEditId(node.id),
                 })
+                if (onAddImage !== undefined) {
+                  items.push({
+                    label: 'Set background image',
+                    icon: <ImageIcon />,
+                    onSelect: () => {
+                      pendingBackgroundGroupIdRef.current = node.id
+                      imageInputRef.current?.click()
+                    },
+                  })
+                }
+                if (node.background !== undefined) {
+                  const background = node.background
+                  const applyStyle = (backgroundStyle: 'cover' | 'ratio') =>
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-group-background', id: node.id, background, backgroundStyle },
+                      ],
+                    })
+                  items.push({
+                    kind: 'options',
+                    label: 'Background',
+                    options: [
+                      {
+                        label: 'Cover',
+                        ariaLabel: 'Cover',
+                        selected: node.backgroundStyle !== 'ratio',
+                        onSelect: () => applyStyle('cover'),
+                      },
+                      {
+                        label: 'Fit',
+                        ariaLabel: 'Fit',
+                        selected: node.backgroundStyle === 'ratio',
+                        onSelect: () => applyStyle('ratio'),
+                      },
+                    ],
+                  })
+                  items.push({
+                    label: 'Remove background',
+                    icon: <ImageOff />,
+                    onSelect: () =>
+                      applyResult({
+                        state: { kind: 'idle' },
+                        commands: [{ kind: 'set-group-background', id: node.id }],
+                      }),
+                  })
+                }
                 items.push({ kind: 'separator' })
               }
               // Framing an existing multi-selection is reached from any of
@@ -3402,6 +3475,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   .map(({ id, path }) => (
                     <polyline
                       key={`edge-${id}`}
+                      data-edge-id={id}
                       points={path.map((p) => `${p.x},${p.y}`).join(' ')}
                       fill="none"
                       stroke="#2563eb"

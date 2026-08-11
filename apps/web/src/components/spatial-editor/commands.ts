@@ -107,6 +107,15 @@ export type EditorLeafCommand =
       readonly label: string
     }
   | {
+      // Sets or restyles a group frame's background image (JSON Canvas
+      // group.background/backgroundStyle); omitting `background` removes
+      // both fields. Non-group targets no-op.
+      readonly kind: 'set-group-background'
+      readonly id: string
+      readonly background?: string
+      readonly backgroundStyle?: 'cover' | 'ratio' | 'repeat'
+    }
+  | {
       // Retargets a file node at another document. A stale subpath from the
       // old target has no meaning in the new one, so it is always cleared.
       readonly kind: 'set-node-file'
@@ -328,6 +337,28 @@ function setGroupLabel(canvas: SpatialCanvas, id: string, label: string): Spatia
   }
 }
 
+function setGroupBackground(
+  canvas: SpatialCanvas,
+  id: string,
+  background: string | undefined,
+  backgroundStyle: 'cover' | 'ratio' | 'repeat' | undefined,
+): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) => {
+      if (node.id !== id || node.type !== 'group') return node
+      const { background: _bg, backgroundStyle: _style, ...rest } = node
+      if (background === undefined) return rest
+      return {
+        ...rest,
+        background,
+        ...(backgroundStyle !== undefined ? { backgroundStyle } : {}),
+      }
+    }),
+  }
+}
+
 function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanvas {
   if (!canvas.nodes.some((node) => node.id === id && node.type === 'link')) return canvas
   return {
@@ -422,6 +453,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createGroup(canvas, command.node)
     case 'set-group-label':
       return setGroupLabel(canvas, command.id, command.label)
+    case 'set-group-background':
+      return setGroupBackground(canvas, command.id, command.background, command.backgroundStyle)
     case 'delete-node':
       return deleteNode(canvas, command.id)
     case 'reorder-nodes':

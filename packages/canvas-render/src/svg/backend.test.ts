@@ -695,6 +695,17 @@ describe('renderSceneToSvg — document envelope options', () => {
 })
 
 describe('image nodes', () => {
+  it("fit 'cover' slices, absent fit stays the byte-identical meet default", () => {
+    const cover = renderSceneToSvg({
+      nodes: [{ kind: 'image', bbox: { x: 0, y: 0, w: 10, h: 10 }, href: 'a.png', fit: 'cover' }],
+    })
+    expect(cover).toContain('preserveAspectRatio="xMidYMid slice"')
+    const plain = renderSceneToSvg({
+      nodes: [{ kind: 'image', bbox: { x: 0, y: 0, w: 10, h: 10 }, href: 'a.png' }],
+    })
+    expect(plain).toContain('preserveAspectRatio="xMidYMid meet"')
+  })
+
   it('emits <image> with fixed attribute order, escaped href, and title-as-alt', () => {
     const svg = renderSceneToSvg({
       nodes: [

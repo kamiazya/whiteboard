@@ -359,6 +359,41 @@ describe('applyCommand', () => {
     expect(onText).toBe(labeled)
   })
 
+  it('set-group-background sets, restyles, removes, and ignores non-groups', () => {
+    const grouped = applyCommand(baseCanvas(), {
+      kind: 'create-group',
+      node: { id: 'g1', type: 'group', x: -20, y: -20, width: 400, height: 200 },
+    })
+
+    const withBg = applyCommand(grouped, {
+      kind: 'set-group-background',
+      id: 'g1',
+      background: 'bg.png',
+      backgroundStyle: 'cover',
+    })
+    expect(withBg.nodes[0]).toMatchObject({ background: 'bg.png', backgroundStyle: 'cover' })
+    expect(spatialCanvasSchema.safeParse(withBg).success).toBe(true)
+
+    const restyled = applyCommand(withBg, {
+      kind: 'set-group-background',
+      id: 'g1',
+      background: 'bg.png',
+      backgroundStyle: 'ratio',
+    })
+    expect(restyled.nodes[0]).toMatchObject({ backgroundStyle: 'ratio' })
+
+    const removed = applyCommand(restyled, { kind: 'set-group-background', id: 'g1' })
+    expect(removed.nodes[0]).not.toHaveProperty('background')
+    expect(removed.nodes[0]).not.toHaveProperty('backgroundStyle')
+
+    const onText = applyCommand(withBg, {
+      kind: 'set-group-background',
+      id: 'a',
+      background: 'x.png',
+    })
+    expect(onText).toBe(withBg)
+  })
+
   it('set-node-file retargets a file node and ignores non-file targets', () => {
     const withFile = applyCommand(baseCanvas(), {
       kind: 'create-node',

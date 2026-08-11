@@ -50,6 +50,16 @@ export interface ContextMenuOptionsItem {
   readonly kind: 'options'
   readonly label: string
   readonly options: readonly ContextMenuOption[]
+  /**
+   * Appends a native color input after the options — the JSON Canvas color
+   * union is presets OR a 6-digit hex, and `<input type="color">` emits
+   * exactly that hex form.
+   */
+  readonly customColor?: {
+    readonly value: string
+    readonly ariaLabel: string
+    readonly onPick: (hex: string) => void
+  }
 }
 
 /** Visual section boundary between action, property, and destructive groups. */
@@ -169,6 +179,15 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                   )}
                 </button>
               ))}
+              {item.customColor !== undefined && (
+                <input
+                  type="color"
+                  aria-label={item.customColor.ariaLabel}
+                  value={item.customColor.value}
+                  className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent p-0.5"
+                  onChange={(e) => item.customColor?.onPick(e.target.value)}
+                />
+              )}
             </span>
           </fieldset>
         ) : (
