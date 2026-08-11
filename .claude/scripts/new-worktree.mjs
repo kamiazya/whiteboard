@@ -10,7 +10,7 @@
 //
 // Remove when done: git worktree remove --force .claude/worktrees/<name>
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { cpSync as nodeCpSync, existsSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
@@ -40,6 +40,33 @@ export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg)
   } catch (err) {
     log(`[new-worktree] failed to wire Claude Code MCP for ${wtPath} (${err.message}). ${fallback}`)
     return { success: false }
+  }
+}
+
+/**
+ * Copy the main checkout's built `packages/mcp-server/dist` into a fresh worktree BEFORE its first
+ * `pnpm install`.
+ *
+ * That install links every workspace dep's declared `bin`, and @kamiazya/whiteboard-mcp declares
+ * `whiteboard -> dist/cli/index.js`. `dist` is gitignored, so a new worktree has none and pnpm
+ * prints two ENOENT warnings it can do nothing about. Seeding the directory first removes them,
+ * and leaves the worktree able to run the server without a build.
+ *
+ * Never load-bearing: an absent build or a failed copy is logged and skipped, because a worktree
+ * that exists without this is still a working worktree. The copy is a starting point, not a
+ * substitute for building — anything editing mcp-server rebuilds anyway.
+ *
+ * @returns {boolean} whether a dist was seeded
+ */
+export function seedBuiltDist({ mainRoot, worktreeRoot, existsSync: exists = existsSync, cpSync = nodeCpSync, log = (msg) => console.warn(msg) }) {
+  const from = `${mainRoot}/packages/mcp-server/dist`
+  if (!exists(from)) return false
+  try {
+    cpSync(from, `${worktreeRoot}/packages/mcp-server/dist`, { recursive: true })
+    return true
+  } catch (err) {
+    log(`[new-worktree] could not seed the built dist (${err.message}) — pnpm will warn about the unlinkable \`whiteboard\` bin; harmless.`)
+    return false
   }
 }
 
@@ -78,6 +105,9 @@ function main() {
   const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
   if (!baseArg) run('git', ['-C', repoRoot, 'fetch', 'origin'])
   run('git', ['-C', repoRoot, 'worktree', 'add', wtPath, '-b', name, base])
+  // Before the first install: see seedBuiltDist for why pnpm cannot link the `whiteboard` bin
+  // otherwise.
+  seedBuiltDist({ mainRoot: repoRoot, worktreeRoot: wtPath })
   run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 
   // A linked worktree always has a `.git` FILE (not a directory) at its root,

@@ -67,3 +67,54 @@ test('runWireStep: reports success when the wire script exits zero', () => {
 
   assert.equal(result.success, true)
 })
+
+// --- pre-seeding the built dist ---
+import { seedBuiltDist } from './new-worktree.mjs'
+
+// `pnpm install` links every workspace dep's declared `bin`. @kamiazya/whiteboard-mcp declares
+// `whiteboard -> dist/cli/index.js`, and `dist` is gitignored, so a fresh worktree's FIRST install
+// cannot create the symlink and pnpm prints two ENOENT warnings. Verified: seeding dist before
+// that first install removes them. Moving the bin path was rejected — `dist/cli/index.js` is
+// pinned by prepend-cli-shebang, check-release-artifacts and three distribution smokes, and none
+// of that release surface should move for an install-time warning.
+test('seeds the built dist when the main checkout has one', () => {
+  const copies = []
+  const ok = seedBuiltDist({
+    mainRoot: '/repo',
+    worktreeRoot: '/wt',
+    existsSync: (p) => p === '/repo/packages/mcp-server/dist',
+    cpSync: (from, to) => copies.push([from, to]),
+    log: () => {},
+  })
+  assert.equal(ok, true)
+  assert.deepEqual(copies, [['/repo/packages/mcp-server/dist', '/wt/packages/mcp-server/dist']])
+})
+
+test('skips silently when the main checkout has no build yet', () => {
+  const copies = []
+  const ok = seedBuiltDist({
+    mainRoot: '/repo',
+    worktreeRoot: '/wt',
+    existsSync: () => false,
+    cpSync: (from, to) => copies.push([from, to]),
+    log: () => {},
+  })
+  assert.equal(ok, false)
+  assert.deepEqual(copies, [])
+})
+
+// Seeding is an optimisation, never a reason a worktree fails to be created.
+test('a copy failure is reported and swallowed', () => {
+  const logs = []
+  const ok = seedBuiltDist({
+    mainRoot: '/repo',
+    worktreeRoot: '/wt',
+    existsSync: () => true,
+    cpSync: () => {
+      throw new Error('disk full')
+    },
+    log: (m) => logs.push(m),
+  })
+  assert.equal(ok, false)
+  assert.ok(logs.some((m) => m.includes('disk full')))
+})

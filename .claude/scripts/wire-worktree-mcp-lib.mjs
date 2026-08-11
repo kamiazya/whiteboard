@@ -245,3 +245,22 @@ export function removeStaleEntriesFromConfig(config, actions) {
   }
   return { ...config, projects }
 }
+
+/**
+ * True when this checkout is a LINKED worktree whose CLI-resolved project entry is the main
+ * checkout's, and that entry already holds `name`.
+ *
+ * `claude mcp add --scope local` keys its write by the project the CLI resolves, which for a
+ * linked worktree is the main checkout — there is only ever one project key per repository in
+ * ~/.claude.json. So an add attempted from a worktree lands on the main entry and fails with
+ * "already exists". The add cannot succeed, and retrying it each time a worktree is created just
+ * prints a failed command line. Detect it first and explain instead.
+ *
+ * @param {{ config: unknown, repoRoot: string, mainRoot: string, name: string }} input
+ */
+export function resolvesToAnotherProjectEntry({ config, repoRoot, mainRoot, name }) {
+  if (repoRoot === mainRoot) return false
+  const projects = config && typeof config === 'object' ? config.projects : null
+  if (!projects || typeof projects !== 'object') return false
+  return Boolean(projects[mainRoot]?.mcpServers?.[name])
+}
