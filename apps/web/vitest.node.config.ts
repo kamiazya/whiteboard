@@ -15,6 +15,7 @@ export default defineConfig({
       'vite-dev-headers.test.ts',
       'vite-plugin-strip-wasm-sourcemap.test.ts',
       'index-html.test.ts',
+      'pwa-icons.test.ts',
       'scripts/**/*.test.ts',
     ],
   },
