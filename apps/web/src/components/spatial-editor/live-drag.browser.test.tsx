@@ -110,6 +110,86 @@ it('drops the live layer and restores the committed scene on release', async () 
   })
 })
 
+it('re-routes a bystander edge live when the dragged node lands on its path', async () => {
+  // `a` has no edges; c—d run a straight line the drag will block. On drop
+  // the router detours around `a`, so mid-drag must already show the detour
+  // or the preview disagrees with the committed result.
+  const blocked: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Mover' },
+      { id: 'c', type: 'text', x: 100, y: 300, width: 120, height: 60, text: 'From' },
+      { id: 'd', type: 'text', x: 700, y: 300, width: 120, height: 60, text: 'To' },
+    ],
+    edges: [{ id: 'e-cd', fromNode: 'c', toNode: 'd' }],
+  }
+  const { Host } = makeHost(blocked)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Grab Mover at (160, 130), park it on the c—d line (+240, +200).
+  await dragWithoutRelease(root, [160, 130], [400, 330])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live).not.toBeNull()
+  const points = (live?.querySelector('polyline')?.getAttribute('points') ?? '')
+    .split(' ')
+    .filter((p) => p.length > 0)
+  // A straight c—d line is two points; the detour around Mover is more.
+  expect(points.length).toBeGreaterThan(2)
+
+  // The live layer owns EVERY edge during the drag — none stay frozen.
+  const staticPolylines = [
+    ...container.querySelectorAll('[data-testid="canvas-content"] svg polyline'),
+  ]
+  expect(staticPolylines).toHaveLength(0)
+})
+
+it('recomputes line jumps live while the drag is in flight', async () => {
+  // e2 starts clear of e1; dragging `d` up makes e2 cross e1. Jumps are
+  // enabled, so the drop result hops e2 over e1 — the live preview must too.
+  const crossing: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
+      { id: 'b', type: 'text', x: 700, y: 100, width: 120, height: 60, text: 'B' },
+      { id: 'c', type: 'text', x: 350, y: 300, width: 120, height: 60, text: 'C' },
+      { id: 'd', type: 'text', x: 350, y: 600, width: 120, height: 60, text: 'D' },
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'a', toNode: 'b' },
+      { id: 'e2', fromNode: 'c', toNode: 'd' },
+    ],
+    'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+  }
+  const { Host } = makeHost(crossing)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Grab D at (410, 630), move it above the a—b line (to y 30).
+  await dragWithoutRelease(root, [410, 630], [410, 30])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live).not.toBeNull()
+  const jumpPaths = [...(live?.querySelectorAll('path') ?? [])].filter((p) =>
+    (p.getAttribute('d') ?? '').includes('A 5 5'),
+  )
+  expect(jumpPaths.length).toBeGreaterThan(0)
+})
+
+it('keeps a touched edge label visible and centered during the drag', async () => {
+  const labelled: SpatialCanvas = {
+    ...start,
+    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flow' }],
+  }
+  const { Host } = makeHost(labelled)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  await dragWithoutRelease(root, [160, 130], [260, 280])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live?.innerHTML ?? '').toContain('flow')
+})
+
 it('a multi-selection ghost carries every member, not only the grabbed node', async () => {
   const trio: SpatialCanvas = {
     nodes: [

@@ -57,6 +57,8 @@
  * so anything drawn that way would lose its shape reaching another tool. A
  * diagram that needs a shape uses an image node.
  */
+
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type {
   CanvasColor,
   ClipboardFragment,
@@ -64,12 +66,12 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, SpatialPresetKey, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   flattenRoundedEdgePath,
+  layoutSpatialEdges,
   renderSceneToSvg,
-  routeEdge,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
@@ -781,10 +783,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /**
      * The scene WITHOUT everything the drag layers draw live: carried
-     * nodes travel as the ghost, and edges touching them re-route per
-     * frame in the live-edges layer. Rendered ONCE per drag (gestureState
-     * is reference-stable across pointermoves), so per-frame cost stays
-     * with the small layers.
+     * nodes travel as the ghost, and EVERY edge re-routes per frame in
+     * the live-edges layer — a bystander edge is excluded too, because
+     * the moving node entering or leaving its path changes its route and
+     * its line jumps, and a frozen copy would disagree with the drop
+     * result. Rendered ONCE per drag (gestureState is reference-stable
+     * across pointermoves), so per-frame cost stays with the small layers.
+     * The returned `measure` memoizes per drag: edge labels measure on the
+     * first live frame and every later frame re-places the cached metrics,
+     * keeping pointermoves free of text measurement.
      * ponytail: full render at the drag boundary is ~30ms on an 80-node
      * canvas; if start/commit jank appears on much larger canvases, move
      * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
@@ -795,7 +802,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const base: SpatialCanvas = {
         ...canvas,
         nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
-        edges: canvas.edges.filter((e) => !carried.has(e.fromNode) && !carried.has(e.toNode)),
+        edges: [],
       }
       const rendered = renderCanvasToSvg(base, {
         measure: resolvedMeasure,
@@ -805,7 +812,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         expandFileNode,
         resolveFileImage,
       })
-      return { carried, svg: rendered.svg, bounds: rendered.bounds }
+      const metricsCache = new Map<string, TextMetrics>()
+      const measure: MeasureText = (text, font) => {
+        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx} ${text}`
+        const hit = metricsCache.get(key)
+        if (hit !== undefined) return hit
+        const metrics = resolvedMeasure(text, font)
+        metricsCache.set(key, metrics)
+        return metrics
+      }
+      return { carried, svg: rendered.svg, bounds: rendered.bounds, measure }
       // isLocked closes over lockedNodeIds/lockEnabled, both listed.
     }, [
       gestureState,
@@ -880,37 +896,38 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
 
     /**
-     * Edges touching the carried nodes, re-routed at the ghost's snapped
-     * live position and rendered as a small overlay — the per-frame half
-     * of live drag rendering. A handful of routeEdge calls plus a small
-     * serialization per pointermove; line jumps (paint decoration) are
-     * recomputed at commit, not per frame.
+     * EVERY edge, re-composed against the ghost's snapped live position and
+     * rendered as an overlay — the per-frame half of live drag rendering.
+     * Goes through canvas-render's `layoutSpatialEdges`, the same producer
+     * the committed render uses, so routing detours around the moving node,
+     * line jumps, and label placement all match the drop result exactly
+     * (one producer per geometry). Per pointermove this is edge routing
+     * plus a small serialization; text measurement is absorbed by
+     * `dragStatic.measure`'s per-drag cache.
      */
     const liveEdges = useMemo(() => {
       if (
         gestureState.kind !== 'moving' ||
         dragPreview === undefined ||
         dragPreview.kind !== 'box' ||
-        dragStatic === undefined
+        dragStatic === undefined ||
+        canvas.edges.length === 0
       ) {
         return undefined
       }
-      const touched = canvas.edges.filter(
-        (e) => dragStatic.carried.has(e.fromNode) || dragStatic.carried.has(e.toNode),
-      )
-      if (touched.length === 0) return undefined
       const dx = dragPreview.box.x - gestureState.startX
       const dy = dragPreview.box.y - gestureState.startY
       const liveNodes = canvas.nodes.map((n) =>
         dragStatic.carried.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
       )
-      const style = canvas['x-whiteboard']?.edgeRouting?.style
-      const resolver = createEditorAppearance(theme)
-      const nodes = touched.map((edge) => {
-        const routed = routeEdge(liveNodes, edge, style)
-        const appearance = resolver.resolveEdge(edge)
-        return appearance === undefined ? routed : { ...routed, appearance }
-      })
+      const nodes = layoutSpatialEdges(
+        { ...canvas, nodes: liveNodes },
+        {
+          measure: dragStatic.measure,
+          parseBody: parseMarkdownBody,
+          appearance: createEditorAppearance(theme),
+        },
+      )
       const liveBounds = sceneBounds({ nodes })
       return {
         svg: renderSceneToSvg(

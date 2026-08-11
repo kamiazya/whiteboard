@@ -6,7 +6,7 @@ import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
-import { layoutSpatialCanvas } from './spatial-canvas.js'
+import { layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
 
 const NODE_PADDING_PX = 8
 const NODE_CORNER_RADIUS_PX = 4
@@ -539,5 +539,31 @@ describe('group background images (JSON Canvas group.background/backgroundStyle)
     expect(
       layoutSpatialCanvas(groupWithBackground(), throwing).nodes.some((n) => n.kind === 'image'),
     ).toBe(false)
+  })
+})
+
+describe('layoutSpatialEdges', () => {
+  // One producer per geometry: the standalone edge layout must equal the
+  // edge-and-label suffix of the full scene, or a live-preview consumer
+  // drifts from the committed render.
+  it('equals the edge+label suffix of the full layout, jumps and labels included', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 40, text: 'b' },
+        { id: 'c', type: 'text', x: 150, y: -200, width: 100, height: 40, text: 'c' },
+        { id: 'd', type: 'text', x: 150, y: 200, width: 100, height: 40, text: 'd' },
+      ],
+      edges: [
+        { id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' },
+        { id: 'e2', fromNode: 'c', toNode: 'd' },
+      ],
+      'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+    }
+    const options = baseOptions()
+    const full = layoutSpatialCanvas(canvas, options).nodes
+    const edgesOnly = layoutSpatialEdges(canvas, options)
+    expect(edgesOnly.length).toBeGreaterThan(0)
+    expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
   })
 })
