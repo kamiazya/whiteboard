@@ -110,24 +110,33 @@ describe('drag-preview / translation equivariance (fast-check)', () => {
   )
 
   fcTest.prop([boxArb, pointArb], PROPERTY_PARAMS)(
-    'connecting: shifting the live point shifts the line "to" endpoint, leaving "from" invariant',
-    (fromBox, shift) => {
+    'connecting over empty space: the routed preview ends AT the pointer and departs ON the source border',
+    (fromBox, livePoint) => {
       const state: GestureState = { kind: 'connecting', fromNodeId: 'n1' }
       const boxes: readonly NodeBox[] = [{ id: 'n1', box: fromBox }]
-      const livePoint = { x: 0, y: 0 }
-      const before = computeDragPreview(state, boxes, livePoint)
-      const after = computeDragPreview(state, boxes, {
-        x: livePoint.x + shift.x,
-        y: livePoint.y + shift.y,
+      const canvas: SpatialCanvas = {
+        nodes: [{ id: 'n1', type: 'text', ...fromBox, text: '' }],
+        edges: [],
+      }
+      const preview = computeDragPreview(state, boxes, livePoint, {
+        canvas,
+        selectableBoxes: boxes,
       })
-      return (
-        before?.kind === 'line' &&
-        after?.kind === 'line' &&
-        after.from.x === before.from.x &&
-        after.from.y === before.from.y &&
-        after.to.x - before.to.x === shift.x &&
-        after.to.y - before.to.y === shift.y
-      )
+      if (preview?.kind !== 'line') return false
+      const first = preview.path[0]
+      const last = preview.path[preview.path.length - 1]
+      if (first === undefined || last === undefined) return false
+      // A pointer inside the source box hit-tests as the source itself,
+      // which previews like empty space; either way the path must END at
+      // the pointer (the phantom target's every anchor IS the pointer).
+      const endsAtPointer = last.x === livePoint.x && last.y === livePoint.y
+      // The departure sits on the source's border, never its interior.
+      const onBorder =
+        first.x === fromBox.x ||
+        first.x === fromBox.x + fromBox.width ||
+        first.y === fromBox.y ||
+        first.y === fromBox.y + fromBox.height
+      return endsAtPointer && onBorder
     },
   )
 

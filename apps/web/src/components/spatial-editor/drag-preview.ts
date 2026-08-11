@@ -15,14 +15,27 @@
  * YAGNI + zod-schema-discipline this type deliberately carries no Zod schema.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { assignEdgeAnchors, routeEdge } from '@kamiazya/whiteboard-canvas-render'
 import type { Box, NodeBox } from './geometry.js'
-import { resizeBoxByDelta } from './geometry.js'
+import { hitTest, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import type { Point } from './viewport.js'
 
 export type DragPreview =
   | { readonly kind: 'box'; readonly box: Box }
-  | { readonly kind: 'line'; readonly from: Point; readonly to: Point }
+  | { readonly kind: 'line'; readonly path: readonly Point[] }
+
+/**
+ * What the connecting branch needs to preview the REAL prospective edge:
+ * the canvas (existing edges take part in anchor fan-out; the routing
+ * style rides on it) and the same selectable-box set the pointerup handler
+ * hit-tests for its target, so preview and commit agree on what counts as
+ * hovering a node.
+ */
+export interface ConnectPreviewContext {
+  readonly canvas: SpatialCanvas
+  readonly selectableBoxes: readonly NodeBox[]
+}
 
 /**
  * Returns the preview geometry for the gesture currently in flight, or
@@ -40,6 +53,7 @@ export function computeDragPreview(
   gestureState: GestureState,
   boxes: readonly NodeBox[],
   livePoint: Point | null,
+  connect?: ConnectPreviewContext,
 ): DragPreview | undefined {
   if (livePoint === null) return undefined
   switch (gestureState.kind) {
@@ -67,12 +81,50 @@ export function computeDragPreview(
       }
     case 'connecting': {
       const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
-      if (box === undefined) return undefined
-      return {
-        kind: 'line',
-        from: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-        to: livePoint,
+      if (box === undefined || connect === undefined) return undefined
+      // Route the PROSPECTIVE edge through the same producer the drop
+      // uses (routeEdge + assignEdgeAnchors over the tentative edge set),
+      // so the preview attaches where the committed edge will — the old
+      // center-to-pointer line implied edges attach at the node center,
+      // which fan-out, sliding, and exposed-side selection all contradict.
+      const { canvas } = connect
+      // Hovering the source keeps the connect armed rather than creating
+      // an edge (see reducePointerUpConnecting), so it previews like empty
+      // space: a phantom zero-size node at the pointer, whose every side
+      // anchor IS the pointer.
+      const hovered = hitTest(connect.selectableBoxes, livePoint)
+      const targetId =
+        hovered === undefined || hovered === gestureState.fromNodeId
+          ? '__connect-pointer__'
+          : hovered
+      const nodes =
+        targetId === '__connect-pointer__'
+          ? [
+              ...canvas.nodes,
+              {
+                id: '__connect-pointer__',
+                type: 'text' as const,
+                x: livePoint.x,
+                y: livePoint.y,
+                width: 0,
+                height: 0,
+                text: '',
+              },
+            ]
+          : canvas.nodes
+      const tentative = {
+        id: '__connect-preview__',
+        fromNode: gestureState.fromNodeId,
+        toNode: targetId,
       }
+      const anchors = assignEdgeAnchors(nodes, [...canvas.edges, tentative])
+      const routed = routeEdge(
+        nodes,
+        tentative,
+        canvas['x-whiteboard']?.edgeRouting?.style,
+        anchors.get(tentative.id),
+      )
+      return { kind: 'line', path: routed.path }
     }
     default:
       return undefined

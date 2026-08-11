@@ -913,11 +913,15 @@ describe('SpatialEditor (browser)', () => {
         pointerId: 204,
       }),
     )
+    const lastPreviewPoint = () => {
+      const polyline = page.getByTestId('drag-preview').element().querySelector('polyline')
+      expect(polyline).toBeTruthy()
+      const points = (polyline?.getAttribute('points') ?? '').split(' ').filter((p) => p.length > 0)
+      return points[points.length - 1]
+    }
+    // Over empty space the routed preview ends AT the pointer.
     await waitFor(() => {
-      const line = page.getByTestId('drag-preview').element().querySelector('line')
-      expect(line).toBeTruthy()
-      expect(Number(line?.getAttribute('x2'))).toBe(200)
-      expect(Number(line?.getAttribute('y2'))).toBe(60)
+      expect(lastPreviewPoint()).toBe('200,60')
     })
 
     await editor.element().dispatchEvent(
@@ -928,10 +932,10 @@ describe('SpatialEditor (browser)', () => {
         pointerId: 204,
       }),
     )
+    // Hovering node "b", the preview snaps to the edge the drop will
+    // create: it ends at b's derived left anchor, not at the pointer.
     await waitFor(() => {
-      const line = page.getByTestId('drag-preview').element().querySelector('line')
-      expect(Number(line?.getAttribute('x2'))).toBe(260)
-      expect(Number(line?.getAttribute('y2'))).toBe(45)
+      expect(lastPreviewPoint()).toBe('250,40')
     })
 
     // Node "b" chrome rect sits at canvas (250,20)-(330,60); drop inside it.
