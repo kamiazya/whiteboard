@@ -127,6 +127,41 @@ describe('BrowserLocalIndexPage', () => {
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
   })
 
+  it('Delete opens a dialog naming the canvas; Cancel removes nothing', async () => {
+    const store = await seededStore([
+      { id: 'id-a', name: 'Keep Me', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+    ])
+    renderPage(store)
+    await screen.findAllByTestId('canvas-list-card')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Keep Me' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/Delete "Keep Me"\?/)).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(await store.listCanvases()).toHaveLength(1)
+    expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
+  })
+
+  it('confirming Delete removes the canvas; deleting the last one returns the empty state', async () => {
+    const store = await seededStore([
+      { id: 'id-a', name: 'Doomed', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+    ])
+    const { onOpenCanvas } = renderPage(store)
+    await screen.findAllByTestId('canvas-list-card')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Doomed' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(await store.listCanvases()).toHaveLength(0)
+    expect(await screen.findByText('No canvases yet')).toBeTruthy()
+    // The delete flow must never open the canvas.
+    expect(onOpenCanvas).not.toHaveBeenCalled()
+  })
+
   it('suffixes colliding display slugs instead of repeating them', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Notes', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
