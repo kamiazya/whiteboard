@@ -228,9 +228,22 @@ export interface GroupSceneNode {
   readonly children: readonly SceneNode[]
 }
 
+/** A point where this edge hops over an earlier edge, on path segment `segment`. */
+export interface EdgeJumpPoint {
+  readonly segment: number
+  readonly x: number
+  readonly y: number
+}
+
 export interface ResolvedEdgeNode {
   readonly kind: 'edge'
   readonly id: string
+  /**
+   * Line-jump hops, present only when the canvas enables them. Paint-only
+   * decoration bounded by the jump radius: hit-testing and bounds keep
+   * reading the raw `path` (the deviation never exceeds the hit tolerance).
+   */
+  readonly jumps?: readonly EdgeJumpPoint[]
   readonly path: readonly { readonly x: number; readonly y: number }[]
   readonly fromSide: 'top' | 'right' | 'bottom' | 'left'
   readonly toSide: 'top' | 'right' | 'bottom' | 'left'

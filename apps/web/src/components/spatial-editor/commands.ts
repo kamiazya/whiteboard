@@ -22,6 +22,7 @@ import type {
   CanvasColor,
   CanvasEdge,
   EdgeRoutingStyle,
+  LineJumps,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -81,11 +82,17 @@ export type EditorLeafCommand =
       readonly color: CanvasColor | undefined
     }
   | {
-      // The one command that edits the canvas ENVELOPE rather than its
-      // contents, so it names no node: routing style is a property of the
-      // canvas, and per-edge overrides are a later, separate command.
+      // Edits the canvas ENVELOPE rather than its contents, so it names no
+      // node: routing style is a property of the canvas, and per-edge
+      // overrides are a later, separate command.
       readonly kind: 'set-edge-routing'
       readonly style: EdgeRoutingStyle
+    }
+  | {
+      // Canvas-envelope sibling of set-edge-routing: whether crossing
+      // edges hop over each other. Same later-per-edge-override caveat.
+      readonly kind: 'set-line-jumps'
+      readonly lineJumps: LineJumps
     }
   | {
       readonly kind: 'set-edge-color'
@@ -280,13 +287,38 @@ function setEdgeEnds(
  * changed its mind then serialize identically — otherwise every canvas anyone
  * opened the menu on would carry a redundant extension forever.
  */
-function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
+/**
+ * Rebuilds the canvas envelope from the CANONICAL form of its edgeRouting:
+ * default values (style straight, jumps none) are omitted, an empty
+ * edgeRouting is dropped, and an empty x-whiteboard disappears — so a
+ * canvas that chose a setting and reverted serializes identically to one
+ * that never touched it. Style and jumps are independent fields of the
+ * same object; writing one must never erase the other.
+ */
+function withEdgeRouting(
+  canvas: SpatialCanvas,
+  patch: { style?: EdgeRoutingStyle; lineJumps?: LineJumps },
+): SpatialCanvas {
   const { 'x-whiteboard': extension, ...rest } = canvas
-  if (style === 'straight') {
-    const { edgeRouting: _removed, ...others } = extension ?? {}
-    return Object.keys(others).length === 0 ? rest : { ...rest, 'x-whiteboard': others }
+  const merged = { ...extension?.edgeRouting, ...patch }
+  const canonical = {
+    ...(merged.style !== undefined && merged.style !== 'straight' ? { style: merged.style } : {}),
+    ...(merged.lineJumps !== undefined && merged.lineJumps !== 'none'
+      ? { lineJumps: merged.lineJumps }
+      : {}),
   }
-  return { ...rest, 'x-whiteboard': { ...extension, edgeRouting: { style } } }
+  const { edgeRouting: _removed, ...others } = extension ?? {}
+  const nextExtension =
+    Object.keys(canonical).length === 0 ? others : { ...others, edgeRouting: canonical }
+  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+}
+
+function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
+  return withEdgeRouting(canvas, { style })
+}
+
+function setLineJumps(canvas: SpatialCanvas, lineJumps: LineJumps): SpatialCanvas {
+  return withEdgeRouting(canvas, { lineJumps })
 }
 
 function setNodeColor(
@@ -443,6 +475,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setNodeColor(canvas, command.id, command.color)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
+    case 'set-line-jumps':
+      return setLineJumps(canvas, command.lineJumps)
     case 'set-edge-color':
       return setEdgeColor(canvas, command.id, command.color)
     case 'set-node-url':

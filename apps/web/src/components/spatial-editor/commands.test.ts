@@ -680,4 +680,46 @@ describe('set-edge-routing', () => {
 
     expect(next['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
   })
+
+  // Style and jumps live in the same edgeRouting object but are independent
+  // settings — reverting one must never erase the other.
+  it('reverting the style to straight keeps the line-jumps setting', () => {
+    const withJumps = applyCommand(
+      applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' }),
+      { kind: 'set-line-jumps', lineJumps: 'arc' },
+    )
+    const reverted = applyCommand(withJumps, { kind: 'set-edge-routing', style: 'straight' })
+
+    expect(reverted['x-whiteboard']?.edgeRouting).toEqual({ lineJumps: 'arc' })
+  })
+})
+
+describe('set-line-jumps', () => {
+  const empty: SpatialCanvas = { nodes: [], edges: [] }
+
+  it('records arc on the canvas and keeps the routing style', () => {
+    const styled = applyCommand(empty, { kind: 'set-edge-routing', style: 'curved' })
+    const jumped = applyCommand(styled, { kind: 'set-line-jumps', lineJumps: 'arc' })
+
+    expect(jumped['x-whiteboard']?.edgeRouting).toEqual({ style: 'curved', lineJumps: 'arc' })
+  })
+
+  // Same no-trace rule as the routing style: default settings serialize as
+  // if never touched.
+  it('turning jumps off leaves no trace', () => {
+    const jumped = applyCommand(empty, { kind: 'set-line-jumps', lineJumps: 'arc' })
+    expect(jumped['x-whiteboard']?.edgeRouting).toEqual({ lineJumps: 'arc' })
+
+    const off = applyCommand(jumped, { kind: 'set-line-jumps', lineJumps: 'none' })
+    expect(off).not.toHaveProperty('x-whiteboard')
+  })
+
+  it('turning jumps off keeps a non-default style', () => {
+    const both = applyCommand(applyCommand(empty, { kind: 'set-edge-routing', style: 'curved' }), {
+      kind: 'set-line-jumps',
+      lineJumps: 'arc',
+    })
+    const off = applyCommand(both, { kind: 'set-line-jumps', lineJumps: 'none' })
+    expect(off['x-whiteboard']?.edgeRouting).toEqual({ style: 'curved' })
+  })
 })

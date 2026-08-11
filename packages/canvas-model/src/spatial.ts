@@ -121,7 +121,19 @@ export const edgeRoutingStyleSchema = z.enum(['straight', 'orthogonal', 'curved'
 
 export type EdgeRoutingStyle = z.infer<typeof edgeRoutingStyleSchema>
 
-export const edgeRoutingSchema = z.object({ style: edgeRoutingStyleSchema })
+/**
+ * Line jumps draw a small arc where one edge crosses another, so crossing
+ * lines stay readable. Canvas-wide today; the same enum is the slot a
+ * later per-edge override reuses.
+ */
+export const lineJumpsSchema = z.enum(['none', 'arc'])
+
+export type LineJumps = z.infer<typeof lineJumpsSchema>
+
+export const edgeRoutingSchema = z.object({
+  style: edgeRoutingStyleSchema.optional(),
+  lineJumps: lineJumpsSchema.optional(),
+})
 
 /**
  * `x-whiteboard` at the CANVAS level — separate from the node-level key of the

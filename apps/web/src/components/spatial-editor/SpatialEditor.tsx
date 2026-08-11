@@ -2984,7 +2984,33 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     selected: currentRouting === style,
                     onSelect: () => {
                       const command: EditorCommand = { kind: 'set-edge-routing', style }
-                      onChange(applyCommand(canvasRef.current, command), command)
+                      const running = applyCommand(canvasRef.current, command)
+                      // Eager, like every other command path: a second pick
+                      // from the same open menu must chain off this result,
+                      // not the stale prop of a parent that has not
+                      // committed yet.
+                      canvasRef.current = running
+                      onChange(running, command)
+                    },
+                  })),
+                })
+                const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+                emptyItems.push({
+                  kind: 'options',
+                  label: 'Line jumps',
+                  options: (
+                    [
+                      { lineJumps: 'none', label: 'Off' },
+                      { lineJumps: 'arc', label: 'On' },
+                    ] as const
+                  ).map(({ lineJumps, label }) => ({
+                    label,
+                    selected: currentJumps === lineJumps,
+                    onSelect: () => {
+                      const command: EditorCommand = { kind: 'set-line-jumps', lineJumps }
+                      const running = applyCommand(canvasRef.current, command)
+                      canvasRef.current = running
+                      onChange(running, command)
                     },
                   })),
                 })
