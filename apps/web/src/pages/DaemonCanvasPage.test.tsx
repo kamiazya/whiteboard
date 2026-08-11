@@ -714,6 +714,44 @@ describe('DaemonCanvasPage', () => {
     fireEvent.click(await screen.findByTestId('select-tool-button'))
   })
 
+  it('disables Create a canvas while a create is in flight, and a same-tick second click is a no-op', async () => {
+    mockListCanvases.mockResolvedValue({ canvases: [] })
+    let resolveCreate: (value: { slug: string }) => void = () => {}
+    mockCreateCanvas.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Create a canvas' }).hasAttribute('disabled')).toBe(
+        true,
+      ),
+    )
+    // A second, same-tick click while the first create is still pending must
+    // not fire a second create call — `disabled` is the guard (see the
+    // `creating` state's comment), so this is exercising that guard, not an
+    // in-handler early-return.
+    fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    expect(mockCreateCanvas).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCreate({ slug: 'untitled' })
+    })
+  })
+
   it('shows the createError alert in the empty-canvases state when creation fails', async () => {
     mockListCanvases.mockResolvedValue({ canvases: [] })
     mockCreateCanvas.mockRejectedValue(new Error('slug already exists'))
