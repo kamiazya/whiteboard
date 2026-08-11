@@ -7,7 +7,7 @@
  * row two already owns, and the canvas name was appearing in both.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -71,5 +71,35 @@ describe('top bar scopes', () => {
   it('reports the exit affordance when already fullscreen', () => {
     renderTopBar({ isFullscreen: true, onToggleFullscreen: () => {} })
     expect(screen.getByRole('button', { name: /exit fullscreen/i })).toBeTruthy()
+  })
+})
+
+describe('fullscreen ground', () => {
+  it('paints the fullscreen target itself, not just the body behind it', async () => {
+    const { BrowserLocalCanvasPage } = await import('../pages/BrowserLocalCanvasPage.js')
+    const { IndexedDBStore } = await import('../lib/browser-local-store.js')
+    const { MemoryRouter } = await import('react-router-dom')
+
+    render(
+      <div style={{ height: '400px' }}>
+        <MemoryRouter initialEntries={['/']}>
+          <BrowserLocalCanvasPage store={new IndexedDBStore()} />
+        </MemoryRouter>
+      </div>,
+    )
+
+    // `<main>` is the element that goes fullscreen. Once it does, it is
+    // promoted to the top layer and the BODY's background stops showing —
+    // anything `<main>` does not paint itself falls through to the default
+    // black backdrop, which is what made the canvas area go black under a
+    // light theme.
+    const main = await waitFor(() => {
+      const el = document.querySelector('main')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    })
+    const background = getComputedStyle(main).backgroundColor
+    expect(background).not.toBe('rgba(0, 0, 0, 0)')
+    expect(background).not.toBe('transparent')
   })
 })

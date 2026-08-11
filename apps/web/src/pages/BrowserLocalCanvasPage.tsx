@@ -484,7 +484,12 @@ export function BrowserLocalCanvasPage({
     // every header-shaped row stacks inside the auto row, and the editor
     // owns minmax(0,1fr) — however many rows appear or however tall they
     // wrap, the editor row is always exactly the remaining viewport height.
-    <main ref={mainRef} className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
+    // `bg-background` on the FULLSCREEN TARGET, not just on `body`: going
+    // fullscreen promotes this element to the top layer, where the body's
+    // background no longer shows. Anything this element does not paint itself
+    // falls through to the browser's default black backdrop — which turned
+    // the canvas area black under a light theme.
+    <main ref={mainRef} className="bg-background grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
