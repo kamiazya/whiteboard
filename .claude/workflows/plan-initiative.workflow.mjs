@@ -32,6 +32,12 @@ const CONTEXT_PATHS = Array.isArray(A.contextPaths) ? A.contextPaths : []
 const DEPTH = A.depth === 'detailed' ? 'detailed' : 'concept'
 const VISUALIZE = A.visualize !== false
 const CODEX = A.codex !== false
+
+// An unavailable Codex is "no second opinion", never a gate failure. `agent()` resolves to null
+// when a subagent dies, but an agentType the host has no plugin for REJECTS instead — so without
+// this the whole workflow aborts on any machine where the Codex plugin isn't installed, which is
+// the opposite of the "Codex unavailable never blocks" rule it is supposed to implement.
+const optionalLane = (run) => run().catch(() => null)
 // consult: adversarially vet the plan's load-bearing cross-perspective conflicts via the
 // consult-adversarial workflow before returning (opt-in — expensive). consultant: agent|codex|panel.
 const CONSULT = !!A.consult
@@ -152,8 +158,8 @@ const runGate = async (pl) => {
     agent(`Review this initiative plan for completeness before slicing into dev-loops. Plan: ${JSON.stringify(pl)}. Fail with mustFix if slices aren't single-scope, dependencies/risks are missing, fixture/test paths or assertions would break, or high-risk angles are unaddressed.`,
       { label: 'gate:plan-reviewer', phase: 'Gate', agentType: 'plan-reviewer', schema: PLAN_VERDICT_SCHEMA }),
     CODEX
-      ? agent(`Independently review this initiative plan as a gate. Plan: ${JSON.stringify(pl)}. Read the repo to check assumptions; flag scope/sequencing/risk/assumption problems; fail with concrete mustFix if it should not proceed.`,
-          { label: 'gate:codex', phase: 'Gate', agentType: 'codex:codex-rescue', schema: PLAN_VERDICT_SCHEMA })
+      ? optionalLane(() => agent(`Independently review this initiative plan as a gate. Plan: ${JSON.stringify(pl)}. Read the repo to check assumptions; flag scope/sequencing/risk/assumption problems; fail with concrete mustFix if it should not proceed.`,
+          { label: 'gate:codex', phase: 'Gate', agentType: 'codex:codex-rescue', schema: PLAN_VERDICT_SCHEMA }))
       : Promise.resolve(null),
   ])
   return {

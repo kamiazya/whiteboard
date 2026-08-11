@@ -16,7 +16,7 @@
 // `optionalLane` guard. This test extracts each copy from source and checks the behavior
 // directly, so deleting or weakening either one fails here.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -24,7 +24,18 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const workflowDir = path.join(__dirname, '..')
 
-const WORKFLOWS = ['dev-loop.workflow.mjs', 'review.workflow.mjs']
+// Enumerated, never a fixed list: this guard first shipped naming dev-loop and review by hand,
+// which quietly exempted plan-initiative and consult-adversarial — both of which had the same
+// unguarded lane in the same plain Promise.all. Any workflow that reaches for the Codex agent
+// type is in scope automatically.
+const WORKFLOWS = readdirSync(workflowDir)
+  .filter((f) => f.endsWith('.workflow.mjs'))
+  .filter((f) => readFileSync(path.join(workflowDir, f), 'utf8').includes("agentType: 'codex:codex-rescue'"))
+  .sort()
+
+test('the codex-using workflows are discovered', () => {
+  assert.ok(WORKFLOWS.length >= 4, `expected every codex-using workflow, found ${WORKFLOWS.join(', ')}`)
+})
 
 function extractOptionalLane(file) {
   const source = readFileSync(path.join(workflowDir, file), 'utf8')
