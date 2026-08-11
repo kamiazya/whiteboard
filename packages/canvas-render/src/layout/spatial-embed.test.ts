@@ -105,6 +105,40 @@ describe('file-node inline embeds', () => {
     expect(embedOf(unresolvable)).toBeUndefined()
   })
 
+  it("keeps a line-jump child's hop points inside the frame (jumps transform with the path)", () => {
+    // Two crossing edges in a large child force a jump; laid out at native
+    // size the hop sits at child coordinates far outside the parent frame,
+    // so a scale/translate that misses `jumps` draws the arc outside it.
+    const crossing: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: '' },
+        { id: 'b', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' },
+        { id: 'c', type: 'text', x: 200, y: -300, width: 100, height: 50, text: '' },
+        { id: 'd', type: 'text', x: 200, y: 300, width: 100, height: 50, text: '' },
+      ],
+      edges: [
+        { id: 'h', fromNode: 'a', toNode: 'b' },
+        { id: 'v', fromNode: 'c', toNode: 'd' },
+      ],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } },
+    }
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({ resolveFileCanvas: () => crossing, expandFileNode: () => true }),
+    )
+    const edges = (embedOf(scene)?.children ?? []).filter(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    const jumps = edges.flatMap((edge) => edge.jumps ?? [])
+    expect(jumps.length).toBeGreaterThan(0)
+    for (const jump of jumps) {
+      expect(jump.x).toBeGreaterThanOrEqual(100)
+      expect(jump.x).toBeLessThanOrEqual(320)
+      expect(jump.y).toBeGreaterThanOrEqual(100)
+      expect(jump.y).toBeLessThanOrEqual(280)
+    }
+  })
+
   it('degrades a cycle on the current path to the card instead of recursing forever', () => {
     const a: SpatialCanvas = { nodes: [fileNode({ id: 'fa', file: 'b' })], edges: [] }
     const b: SpatialCanvas = { nodes: [fileNode({ id: 'fb', file: 'a' })], edges: [] }
