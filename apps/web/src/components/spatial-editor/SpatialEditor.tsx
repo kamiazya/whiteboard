@@ -1591,7 +1591,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (moved !== undefined && gestureState.kind === 'moving') {
         const dx = moved.x - gestureState.startX
         const dy = moved.y - gestureState.startY
-        const extras = [...extraIds]
+        // The SAME carried set the drag preview showed: selection extras
+        // plus a grabbed group frame's geometrically contained members
+        // (minus locked ones). Going through `carriedWithDrag` — the one
+        // producer the ghost, snapping, and the live layers already share —
+        // is what makes "what you saw travelling is what the commit moves"
+        // structural rather than two hand-kept copies of the containment
+        // rule.
+        const followerMoves = [
+          ...carriedWithDrag(canvasRef.current, gestureState, extraIds, isLocked),
+        ]
           .filter((id) => id !== moved.id)
           .flatMap((id) => {
             const node = canvasRef.current.nodes.find((n) => n.id === id)
@@ -1599,30 +1608,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               ? []
               : [{ kind: 'move-node' as const, id, x: node.x + dx, y: node.y + dy }]
           })
-        // Moving a group frame carries its members along: every node fully
-        // contained in the frame's PRE-move box (JSON Canvas containment is
-        // geometric — there is no parent pointer) gets the same delta.
-        const movedNode = canvasRef.current.nodes.find((n) => n.id === moved.id)
-        const alreadyMoving = new Set([moved.id, ...extras.map((c) => c.id)])
-        const memberMoves =
-          movedNode?.type === 'group'
-            ? canvasRef.current.nodes
-                .filter(
-                  (n) =>
-                    !alreadyMoving.has(n.id) &&
-                    // Containment is geometric, so a locked member would
-                    // otherwise be carried along by its frame — the one way
-                    // a lock could be moved without ever being selected.
-                    !isLocked(n.id) &&
-                    n.x >= gestureState.startX &&
-                    n.y >= gestureState.startY &&
-                    n.x + n.width <= gestureState.startX + movedNode.width &&
-                    n.y + n.height <= gestureState.startY + movedNode.height,
-                )
-                .map((n) => ({ kind: 'move-node' as const, id: n.id, x: n.x + dx, y: n.y + dy }))
-            : []
-        if (extras.length > 0 || memberMoves.length > 0) {
-          applyResult({ ...result, commands: [...result.commands, ...extras, ...memberMoves] })
+        if (followerMoves.length > 0) {
+          applyResult({ ...result, commands: [...result.commands, ...followerMoves] })
           return
         }
       }
