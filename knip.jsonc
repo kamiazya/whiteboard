@@ -7,8 +7,7 @@
         ".claude/scripts/*.mjs",
         // Claude Code lifecycle hooks: invoked by .claude/settings.json
         // (PreToolUse/PostToolUse commands), which knip does not parse.
-        ".claude/scripts/hooks/*.mjs",
-        "tools/check-pr-title.mjs"
+        ".claude/scripts/hooks/*.mjs"
       ],
       "project": [".claude/workflows/**/*.mjs", ".claude/scripts/**/*.mjs", "tools/**/*.mjs"]
     },
