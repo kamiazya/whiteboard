@@ -3,7 +3,10 @@ import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { updateCanvasResponseSchema } from '../../shared/api-contracts/canvas.js'
+import {
+  deleteCanvasResponseSchema,
+  updateCanvasResponseSchema,
+} from '../../shared/api-contracts/canvas.js'
 import { withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-routes-test-')
@@ -236,6 +239,141 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
   })
 })
 
+describe('DELETE /api/workspaces/:workspaceId/canvases/:slug', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+  })
+  afterEach(() => {
+    clearCache()
+  })
+
+  it('returns 200 { ok: true }, parses with deleteCanvasResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const app = createCanvasRouter()
+
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a', {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(200)
+    const json: unknown = await res.json()
+    expect(deleteCanvasResponseSchema.parse(json)).toEqual({ ok: true })
+
+    const listRes = await app.request('/api/workspaces/session1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
+    expect(listJson.canvases.map((c) => c.slug)).not.toContain('canvas-a')
+
+    const existsRes = await app.request('/api/canvas/session1/canvas-a/exists')
+    expect(await existsRes.json()).toEqual({ exists: false })
+
+    const snapshotRes = await app.request('/api/canvas/session1/canvas-a/snapshot')
+    expect(snapshotRes.status).toBe(404)
+  })
+
+  it('returns 404 with Problem Details { title } for a missing canvas', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/session1/canvases/never-created', {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(404)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+    expect(json).not.toHaveProperty('error')
+  })
+
+  it('returns 400 with Problem Details { title } for an invalid workspaceId or slug', async () => {
+    const app = createCanvasRouter()
+
+    const badWs = await app.request('/api/workspaces/bad.workspace/canvases/canvas-a', {
+      method: 'DELETE',
+    })
+    expect(badWs.status).toBe(400)
+    expect(typeof ((await badWs.json()) as { title?: string }).title).toBe('string')
+
+    const badSlug = await app.request('/api/workspaces/session1/canvases/bad.slug', {
+      method: 'DELETE',
+    })
+    expect(badSlug.status).toBe(400)
+    expect(typeof ((await badSlug.json()) as { title?: string }).title).toBe('string')
+  })
+
+  it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const canvasStore = await import('../store/canvas-store.js')
+    const spy = vi
+      .spyOn(canvasStore, 'deleteCanvas')
+      .mockRejectedValueOnce(
+        corruptStoredData('/tmp/blobs/session1/canvas/abc.loro', 'broken canvas blob'),
+      )
+    const app = createCanvasRouter()
+    try {
+      const res = await app.request('/api/workspaces/session1/canvases/canvas-a', {
+        method: 'DELETE',
+      })
+      expect(res.status).toBe(500)
+      await expect(res.json()).resolves.toEqual({
+        error: 'corrupt_stored_data',
+        message: expect.stringContaining('broken canvas blob'),
+      })
+
+      // Mutation guard: a non-corruption throw must NOT hit the same
+      // branch — proves the mapping checks the error type, not "any throw".
+      spy.mockRejectedValueOnce(new Error('disk exploded'))
+      const res2 = await app.request('/api/workspaces/session1/canvases/canvas-a', {
+        method: 'DELETE',
+      })
+      expect(res2.status).toBe(500)
+      const json2: unknown = await res2.json()
+      expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('evicts the doc-cache on delete, so re-creating the same slug after a warm cache read yields a fresh empty doc', async () => {
+    const app = createCanvasRouter()
+    await app.request('/api/workspaces/session1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'cached' }),
+    })
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    const list = clientDoc.getMovableList('elements')
+    const m = list.insertContainer(0, new LoroMap())
+    m.set('id', 'old-element')
+    clientDoc.commit()
+    const update = clientDoc.export({ mode: 'update', from: prevVV })
+    // Warm the doc-cache via the update path, matching real client traffic.
+    await app.request('/api/canvas/session1/cached/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: update,
+    })
+    expect(peekDoc('session1', 'cached')).toBeDefined()
+
+    const delRes = await app.request('/api/workspaces/session1/canvases/cached', {
+      method: 'DELETE',
+    })
+    expect(delRes.status).toBe(200)
+
+    // Re-creating must succeed (not 409) and must not resurrect the old doc.
+    const createRes = await app.request('/api/workspaces/session1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'cached' }),
+    })
+    expect(createRes.status).toBe(200)
+
+    const snapshotRes = await app.request('/api/canvas/session1/cached/snapshot')
+    expect(snapshotRes.status).toBe(200)
+    const buf = await snapshotRes.arrayBuffer()
+    const restored = LoroDoc.fromSnapshot(new Uint8Array(buf))
+    expect(restored.getMovableList('elements').length).toBe(0)
+  })
+})
+
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
@@ -325,6 +463,27 @@ describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/canvas/session1/bad.slug/snapshot')
     expect(res.status).toBe(400)
+  })
+
+  it('returns 404 with Problem Details { title } for a canvas that was never created', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/never-created/snapshot')
+    expect(res.status).toBe(404)
+    const json = (await res.json()) as { title?: string }
+    // Same shape as DELETE's 404 — the client parses problem-details for
+    // both routes — deliberately not thumbnails/restore's { error, message }.
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+    expect(json).not.toHaveProperty('error')
+  })
+
+  it('returns 404 for a canvas that existed and was deleted', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const app = createCanvasRouter()
+    await app.request('/api/workspaces/session1/canvases/canvas-a', { method: 'DELETE' })
+
+    const res = await app.request('/api/canvas/session1/canvas-a/snapshot')
+    expect(res.status).toBe(404)
   })
 })
 

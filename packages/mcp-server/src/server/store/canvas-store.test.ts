@@ -23,6 +23,7 @@ const {
   listCanvases,
   listWorkspaces,
   compactCanvas,
+  deleteCanvas,
   scheduleAutoCompact,
   setAutoCompactTrigger,
   disposeAutoCompact,
@@ -704,6 +705,118 @@ describe('compactCanvas', () => {
     expect(stamp).not.toBeNull()
     expect(stamp!).toBeGreaterThanOrEqual(before)
     expect(stamp!).toBeLessThanOrEqual(after)
+  })
+})
+
+describe('deleteCanvas', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-delete-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('removes the canvases row, cascades branches/versions rows, and unlinks the .loro blob and version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { createBranch } = await import('./branches-store.js')
+    const { stat } = await import('node:fs/promises')
+
+    const doc = new LoroDoc()
+    await saveCanvas('session1', 'canvas-a', doc)
+    await saveCanvas('session1', 'canvas-b', doc)
+    const store = new FileVersionStore()
+    const version = await store.save('session1', 'canvas-a', doc, { auto: true })
+    await store.saveThumbnail('session1', version.id, new Uint8Array([1, 2, 3]))
+    await createBranch('session1', 'canvas-a', { name: 'feature' })
+
+    const db = await getDb(tempDir)
+    const canvasRow = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'canvas-a')
+      .executeTakeFirstOrThrow()
+    const canvasId = canvasRow.id
+
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${canvasId}.loro`)
+    const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
+    await expect(stat(blobPath)).resolves.toBeDefined()
+    await expect(stat(thumbPath)).resolves.toBeDefined()
+
+    await expect(deleteCanvas('session1', 'canvas-a')).resolves.toBe(true)
+
+    const canvasAfter = await db
+      .selectFrom('canvases')
+      .selectAll()
+      .where('id', '=', canvasId)
+      .executeTakeFirst()
+    expect(canvasAfter).toBeUndefined()
+    const branchesAfter = await db
+      .selectFrom('branches')
+      .selectAll()
+      .where('canvasId', '=', canvasId)
+      .execute()
+    expect(branchesAfter).toEqual([])
+    const versionsAfter = await db
+      .selectFrom('versions')
+      .selectAll()
+      .where('canvasId', '=', canvasId)
+      .execute()
+    expect(versionsAfter).toEqual([])
+
+    await expect(stat(blobPath)).rejects.toThrow()
+    await expect(stat(thumbPath)).rejects.toThrow()
+
+    const wsRow = await db
+      .selectFrom('workspaces')
+      .select(['id'])
+      .where('id', '=', 'session1')
+      .executeTakeFirst()
+    expect(wsRow).toBeDefined()
+    const siblingRow = await db
+      .selectFrom('canvases')
+      .select(['slug'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'canvas-b')
+      .executeTakeFirst()
+    expect(siblingRow).toBeDefined()
+  })
+
+  it('returns false for a missing canvas without throwing; deleting the same canvas twice returns true then false', async () => {
+    await expect(deleteCanvas('session1', 'ghost')).resolves.toBe(false)
+
+    await saveCanvas('session1', 'once', new LoroDoc())
+    await expect(deleteCanvas('session1', 'once')).resolves.toBe(true)
+    await expect(deleteCanvas('session1', 'once')).resolves.toBe(false)
+  })
+
+  it('deletes a canvas whose blob file is already missing (unlink ignores ENOENT so row-only canvases still delete)', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { unlink } = await import('node:fs/promises')
+
+    await saveCanvas('session1', 'row-only', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'row-only')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await unlink(blobPath)
+
+    await expect(deleteCanvas('session1', 'row-only')).resolves.toBe(true)
+    const after = await db
+      .selectFrom('canvases')
+      .selectAll()
+      .where('id', '=', row.id)
+      .executeTakeFirst()
+    expect(after).toBeUndefined()
   })
 })
 
