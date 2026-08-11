@@ -1,0 +1,33 @@
+# PR-title validation as its own check, separate from ci.yml, because it must
+# re-run on `edited`: a title fixed after a rejection would otherwise stay red
+# until some unrelated push — `gh run rerun` re-reads the ORIGINAL event
+# payload, so it can never see the corrected title. ci.yml deliberately does
+# NOT listen to `edited` (a PR body edit must not re-run the full suite), so
+# the two workflows split on exactly that event.
+#
+# tools/check-pr-title.mjs is dependency-free, so this job needs no pnpm
+# install — checkout + node is the whole cost of an edited-event re-run.
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node tools/check-pr-title.mjs "$PR_TITLE"
