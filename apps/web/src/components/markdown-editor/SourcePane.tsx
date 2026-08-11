@@ -1,8 +1,12 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import { tags } from '@lezer/highlight'
+import { GFM } from '@lezer/markdown'
 import { useEffect, useRef } from 'react'
+import { minimalChange } from './minimal-change.js'
 
 // Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
 // collapsed selection inserts an empty pair and parks the cursor between
@@ -28,6 +32,38 @@ const styleKeymap = [
   { key: 'Mod-b', run: wrapSelectionWith('**') },
   { key: 'Mod-i', run: wrapSelectionWith('*') },
 ]
+
+/**
+ * Markdown token styling, as class names rather than inline colors: the
+ * app's palette lives in CSS custom properties that already flip with the
+ * theme (`:root` / `.dark` in index.css), so the rules for these classes go
+ * there too and dark mode needs no second definition here.
+ *
+ * The palette is deliberately achromatic (every token is `oklch(L 0 0)`),
+ * so structure is carried by WEIGHT, SLANT and CONTRAST instead of hue —
+ * a syntax rainbow would be the one colorful surface in the whole app.
+ * Markers (`#`, `-`, `**`) recede rather than highlight: they are scaffolding
+ * for the prose, and reading them as loudly as the prose inverts the point.
+ *
+ * `HeaderMark` and friends carry BOTH their own `processingInstruction` tag
+ * and the enclosing heading's, and a `HighlightStyle` applies every matching
+ * rule — so `.cm-md-marker` has to win on the shared properties by order in
+ * the stylesheet, not by being the only match.
+ */
+const markdownHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, class: 'cm-md-heading' },
+  { tag: tags.strong, class: 'cm-md-strong' },
+  { tag: tags.emphasis, class: 'cm-md-emphasis' },
+  { tag: tags.strikethrough, class: 'cm-md-strikethrough' },
+  { tag: tags.link, class: 'cm-md-link' },
+  { tag: tags.url, class: 'cm-md-url' },
+  { tag: tags.monospace, class: 'cm-md-code' },
+  { tag: tags.quote, class: 'cm-md-quote' },
+  { tag: tags.list, class: 'cm-md-list' },
+  { tag: tags.contentSeparator, class: 'cm-md-separator' },
+  { tag: tags.labelName, class: 'cm-md-label' },
+  { tag: tags.processingInstruction, class: 'cm-md-marker' },
+])
 
 export interface SourcePaneProps {
   value: string
@@ -58,7 +94,20 @@ export function SourcePane({ value, onChange, className, autoFocus = false }: So
     const state = EditorState.create({
       doc: value,
       extensions: [
-        markdown(),
+        // GFM, because the preview pane parses through canvas-codec's
+        // pipeline (`remark-parse` + `remark-gfm` + `remark-math`) and
+        // `markdown()`'s default base is plain CommonMark. Left unmatched,
+        // the two panes disagree about what the document even IS: a
+        // `~~strikethrough~~` or a table renders in the preview while
+        // staying unrecognized, and therefore unstyled, in the source.
+        // `markdownLanguage` would also cover GFM but throws in
+        // Subscript/Superscript/Emoji, which canvas-codec does NOT parse —
+        // that trades this mismatch for its mirror image. Math is still
+        // unmatched: canvas-codec parses it, but the preview degrades it to
+        // an escaped-source placeholder anyway (see render-preview.ts), so
+        // there is nothing yet for a source-side math grammar to agree with.
+        markdown({ extensions: [GFM] }),
+        syntaxHighlighting(markdownHighlightStyle),
         history(),
         // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
         // default binding; indentWithTab keeps Tab in the editor (Escape
@@ -104,9 +153,13 @@ export function SourcePane({ value, onChange, className, autoFocus = false }: So
     // every keystroke, since a controlled parent typically echoes the same
     // value straight back in via `onChange`.
     if (current === value) return
-    view.dispatch({
-      changes: { from: 0, to: current.length, insert: value },
-    })
+    // Only the span that actually differs. CodeMirror maps the selection
+    // through a change, so a whole-document replace collapses every caret
+    // and selection inside it to a boundary — which is the entire document.
+    // Confining the range keeps every position outside it untouched, and is
+    // what makes a remote CRDT update land without yanking the local caret
+    // out of the word being typed.
+    view.dispatch({ changes: minimalChange(current, value) })
   }, [value])
 
   return (

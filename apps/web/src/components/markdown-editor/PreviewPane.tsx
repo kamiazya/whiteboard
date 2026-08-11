@@ -1,5 +1,7 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { useMemo } from 'react'
+import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { editorTextFill } from '../spatial-editor/editor-appearance.js'
 import { renderMarkdownPreviewSvg } from './render-preview.js'
 
 export interface PreviewPaneProps {
@@ -7,6 +9,7 @@ export interface PreviewPaneProps {
   maxWidth: number
   measure: MeasureText
   background?: string
+  theme?: ResolvedTheme
 }
 
 /**
@@ -20,7 +23,13 @@ export interface PreviewPaneProps {
  * ever stops being canvas-render's own output, this reasoning no longer
  * holds and must be revisited.
  */
-export function PreviewPane({ value, maxWidth, measure, background }: PreviewPaneProps) {
+export function PreviewPane({
+  value,
+  maxWidth,
+  measure,
+  background,
+  theme = 'light',
+}: PreviewPaneProps) {
   const svg = useMemo(
     () => renderMarkdownPreviewSvg(value, { measure, maxWidth, background }),
     [value, measure, maxWidth, background],
@@ -29,7 +38,13 @@ export function PreviewPane({ value, maxWidth, measure, background }: PreviewPan
   return (
     <div
       data-testid="markdown-preview-pane"
-      style={{ overflow: 'auto' }}
+      // `fill` on the host, not in the SVG: canvas-render assigns markdown
+      // body runs no fill of their own, so each `<text>` would otherwise take
+      // the SVG default — black — on every theme, leaving the dark preview
+      // black on near-black. Inheriting from here themes every run at once
+      // and keeps color out of the render path, so exported SVG bytes stay
+      // independent of whichever theme the viewer happens to be using.
+      style={{ overflow: 'auto', fill: editorTextFill(theme) }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

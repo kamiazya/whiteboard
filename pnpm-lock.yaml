@@ -119,6 +119,9 @@ importers:
       '@codemirror/lang-markdown':
         specifier: ^6.5.1
         version: 6.5.1
+      '@codemirror/language':
+        specifier: ^6.11.4
+        version: 6.12.4
       '@codemirror/state':
         specifier: ^6.7.1
         version: 6.7.1
@@ -143,6 +146,12 @@ importers:
       '@kamiazya/whiteboard-mcp':
         specifier: workspace:*
         version: link:../../packages/mcp-server
+      '@lezer/highlight':
+        specifier: ^1.2.1
+        version: 1.2.3
+      '@lezer/markdown':
+        specifier: ^1.7.2
+        version: 1.7.2
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.23
         version: 1.1.23(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)

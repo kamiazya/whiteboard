@@ -108,6 +108,65 @@
   }
 
   /*
+   * Markdown source-pane token styling (SourcePane.tsx's
+   * `markdownHighlightStyle` assigns these classes). They live here, not in
+   * a CodeMirror theme, so they read the same `--foreground` /
+   * `--muted-foreground` tokens as the rest of the app and flip with
+   * `.dark` for free.
+   *
+   * Order matters: a marker span inside a heading matches BOTH
+   * `.cm-md-heading` and `.cm-md-marker` at equal specificity, so
+   * `.cm-md-marker` is declared last to win the color and weight it shares
+   * with the tokens that enclose it.
+   */
+  .cm-md-heading {
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .cm-md-strong {
+    font-weight: 700;
+  }
+
+  .cm-md-emphasis {
+    font-style: italic;
+  }
+
+  .cm-md-strikethrough {
+    text-decoration: line-through;
+    color: var(--muted-foreground);
+  }
+
+  .cm-md-link,
+  .cm-md-label {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .cm-md-url {
+    color: var(--muted-foreground);
+  }
+
+  .cm-md-code {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    color: var(--muted-foreground);
+  }
+
+  .cm-md-quote {
+    font-style: italic;
+    color: var(--muted-foreground);
+  }
+
+  .cm-md-list,
+  .cm-md-separator,
+  .cm-md-marker {
+    font-weight: 400;
+    font-style: normal;
+    color: var(--muted-foreground);
+  }
+
+  /*
    * One-shot attention echo (ConnectionStatus sync-off entry): an
    * expanding, fading ring behind the chip dot. Compositor props only;
    * a FINITE iteration count at the use site keeps it a pulse that
