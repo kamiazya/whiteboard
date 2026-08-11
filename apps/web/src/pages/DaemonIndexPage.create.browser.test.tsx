@@ -39,9 +39,6 @@ function stubFetch(onCreateCanvas: (workspaceId: string, slug: string) => void) 
       if (canvasesMatch) {
         return Promise.resolve(jsonResponse({ canvases: [] }))
       }
-      if (url.match(/\/api\/workspaces\/([^/]+)\/names$/)) {
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     }),
   )
@@ -66,12 +63,11 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    await screen.findByRole('button', { name: 'New canvas' })
 
     // Tab through the toolbar controls in DOM order until "New canvas" is
     // focused — asserting reachability by keyboard alone, not by a direct
     // ref/click shortcut.
-    const button = screen.getByRole('button', { name: 'New canvas' })
+    const button = await screen.findByRole('button', { name: 'New canvas' })
     for (let i = 0; i < 10 && document.activeElement !== button; i++) {
       await userEvent.tab()
     }
