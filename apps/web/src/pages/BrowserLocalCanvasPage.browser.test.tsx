@@ -1,4 +1,11 @@
-import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -132,7 +139,8 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
-    screen.getByRole('button', { name: /delete canvas/i }).click()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
     within(dialog)
       .getByRole('button', { name: /^delete$/i })
@@ -150,7 +158,8 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
-    screen.getByRole('button', { name: /delete canvas/i }).click()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
     within(dialog)
       .getByRole('button', { name: /^delete$/i })

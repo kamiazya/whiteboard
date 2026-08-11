@@ -50,7 +50,9 @@ const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
  * the condition these tests actually depend on before tearing the page down.
  */
 async function waitForSaved(): Promise<void> {
-  await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy(), { timeout: 15_000 })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy(), {
+    timeout: 15_000,
+  })
 }
 
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {
@@ -108,6 +110,29 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       expect(content?.textContent).toContain('# Persisted note')
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
+  })
+
+  it('a markdown canvas has no display-settings gear — edge routing is spatial-only', async () => {
+    const store = new IndexedDBStore()
+    render(<BrowserLocalCanvasPage store={store} />)
+
+    // Fresh DB boots into a spatial canvas: the gear is offered there.
+    await screen.findByTestId('mock-spatial-editor')
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="canvas-settings-button"]')).not.toBeNull()
+    })
+
+    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    await userEvent.click(switcher)
+    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await waitFor(() => {
+      expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
+    })
+
+    // Edge routing has no meaning for a document with no spatial scene —
+    // the gear must not carry over; the rest of the canvas row does.
+    expect(document.querySelector('[data-testid="canvas-settings-button"]')).toBeNull()
+    expect(document.querySelector('[data-testid="save-status-chip"]')).toBeTruthy()
   })
 
   it('the title survives a remount and renames the canvas in the switcher', async () => {

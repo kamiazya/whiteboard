@@ -408,7 +408,7 @@ describe('WorkspaceTopBar browser mode', () => {
   // variants only take effect against the real viewport width, so this
   // guard can only run in the browser layer (jsdom class-list checks alone
   // would pass even if the CSS never generated).
-  it('collapses the right-side actions into a "More actions" kebab under 400px, without hiding the left-side group', async () => {
+  it('collapses the right-side actions into a "View options" kebab under 400px, without hiding the left-side group', async () => {
     // `display:none` on an ancestor (the collapse group, not the button
     // itself) drops the button out of the accessibility tree, so
     // page.getByRole()/toBeVisible() can't distinguish "present but hidden"
@@ -457,7 +457,7 @@ describe('WorkspaceTopBar browser mode', () => {
     const onEnterFullscreen = vi.fn()
     cleanup()
     renderTopBar({ onEnterFullscreen })
-    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'Fullscreen' }).click()
     expect(onEnterFullscreen).toHaveBeenCalledTimes(1)
 

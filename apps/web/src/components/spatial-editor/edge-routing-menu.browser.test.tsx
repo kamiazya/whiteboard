@@ -1,12 +1,15 @@
-// Canvas-wide routing style, set from the dock's settings popover.
+// Canvas-wide routing style, set from the canvas row's settings popover.
 //
 // The rendering assertions are the point here: a pick must not just record
-// the extension on the canvas, it must change what the scene draws. The
-// popover wiring itself is pinned in canvas-settings.browser.test.tsx.
+// the extension on the canvas, it must change what the scene DRAWS. The
+// host composes the popover and the editor over one canvas state, exactly
+// as the page does; the popover's own wiring is pinned in
+// canvas-settings.browser.test.tsx.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -26,6 +29,7 @@ function makeHost() {
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
+        <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -40,11 +44,12 @@ function makeHost() {
 
 function openSettings(container: HTMLElement) {
   const gear = container.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
-  gear.click()
+  fireEvent.click(gear)
 }
 
-const optionButton = (container: HTMLElement, label: string) =>
-  [...container.querySelectorAll('[data-testid="canvas-settings-menu"] button')].find(
+// The popover renders in a portal, so options are queried from the document.
+const optionButton = (_container: HTMLElement, label: string) =>
+  [...document.querySelectorAll('[data-testid="canvas-settings-menu"] button')].find(
     (button) => button.textContent?.trim() === label,
   ) as HTMLButtonElement | undefined
 
@@ -54,9 +59,9 @@ it('offers the routing style from the settings popover, not the creation menu', 
   openSettings(container)
 
   await vi.waitFor(() => {
-    expect(container.querySelector('[data-testid="canvas-settings-menu"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="canvas-settings-menu"]')).not.toBeNull()
   })
-  expect(container.textContent).toContain('Edge routing')
+  expect(document.body.textContent).toContain('Edge routing')
   expect(optionButton(container, 'Orthogonal')).toBeDefined()
 
   // The dock's "+" menu is for what does not exist yet; a canvas-wide setting
@@ -151,6 +156,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
+        <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -193,19 +199,16 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
   function DeferredHost() {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
+    const deferSet = (next: SpatialCanvas) => {
+      setTimeout(() => {
+        latest.canvas = next
+        setCanvas(next)
+      }, 30)
+    }
     return (
       <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => {
-            setTimeout(() => {
-              latest.canvas = next
-              setCanvas(next)
-            }, 30)
-          }}
-          theme="light"
-        />
+        <CanvasDisplaySettings canvas={canvas} onChange={deferSet} />
+        <SpatialEditor defaultTool="select" canvas={canvas} onChange={deferSet} theme="light" />
       </div>
     )
   }

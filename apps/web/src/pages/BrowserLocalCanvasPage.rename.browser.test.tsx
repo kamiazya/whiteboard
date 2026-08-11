@@ -96,7 +96,9 @@ describe('BrowserLocalCanvasPage rename (browser — real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Reloaded title' } })
     titleInput.blur()
     await waitForTitle('Reloaded title')
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
+      timeout: 5000,
+    })
 
     cleanup()
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
@@ -165,14 +167,18 @@ describe('BrowserLocalCanvasPage rename (browser — real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Named canvas' } })
     titleInput.blur()
     await waitForTitle('Named canvas')
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
+      timeout: 5000,
+    })
 
     const titleInput2 = await openRenameInput()
     titleInput2.focus()
     fireEvent.change(titleInput2, { target: { value: '   ' } })
     titleInput2.blur()
     await waitForTitle('untitled')
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
+      timeout: 5000,
+    })
 
     cleanup()
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)

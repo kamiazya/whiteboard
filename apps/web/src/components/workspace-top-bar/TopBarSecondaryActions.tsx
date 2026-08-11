@@ -27,7 +27,7 @@ interface TopBarSecondaryActionsProps {
   onOpenSettings?: () => void
 }
 
-// Right side: theme and fullscreen — plus the "More actions" kebab that
+// Right side: theme and fullscreen — plus the "View options" kebab that
 // reuses the exact same handlers below 400px so the header never wraps.
 // Version history moved to the canvas's HistoryCluster (bottom-left).
 export function TopBarSecondaryActions({
@@ -82,7 +82,7 @@ export function TopBarSecondaryActions({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="More actions"
+            aria-label="View options"
             data-testid="topbar-more-actions-trigger"
             className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground min-[400px]:hidden"
           >

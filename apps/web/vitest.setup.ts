@@ -1,6 +1,19 @@
 import { afterEach, expect, vi } from 'vitest'
 import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 
+// jsdom ships no ResizeObserver; Radix popper-positioned surfaces
+// (DropdownMenu/Popover content) observe their anchor on mount and throw
+// without one. A no-op is enough — layout geometry is a browser-mode
+// concern, jsdom tests only assert structure and wiring.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class NoopResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = NoopResizeObserver as unknown as typeof ResizeObserver
+}
+
 // Shared jsdom-project teardown hook. See src/test-utils/scheduler-drain.ts
 // for why this exists: React's scheduler can outlive a test's own cleanup,
 // so every test gets a bounded drain window before the next test (or the
