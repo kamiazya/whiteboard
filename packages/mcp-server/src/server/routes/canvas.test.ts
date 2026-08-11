@@ -201,6 +201,23 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title).not.toMatch(/slug is required/i)
   })
 
+  it('falls back to the issue message when the invalid field is neither slug nor kind', async () => {
+    // An array body parses as JSON but fails the object schema at the TOP level — path [] —
+    // exercising createCanvasRequestErrorTitle's fallback branch rather than a field-specific
+    // message that would name the wrong thing.
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws-a/canvases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify([1, 2, 3]),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title: string }
+    expect(json.title).not.toMatch(/slug is required/i)
+    expect(json.title).not.toMatch(/spatial/i)
+    expect(json.title.length).toBeGreaterThan(0)
+  })
+
   it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/bad.workspace/canvases', {
