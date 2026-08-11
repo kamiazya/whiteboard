@@ -47,9 +47,10 @@ describe('single content path (S10 guardrail)', () => {
     // canvas-render's serializer tests — this test only pins that nothing
     // BUT that serializer's two documented injection points exists here.
     const allowed = new Map([
-      // Committed scene + the live-edges drag overlay, both fed solely by
-      // canvas-render's escaping serializer.
-      ['./SpatialEditor.tsx', 2],
+      // Committed scene + the live-edges drag overlay + the live-node
+      // resize overlay, all fed solely by canvas-render's escaping
+      // serializer.
+      ['./SpatialEditor.tsx', 3],
       ['./DragPreviewLayer.tsx', 1],
     ])
     const sinkPattern =
