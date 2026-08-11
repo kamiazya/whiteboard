@@ -213,6 +213,12 @@ export interface ImageSceneNode {
   readonly href: string
   /** Accessible name for the image; absent renders as presentation. */
   readonly alt?: string
+  /**
+   * How the image meets its frame: 'contain' letterboxes (the default,
+   * preserving the pre-fit output byte-for-byte), 'cover' fills and crops.
+   * Maps to SVG preserveAspectRatio meet/slice.
+   */
+  readonly fit?: 'contain' | 'cover'
 }
 
 export interface GroupSceneNode {

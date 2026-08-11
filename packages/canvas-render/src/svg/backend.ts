@@ -234,7 +234,7 @@ function renderNode(node: SceneNode): string {
           ? `<title>${escapeXmlText(node.alt)}</title>`
           : ''
       const roleAttr = title === '' ? ` ${PRESENTATION_ATTR}` : ''
-      return `<image ${rectAttrs(node.bbox)} href="${escapeXmlAttr(node.href)}" preserveAspectRatio="xMidYMid meet"${roleAttr}>${title}</image>`
+      return `<image ${rectAttrs(node.bbox)} href="${escapeXmlAttr(node.href)}" preserveAspectRatio="xMidYMid ${node.fit === 'cover' ? 'slice' : 'meet'}"${roleAttr}>${title}</image>`
     }
   }
 }

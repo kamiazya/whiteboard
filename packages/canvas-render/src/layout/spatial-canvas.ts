@@ -52,6 +52,14 @@ import { translateScene } from './translate-scene.js'
 export type SpatialLayoutDegradation =
   | { readonly kind: 'body-parse-failed'; readonly nodeId: string; readonly err: unknown }
   | { readonly kind: 'unknown-node-kind'; readonly nodeId: string; readonly type: string }
+  // 'repeat' tiling needs the image's intrinsic size, which this pure layer
+  // never has (no image decoding behind the resolveFileImage seam) — it
+  // renders as 'cover' and the caller is told.
+  | {
+      readonly kind: 'unsupported-background-style'
+      readonly nodeId: string
+      readonly style: 'repeat'
+    }
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
@@ -344,6 +352,38 @@ function composeFileImage(
   }
 }
 
+/**
+ * JSON Canvas group background: a full-frame image behind the members.
+ * `backgroundStyle` maps 'ratio' -> contain and 'cover'/absent -> cover
+ * (the spec's visual default); 'repeat' degrades to cover, reported via
+ * `onDegrade`. Resolution failures keep the plain frame, matching the
+ * file-image seam's never-throw rule.
+ */
+function composeGroupBackground(
+  node: Extract<SpatialNode, { type: 'group' }>,
+  options: ResolvedLayoutOptions,
+): SceneNode | undefined {
+  if (node.background === undefined || options.resolveFileImage === undefined) return undefined
+  let resolved: { readonly href: string; readonly alt?: string } | undefined
+  try {
+    resolved = options.resolveFileImage(node.background)
+  } catch {
+    resolved = undefined
+  }
+  if (resolved === undefined) return undefined
+  if (!(node.width > 0) || !(node.height > 0)) return undefined
+  if (node.backgroundStyle === 'repeat') {
+    options.onDegrade?.({ kind: 'unsupported-background-style', nodeId: node.id, style: 'repeat' })
+  }
+  return {
+    kind: 'image',
+    bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
+    href: resolved.href,
+    ...(resolved.alt !== undefined ? { alt: resolved.alt } : {}),
+    fit: node.backgroundStyle === 'ratio' ? 'contain' : 'cover',
+  }
+}
+
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   switch (node.type) {
     case 'file': {
@@ -371,10 +411,12 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
       return composeTextNode(node, options)
     case 'group': {
       const chrome = chromeShape(node, options)
+      const background = composeGroupBackground(node, options)
+      const base = background === undefined ? [chrome] : [chrome, background]
       const label = labelOf(node, options)
       return label === undefined
-        ? [chrome]
-        : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
+        ? base
+        : [...base, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
     }
     case 'file':
     case 'link': {

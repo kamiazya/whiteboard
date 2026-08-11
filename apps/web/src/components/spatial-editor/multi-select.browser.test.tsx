@@ -328,6 +328,6 @@ it('member outlines include the edges between members, not edges leaving the are
   await vi.waitFor(() =>
     expect(container.querySelectorAll('[data-testid="member-outlines"] rect').length).toBe(2),
   )
-  const edgeHighlights = container.querySelectorAll('[data-testid="member-outlines"] polyline')
-  expect(edgeHighlights.length).toBe(1)
+  const edgeHighlights = [...container.querySelectorAll('[data-testid="member-outlines"] polyline')]
+  expect(edgeHighlights.map((el) => el.getAttribute('data-edge-id'))).toEqual(['ab'])
 })

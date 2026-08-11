@@ -96,17 +96,26 @@ function themeBackground(options: HeadlessExportOptions): string {
 
 /** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
 function onDegrade(event: SpatialLayoutDegradation): void {
-  if (event.kind === 'body-parse-failed') {
-    log.warning(
-      { nodeId: event.nodeId, err: event.err },
-      'text node body failed to parse as markdown; falling back to literal text',
-    )
-    return
+  switch (event.kind) {
+    case 'body-parse-failed':
+      log.warning(
+        { nodeId: event.nodeId, err: event.err },
+        'text node body failed to parse as markdown; falling back to literal text',
+      )
+      return
+    case 'unsupported-background-style':
+      log.warning(
+        { nodeId: event.nodeId, style: event.style },
+        'group backgroundStyle not supported; rendering as cover',
+      )
+      return
+    case 'unknown-node-kind':
+      log.warning(
+        { nodeId: event.nodeId, type: event.type },
+        'unrecognized spatial node kind; emitting chrome only',
+      )
+      return
   }
-  log.warning(
-    { nodeId: event.nodeId, type: event.type },
-    'unrecognized spatial node kind; emitting chrome only',
-  )
 }
 
 /**
