@@ -1,5 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
+import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 type Side = 'top' | 'right' | 'bottom' | 'left'
 type Point = { readonly x: number; readonly y: number }
@@ -97,35 +98,105 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
  * derivation falls back to the preferred side, so fully-boxed-in nodes
  * keep the old behaviour.
  */
+/** Inset tangent spans of two facing sides overlap — a zero-bend lane exists. */
+function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
+  const span = (r: Rect): readonly [number, number] =>
+    axis === 'h'
+      ? [
+          r.y + Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
+          r.y + r.h - Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
+        ]
+      : [
+          r.x + Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
+          r.x + r.w - Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
+        ]
+  const [aLo, aHi] = span(fromRect)
+  const [bLo, bHi] = span(toRect)
+  return Math.max(aLo, bLo) <= Math.min(aHi, bHi)
+}
+
+/**
+ * Side-pair candidates ranked by ESTIMATED bends, best first:
+ * a facing opposing pair whose spans overlap routes as one straight
+ * segment (0 bends, dominant axis first); a perpendicular L-pair reaches a
+ * genuinely diagonal target with one bend; an opposing pair without a
+ * shared lane needs a two-bend Z. Ties between the two L-pairs break
+ * toward the less crowded sides (`crowd`), so a departure prefers a side
+ * other edges have not already claimed — fewer shared sides means fewer
+ * fanned anchors and lane jogs. The old dominant-axis rule survives as
+ * the ranking's tie-breaks, so aligned pairs keep their exact old sides.
+ */
+function rankedSidePairs(
+  dx: number,
+  dy: number,
+  fromRect: Rect,
+  toRect: Rect,
+  crowd: (end: 'from' | 'to', side: Side) => number,
+): readonly { fromSide: Side; toSide: Side }[] {
+  const h: Side = dx >= 0 ? 'right' : 'left'
+  const v: Side = dy >= 0 ? 'bottom' : 'top'
+  const opposingH = { fromSide: h, toSide: oppositeSide(h) }
+  const opposingV = { fromSide: v, toSide: oppositeSide(v) }
+  const zero: { fromSide: Side; toSide: Side }[] = []
+  const zeroH = facingSpansOverlap(fromRect, toRect, 'h')
+  const zeroV = facingSpansOverlap(fromRect, toRect, 'v')
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (zeroH) zero.push(opposingH)
+    if (zeroV) zero.push(opposingV)
+  } else {
+    if (zeroV) zero.push(opposingV)
+    if (zeroH) zero.push(opposingH)
+  }
+  const ls: { fromSide: Side; toSide: Side }[] = []
+  if (dx !== 0 && dy !== 0) {
+    const l1 = { fromSide: h, toSide: oppositeSide(v) }
+    const l2 = { fromSide: v, toSide: oppositeSide(h) }
+    const crowding = (p: { fromSide: Side; toSide: Side }) =>
+      crowd('from', p.fromSide) + crowd('to', p.toSide)
+    const dominantFirst = Math.abs(dx) >= Math.abs(dy) ? [l1, l2] : [l2, l1]
+    ls.push(...dominantFirst.sort((a, b) => crowding(a) - crowding(b)))
+  }
+  const fallback = Math.abs(dx) >= Math.abs(dy) ? [opposingH, opposingV] : [opposingV, opposingH]
+  const seen = new Set<string>()
+  return [...zero, ...ls, ...fallback].filter((p) => {
+    const key = `${p.fromSide} ${p.toSide}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function deriveDefaultSides(
   nodes: readonly SpatialNode[],
   edge: CanvasEdge,
   fromRect: Rect,
   toRect: Rect,
+  crowd: (end: 'from' | 'to', side: Side) => number = () => 0,
 ): { fromSide: Side; toSide: Side } {
   const fromCenter = centerOf(fromRect)
   const toCenter = centerOf(toRect)
   const dx = toCenter.x - fromCenter.x
   const dy = toCenter.y - fromCenter.y
-  const fromCandidates = facingSides(dx, dy)
-  // The to end's preferences mirror the from end's (the old derivation
-  // always returned opposite pairs), each end then skipping occlusion
-  // independently.
-  const toCandidates = fromCandidates.map(oppositeSide) as unknown as readonly [
-    Side,
-    Side,
-    Side,
-    Side,
-  ]
+  const pairs = rankedSidePairs(dx, dy, fromRect, toRect, crowd)
   const foreign = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
-  const pick = (rect: Rect, candidates: readonly Side[]): Side => {
+  const exposed = (rect: Rect, side: Side): boolean => {
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
-    return (
-      candidates.find((side) => !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))) ??
-      candidates[0]!
-    )
+    return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
   }
-  return { fromSide: pick(fromRect, fromCandidates), toSide: pick(toRect, toCandidates) }
+  // Ranking is geometric only; occlusion then adjusts each end
+  // independently from the chosen pair (an occluded end moves to its next
+  // exposed side alone, rather than dragging the other end with it).
+  const best = pairs[0]!
+  const pick = (rect: Rect, primary: Side, mirror: readonly [Side, Side, Side, Side]): Side => {
+    const candidates = [primary, ...mirror.filter((sd) => sd !== primary)]
+    return candidates.find((side) => exposed(rect, side)) ?? primary
+  }
+  const fromMirror = facingSides(dx, dy)
+  const toMirror = fromMirror.map(oppositeSide) as unknown as readonly [Side, Side, Side, Side]
+  return {
+    fromSide: pick(fromRect, best.fromSide, fromMirror),
+    toSide: pick(toRect, best.toSide, toMirror),
+  }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
@@ -168,6 +239,17 @@ function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
 export interface EdgeAnchorPair {
   readonly from?: Point
   readonly to?: Point
+  /** Stub depth for each end, when its (node, side) group assigned a lane. */
+  readonly fromLaneDepth?: number
+  readonly toLaneDepth?: number
+  /**
+   * The sides the anchor pass resolved. Side choice can depend on how
+   * crowded each side is across the WHOLE edge set — information a single
+   * routeEdge call does not have — so the pass records its choice and
+   * routeEdge follows it, keeping the two producers agreeing.
+   */
+  readonly fromSide?: Side
+  readonly toSide?: Side
 }
 
 /** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
@@ -207,9 +289,85 @@ function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
  * Edges with a missing endpoint get no entry — `routeEdge` already
  * degrades those to a zero-length path on its own.
  */
-export function assignEdgeAnchors(
+/** A resolved side pair for one edge, as consumed by `edgeSideOverrides`. */
+export interface EdgeSides {
+  readonly fromSide: Side
+  readonly toSide: Side
+}
+
+type SidePair = EdgeSides
+
+/**
+ * The heuristic side choice per edge — authored sides applied, self-edges
+ * pinned to their loop side, crowd-aware pair ranking for the rest. This
+ * is the INITIAL configuration; `optimizeSideChoices` may re-side edges
+ * whose guesses produce crossings or overlaps.
+ */
+function initialSideChoices(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
+): Map<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  // Crowding estimate per (node, side): every edge end's PROSPECTIVE side
+  // (authored, or the plain dominant-axis facing side — deliberately NOT
+  // the crowd-aware derivation, which would recurse) — so a departure can
+  // prefer a side other edges have not already claimed, deterministically
+  // and independent of edge order.
+  const crowdCounts = new Map<string, number>()
+  const prospective = new Map<string, SidePair>()
+  for (const edge of edges) {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) continue
+    if (edge.fromNode === edge.toNode) continue
+    const fromCenter = centerOf(rectOf(fromNode))
+    const toCenter = centerOf(rectOf(toNode))
+    const primary = facingSides(toCenter.x - fromCenter.x, toCenter.y - fromCenter.y)[0]
+    const sides = {
+      fromSide: edge.fromSide ?? primary,
+      toSide: edge.toSide ?? oppositeSide(primary),
+    }
+    prospective.set(edge.id, sides)
+    crowdCounts.set(
+      `${edge.fromNode} ${sides.fromSide}`,
+      (crowdCounts.get(`${edge.fromNode} ${sides.fromSide}`) ?? 0) + 1,
+    )
+    crowdCounts.set(
+      `${edge.toNode} ${sides.toSide}`,
+      (crowdCounts.get(`${edge.toNode} ${sides.toSide}`) ?? 0) + 1,
+    )
+  }
+  const choices = new Map<string, SidePair>()
+  for (const edge of edges) {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) continue
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const own = prospective.get(edge.id)
+    const crowd = (end: 'from' | 'to', side: Side): number => {
+      const nodeId = end === 'from' ? edge.fromNode : edge.toNode
+      const ownSide = end === 'from' ? own?.fromSide : own?.toSide
+      const count = crowdCounts.get(`${nodeId} ${side}`) ?? 0
+      return ownSide === side ? count - 1 : count
+    }
+    const derived =
+      edge.fromNode === edge.toNode
+        ? { fromSide: 'right' as Side, toSide: 'right' as Side }
+        : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
+    choices.set(edge.id, {
+      fromSide: edge.fromSide ?? derived.fromSide,
+      toSide: edge.toSide ?? derived.toSide,
+    })
+  }
+  return choices
+}
+
+/** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
+function computeAnchorsFor(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  sides: ReadonlyMap<string, SidePair>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   type End = {
@@ -224,20 +382,17 @@ export function assignEdgeAnchors(
   edges.forEach((edge, edgeIndex) => {
     const fromNode = byId.get(edge.fromNode)
     const toNode = byId.get(edge.toNode)
-    if (fromNode === undefined || toNode === undefined) return
+    const chosen = sides.get(edge.id)
+    if (fromNode === undefined || toNode === undefined || chosen === undefined) return
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
-    const derived =
-      edge.fromNode === edge.toNode
-        ? { fromSide: 'right' as Side, toSide: 'right' as Side }
-        : deriveDefaultSides(nodes, edge, fromRect, toRect)
     const ends: End[] = [
       {
         edgeId: edge.id,
         edgeIndex,
         role: 'from',
         rect: fromRect,
-        side: edge.fromSide ?? derived.fromSide,
+        side: chosen.fromSide,
         farCenter: centerOf(toRect),
       },
       {
@@ -245,7 +400,7 @@ export function assignEdgeAnchors(
         edgeIndex,
         role: 'to',
         rect: toRect,
-        side: edge.toSide ?? derived.toSide,
+        side: chosen.toSide,
         farCenter: centerOf(fromRect),
       },
     ]
@@ -257,7 +412,17 @@ export function assignEdgeAnchors(
     }
   })
 
-  const anchors = new Map<string, { from?: Point; to?: Point }>()
+  const anchors = new Map<
+    string,
+    {
+      from?: Point
+      to?: Point
+      fromLaneDepth?: number
+      toLaneDepth?: number
+      fromSide?: Side
+      toSide?: Side
+    }
+  >()
   for (const group of groups.values()) {
     group.sort(
       (a, b) =>
@@ -265,16 +430,300 @@ export function assignEdgeAnchors(
         a.edgeIndex - b.edgeIndex ||
         (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
     )
-    group.forEach((end, i) => {
-      const point = sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))
-      const entry = anchors.get(end.edgeId) ?? {}
+    const placed = group.map((end, i) => ({
+      end,
+      point: sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1)),
+      t: tangentCoordinate(end.side, sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))),
+    }))
+    for (const member of placed) {
+      // Depth by SWEEP RANK, not list index: a corridor travelling toward
+      // its far endpoint passes every anchor between its own and that
+      // direction, and must run deeper than all of their exit segments —
+      // an index-ordered ladder gives a sweeping corridor a shallow lane
+      // and forces a crossing right at the node that the connections
+      // themselves never required. Ends that sweep past nothing share the
+      // base depth; their corridors occupy disjoint tangent ranges.
+      const dir = Math.sign(tangentCoordinate(member.end.side, member.end.farCenter) - member.t)
+      const rank =
+        dir === 0
+          ? 0
+          : placed.filter((other) => (dir > 0 ? other.t > member.t : other.t < member.t)).length
+      const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
+      const entry = anchors.get(member.end.edgeId) ?? {}
       anchors.set(
-        end.edgeId,
-        end.role === 'from' ? { ...entry, from: point } : { ...entry, to: point },
+        member.end.edgeId,
+        member.end.role === 'from'
+          ? { ...entry, from: member.point, fromLaneDepth: depth, fromSide: member.end.side }
+          : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
       )
-    })
+    }
   }
   return anchors
+}
+
+/** Quarter-pixel quantization: every cost term is integral, so candidate
+ * comparison is exact integer arithmetic — no float tie can differ between
+ * platforms. */
+const COST_QUANTUM = 4
+
+type ConfigCost = readonly [overlap: number, illegible: number, crossings: number]
+
+function lessCost(a: ConfigCost, b: ConfigCost): boolean {
+  if (a[0] !== b[0]) return a[0] < b[0]
+  if (a[1] !== b[1]) return a[1] < b[1]
+  return a[2] < b[2]
+}
+
+/**
+ * Global legibility cost of a routed configuration, as a lexicographic
+ * integer tuple: total collinear axis-aligned overlap length (a parallel
+ * overlap has no crossing point, so a line jump cannot express it —
+ * heaviest), crossings too close to a segment end to render their jump
+ * arc, then total crossings. Bends and length are deliberately NOT part
+ * of the cost: they are governed by the per-edge pair ranking, and letting
+ * them drive re-siding would let the optimizer reshuffle crossing-free
+ * canvases that nothing is wrong with.
+ */
+function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  let overlap = 0
+  let illegible = 0
+  let crossings = 0
+  const clearance = EDGE_JUMP_RADIUS_PX + 1
+  for (let ai = 1; ai < a.length; ai++) {
+    const a1 = a[ai - 1]!
+    const a2 = a[ai]!
+    for (let bi = 1; bi < b.length; bi++) {
+      const b1 = b[bi - 1]!
+      const b2 = b[bi]!
+      // Collinear axis-aligned overlap.
+      if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
+        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
+        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+        if (hi > lo) overlap += hi - lo
+        continue
+      }
+      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
+        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
+        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+        if (hi > lo) overlap += hi - lo
+        continue
+      }
+      // Proper transversal crossing.
+      const dax = a2.x - a1.x
+      const day = a2.y - a1.y
+      const dbx = b2.x - b1.x
+      const dby = b2.y - b1.y
+      const denom = dax * dby - day * dbx
+      if (denom === 0) continue
+      const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom
+      const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
+      if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue
+      crossings++
+      const lenA = Math.hypot(dax, day)
+      const lenB = Math.hypot(dbx, dby)
+      if (
+        t * lenA < clearance ||
+        (1 - t) * lenA < clearance ||
+        u * lenB < clearance ||
+        (1 - u) * lenB < clearance
+      ) {
+        illegible++
+      }
+    }
+  }
+  return [overlap, illegible, crossings]
+}
+
+function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
+  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2]]
+}
+
+/**
+ * Edge-count gate for the improvement pass. Trials evaluate incrementally
+ * (only changed-anchor edges re-route; the pairwise matrix is patched),
+ * but the initial matrix build is O(E^2) segment pairs and a committed
+ * render pays the loop on every edit, so the bound keeps worst-case work
+ * small (~24ms at the gate on a dev machine; per-frame surfaces opt out
+ * entirely via edgeSideOverrides). ponytail: a sweepline pair scan is the
+ * next rung if this gate ever needs raising.
+ */
+const CROSSING_OPT_MAX_EDGES = 40
+const CROSSING_OPT_MAX_PASSES = 2
+
+/**
+ * Bounded global improvement over per-edge side choices: iterate edges in
+ * document order; adopt an alternative ranked pair only when the WHOLE
+ * configuration's cost strictly decreases (lexicographic integer compare —
+ * deterministic, monotone, so the loop cannot oscillate). A crossing-free,
+ * overlap-free configuration short-circuits without evaluating a single
+ * candidate, which keeps the common case at one scoring sweep.
+ */
+function optimizeSideChoices(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle,
+  initial: ReadonlyMap<string, SidePair>,
+): ReadonlyMap<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
+    a?.from?.x === b?.from?.x &&
+    a?.from?.y === b?.from?.y &&
+    a?.to?.x === b?.to?.x &&
+    a?.to?.y === b?.to?.y &&
+    a?.fromLaneDepth === b?.fromLaneDepth &&
+    a?.toLaneDepth === b?.toLaneDepth &&
+    a?.fromSide === b?.fromSide &&
+    a?.toSide === b?.toSide
+
+  // Incremental state: per-edge routed paths, the pairwise score matrix,
+  // and the aggregate cost. A trial re-sides ONE edge; only the edges
+  // whose anchor entries actually changed (the trial edge plus members of
+  // the anchor groups it left and joined) re-route and re-score their
+  // pairs — everything else is carried over. This is what keeps a trial
+  // O(affected * E) instead of O(E^2).
+  let current = new Map(initial)
+  let anchors = computeAnchorsFor(nodes, edges, current)
+  let paths: (readonly Point[])[] = edges.map(
+    (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
+  )
+  const pairKey = (i: number, j: number) => i * edges.length + j
+  const matrix = new Map<number, ConfigCost>()
+  let currentCost: ConfigCost = [0, 0, 0]
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      const score = pairScore(paths[i]!, paths[j]!)
+      matrix.set(pairKey(i, j), score)
+      currentCost = addCost(currentCost, score, 1)
+    }
+  }
+  if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+
+  const evaluateTrial = (
+    trialSides: ReadonlyMap<string, SidePair>,
+  ): {
+    cost: ConfigCost
+    anchors: ReadonlyMap<string, EdgeAnchorPair>
+    paths: (readonly Point[])[]
+    touched: number[]
+    updates: Map<number, ConfigCost>
+  } => {
+    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides)
+    const touched: number[] = []
+    for (let i = 0; i < edges.length; i++) {
+      if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
+    }
+    const trialPaths = paths.slice()
+    for (const i of touched) {
+      trialPaths[i] = routeEdge(nodes, edges[i]!, style, trialAnchors.get(edges[i]!.id)).path
+    }
+    const touchedSet = new Set(touched)
+    let cost = currentCost
+    const updates = new Map<number, ConfigCost>()
+    for (const i of touched) {
+      for (let j = 0; j < edges.length; j++) {
+        if (j === i) continue
+        const [lo, hi] = i < j ? [i, j] : [j, i]
+        const key = pairKey(lo, hi)
+        if (updates.has(key)) continue
+        // A pair between two touched edges is visited once thanks to the
+        // updates map; a pair with an untouched edge reuses its cached path.
+        if (touchedSet.has(j) && j < i) continue
+        const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
+        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0], -1)
+        cost = addCost(cost, next, 1)
+        updates.set(key, next)
+      }
+    }
+    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates }
+  }
+
+  const candidatesFor = (edge: CanvasEdge): SidePair[] => {
+    if (edge.fromNode === edge.toNode) return []
+    if (edge.fromSide !== undefined && edge.toSide !== undefined) return []
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) return []
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const fromCenter = centerOf(fromRect)
+    const toCenter = centerOf(toRect)
+    const pairs = rankedSidePairs(
+      toCenter.x - fromCenter.x,
+      toCenter.y - fromCenter.y,
+      fromRect,
+      toRect,
+      () => 0,
+    )
+    const seen = new Set<string>()
+    return pairs
+      .map((pair) => ({
+        fromSide: edge.fromSide ?? pair.fromSide,
+        toSide: edge.toSide ?? pair.toSide,
+      }))
+      .filter((pair) => {
+        const key = `${pair.fromSide} ${pair.toSide}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }
+
+  for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
+    let improved = false
+    for (const edge of edges) {
+      const chosen = current.get(edge.id)
+      if (chosen === undefined) continue
+      for (const candidate of candidatesFor(edge)) {
+        if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
+        const trial = new Map(current)
+        trial.set(edge.id, candidate)
+        const evaluated = evaluateTrial(trial)
+        if (lessCost(evaluated.cost, currentCost)) {
+          current = trial
+          currentCost = evaluated.cost
+          anchors = evaluated.anchors
+          paths = evaluated.paths
+          for (const [key, score] of evaluated.updates) matrix.set(key, score)
+          improved = true
+          break
+        }
+      }
+      if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+    }
+    if (!improved) break
+  }
+  return current
+}
+
+export function assignEdgeAnchors(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle = 'straight',
+  // FROZEN side choices for the listed edges: the caller opts out of the
+  // optimization pass wholesale (a per-frame surface like the live drag
+  // overlay wants route STABILITY over optimality mid-gesture, and cannot
+  // afford the improvement loop each frame). Sides settle again on the
+  // next committed render.
+  sideOverrides?: ReadonlyMap<string, EdgeSides>,
+): ReadonlyMap<string, EdgeAnchorPair> {
+  let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
+  if (sideOverrides !== undefined) {
+    const merged = new Map(sides)
+    for (const [id, pair] of sideOverrides) {
+      const edge = edges.find((e) => e.id === id)
+      if (edge === undefined || merged.get(id) === undefined) continue
+      merged.set(id, {
+        fromSide: edge.fromSide ?? pair.fromSide,
+        toSide: edge.toSide ?? pair.toSide,
+      })
+    }
+    return computeAnchorsFor(nodes, edges, merged)
+  }
+  if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
+    sides = optimizeSideChoices(nodes, edges, style, sides)
+  }
+  return computeAnchorsFor(nodes, edges, sides)
 }
 
 /** How close a route may pass to a foreign node's border, in px. */
@@ -472,6 +921,8 @@ function routeStraightWithApproach(
   toSide: Side,
   fromRect: Rect,
   toRect: Rect,
+  fromDepth: number,
+  toDepth: number,
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
@@ -479,26 +930,35 @@ function routeStraightWithApproach(
   const toSideways = approachesSideways(end, start, toSide)
   if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
   if (toSideways && !fromSideways) {
-    const entry = stubFrom(end, toSide)
+    const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
     if (slid !== undefined) {
       return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
     }
   }
   if (fromSideways && !toSideways) {
-    const exit = stubFrom(start, fromSide)
+    const exit = stubFrom(start, fromSide, fromDepth)
     const slid = slideAlongSide(end, toRect, toSide, exit)
     if (slid !== undefined) {
       return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
     }
   }
-  const exit = fromSideways ? stubFrom(start, fromSide) : start
-  const entry = toSideways ? stubFrom(end, toSide) : end
+  const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
+  const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
 }
 
 /** How far an orthogonal edge travels straight out of a node before turning. */
 const ORTHOGONAL_STUB_PX = 20
+/** Extra stub depth per additional member of a shared (node, side) group,
+ * so ends sharing a side leave through parallel DISTINCT corridors instead
+ * of one collinear overlap that a line jump cannot express. One-sided and
+ * strictly additive: lane 0 keeps the exact base depth (unshared canvases
+ * are byte-identical), deeper lanes only ever move AWAY from their node.
+ * ponytail: depth grows unbounded with group size — a ~15-edge side pushes
+ * the deepest stub ~200px out; cap distinct lanes and share the outermost
+ * if that ever hurts. */
+const STUB_LANE_STEP_PX = 12
 
 /** The direction a side faces, away from the node's interior. */
 function outwardNormal(side: Side): Point {
@@ -514,11 +974,11 @@ function outwardNormal(side: Side): Point {
   }
 }
 
-function stubFrom(point: Point, side: Side): Point {
+function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {
-    x: point.x + normal.x * ORTHOGONAL_STUB_PX,
-    y: point.y + normal.y * ORTHOGONAL_STUB_PX,
+    x: point.x + normal.x * depth,
+    y: point.y + normal.y * depth,
   }
 }
 
@@ -548,11 +1008,62 @@ function routeOrthogonal(
   end: Point,
   fromSide: Side,
   toSide: Side,
+  fromRect: Rect,
+  toRect: Rect,
+  fromDepth: number,
+  toDepth: number,
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
-  const exit = stubFrom(start, fromSide)
-  const entry = stubFrom(end, toSide)
+  // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
+  // often share one tangent coordinate — anchors are renderer-chosen
+  // defaults, so sliding one end along its side buys a single straight
+  // segment instead of a stub-jog-stub elbow. Facing is required (each
+  // side's outward normal points toward the other end), or an authored
+  // opposing pair with the nodes swapped would draw a line backwards
+  // through both. A blocked lane falls through to the elbows.
+  if (fromSide === oppositeSide(toSide)) {
+    const fromNormal = outwardNormal(fromSide)
+    const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
+    if (facing) {
+      const span = (rect: Rect, side: Side): readonly [number, number] =>
+        side === 'left' || side === 'right'
+          ? [
+              rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+              rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+            ]
+          : [
+              rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+              rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+            ]
+      const withTangent = (anchor: Point, side: Side, t: number): Point =>
+        side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
+      const [fromLo, fromHi] = span(fromRect, fromSide)
+      const [toLo, toHi] = span(toRect, toSide)
+      const lo = Math.max(fromLo, toLo)
+      const hi = Math.min(fromHi, toHi)
+      if (lo <= hi) {
+        const startT = tangentCoordinate(fromSide, start)
+        const endT = tangentCoordinate(toSide, end)
+        // Keep an existing anchor when one already lies in the shared
+        // lane (departure first, then the arrival's fan position), else
+        // move as little as possible.
+        const t =
+          startT >= lo && startT <= hi
+            ? startT
+            : endT >= lo && endT <= hi
+              ? endT
+              : Math.min(hi, Math.max(lo, startT))
+        const alignedStart = withTangent(start, fromSide, t)
+        const alignedEnd = withTangent(end, toSide, t)
+        if (pathIsClear([alignedStart, alignedEnd], inflated)) {
+          return [alignedStart, alignedEnd]
+        }
+      }
+    }
+  }
+  const exit = stubFrom(start, fromSide, fromDepth)
+  const entry = stubFrom(end, toSide, toDepth)
   const between = (middles: readonly Point[]) =>
     withoutRepeats([start, exit, ...middles, entry, end])
 
@@ -645,8 +1156,10 @@ export function routeEdge(
   }
 
   const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
-  const fromSide = edge.fromSide ?? derived.fromSide
-  const toSide = edge.toSide ?? derived.toSide
+  // The anchor pass resolves sides with whole-edge-set crowding knowledge a
+  // single call lacks; when it spoke, follow it (authored sides still win).
+  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derived.fromSide
+  const toSide = edge.toSide ?? anchors?.toSide ?? derived.toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
@@ -689,10 +1202,23 @@ export function routeEdge(
             toSide,
             fromRect,
             toRect,
+            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
+            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
             obstacles,
             rawObstacles,
           )
-        : routeOrthogonal(start, end, fromSide, toSide, obstacles, rawObstacles),
+        : routeOrthogonal(
+            start,
+            end,
+            fromSide,
+            toSide,
+            fromRect,
+            toRect,
+            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
+            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
+            obstacles,
+            rawObstacles,
+          ),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,

@@ -287,3 +287,197 @@ describe('routing properties: occlusion-aware sides', () => {
     },
   )
 })
+
+// Zero-bend alignment. Vertically stacked pairs whose x-spans always
+// overlap (both contain 200..300): with nothing in the way, the orthogonal
+// route must be a single straight segment — anchors slide rather than
+// jogging. The mutation check is removing the alignment shortcut, which
+// reintroduces the stub-jog-stub elbow.
+const stackedPairArb = fc.record({
+  aX: fc.integer({ min: 0, max: 200 }),
+  aW: fc.integer({ min: 120, max: 400 }),
+  bX: fc.integer({ min: 0, max: 200 }),
+  bW: fc.integer({ min: 120, max: 400 }),
+  // Vertical offset dominates every reachable horizontal offset (max ~340),
+  // so side derivation always picks bottom/top — a 45-degree tie would pick
+  // the horizontal pair and step outside this property's claim.
+  gap: fc.integer({ min: 250, max: 500 }),
+})
+
+describe('routing properties: zero-bend alignment', () => {
+  fcTest.prop([stackedPairArb], withDefaults())(
+    'a facing vertical pair with overlapping spans routes as one straight segment',
+    ({ aX, aW, bX, bW, gap }) => {
+      // Both spans contain [200, 300], so an aligned lane always exists.
+      const a = node('a', 'text', { x: aX, y: 0, w: Math.max(aW, 300 - aX + 20), h: 100 })
+      const b = node('b', 'text', { x: bX, y: 100 + gap, w: Math.max(bW, 300 - bX + 20), h: 100 })
+      const routed = routeEdge([a, b], edge('a', 'b'), 'orthogonal')
+      expect(routed.path).toHaveLength(2)
+      expect(routed.path[0]!.x).toBe(routed.path[1]!.x)
+    },
+  )
+})
+
+// Stub lane depth. All spokes sit far right of the hub, so every edge's
+// from-end lands in the hub's (right) group; each member must exit through
+// its own corridor (distinct stub x), lane 0 at exactly base depth, and no
+// stub ever inside the hub itself. Mutation check: reverting the depth to
+// the bare constant collapses every corridor onto one x.
+const laneScenario = fc.record({
+  count: fc.integer({ min: 1, max: 12 }),
+  // Per-spoke jitter only: spokes are stacked at y = 150 + i*130 (+ jitter),
+  // clear of the hub's own tangent span, so the zero-bend alignment can
+  // never absorb the stub and every route actually exits through one.
+  jitters: fc.array(fc.integer({ min: 0, max: 40 }), { minLength: 12, maxLength: 12 }),
+})
+
+describe('routing properties: stub lane depth', () => {
+  fcTest.prop([laneScenario], withDefaults())(
+    'every member of a shared side exits through a distinct corridor outside its node',
+    ({ count, jitters }) => {
+      const hub = node('hub', 'text', { x: 0, y: 0, w: 100, h: 100 })
+      const spokes = Array.from({ length: count }, (_, i) =>
+        node(`s${i}`, 'text', { x: 2000, y: 150 + i * 130 + jitters[i]!, w: 100, h: 100 }),
+      )
+      // fromSide authored: the property pins LANE mechanics on one shared
+      // side; without it the bend-aware derivation legitimately splits the
+      // group across sides.
+      const edges: CanvasEdge[] = spokes.map((s, i) => ({
+        id: `e${i}`,
+        fromNode: 'hub',
+        toNode: s.id,
+        fromSide: 'right' as const,
+      }))
+      const anchors = assignEdgeAnchors([hub, ...spokes], edges)
+      const exits = edges.map((e) => {
+        const routed = routeEdge([hub, ...spokes], e, 'orthogonal', anchors.get(e.id))
+        return routed.path[1]!.x
+      })
+      // The full lane ladder, not just uniqueness: base 120, step 12.
+      expect([...exits].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, i) => 120 + i * 12),
+      )
+    },
+  )
+})
+
+type PointXY = { x: number; y: number }
+
+// Sweep-rank lanes. Spokes sit BOTH above and below the hub's right side,
+// so the group mixes upward- and downward-sweeping corridors; no member's
+// lane run may cross another member's exit segment right at the node.
+// Mutation check: reverting depth to the list index reintroduces the
+// crossing for a sweeping corridor given a shallow lane.
+const mixedLaneScenario = fc.record({
+  below: fc.integer({ min: 1, max: 5 }),
+  above: fc.integer({ min: 1, max: 5 }),
+  jitters: fc.array(fc.integer({ min: 0, max: 40 }), { minLength: 10, maxLength: 10 }),
+})
+
+describe('routing properties: sweep-rank lanes', () => {
+  fcTest.prop([mixedLaneScenario], withDefaults())(
+    'no lane run crosses another member exit at the node, for mixed sweep directions',
+    ({ below, above, jitters }) => {
+      const hub = node('hub', 'text', { x: 0, y: 0, w: 100, h: 100 })
+      const spokes = [
+        ...Array.from({ length: below }, (_, i) =>
+          node(`d${i}`, 'text', { x: 2000, y: 250 + i * 130 + jitters[i]!, w: 100, h: 100 }),
+        ),
+        ...Array.from({ length: above }, (_, i) =>
+          node(`u${i}`, 'text', { x: 2000, y: -250 - i * 130 - jitters[5 + i]!, w: 100, h: 100 }),
+        ),
+      ]
+      const edges: CanvasEdge[] = spokes.map((s, i) => ({
+        id: `e${i}`,
+        fromNode: 'hub',
+        toNode: s.id,
+        fromSide: 'right' as const,
+      }))
+      const anchors = assignEdgeAnchors([hub, ...spokes], edges)
+      const routed = edges.map((e) =>
+        routeEdge([hub, ...spokes], e, 'orthogonal', anchors.get(e.id)),
+      )
+      const cross = (a1: PointXY, a2: PointXY, b1: PointXY, b2: PointXY) => {
+        const d = (p: PointXY, q: PointXY, r: PointXY) =>
+          (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
+        return d(b1, b2, a1) * d(b1, b2, a2) < 0 && d(a1, a2, b1) * d(a1, a2, b2) < 0
+      }
+      for (const a of routed) {
+        for (const b of routed) {
+          if (a === b || a.path.length < 3 || b.path.length < 2) continue
+          // a's lane run (stub to first turn) vs b's exit segment.
+          expect(cross(a.path[1]!, a.path[2]!, b.path[0]!, b.path[1]!)).toBe(false)
+        }
+      }
+    },
+  )
+})
+
+// Crossing minimization. Dense chunky boxes with edges across them make
+// crossings — and degenerate coincident stacks — the common case; the
+// property pins that optimizing stays a pure deterministic function of
+// the canvas, never throws, and never detaches an anchor from its
+// reported side. The optimizer's ACCEPTANCE criterion (adopt only on a
+// strict cost decrease) is pinned by the crossing-elimination example in
+// edge-crossing-min.test.ts, whose mutation check inverts the comparison.
+const clutterScenario = fc.record({
+  rects: fc.array(
+    fc.record({
+      x: fc.constantFrom(0, 120, 240, 360, 480),
+      y: fc.constantFrom(0, 120, 240, 360),
+      w: fc.constantFrom(80, 140),
+      h: fc.constantFrom(80, 140),
+    }),
+    { minLength: 4, maxLength: 6 },
+  ),
+  pairs: fc.array(fc.tuple(fc.nat({ max: 5 }), fc.nat({ max: 5 })), {
+    minLength: 3,
+    maxLength: 6,
+  }),
+})
+
+function clutterConfig({
+  rects,
+  pairs,
+}: {
+  rects: { x: number; y: number; w: number; h: number }[]
+  pairs: [number, number][]
+}) {
+  const nodes = rects.map((r, i) => node(`n${i}`, 'text', r))
+  const edges: CanvasEdge[] = pairs
+    .map(([f, t], i) => ({
+      id: `e${i}`,
+      fromNode: `n${f % nodes.length}`,
+      toNode: `n${t % nodes.length}`,
+    }))
+    .filter((e) => e.fromNode !== e.toNode)
+  return { nodes, edges }
+}
+
+describe('routing properties: crossing minimization', () => {
+  fcTest.prop([clutterScenario], withDefaults({ numRuns: 60 }))(
+    'optimizing stays deterministic, total, and keeps every anchor on its reported side',
+    (scenario) => {
+      const { nodes, edges } = clutterConfig(scenario)
+      if (edges.length < 2) return
+      const a = assignEdgeAnchors(nodes, edges, 'orthogonal')
+      const b = assignEdgeAnchors(nodes, edges, 'orthogonal')
+      expect(a).toEqual(b)
+      const byId = new Map(nodes.map((n) => [n.id, n]))
+      for (const e of edges) {
+        const pair = a.get(e.id)
+        const routed = routeEdge(nodes, e, 'orthogonal', pair)
+        const onSide = (n: SpatialNode, side: string, p: PointXY) => {
+          if (side === 'left') return p.x === n.x && p.y >= n.y && p.y <= n.y + n.height
+          if (side === 'right') return p.x === n.x + n.width && p.y >= n.y && p.y <= n.y + n.height
+          if (side === 'top') return p.y === n.y && p.x >= n.x && p.x <= n.x + n.width
+          return p.y === n.y + n.height && p.x >= n.x && p.x <= n.x + n.width
+        }
+        expect(onSide(byId.get(e.fromNode)!, routed.fromSide, routed.path[0]!)).toBe(true)
+        expect(
+          onSide(byId.get(e.toNode)!, routed.toSide, routed.path[routed.path.length - 1]!),
+        ).toBe(true)
+      }
+    },
+  )
+})

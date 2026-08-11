@@ -892,10 +892,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * it routes the prospective edge through the committed producer, a few
      * routeEdge calls per frame.
      */
-    const dragPreview = useMemo(
-      () => computeDragPreview(gestureState, boxes, livePoint, { canvas, selectableBoxes }),
-      [gestureState, livePoint, boxes, canvas, selectableBoxes],
-    )
+    const dragPreview = useMemo(() => {
+      // Existing edges keep their committed sides while a connect gesture
+      // is in flight — same freeze the live drag overlay applies, so the
+      // canvas around the pointer stays still and pointer frames skip the
+      // crossing-optimization loop. The prospective edge itself derives
+      // fresh each frame.
+      const frozenEdgeSides = new Map(
+        scene.nodes.flatMap((n) =>
+          n.kind === 'edge' ? [[n.id, { fromSide: n.fromSide, toSide: n.toSide }] as const] : [],
+        ),
+      )
+      return computeDragPreview(gestureState, boxes, livePoint, {
+        canvas,
+        selectableBoxes,
+        frozenEdgeSides,
+      })
+    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, scene])
 
     /**
      * EVERY edge, re-composed against the ghost's snapped live position and
@@ -922,12 +935,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const liveNodes = canvas.nodes.map((n) =>
         dragStatic.carried.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
       )
+      // Sides FROZEN at their committed choices for the whole gesture:
+      // per-frame crossing optimization would both blow the frame budget
+      // and let routes flip sides mid-drag. Anchors and lanes still track
+      // the moved geometry; the drop's committed render re-optimizes.
+      const frozenSides = new Map(
+        scene.nodes.flatMap((n) =>
+          n.kind === 'edge' ? [[n.id, { fromSide: n.fromSide, toSide: n.toSide }] as const] : [],
+        ),
+      )
       const nodes = layoutSpatialEdges(
         { ...canvas, nodes: liveNodes },
         {
           measure: dragStatic.measure,
           parseBody: parseMarkdownBody,
           appearance: createEditorAppearance(theme),
+          edgeSideOverrides: frozenSides,
         },
       )
       const liveBounds = sceneBounds({ nodes })
@@ -938,7 +961,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ),
         bounds: liveBounds,
       }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, scene])
 
     /**
      * How far a snap guide extends, in canvas space: across all content plus
