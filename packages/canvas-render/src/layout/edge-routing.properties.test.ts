@@ -349,9 +349,10 @@ describe('routing properties: stub lane depth', () => {
         const routed = routeEdge([hub, ...spokes], e, 'orthogonal', anchors.get(e.id))
         return routed.path[1]!.x
       })
-      expect(new Set(exits).size).toBe(count)
-      expect(Math.min(...exits)).toBe(120)
-      for (const x of exits) expect(x).toBeGreaterThan(100)
+      // The full lane ladder, not just uniqueness: base 120, step 12.
+      expect([...exits].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, i) => 120 + i * 12),
+      )
     },
   )
 })
