@@ -26,6 +26,7 @@ const {
   scheduleAutoCompact,
   setAutoCompactTrigger,
   disposeAutoCompact,
+  getCanvasKind,
   _inFlightAutoCompactCountForTests,
   _isDisposingAutoCompactForTests,
 } = await import('./canvas-store.js')
@@ -346,6 +347,34 @@ describe('listCanvases', () => {
   // tests against directory traversal failures and broken non-directory
   // paths no longer apply now that the listing is a SELECT against the
   // canvases table.
+})
+
+describe('getCanvasKind', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('returns null when the canvas does not exist', async () => {
+    expect(await getCanvasKind('session1', 'missing')).toBeNull()
+  })
+
+  it('returns the persisted kind for an existing canvas', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    expect(await getCanvasKind('session1', 'note')).toBe('markdown')
+  })
+
+  it('defaults to spatial when saveCanvas was called without a kind option', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    expect(await getCanvasKind('session1', 'canvas-a')).toBe('spatial')
+  })
 })
 
 describe('saveCanvas / loadCanvas - slug validation', () => {
