@@ -19,51 +19,71 @@
       :root {
         --wb-boot-bg: oklch(1 0 0);
         --wb-boot-line: oklch(0.87 0 0);
+        --wb-boot-ink: oklch(0.556 0 0);
       }
       @media (prefers-color-scheme: dark) {
         :root {
           --wb-boot-bg: oklch(0.145 0 0);
           --wb-boot-line: oklch(1 0 0 / 22%);
+          --wb-boot-ink: oklch(0.708 0 0);
         }
       }
       .wb-boot {
         position: fixed;
         inset: 0;
         display: flex;
+        flex-direction: column;
+        gap: 14px;
         align-items: center;
         justify-content: center;
         background: var(--wb-boot-bg);
       }
-      /* A quiet whiteboard-shaped mark breathing, not a spinner: opacity +
-         scale only (compositor-friendly, no layout churn). */
-      .wb-boot__mark {
-        width: 56px;
-        height: 42px;
-        border: 2px solid var(--wb-boot-line);
-        border-radius: 10px;
-        animation: wb-boot-breathe 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+      .wb-boot__label {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        color: var(--wb-boot-ink);
       }
-      @keyframes wb-boot-breathe {
-        0%,
-        100% {
-          opacity: 0.35;
-          transform: scale(0.94);
-        }
-        50% {
+      /* A pen stroke drawing itself onto the board, looping: the classic
+         stroke-dashoffset reveal (compositor/paint only, no layout churn).
+         Base state is the fully drawn squiggle so the reduced-motion
+         one-shot below lands on something visible, not a blank board. */
+      .wb-boot__stroke {
+        stroke-dasharray: 80;
+        stroke-dashoffset: 0;
+        animation: wb-boot-draw 2s ease-in-out infinite;
+      }
+      @keyframes wb-boot-draw {
+        0% {
+          stroke-dashoffset: 80;
           opacity: 1;
-          transform: scale(1);
+        }
+        55% {
+          stroke-dashoffset: 0;
+          opacity: 1;
+        }
+        80% {
+          stroke-dashoffset: 0;
+          opacity: 0;
+        }
+        100% {
+          stroke-dashoffset: 80;
+          opacity: 0;
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        .wb-boot__mark {
-          animation: wb-boot-breathe 0.01ms 1;
+        .wb-boot__stroke {
+          animation: wb-boot-draw 0.01ms 1;
         }
       }
     </style>
   </head>
   <body>
     <!-- Inside #root so React's first commit replaces it — no removal code. -->
-    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><div class="wb-boot__mark"></div></div></div>
+    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><svg width="88" height="66" viewBox="0 0 88 66" fill="none" aria-hidden="true"><rect x="2" y="2" width="84" height="62" rx="10" stroke="var(--wb-boot-line)" stroke-width="3"/><path class="wb-boot__stroke" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="var(--wb-boot-ink)" stroke-width="3.5" stroke-linecap="round"/></svg><div class="wb-boot__label">Whiteboard</div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
