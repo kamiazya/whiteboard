@@ -7,9 +7,10 @@
  * splash. Timings mirror the wb-boot-draw keyframes in index.html.
  */
 
-// The stroke finishes drawing at 1.2s (wb-draw in public/boot-splash.svg);
-// holding to 1.5s means the user sees the completed stroke plus a beat —
-// the mark's slow breathing loop then carries any longer wait.
+// The signature stroke finishes drawing at 1.2s (wb-draw in
+// public/boot-splash.svg); holding to 1.5s shows the completed stroke plus
+// a beat. A longer wait rolls on into the SVG's sketch-then-tidy story,
+// which always lands back on the breathing logo.
 export const SPLASH_MIN_VISIBLE_MS = 1500
 export const SPLASH_FADE_MS = 200
 
