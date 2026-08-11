@@ -107,6 +107,17 @@ glob/read `resources/*.md` itself. The launching session (this skill's
 caller) must do the glob+read and pass `content` through `args`; that is why
 the mechanism accepts `{name, content}` objects rather than a directory path.
 
+**Do not shortcut step 2 by passing a PATH as `content`.** The reviewing
+agent does have `Read`, so "read `resources/<name>.md` and apply it" looks
+equivalent and saves inlining hundreds of lines into `args`. Measured on a
+real run, it is not: of four lanes given a path-only pointer, **two never
+opened the file** and reviewed from the pointer sentence alone. The two that
+did read it were the ones whose pointer carried an emphatic, specific
+instruction — which is exactly the kind of difference you cannot rely on.
+Inlining the body is what makes the criteria unconditionally present in the
+prompt, and a lane that silently reviewed against nothing is indistinguishable
+in the report from one that found no issues.
+
 `.claude/agents/reviewer-dimension.md` still carries its own embedded `##
 Dimensions` summary (contract, boundary, dead-code, test-coverage, auth,
 correctness) as the legacy fallback — used when a caller passes plain
