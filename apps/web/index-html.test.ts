@@ -44,6 +44,14 @@ describe('public/boot-splash.svg', () => {
     expect(svg).toMatch(/@keyframes wb-drawn\s*\{[^@]*from[^@]*opacity: 1/)
   })
 
+  // The splash follows the OS splash grammar: a single glyph, no container,
+  // no caption. The app name lives in the tab title / the OS's own PWA
+  // splash, and <text> would render in an unpredictable system font.
+  it('is icon-only: no board frame, no wordmark', () => {
+    expect(svg).not.toContain('<text')
+    expect(svg).not.toMatch(/<rect[^>]*width="172"/)
+  })
+
   it('neutralizes all animation under prefers-reduced-motion', () => {
     const idx = svg.indexOf('prefers-reduced-motion: reduce')
     expect(idx).toBeGreaterThan(-1)
