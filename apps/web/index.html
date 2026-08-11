@@ -18,72 +18,28 @@
     <style>
       :root {
         --wb-boot-bg: oklch(1 0 0);
-        --wb-boot-line: oklch(0.87 0 0);
-        --wb-boot-ink: oklch(0.556 0 0);
       }
       @media (prefers-color-scheme: dark) {
         :root {
           --wb-boot-bg: oklch(0.145 0 0);
-          --wb-boot-line: oklch(1 0 0 / 22%);
-          --wb-boot-ink: oklch(0.708 0 0);
         }
       }
       .wb-boot {
         position: fixed;
         inset: 0;
         display: flex;
-        flex-direction: column;
-        gap: 14px;
         align-items: center;
         justify-content: center;
         background: var(--wb-boot-bg);
       }
-      .wb-boot__label {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        font-size: 13px;
-        letter-spacing: 0.04em;
-        color: var(--wb-boot-ink);
-      }
-      /* A pen stroke drawing itself onto the board, looping: the classic
-         stroke-dashoffset reveal (compositor/paint only, no layout churn).
-         Base state is the fully drawn squiggle so the reduced-motion
-         one-shot below lands on something visible, not a blank board. */
-      .wb-boot__stroke {
-        stroke-dasharray: 80;
-        stroke-dashoffset: 0;
-        animation: wb-boot-draw 2s ease-in-out infinite;
-      }
-      @keyframes wb-boot-draw {
-        0% {
-          stroke-dashoffset: 80;
-          opacity: 1;
-        }
-        55% {
-          stroke-dashoffset: 0;
-          opacity: 1;
-        }
-        80% {
-          stroke-dashoffset: 0;
-          opacity: 0;
-        }
-        100% {
-          stroke-dashoffset: 80;
-          opacity: 0;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .wb-boot__stroke {
-          animation: wb-boot-draw 0.01ms 1;
-        }
-      }
     </style>
   </head>
   <body>
-    <!-- Inside #root so React's first commit replaces it — no removal code. -->
-    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><svg width="88" height="66" viewBox="0 0 88 66" fill="none" aria-hidden="true"><rect x="2" y="2" width="84" height="62" rx="10" stroke="var(--wb-boot-line)" stroke-width="3"/><path class="wb-boot__stroke" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="var(--wb-boot-ink)" stroke-width="3.5" stroke-linecap="round"/></svg><div class="wb-boot__label">Whiteboard</div></div></div>
+    <!-- Inside #root so React's first commit replaces it — no removal code.
+         The animated mark (pen stroke drawing itself + wordmark) is the
+         shared external SVG public/boot-splash.svg — same file the README
+         embeds — with its animation and reduced-motion guard inside. -->
+    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><img src="/boot-splash.svg" alt="" width="176" height="168" /></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

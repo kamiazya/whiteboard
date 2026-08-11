@@ -1,5 +1,9 @@
 # @kamiazya/whiteboard
 
+<p align="center">
+  <img src="apps/web/public/boot-splash.svg" alt="Whiteboard — a pen stroke drawing itself onto a whiteboard" width="176" height="168" />
+</p>
+
 > A collaborative OpenCanvas whiteboard for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time canvas.
 
 [![npm version](https://img.shields.io/npm/v/@kamiazya/whiteboard-mcp.svg)](https://www.npmjs.com/package/@kamiazya/whiteboard-mcp)
