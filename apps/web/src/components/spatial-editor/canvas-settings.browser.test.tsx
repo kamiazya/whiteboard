@@ -115,6 +115,22 @@ it('the popover marks the current values as selected', () => {
   expect(on?.getAttribute('aria-checked')).toBe('true')
 })
 
+it('Escape hands focus back to the gear, like the add menu does', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+
+  const gear = gearOf(container)
+  fireEvent.click(gear)
+  const menu = settingsMenu(container) as HTMLElement
+  expect(menu).toBeTruthy()
+
+  fireEvent.keyDown(menu, { key: 'Escape' })
+  expect(settingsMenu(container)).toBeNull()
+  // Closing unmounts the focused popover; without an explicit hand-back a
+  // keyboard user's focus falls to <body> and they lose their place.
+  expect(document.activeElement).toBe(gear)
+})
+
 it('the empty-space context menu no longer carries the settings rows', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)

@@ -81,6 +81,13 @@ export interface ContextMenuProps {
   /** Overrides for a second, non-context use of this surface (e.g. the canvas settings popover). */
   readonly testId?: string
   readonly ariaLabel?: string
+  /**
+   * Called on Escape dismissal only — NOT on outside clicks, which move
+   * focus themselves. A trigger-opened menu passes its trigger's focus()
+   * here so a keyboard user does not fall to <body> when the focused menu
+   * unmounts (same hand-back the dock's add menu performs).
+   */
+  readonly onEscape?: () => void
 }
 
 /**
@@ -121,7 +128,15 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose, testId, ariaLabel }: ContextMenuProps) {
+export function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+  testId,
+  ariaLabel,
+  onEscape,
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so the requested position is nudged back inside once the real menu size
@@ -184,6 +199,7 @@ export function ContextMenu({ x, y, items, onClose, testId, ariaLabel }: Context
         if (e.key === 'Escape') {
           e.stopPropagation()
           onClose()
+          onEscape?.()
         }
       }}
     >

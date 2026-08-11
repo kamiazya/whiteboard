@@ -482,6 +482,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** Open right-click menu: screen position (root-relative) + hit target. */
     // Canvas-wide display settings popover, anchored at the dock's gear.
     const [settingsMenu, setSettingsMenu] = useState<{ x: number; y: number } | null>(null)
+    const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
     const [contextMenu, setContextMenu] = useState<{
       x: number
       y: number
@@ -2876,6 +2877,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           trailing={
             tool === 'hand' ? undefined : (
               <button
+                ref={settingsButtonRef}
                 type="button"
                 data-testid="canvas-settings-button"
                 aria-label="Canvas settings"
@@ -2970,6 +2972,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             x={settingsMenu.x}
             y={settingsMenu.y}
             onClose={() => setSettingsMenu(null)}
+            onEscape={() => settingsButtonRef.current?.focus()}
             items={canvasSettingsItems()}
           />
         )}
