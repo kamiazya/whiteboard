@@ -104,3 +104,21 @@ consolidation is a separate, currently out-of-scope effort.
 **Runtime mode switching within a single session.** Rejected: no product
 requirement calls for switching without a reload, and treating mode as
 load-time-fixed simplifies event-listener lifecycle handling.
+
+## Addendum (2026-08-12): what shipped differs from three premises above
+
+Recorded as-built rather than rewriting the decision:
+
+- **Route shape.** Point 4's single shared `/canvas/:id/*` editor URL was
+  not what shipped. The modes have distinct routes — `/canvas/:workspaceId/:slug`
+  (daemon) and `/local/:canvasId` (browser-local) — matching their distinct
+  identities (see [ADR-0007](0007-canvas-identity-and-store-split.md)).
+  `/` landing on a canvas list is now true in both modes via the shared
+  `CanvasListView`.
+- **"Unimplemented follow-up slices."** The router, capability-gated
+  chrome, and the shared list have since landed; that consequence bullet
+  is historical.
+- **Open UX details.** Two of the listed open product decisions are now
+  decided: workspaces surface in browser-local as a fixed single
+  workspace modeled as present (ADR-0007), and Delete's placement is a
+  per-card action on the shared list with a confirmation dialog.

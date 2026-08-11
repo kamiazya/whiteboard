@@ -7,6 +7,7 @@ following step by step.
 Explanation pages:
 
 - **[architecture](architecture.md)** — components, data flow, MCP tool surface, and design boundaries.
+- **[domain-model](domain-model.md)** — what a canvas is in each runtime mode, how canvases are identified, and the daemon's current two-store split.
 - **[security-model](security-model.md)** — the three runtimes (browser-local, local daemon, server mode), their separate trust boundaries, HTTP protections, and file-system safety.
 
 Planned:
