@@ -2988,6 +2988,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     },
                   })),
                 })
+                const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+                emptyItems.push({
+                  kind: 'options',
+                  label: 'Line jumps',
+                  options: (
+                    [
+                      { lineJumps: 'none', label: 'Off' },
+                      { lineJumps: 'arc', label: 'On' },
+                    ] as const
+                  ).map(({ lineJumps, label }) => ({
+                    label,
+                    selected: currentJumps === lineJumps,
+                    onSelect: () => {
+                      const command: EditorCommand = { kind: 'set-line-jumps', lineJumps }
+                      onChange(applyCommand(canvasRef.current, command), command)
+                    },
+                  })),
+                })
                 return emptyItems
               }
               const items: ContextMenuItem[] = []

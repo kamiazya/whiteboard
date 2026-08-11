@@ -293,6 +293,18 @@ describe('canvas-level x-whiteboard', () => {
     expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
   })
 
+  it('accepts line jumps beside the style, and alone', () => {
+    const both = spatialCanvasSchema.parse(
+      canvasWith({ edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } }),
+    )
+    expect(both['x-whiteboard']).toEqual({
+      edgeRouting: { style: 'orthogonal', lineJumps: 'arc' },
+    })
+    // Jumps without an explicit style: the style keeps its own default.
+    const alone = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { lineJumps: 'arc' } }))
+    expect(alone['x-whiteboard']).toEqual({ edgeRouting: { lineJumps: 'arc' } })
+  })
+
   it('is absent-by-default, so a strict JSON Canvas document parses unchanged', () => {
     expect(spatialCanvasSchema.parse({ nodes: [], edges: [] })['x-whiteboard']).toBeUndefined()
   })

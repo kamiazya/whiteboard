@@ -761,6 +761,58 @@ it('draws a bent edge as a line, not a filled wedge', () => {
   expect(polyline).toContain('fill="none"')
 })
 
+describe('line-jump hops', () => {
+  const crossing = {
+    kind: 'edge' as const,
+    id: 'e2',
+    path: [
+      { x: 0, y: 100 },
+      { x: 200, y: 100 },
+    ],
+    fromSide: 'right' as const,
+    toSide: 'left' as const,
+    fromEnd: 'none' as const,
+    toEnd: 'none' as const,
+    jumps: [{ segment: 0, x: 100, y: 100 }],
+  }
+
+  it('draws a path with an arc over each hop instead of a polyline', () => {
+    const svg = renderSceneToSvg({ nodes: [crossing] })
+    expect(svg).not.toContain('<polyline')
+    // Straight run to the hop entry, a half-circle over the crossing,
+    // straight run out: entry at x-r, exit at x+r, sweep 0 bulges up.
+    expect(svg).toContain('d="M 0 100 L 95 100 A 5 5 0 0 0 105 100 L 200 100"')
+  })
+
+  it('a jump-free edge stays the byte-identical polyline', () => {
+    const { jumps: _jumps, ...plain } = crossing
+    const svg = renderSceneToSvg({ nodes: [plain] })
+    expect(svg).toContain('<polyline points="0,100 200,100"')
+  })
+
+  it('rounded edges hop on their straight runs and keep their corner curves', () => {
+    const bent = {
+      kind: 'edge' as const,
+      id: 'e3',
+      path: [
+        { x: 0, y: 100 },
+        { x: 200, y: 100 },
+        { x: 200, y: 300 },
+      ],
+      fromSide: 'right' as const,
+      toSide: 'top' as const,
+      fromEnd: 'none' as const,
+      toEnd: 'none' as const,
+      rounded: true as const,
+      jumps: [{ segment: 0, x: 80, y: 100 }],
+    }
+    const svg = renderSceneToSvg({ nodes: [bent] })
+    // The hop arc and the corner quadratic coexist in one path.
+    expect(svg).toContain('A 5 5 0 0 0 85 100')
+    expect(svg).toContain('Q 200 100')
+  })
+})
+
 describe('rounded edges', () => {
   const bent = {
     kind: 'edge' as const,

@@ -1,4 +1,5 @@
 import { edgeArrowPolygons } from '../edge-arrows.js'
+import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edge-rounding.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
@@ -126,6 +127,74 @@ function renderTableRow(row: TableRowSceneNode): string {
 
 type EdgePoint = { readonly x: number; readonly y: number }
 
+type EdgeJump = { readonly segment: number; readonly x: number; readonly y: number }
+
+/**
+ * Path commands for one straight run from `from` to `to`, hopping over each
+ * jump point with a half-circle arc (sweep 0 — the hop bulges to the left
+ * of travel, drawio-style "over"). Jumps arrive ordered along the run.
+ */
+function lineWithJumps(
+  from: EdgePoint,
+  to: EdgePoint,
+  jumps: readonly EdgeJump[],
+): readonly string[] {
+  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  if (len === 0 || jumps.length === 0) {
+    return [`L ${formatCoord(to.x)} ${formatCoord(to.y)}`]
+  }
+  const ux = (to.x - from.x) / len
+  const uy = (to.y - from.y) / len
+  const r = EDGE_JUMP_RADIUS_PX
+  const parts: string[] = []
+  for (const jump of jumps) {
+    parts.push(`L ${formatCoord(jump.x - ux * r)} ${formatCoord(jump.y - uy * r)}`)
+    parts.push(`A ${r} ${r} 0 0 0 ${formatCoord(jump.x + ux * r)} ${formatCoord(jump.y + uy * r)}`)
+  }
+  parts.push(`L ${formatCoord(to.x)} ${formatCoord(to.y)}`)
+  return parts
+}
+
+/** The polyline as a path `d`, hopping over each jump on its segment. */
+function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]): string {
+  const first = path[0]
+  if (first === undefined) return ''
+  const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
+  for (let seg = 0; seg < path.length - 1; seg += 1) {
+    parts.push(
+      ...lineWithJumps(
+        path[seg] as EdgePoint,
+        path[seg + 1] as EdgePoint,
+        jumps.filter((jump) => jump.segment === seg),
+      ),
+    )
+  }
+  return parts.join(' ')
+}
+
+/**
+ * The jumps on original segment `segment` that fall INSIDE the drawn span
+ * `from`->`to` with enough clearance for the arc. A rounded corner truncates
+ * its segments to midpoints, so a hop computed near a corner may fall in the
+ * curve zone — those are dropped rather than deforming the corner.
+ */
+function jumpsWithinSpan(
+  jumps: readonly EdgeJump[],
+  segment: number,
+  from: EdgePoint,
+  to: EdgePoint,
+): readonly EdgeJump[] {
+  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  if (len === 0) return []
+  const ux = (to.x - from.x) / len
+  const uy = (to.y - from.y) / len
+  return jumps.filter((jump) => {
+    if (jump.segment !== segment) return false
+    const t = (jump.x - from.x) * ux + (jump.y - from.y) * uy
+    return t > EDGE_JUMP_RADIUS_PX && t < len - EDGE_JUMP_RADIUS_PX
+  })
+}
+
 /**
  * The same polyline with its corners rounded off, per the shared
  * `roundedEdgeCorners` decomposition (see layout/edge-rounding.ts — the
@@ -134,22 +203,28 @@ type EdgePoint = { readonly x: number; readonly y: number }
  * rather than emitting a malformed `d`, matching this package's never-throw
  * rule.
  */
-function roundedPathData(path: readonly EdgePoint[]): string {
+function roundedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[] = []): string {
   const first = path[0]
   const last = path.at(-1)
   if (first === undefined || last === undefined) return ''
   if (path.length < 3) {
-    return `M ${formatCoord(first.x)} ${formatCoord(first.y)} L ${formatCoord(last.x)} ${formatCoord(last.y)}`
+    return [
+      `M ${formatCoord(first.x)} ${formatCoord(first.y)}`,
+      ...lineWithJumps(first, last, jumpsWithinSpan(jumps, 0, first, last)),
+    ].join(' ')
   }
 
   const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
-  for (const { enter, control, leave } of roundedEdgeCorners(path)) {
-    parts.push(`L ${formatCoord(enter.x)} ${formatCoord(enter.y)}`)
+  let current = first
+  const corners = roundedEdgeCorners(path)
+  for (const [index, { enter, control, leave }] of corners.entries()) {
+    parts.push(...lineWithJumps(current, enter, jumpsWithinSpan(jumps, index, current, enter)))
     parts.push(
       `Q ${formatCoord(control.x)} ${formatCoord(control.y)} ${formatCoord(leave.x)} ${formatCoord(leave.y)}`,
     )
+    current = leave
   }
-  parts.push(`L ${formatCoord(last.x)} ${formatCoord(last.y)}`)
+  parts.push(...lineWithJumps(current, last, jumpsWithinSpan(jumps, corners.length, current, last)))
   return parts.join(' ')
 }
 
@@ -197,10 +272,13 @@ function renderNode(node: SceneNode): string {
       // surrounding document inherits — invisible while every path had two
       // points, glaring the moment routing started bending them. A <path>
       // needs it for exactly the same reason.
+      const jumps = node.jumps ?? []
       const polyline =
         node.rounded === true
-          ? `<path d="${roundedPathData(node.path)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
-          : `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+          ? `<path d="${roundedPathData(node.path, jumps)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+          : jumps.length > 0
+            ? `<path d="${jumpedPathData(node.path, jumps)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+            : `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
       // Arrowheads are filled triangles in the edge's stroke color, drawn
       // after (over) the polyline. Geometry comes from the shared helper so
       // sceneBounds always agrees on how far the wings reach.

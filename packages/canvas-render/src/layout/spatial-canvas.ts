@@ -36,6 +36,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
+import { computeEdgeJumps } from './edge-jumps.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
@@ -538,7 +539,18 @@ function layoutSpatialCanvasInternal(
   resolved: ResolvedLayoutOptions,
 ): Scene {
   const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
-  const edgeContent = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
+  const routedEdges = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
+  // Canvas-wide today; the same resolution is where a per-edge
+  // x-whiteboard override slots in later without touching the pipeline.
+  const lineJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+  const jumpsByEdge = lineJumps === 'arc' ? computeEdgeJumps(routedEdges) : undefined
+  const edgeContent =
+    jumpsByEdge === undefined
+      ? routedEdges
+      : routedEdges.map((edge) => {
+          const jumps = jumpsByEdge.get(edge.id)
+          return jumps === undefined ? edge : { ...edge, jumps }
+        })
   const labelContent = canvas.edges
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
     .filter((label): label is TextRunNode => label !== undefined)

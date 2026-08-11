@@ -140,3 +140,59 @@ it('draws a curve when the canvas asks for one', async () => {
     expect(path?.getAttribute('fill')).toBe('none')
   })
 })
+
+// Line jumps ride the same canvas menu as the routing style: crossing edges
+// hop over each other so their directions stay readable.
+it('toggles line jumps from the canvas menu and draws the hop arc', async () => {
+  const crossed: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 0, y: 145, width: 50, height: 50, text: 'a' },
+      { id: 'b', type: 'text', x: 500, y: 145, width: 50, height: 50, text: 'b' },
+      { id: 'c', type: 'text', x: 250, y: 0, width: 50, height: 50, text: 'c' },
+      { id: 'd', type: 'text', x: 250, y: 400, width: 50, height: 50, text: 'd' },
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'a', toNode: 'b' },
+      { id: 'e2', fromNode: 'c', toNode: 'd' },
+    ],
+  }
+  const latest = { canvas: crossed }
+  function CrossHost() {
+    const [canvas, setCanvas] = useState(crossed)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 900, height: 700 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<CrossHost />)
+  openCanvasMenu(rootOf(container))
+
+  await vi.waitFor(() => expect(optionButton(container, 'On')).toBeDefined())
+  optionButton(container, 'On')?.click()
+
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.edgeRouting?.lineJumps).toBe('arc')
+  })
+  // The crossing edge is now a path with a hop arc.
+  await vi.waitFor(() => {
+    const arcPath = [...container.querySelectorAll('svg path')].find((p) =>
+      (p.getAttribute('d') ?? '').includes('A 5 5'),
+    )
+    expect(arcPath).toBeDefined()
+  })
+
+  // Off leaves no trace on the canvas.
+  openCanvasMenu(rootOf(container))
+  await vi.waitFor(() => expect(optionButton(container, 'Off')).toBeDefined())
+  optionButton(container, 'Off')?.click()
+  await vi.waitFor(() => {
+    expect(latest.canvas).not.toHaveProperty('x-whiteboard')
+  })
+})
