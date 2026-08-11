@@ -9,6 +9,8 @@ import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { useFavicon } from '../hooks/useFavicon.js'
+import type { FaviconStatus, FaviconStyle } from '../lib/favicon.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
@@ -309,6 +311,28 @@ export function BrowserLocalCanvasPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
+  // Tab favicon: persistence state as the status dot (degraded reads as
+  // offline — data is at risk either way), scene content as the minimap.
+  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
+    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
+  )
+  const faviconStatus: FaviconStatus =
+    persistence.kind === 'saved'
+      ? 'saved'
+      : persistence.kind === 'saving'
+        ? 'syncing'
+        : persistence.kind === 'pending'
+          ? 'unsaved'
+          : 'offline'
+  useFavicon({
+    style: faviconStyle,
+    status: faviconStatus,
+    rects: useMemo(
+      () => canvas.nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+      [canvas.nodes],
+    ),
+  })
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -620,6 +644,7 @@ export function BrowserLocalCanvasPage({
         onThemeChange={setTheme}
         webMcpEnabled={webMcpEnabled}
         onWebMcpChange={setWebMcpEnabled}
+        onFaviconStyleChange={setFaviconStyle}
       />
     </main>
   )

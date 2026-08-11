@@ -134,12 +134,23 @@ const capabilitySettingsSchema = z
   })
   .strict()
 
+const appearanceSettingsSchema = z
+  .object({
+    // Which favicon the canvas pages render: a live minimap of the board's
+    // content, or the plain logo mark with just the status dot.
+    faviconStyle: z.enum(['minimap', 'dot']).optional(),
+  })
+  .strict()
+
 const userSettingsSchema = z
   .object({
     version: z.literal(1),
     storage: storageSettingsSchema,
     migration: migrationSettingsSchema,
     capabilities: capabilitySettingsSchema,
+    // Optional (not required) so payloads stored before this section existed
+    // keep parsing — see the key/version comment at the top of this file.
+    appearance: appearanceSettingsSchema.optional(),
   })
   .strict()
 
@@ -151,6 +162,7 @@ export function defaultUserSettings(): UserSettings {
     storage: {},
     migration: {},
     capabilities: {},
+    appearance: {},
   }
 }
 

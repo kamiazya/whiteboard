@@ -12,6 +12,8 @@ import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { useFavicon } from '../hooks/useFavicon.js'
+import type { FaviconStatus, FaviconStyle } from '../lib/favicon.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
@@ -256,6 +258,26 @@ export function DaemonCanvasPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
+  // Tab favicon: sync state as the status dot, scene content as the
+  // minimap (style user-selectable in SettingsPanel, reactive like
+  // webMcpEnabled above).
+  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
+    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
+  )
+  const faviconStatus: FaviconStatus = authError
+    ? 'offline'
+    : syncStatus === 'connected'
+      ? 'saved'
+      : 'syncing'
+  useFavicon({
+    style: faviconStyle,
+    status: faviconStatus,
+    rects: useMemo(
+      () => canvasValue.nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+      [canvasValue.nodes],
+    ),
+  })
 
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
@@ -634,6 +656,7 @@ export function DaemonCanvasPage({
           onThemeChange={setTheme}
           webMcpEnabled={webMcpEnabled}
           onWebMcpChange={setWebMcpEnabled}
+          onFaviconStyleChange={setFaviconStyle}
         />
       </main>
     </DaemonApiContext.Provider>
