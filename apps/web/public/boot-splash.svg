@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="264" height="222" viewBox="0 0 176 148" role="img" aria-label="Whiteboard">
+  <title>Whiteboard</title>
+  <!--
+    The boot-splash mark, as a story: the signature squiggle draws itself
+    (this much is what the splash screen's 1.5s hold shows), holds a beat
+    and fades; a cursor sketches nodes and edges; a spark (the one accent
+    color - the AI's hand) tidies them into an aligned diagram; the diagram
+    bows out and the signature squiggle returns softly, breathing. Where
+    the animation ends, it always lands on the logo.
+    Self-contained (CSS animation inside the SVG) so the same file serves
+    the index.html splash and the README, where it renders inside an <img>
+    and can inherit nothing from the page. Colors are mid-grays chosen to
+    read on both light and dark grounds for the same reason.
+  -->
+  <style>
+    /* Phase 0 (0-2.2s): signature squiggle - draw, hold a beat, fade.
+       Returns at 9.7s as a soft fade-in of the already-drawn stroke. */
+    .stroke {
+      stroke-dasharray: 80;
+      stroke-dashoffset: 80;
+      animation:
+        wb-draw 1.2s ease-out forwards,
+        wb-fade 0.35s ease-in 1.7s forwards,
+        wb-unfade 0.9s ease-out 9.7s forwards;
+    }
+    @keyframes wb-draw {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+    @keyframes wb-fade {
+      to {
+        opacity: 0;
+      }
+    }
+    @keyframes wb-unfade {
+      to {
+        opacity: 1;
+      }
+    }
+    @keyframes wb-out {
+      to {
+        opacity: 0;
+      }
+    }
+    /* Phase 1 (2.2-6.2s): a cursor sketches three nodes and two edges. */
+    .node-g {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    .g1 { transform: rotate(-4deg); animation: wb-tidy1 0.7s cubic-bezier(0.22, 1, 0.36, 1) 7.2s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    .g2 { transform: rotate(3deg);  animation: wb-tidy2 0.7s cubic-bezier(0.22, 1, 0.36, 1) 7.3s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    .g3 { transform: rotate(-2deg); animation: wb-tidy3 0.7s cubic-bezier(0.22, 1, 0.36, 1) 7.4s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    @keyframes wb-tidy1 {
+      to {
+        transform: translate(-2px, -2px) rotate(0deg);
+      }
+    }
+    @keyframes wb-tidy2 {
+      to {
+        transform: translate(2px, 4px) rotate(0deg);
+      }
+    }
+    @keyframes wb-tidy3 {
+      to {
+        transform: translate(5px, 4px) rotate(0deg);
+      }
+    }
+    .node {
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+    }
+    .n1 { animation: wb-drawn 0.55s ease-out 2.7s forwards; }
+    .n2 { animation: wb-drawn 0.55s ease-out 3.5s forwards; }
+    .n3 { animation: wb-drawn 0.55s ease-out 4.3s forwards; }
+    .edge {
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+    }
+    .e1 { animation: wb-drawn 0.45s ease-in-out 5.1s forwards, wb-fade 0.3s ease-out 7.2s forwards; }
+    .e2 { animation: wb-drawn 0.45s ease-in-out 5.7s forwards, wb-fade 0.3s ease-out 7.2s forwards; }
+    @keyframes wb-drawn {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+    /* Phase 2 (6.7-8.6s): the spark tidies - nodes align, edges straighten. */
+    .tidy-edge {
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+    }
+    .t1 { animation: wb-drawn 0.35s ease-out 7.6s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    .t2 { animation: wb-drawn 0.35s ease-out 7.75s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    .t3 { animation: wb-drawn 0.35s ease-out 7.9s forwards, wb-out 0.5s ease-in 9.2s forwards; }
+    .cursor {
+      opacity: 0;
+      animation: wb-cursor-path 4.4s ease-in-out 2.2s forwards;
+    }
+    @keyframes wb-cursor-path {
+      0%   { transform: translate(180px, 140px); opacity: 0; }
+      8%   { transform: translate(26px, 32px); opacity: 1; }
+      20%  { transform: translate(56px, 48px); opacity: 1; }
+      27%  { transform: translate(102px, 26px); opacity: 1; }
+      39%  { transform: translate(132px, 42px); opacity: 1; }
+      45%  { transform: translate(60px, 84px); opacity: 1; }
+      57%  { transform: translate(92px, 100px); opacity: 1; }
+      63%  { transform: translate(56px, 40px); opacity: 1; }
+      75%  { transform: translate(100px, 34px); opacity: 1; }
+      80%  { transform: translate(42px, 50px); opacity: 1; }
+      92%  { transform: translate(72px, 82px); opacity: 1; }
+      100% { transform: translate(72px, 82px); opacity: 0; }
+    }
+    .spark {
+      transform-box: fill-box;
+      transform-origin: center;
+      opacity: 0;
+      animation: wb-spark-pop 1.9s ease-in-out 6.7s forwards;
+    }
+    @keyframes wb-spark-pop {
+      0%   { opacity: 0; transform: scale(0.4) rotate(0deg); }
+      18%  { opacity: 1; transform: scale(1.15) rotate(20deg); }
+      45%  { opacity: 1; transform: scale(0.95) rotate(45deg); }
+      80%  { opacity: 1; transform: scale(1) rotate(70deg); }
+      100% { opacity: 0; transform: scale(0.6) rotate(90deg); }
+    }
+    /* Finale (11s-): the logo - board plus squiggle - breathes. */
+    .scene {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: wb-breathe 3.2s ease-in-out 11s infinite;
+    }
+    @keyframes wb-breathe {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.72;
+        transform: scale(0.99);
+      }
+    }
+    /* Static, fully drawn logo - the story collapses to its landing frame. */
+    @media (prefers-reduced-motion: reduce) {
+      .scene, .cursor, .node, .edge, .tidy-edge, .spark, .node-g, .stroke {
+        animation: none;
+      }
+      .stroke {
+        stroke-dashoffset: 0;
+      }
+      .node-g, .edge, .tidy-edge, .cursor, .spark {
+        display: none;
+      }
+    }
+  </style>
+  <g class="scene">
+    <rect x="2" y="2" width="172" height="120" rx="12" fill="none" stroke="#9ca3af" stroke-opacity="0.55" stroke-width="3"/>
+    <g transform="translate(30 22) scale(1.35)">
+      <path class="stroke" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" fill="none" stroke="#909090" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <path class="edge e1" pathLength="100" d="M54 37 C 70 33, 84 27, 100 31" fill="none" stroke="#909090" stroke-width="2" stroke-linecap="round"/>
+    <path class="edge e2" pathLength="100" d="M42 46 C 46 60, 58 70, 70 80" fill="none" stroke="#909090" stroke-width="2" stroke-linecap="round"/>
+    <path class="tidy-edge t1" pathLength="100" d="M52 35 L102 35" fill="none" stroke="#909090" stroke-width="2" stroke-linecap="round"/>
+    <path class="tidy-edge t2" pathLength="100" d="M37 44 C 37 66, 79 64, 79 84" fill="none" stroke="#909090" stroke-width="2" stroke-linecap="round"/>
+    <path class="tidy-edge t3" pathLength="100" d="M117 44 C 117 66, 79 64, 79 84" fill="none" stroke="#909090" stroke-width="2" stroke-linecap="round"/>
+    <g class="node-g g1"><rect class="node n1" pathLength="100" x="24" y="28" width="30" height="18" rx="4" fill="none" stroke="#909090" stroke-width="2.5"/></g>
+    <g class="node-g g2"><rect class="node n2" pathLength="100" x="100" y="22" width="30" height="18" rx="4" fill="none" stroke="#909090" stroke-width="2.5"/></g>
+    <g class="node-g g3"><rect class="node n3" pathLength="100" x="58" y="80" width="32" height="18" rx="4" fill="none" stroke="#909090" stroke-width="2.5"/></g>
+    <g class="spark">
+      <path d="M150 14 L152.2 20.8 L159 23 L152.2 25.2 L150 32 L147.8 25.2 L141 23 L147.8 20.8 Z" fill="#3b6ecc"/>
+    </g>
+  </g>
+  <g class="cursor">
+    <path d="M0 0 L0 12 L3.2 9.2 L5.6 14 L7.8 12.9 L5.4 8.2 L9.5 7.6 Z" fill="#5b5b5b" stroke="#fdfdfd" stroke-width="1"/>
+  </g>
+  <text x="88" y="143" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" letter-spacing="0.4" fill="#909090">Whiteboard</text>
+</svg>

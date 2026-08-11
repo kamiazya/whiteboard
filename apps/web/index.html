@@ -5,9 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Whiteboard</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!--
+      Boot splash: the only UI that exists before the app bundle (and the
+      vendored viewer font main.tsx awaits) has loaded, so it must be inline
+      CSS + markup — index.css and the theme class are not applied yet.
+      CSS-only on purpose: the production CSP allows inline styles but not
+      inline scripts, so the persisted-theme override cannot run this early;
+      prefers-color-scheme covers the default 'system' preference, and
+      main.tsx applies the stored class before React paints anything else.
+      Colors mirror index.css --background/--border for both schemes so the
+      splash-to-app handoff does not shift the ground color.
+    -->
+    <style>
+      :root {
+        --wb-boot-bg: oklch(1 0 0);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --wb-boot-bg: oklch(0.145 0 0);
+        }
+      }
+      .wb-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--wb-boot-bg);
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Inside #root so React's first commit replaces it — no removal code.
+         The animated mark (pen stroke drawing itself + wordmark) is the
+         shared external SVG public/boot-splash.svg — same file the README
+         embeds — with its animation and reduced-motion guard inside. -->
+    <div id="root"><div class="wb-boot" role="status" aria-label="Loading Whiteboard"><img src="/boot-splash.svg" alt="" width="264" height="222" /></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

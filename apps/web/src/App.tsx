@@ -2,6 +2,7 @@ import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
+import { CanvasPageSkeleton } from './components/CanvasPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import {
@@ -71,19 +72,23 @@ interface AppProps {
 }
 
 // Suspense fallback shared by every lazy page chunk (DaemonCanvasPage and
-// BrowserLocalCanvasPage). The height class differs by mount site (root
-// fills the viewport; the in-banner branches fill the flex row under it), so
-// it's a prop; message is also a prop so the daemon-specific and
-// backend-agnostic mount sites show accurate copy without duplicating this
-// component.
-function LazyPageFallback({ heightClass, message }: { heightClass: string; message: string }) {
+// BrowserLocalCanvasPage). Reuses the structural CanvasPageSkeleton so the
+// chunk-load state and the page's own connecting state are one continuous
+// pulse instead of a text line snapping to a skeleton. The height class
+// differs by mount site (root fills the viewport; the in-banner branches
+// fill the flex row under it), so it's a prop; message becomes the
+// accessible label so daemon-specific and backend-agnostic mount sites
+// announce accurate copy.
+export function LazyPageFallback({
+  heightClass,
+  message,
+}: {
+  heightClass: string
+  message: string
+}) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`flex ${heightClass} items-center justify-center text-sm text-muted-foreground`}
-    >
-      {message}
+    <div className={heightClass}>
+      <CanvasPageSkeleton label={message} />
     </div>
   )
 }
