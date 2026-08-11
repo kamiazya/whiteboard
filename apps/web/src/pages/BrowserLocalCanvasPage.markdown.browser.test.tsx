@@ -73,7 +73,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await screen.findByTestId('mock-spatial-editor')
 
     // Open the switcher dropdown and create a markdown note.
-    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     const newMarkdown = await screen.findByTestId('new-markdown-menu-item')
     await userEvent.click(newMarkdown)
@@ -122,7 +126,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       expect(document.querySelector('[data-testid="canvas-settings-button"]')).not.toBeNull()
     })
 
-    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
     await waitFor(() => {
@@ -140,7 +148,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     const first = render(<BrowserLocalCanvasPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
@@ -153,7 +165,13 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
 
     // title and the canvas name are one concept: the switcher label is the
     // snapshot row, written from the same edit as the OKF core facet.
-    await screen.findByRole('button', { name: 'リリース計画' }, { timeout: 10_000 })
+    // title and the canvas name are one concept — observed in the switcher's
+    // LIST, since its trigger names the workspace rather than the canvas.
+    await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
+    // Scoped to the menu item: the title INPUT holds the same string, so a
+    // bare text query matches both and cannot tell them apart.
+    await screen.findByRole('menuitem', { name: /リリース計画/ }, { timeout: 10_000 })
+    await userEvent.keyboard('{Escape}')
 
     await waitForSaved()
     first.unmount()
@@ -172,7 +190,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     const first = render(<BrowserLocalCanvasPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
@@ -213,7 +235,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     const first = render(<BrowserLocalCanvasPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
@@ -259,9 +285,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(title)
     await userEvent.keyboard('{Control>}a{/Control}')
     await userEvent.keyboard('Architecture map')
-    // Regex rather than an exact name: the switcher's accessible name carries
-    // more than its label text, so a full-string match asserts the wrong thing.
-    await screen.findByRole('button', { name: /Architecture map/ }, { timeout: 10_000 })
+    await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
+    await screen.findByRole('menuitem', { name: /Architecture map/ }, { timeout: 10_000 })
+    await userEvent.keyboard('{Escape}')
 
     await waitForSaved()
     first.unmount()
@@ -290,7 +316,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     render(<BrowserLocalCanvasPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
 
-    const switcher = await screen.findByRole('button', { name: 'Diagram A' }, { timeout: 10_000 })
+    const switcher = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
     await waitFor(() => {
@@ -299,7 +329,11 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
 
     // Switch back to the original spatial canvas via the switcher list.
     const before = spatialMounts
-    const switcher2 = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
+    const switcher2 = await screen.findByRole(
+      'button',
+      { name: /^Workspace:/i },
+      { timeout: 10_000 },
+    )
     await userEvent.click(switcher2)
     await userEvent.click(await screen.findByText('Diagram A'))
 

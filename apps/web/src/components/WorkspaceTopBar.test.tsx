@@ -36,7 +36,7 @@ function renderBar(overrides?: {
       workspaceId="ws_1"
       slug="canvas-a"
       canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-      onEnterFullscreen={() => {}}
+      onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
       onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
     />,
@@ -62,7 +62,7 @@ afterEach(() => {
 // ADR-0006 point 3: creation is not gated on a name. Selecting "New canvas…" derives a slug from
 // the loaded list (preserving the current group prefix) and POSTs immediately — no dialog.
 // These are the red tests for that convergence; the dialog-era suites below are updated with it.
-async function selectNewCanvasItem(switcherName: RegExp = /canvas-a/i) {
+async function selectNewCanvasItem(switcherName: RegExp = /^Workspace:/i) {
   const switcher = screen.getByRole('button', { name: switcherName })
   fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
   const item = await screen.findByTestId('new-canvas-menu-item')
@@ -107,13 +107,13 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
         workspaceId="ws_1"
         slug="design/foo"
         canvases={[{ slug: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={onNavigateToCanvas}
       />,
       { container: document.body },
     )
-    await selectNewCanvasItem(/foo/i)
+    await selectNewCanvasItem()
     await waitFor(() => expect(onNavigateToCanvas).toHaveBeenCalledWith('design/untitled'))
     expect(posts[0]?.body).toEqual({ slug: 'design/untitled' })
   })
@@ -128,7 +128,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
           { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' },
           { slug: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
         ]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
       />,
@@ -191,7 +191,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
     const baseProps = {
       slug: 'shared-slug',
       canvases: [{ slug: 'shared-slug', updatedAt: '2026-04-23T00:00:00Z' }],
-      onEnterFullscreen: () => {},
+      onToggleFullscreen: () => {},
       onNavigateBack: () => {},
       onNavigateToCanvas: () => {},
     }
@@ -207,6 +207,12 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
+    // Observed in the switcher's list: the trigger names the workspace now,
+    // but WHICH canvas name wins is exactly what this race guards.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /^Workspace:/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
     await waitFor(() => {
       expect(screen.getByText('Fresh B')).toBeTruthy()
     })
@@ -238,13 +244,13 @@ describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-0"
         canvases={many}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
       />,
     )
 
-    const switcher = screen.getByRole('button', { name: /canvas-0/i })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByTestId('new-canvas-menu-item')
 
@@ -303,7 +309,7 @@ describe('WorkspaceTopBar — new-canvas double activation', () => {
     })
 
     renderBar()
-    const switcher = screen.getByRole('button', { name: /canvas-a/i })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const item = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(item)
@@ -337,7 +343,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
           workspaceId="ws_1"
           slug="canvas-a"
           canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-          onEnterFullscreen={() => {}}
+          onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={() => {}}
         />
@@ -374,7 +380,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
           workspaceId="ws_1"
           slug="canvas-a"
           canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-          onEnterFullscreen={() => {}}
+          onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
           getThumbnailBlob={overrides?.getThumbnailBlob}
@@ -471,7 +477,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   it('toggles pin through the injected daemon fetch', async () => {
     const daemonFetch = renderBarWithDaemonFetch()
 
-    const switcher = screen.getByRole('button', { name: /canvas-a/i })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const pinButton = await screen.findByRole('button', { name: 'Pin canvas' })
     fireEvent.click(pinButton)
@@ -528,7 +534,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -561,7 +567,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -589,7 +595,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -611,7 +617,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -634,7 +640,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -658,7 +664,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -709,7 +715,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         onExport={onExport}
@@ -758,7 +764,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Back to canvas list')).toBeNull()
   })
 
-  it('hides the fullscreen button when onEnterFullscreen is omitted', () => {
+  it('hides the fullscreen button when onToggleFullscreen is omitted', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
@@ -779,7 +785,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         capabilities={{ versions: false, branches: true, merge: true }}
       />,
@@ -808,7 +814,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         capabilities={{ versions: false, branches: true, merge: true }}
       />,
@@ -829,7 +835,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         capabilities={{ versions: true, branches: false, merge: true }}
       />,
@@ -850,7 +856,7 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
         workspaceId="ws 1#x"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
       />,
@@ -968,7 +974,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
           { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
           { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={() => {}}
@@ -977,7 +983,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     )
 
     // Open the canvas switcher dropdown.
-    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByTestId('new-canvas-menu-item')
 
@@ -991,7 +997,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={() => {}}
@@ -999,6 +1005,12 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
+    // The trigger names the WORKSPACE now, so the resolved canvas name is
+    // observed where it is still shown: the switcher's own list.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /^Workspace:/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
     expect(await screen.findByText('Custom title')).not.toBeNull()
     expect(apiFetch).not.toHaveBeenCalled()
   })
@@ -1011,7 +1023,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={onCreateCanvas}
@@ -1019,7 +1031,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const item = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(item)
@@ -1037,7 +1049,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={onRenameCanvas}
         onCreateCanvas={() => {}}
@@ -1071,7 +1083,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={onRenameCanvas}
         onCreateCanvas={() => {}}
@@ -1104,7 +1116,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={onCreateCanvas}
@@ -1112,7 +1124,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const item = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(item)
@@ -1130,7 +1142,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={() => {}}
@@ -1175,7 +1187,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         workspaceId="ws_1"
         slug="canvas-a"
         canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={onCreateCanvas}
@@ -1183,7 +1195,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const item = await screen.findByTestId('new-canvas-menu-item')
     fireEvent.pointerUp(item)
@@ -1214,7 +1226,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
           { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
           { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
         onCreateCanvas={() => {}}
@@ -1222,7 +1234,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByTestId('new-canvas-menu-item')
 
@@ -1250,7 +1262,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
           workspaceId="ws_1"
           slug="canvas-a"
           canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-          onEnterFullscreen={() => {}}
+          onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={() => {}}
         />

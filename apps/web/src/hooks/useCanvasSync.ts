@@ -1,3 +1,4 @@
+import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
@@ -11,6 +12,7 @@ import {
 } from '../lib/canvas-sync-session.js'
 import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
+import { embedTextInPng } from '../lib/png-embed.js'
 
 export type { UseCanvasSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook
@@ -287,7 +289,8 @@ export function useCanvasSync(
   // a SpatialEditor is currently mounted.
   const exportScene = useCallback(
     async (format: SceneExportFormat): Promise<Blob | null> => {
-      const { svg, bounds } = renderCanvasToSvg(sessionRef.current?.getCanvas() ?? canvas, {
+      const exportedCanvas = sessionRef.current?.getCanvas() ?? canvas
+      const { svg, bounds } = renderCanvasToSvg(exportedCanvas, {
         measure: createBrowserMeasureText(),
         // Pinned to 'light' regardless of the UI theme: an exported SVG/PNG
         // is a saved artifact, and a user's display preference must never
@@ -297,11 +300,24 @@ export function useCanvasSync(
       if (format === 'svg') {
         return new Blob([svg], { type: 'image/svg+xml' })
       }
-      return rasterizeSvgToPng(
+      const png = await rasterizeSvgToPng(
         svg,
         Math.max(1, Math.round(bounds.w)),
         Math.max(1, Math.round(bounds.h)),
       )
+      if (png === null) return null
+      // Editable PNG (the draw.io pattern): embed the extended JSON Canvas
+      // document in an iTXt chunk, so the exported image carries its own
+      // source — exact coordinates included — under the `whiteboard` key.
+      const bytes = new Uint8Array(await png.arrayBuffer())
+      const embedded = embedTextInPng(
+        bytes,
+        'whiteboard',
+        serializeSpatial(exportedCanvas, 'extended'),
+      )
+      // Copy into a fresh ArrayBuffer-backed view: Blob's lib.dom typing
+      // rejects ArrayBufferLike-backed Uint8Arrays.
+      return new Blob([Uint8Array.from(embedded)], { type: 'image/png' })
     },
     [canvas],
   )

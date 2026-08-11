@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import { useDirtyState } from '@/hooks/useDirtyState'
-import type { ThemeMode } from '@/hooks/useThemeMode'
 import { getAppLogger } from '@/lib/app-logger'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
@@ -36,11 +35,6 @@ interface Props {
   slug: string
   canvases: CanvasInfo[]
   getThumbnailBlob?: () => Promise<Blob | null>
-  // Theme preference is owned by the page so reloads can rehydrate from
-  // localStorage and pass the resolved value to <Excalidraw theme=...>. The
-  // button cycles light → dark → system.
-  theme?: ThemeMode
-  onToggleTheme?: (next: ThemeMode) => void
   // apps/web has no react-router-dom; the page owns navigation and passes it
   // in as callbacks instead of the original Link/useNavigate. Omitted when
   // the host page has no "back" destination (e.g. a daemon page with no
@@ -59,7 +53,8 @@ interface Props {
   /** Local mode only for now: creates a markdown-kind canvas and opens it. */
   onCreateMarkdownCanvas?: () => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
-  onEnterFullscreen?: () => void
+  onToggleFullscreen?: () => void
+  isFullscreen?: boolean
   // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
   // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
   // "all capabilities on", matching every existing caller's behavior.
@@ -94,9 +89,8 @@ export default function WorkspaceTopBar({
   workspaceId,
   slug,
   canvases,
-  theme,
-  onToggleTheme,
-  onEnterFullscreen,
+  onToggleFullscreen,
+  isFullscreen,
   getThumbnailBlob,
   onNavigateBack,
   onNavigateToCanvas,
@@ -240,9 +234,6 @@ export default function WorkspaceTopBar({
           canvases={canvases}
           effectiveNames={effectiveNames}
           isLocalMode={isLocalMode}
-          canvasFlat={canvasFlat}
-          canvasPrefix={canvasPrefix}
-          canvasLeaf={canvasLeaf}
           canvasSearch={canvasSearch}
           onCanvasSearchChange={setCanvasSearch}
           onNavigateToCanvas={onNavigateToCanvas}
@@ -344,9 +335,8 @@ export default function WorkspaceTopBar({
 
       {statusSlot}
       <TopBarSecondaryActions
-        theme={theme}
-        onToggleTheme={onToggleTheme}
-        onEnterFullscreen={onEnterFullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+        isFullscreen={isFullscreen}
         onOpenSettings={onOpenSettings}
       />
     </header>

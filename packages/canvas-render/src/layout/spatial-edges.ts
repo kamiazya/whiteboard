@@ -540,14 +540,36 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
 }
 
 /**
- * Per-edge quality of ONE routed path: collinear overlap with ITSELF
- * (adjacent retraces included — the doubled-line arrival a facing-away
- * side produces when the connector overshoots the entry stub through the
- * node body) in the heaviest slot, and realized bend count in the last.
+ * Per-edge quality of ONE routed path, in the heaviest slot: collinear
+ * overlap with ITSELF (adjacent retraces included — the doubled-line
+ * arrival a facing-away side produces when the connector overshoots the
+ * entry stub through the node body) plus the length of any segment
+ * TUNNELLING through a bystander node's raw body — a line through a node
+ * reads as though it connects that node, which no line jump can express,
+ * so it outranks even an edge crossing. Realized bend count sits last.
  */
-function selfScore(path: readonly Point[]): ConfigCost {
+function selfScore(path: readonly Point[], foreignBodies: readonly Rect[]): ConfigCost {
   const q = (n: number) => Math.round(n * COST_QUANTUM)
   let overlap = 0
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    for (const r of foreignBodies) {
+      // Axis-aligned intrusion length, boundary grazing excluded: an
+      // anchor ON a neighbour's border or a segment riding the margin
+      // band is bestCandidate's business, not a tunnel.
+      const minX = Math.max(Math.min(a.x, b.x), r.x)
+      const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
+      const minY = Math.max(Math.min(a.y, b.y), r.y)
+      const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
+      if (maxX <= minX && maxY <= minY) continue
+      if (a.y === b.y && a.y > r.y && a.y < r.y + r.h && maxX > minX) {
+        overlap += q(maxX - minX)
+      } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w && maxY > minY) {
+        overlap += q(maxY - minY)
+      }
+    }
+  }
   for (let i = 1; i < path.length; i++) {
     for (let j = i + 1; j < path.length; j++) {
       const a1 = path[i - 1] as Point
@@ -622,7 +644,10 @@ function optimizeSideChoices(
   )
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
-  const selfCosts: ConfigCost[] = paths.map((path) => selfScore(path))
+  const foreignBodiesFor = edges.map((e) =>
+    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
+  )
+  const selfCosts: ConfigCost[] = paths.map((path, i) => selfScore(path, foreignBodiesFor[i]!))
   let currentCost: ConfigCost = [0, 0, 0, 0]
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
   for (let i = 0; i < edges.length; i++) {
@@ -661,7 +686,7 @@ function optimizeSideChoices(
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfScore(trialPaths[i]!)
+      const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!)
       cost = addCost(cost, selfCosts[i] ?? [0, 0, 0, 0], -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)

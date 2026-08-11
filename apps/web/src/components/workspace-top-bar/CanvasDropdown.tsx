@@ -24,9 +24,6 @@ interface CanvasDropdownProps {
   canvases: CanvasInfo[]
   effectiveNames: WorkspaceNames
   isLocalMode: boolean
-  canvasFlat: string | null
-  canvasPrefix: string | null
-  canvasLeaf: string | null
   canvasSearch: string
   onCanvasSearchChange: (value: string) => void
   onNavigateToCanvas: (slug: string) => void
@@ -44,9 +41,6 @@ export function CanvasDropdown({
   canvases,
   effectiveNames,
   isLocalMode,
-  canvasFlat,
-  canvasPrefix,
-  canvasLeaf,
   canvasSearch,
   onCanvasSearchChange,
   onNavigateToCanvas,
@@ -80,22 +74,26 @@ export function CanvasDropdown({
     onCanvasSearchChange('')
   }
 
+  // Browser-local has no workspace NAME to show — `workspaceId` is the
+  // literal "local" — so the mode is the honest label there. A daemon
+  // workspace prefers its stored name and falls back to the id, which is
+  // what the user sees before anyone has named it.
+  const workspaceLabel = isLocalMode ? 'Local' : (effectiveNames.workspace ?? workspaceId)
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          // The WORKSPACE, not the canvas. The canvas's name is row two's
+          // title field; naming it here too meant editing one and watching
+          // the other lag, and read as two different things being named.
+          // Picking a canvas from this menu is navigation within the
+          // workspace, which is what the label now says.
+          aria-label={`Workspace: ${workspaceLabel}`}
           className="flex min-w-0 items-center gap-1 truncate rounded px-1.5 py-0.5 text-sm hover:bg-accent"
         >
-          {canvasFlat !== null ? (
-            <span className="truncate font-semibold">{canvasFlat}</span>
-          ) : (
-            <>
-              <span className="truncate text-muted-foreground">{canvasPrefix}</span>
-              <span className="shrink-0 text-muted-foreground/60">/</span>
-              <span className="truncate font-semibold">{canvasLeaf}</span>
-            </>
-          )}
+          <span className="truncate font-semibold">{workspaceLabel}</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>

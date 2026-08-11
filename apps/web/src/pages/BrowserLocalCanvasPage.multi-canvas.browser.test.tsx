@@ -109,7 +109,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     )
 
     // Create canvas B and switch to it, via WorkspaceTopBar's switcher dropdown.
-    const switcherA = await screen.findByRole('button', { name: 'untitled' })
+    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-canvas-menu-item')
     await act(async () => {
@@ -137,7 +137,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // "untitled" display name, so disambiguate by the raw id shown in each
     // menu item's subtitle line (only rendered when the name differs from
     // the slug/id, which it always does for a browser-local canvas).
-    const switcherB = await screen.findByRole('button', { name: 'untitled' })
+    const switcherB = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
     const idALabel = await screen.findByText(idA)
     const itemA = idALabel.closest('[role="menuitem"]') as HTMLElement
@@ -225,7 +225,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       latestOnChange!(lateEdit, setTextCommand('multi-canvas-late-edit-a'))
     })
 
-    const switcherA = await screen.findByRole('button', { name: 'untitled' })
+    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-canvas-menu-item')
     await act(async () => {

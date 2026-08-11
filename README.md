@@ -1,7 +1,7 @@
 # @kamiazya/whiteboard
 
 <p align="center">
-  <img src="apps/web/public/boot-splash.svg" alt="Whiteboard — a hand sketches nodes and edges, AI tidies them into a diagram, and the mark returns" width="264" height="222" />
+  <img src="docs/assets/readme-mark.svg" alt="Whiteboard — a hand sketches nodes and edges, AI tidies them into a diagram, and the mark returns" width="264" height="222" />
 </p>
 
 > A collaborative OpenCanvas whiteboard for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time canvas.

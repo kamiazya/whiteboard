@@ -105,7 +105,7 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
     )
 
     // Create canvas B via the switcher's New-canvas control.
-    const switcherA = await screen.findByRole('button', { name: 'untitled' })
+    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-canvas-menu-item')
     await act(async () => {

@@ -92,7 +92,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
           { slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
           { slug: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
         ]}
-        onEnterFullscreen={() => {}}
+        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
         {...props}
@@ -129,45 +129,6 @@ afterEach(async () => {
 })
 
 describe('WorkspaceTopBar browser mode', () => {
-  it('exposes a theme toggle that cycles light → dark → system → light', async () => {
-    const onToggleTheme = vi.fn()
-    const { rerender } = renderTopBar({ theme: 'light', onToggleTheme })
-
-    // light → dark
-    fireEvent.click(screen.getByRole('button', { name: /Theme: light/i }))
-    expect(onToggleTheme).toHaveBeenLastCalledWith('dark')
-
-    function rerenderWith(theme: 'dark' | 'system') {
-      rerender(
-        <div className="h-[560px] w-[1100px] bg-background p-6">
-          <WorkspaceTopBar
-            workspaceId="sess_1"
-            slug="design/login-flow"
-            canvases={[
-              { slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
-              { slug: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
-            ]}
-            onEnterFullscreen={() => {}}
-            onNavigateBack={() => {}}
-            onNavigateToCanvas={() => {}}
-            theme={theme}
-            onToggleTheme={onToggleTheme}
-          />
-        </div>,
-      )
-    }
-
-    // dark → system
-    rerenderWith('dark')
-    fireEvent.click(screen.getByRole('button', { name: /Theme: dark/i }))
-    expect(onToggleTheme).toHaveBeenLastCalledWith('system')
-
-    // system → light
-    rerenderWith('system')
-    fireEvent.click(screen.getByRole('button', { name: /Theme: system/i }))
-    expect(onToggleTheme).toHaveBeenLastCalledWith('light')
-  })
-
   it('immediate create: shows Problem Details title on 409, then fallback without leaking internals on 500', async () => {
     let callCount = 0
     // Override the beforeEach fetch stub for this test only.
@@ -202,13 +163,7 @@ describe('WorkspaceTopBar browser mode', () => {
 
     renderTopBar()
 
-    // The canvas switcher trigger renders the slug as separate spans for prefix/leaf
-    // when a "/" is present ("design" + "/" + "login-flow"). Wait for the leaf span
-    // to appear, then walk up to the enclosing button.
-    await waitFor(() => expect(screen.getByText('login-flow')).toBeTruthy())
-    const switcherLeaf = screen.getByText('login-flow')
-    const switcher = switcherLeaf.closest('button')!
-    expect(switcher).toBeTruthy()
+    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
 
     // First activation: immediate POST (no dialog ever appears), derived inside the
     // current group — the 409 title surfaces in the alert line.
@@ -420,7 +375,7 @@ describe('WorkspaceTopBar browser mode', () => {
       'checkVisibility' in el ? !(el as HTMLElement).checkVisibility() : false
 
     await page.viewport(375, 900)
-    renderTopBar({ theme: 'light', onToggleTheme: vi.fn() })
+    renderTopBar()
 
     const header = screen.getByRole('banner')
     await waitFor(() => {
@@ -429,9 +384,9 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // Exposed right-side actions are hidden at this width.
     await waitFor(() => {
-      expect(
-        isDisplayNone(screen.getByRole('button', { name: /Theme: light/i, hidden: true })),
-      ).toBe(true)
+      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen', hidden: true }))).toBe(
+        true,
+      )
       expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen', hidden: true }))).toBe(
         true,
       )
@@ -449,17 +404,17 @@ describe('WorkspaceTopBar browser mode', () => {
     // HeaderBranchChip) still renders without overflow or wrapping.
     expect(isDisplayNone(screen.getByRole('button', { name: /back to canvas list/i }))).toBe(false)
     await waitFor(() => {
-      expect(screen.getByText('login-flow')).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
     })
 
     // Opening the kebab and selecting Fullscreen calls the same handler as
     // the exposed button would.
-    const onEnterFullscreen = vi.fn()
+    const onToggleFullscreen = vi.fn()
     cleanup()
-    renderTopBar({ onEnterFullscreen })
+    renderTopBar({ onToggleFullscreen })
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'Fullscreen' }).click()
-    expect(onEnterFullscreen).toHaveBeenCalledTimes(1)
+    expect(onToggleFullscreen).toHaveBeenCalledTimes(1)
 
     // At ≥400px the kebab is hidden again and the three buttons are visible.
     // 401 (not exactly 400) sidesteps the boundary ambiguity between
@@ -468,10 +423,10 @@ describe('WorkspaceTopBar browser mode', () => {
     // "narrow" so the two collapse states never both show at once.
     await page.viewport(401, 900)
     cleanup()
-    renderTopBar({ theme: 'light', onToggleTheme: vi.fn() })
+    renderTopBar()
     await waitFor(() => {
       expect(isDisplayNone(screen.getByTestId('topbar-more-actions-trigger'))).toBe(true)
-      expect(isDisplayNone(screen.getByRole('button', { name: /Theme: light/i }))).toBe(false)
+      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
       expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
     })
 
