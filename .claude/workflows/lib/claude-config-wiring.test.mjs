@@ -108,3 +108,27 @@ test('every package-<name>.md rule is path-scoped to packages/<name>', () => {
   }
   assert.deepEqual(unscoped, [], `package rules missing a "paths: packages/<name>/**" frontmatter: ${unscoped.join(', ')}`)
 })
+
+// The Workflow runtime executes each script as a function body (top-level `return` is legal, so
+// `node --check` cannot validate it). Nothing else parses the WHOLE file: the sync tests above
+// extract fragments by regex, so a broken template literal between fragments passes every test and
+// fails only at launch — which is exactly how an unescaped backtick in a prompt edit shipped to
+// main and broke the next dev-loop run.
+test('every workflow script parses as a workflow function body', () => {
+  const workflowDir = path.join(repoRoot, '.claude', 'workflows')
+  const bad = []
+  for (const file of readdirSync(workflowDir).filter((f) => f.endsWith('.mjs'))) {
+    const source = readFileSync(path.join(workflowDir, file), 'utf8')
+      .replace(/^export const meta = /m, 'const meta = ')
+    try {
+      // The runtime runs scripts as an ASYNC function body (top-level await is legal), so the
+      // parse check must use the async function constructor, not `new Function`.
+      const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
+      // eslint-disable-next-line no-new-func -- parse check of our own scripts, never executed
+      new AsyncFunction('args', 'agent', 'workflow', 'phase', 'log', 'parallel', 'pipeline', 'budget', source)
+    } catch (err) {
+      bad.push(`${file}: ${err.message}`)
+    }
+  }
+  assert.deepEqual(bad, [], `workflow scripts that do not parse:\n${bad.join('\n')}`)
+})
