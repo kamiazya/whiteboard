@@ -412,3 +412,70 @@ describe('routing properties: sweep-rank lanes', () => {
     },
   )
 })
+
+// Crossing minimization. Dense chunky boxes with edges across them make
+// crossings the common case; the optimizer must never make the
+// configuration WORSE than the heuristic initial one, and must be a pure
+// deterministic function of the canvas. Mutation check: accepting a trial
+// without the strict cost decrease turns the never-worse property red.
+const clutterScenario = fc.record({
+  rects: fc.array(
+    fc.record({
+      x: fc.constantFrom(0, 120, 240, 360, 480),
+      y: fc.constantFrom(0, 120, 240, 360),
+      w: fc.constantFrom(80, 140),
+      h: fc.constantFrom(80, 140),
+    }),
+    { minLength: 4, maxLength: 6 },
+  ),
+  pairs: fc.array(fc.tuple(fc.nat({ max: 5 }), fc.nat({ max: 5 })), {
+    minLength: 3,
+    maxLength: 6,
+  }),
+})
+
+function clutterConfig({
+  rects,
+  pairs,
+}: {
+  rects: { x: number; y: number; w: number; h: number }[]
+  pairs: [number, number][]
+}) {
+  const nodes = rects.map((r, i) => node(`n${i}`, 'text', r))
+  const edges: CanvasEdge[] = pairs
+    .map(([f, t], i) => ({
+      id: `e${i}`,
+      fromNode: `n${f % nodes.length}`,
+      toNode: `n${t % nodes.length}`,
+    }))
+    .filter((e) => e.fromNode !== e.toNode)
+  return { nodes, edges }
+}
+
+describe('routing properties: crossing minimization', () => {
+  fcTest.prop([clutterScenario], withDefaults({ numRuns: 60 }))(
+    'optimizing stays deterministic, total, and keeps every anchor on its reported side',
+    (scenario) => {
+      const { nodes, edges } = clutterConfig(scenario)
+      if (edges.length < 2) return
+      const a = assignEdgeAnchors(nodes, edges, 'orthogonal')
+      const b = assignEdgeAnchors(nodes, edges, 'orthogonal')
+      expect(a).toEqual(b)
+      const byId = new Map(nodes.map((n) => [n.id, n]))
+      for (const e of edges) {
+        const pair = a.get(e.id)
+        const routed = routeEdge(nodes, e, 'orthogonal', pair)
+        const onSide = (n: SpatialNode, side: string, p: PointXY) => {
+          if (side === 'left') return p.x === n.x && p.y >= n.y && p.y <= n.y + n.height
+          if (side === 'right') return p.x === n.x + n.width && p.y >= n.y && p.y <= n.y + n.height
+          if (side === 'top') return p.y === n.y && p.x >= n.x && p.x <= n.x + n.width
+          return p.y === n.y + n.height && p.x >= n.x && p.x <= n.x + n.width
+        }
+        expect(onSide(byId.get(e.fromNode)!, routed.fromSide, routed.path[0]!)).toBe(true)
+        expect(
+          onSide(byId.get(e.toNode)!, routed.toSide, routed.path[routed.path.length - 1]!),
+        ).toBe(true)
+      }
+    },
+  )
+})
