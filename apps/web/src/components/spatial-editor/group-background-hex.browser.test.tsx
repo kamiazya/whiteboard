@@ -66,7 +66,7 @@ function menuItem(container: HTMLElement, name: string): HTMLElement | undefined
   ) as HTMLElement | undefined
 }
 
-it('the Color row accepts a custom hex via the native color input', async () => {
+it('the Color row opens a custom color panel and applies a typed hex', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
@@ -75,10 +75,22 @@ it('the Color row accepts a custom hex via the native color input', async () => 
   const colorGroup = [...container.querySelectorAll('fieldset')].find(
     (g) => g.getAttribute('aria-label') === 'Color',
   ) as HTMLElement
-  const hexInput = colorGroup.querySelector('input[type="color"]') as HTMLInputElement
-  expect(hexInput).not.toBeNull()
+  const trigger = [...colorGroup.querySelectorAll('[role="menuitemradio"]')].find(
+    (o) => o.getAttribute('aria-label') === 'Custom color',
+  ) as HTMLElement
+  expect(trigger).not.toBeNull()
+  fireEvent.click(trigger)
 
-  fireEvent.change(hexInput, { target: { value: '#ff00aa' } })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="custom-color-panel"]')).not.toBeNull(),
+  )
+  // A real saturation/hue picker is present, not a bare native input.
+  expect(container.querySelector('.react-colorful')).not.toBeNull()
+
+  const hexInput = container.querySelector(
+    '[data-testid="custom-color-panel"] input',
+  ) as HTMLInputElement
+  fireEvent.change(hexInput, { target: { value: 'ff00aa' } })
   await vi.waitFor(() =>
     expect(latest.canvas.nodes.find((n) => n.id === 'n1')?.color).toBe('#ff00aa'),
   )
