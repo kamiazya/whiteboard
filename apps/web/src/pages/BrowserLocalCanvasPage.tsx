@@ -1,3 +1,4 @@
+import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { Copy, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -95,6 +96,21 @@ function persistenceLabel(status: BrowserLocalPersistenceState): string {
     case 'degraded':
       return status.message
   }
+}
+
+/**
+ * The core meta to show when a canvas has none stored yet — every canvas
+ * that predates the facet bar, which is all of them.
+ *
+ * `title` is seeded from the canvas NAME rather than left blank: the two are
+ * one concept, so a canvas already called "Diagram A" must show that as its
+ * title, not an empty box the user has to retype. `untitled` is the list's
+ * placeholder for an unnamed canvas, so it stays a placeholder here instead
+ * of becoming a real stored title on the first unrelated edit.
+ */
+function fallbackCoreMeta(kind: CanvasSnapshot['kind'], name: string | null): CanvasCoreMeta {
+  const title = name && name !== 'untitled' ? name : undefined
+  return { type: kind, ...(title ? { title } : {}) }
 }
 
 export function BrowserLocalCanvasPage({
@@ -266,6 +282,8 @@ export function BrowserLocalCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    coreFacets,
+    setCoreFacets,
   } = useCanvasSync(backend)
 
   // The seams themselves are backend-agnostic (see use-canvas-file-seams.ts);
@@ -485,7 +503,7 @@ export function BrowserLocalCanvasPage({
             <div className="flex h-full min-h-0 flex-col">
               <CanvasProperties
                 key={canvasId ?? 'no-canvas'}
-                meta={markdownDoc.coreMeta}
+                meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
                 onChange={(next) => {
                   markdownDoc.setCoreMeta(next)
                   // title and the canvas name are ONE concept: the facet is
@@ -515,38 +533,58 @@ export function BrowserLocalCanvasPage({
             </div>
           )
         ) : (
-          // Keyed on canvas identity: the editor's pan/zoom, in-flight
-          // gesture and open text editor all describe ONE canvas, and
-          // `SpatialCanvas` carries no id for the editor to notice a switch
-          // by. Without the key, switching canvases silently inherits the
-          // previous canvas's viewport. (The markdown branch keys for the
-          // same reason.)
-          <SpatialEditor
-            key={canvasId ?? 'no-canvas'}
-            canvas={canvas}
-            onChange={onChange}
-            externalVersion={externalVersion}
-            theme={resolvedTheme}
-            // File-node reference = browser-local canvas id; the current
-            // canvas is excluded (a self-reference card is pure noise).
-            fileRefOptions={canvases
-              .filter((entry) => entry.id !== canvasId)
-              .map((entry) => ({ file: entry.id, label: entry.name }))}
-            onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
-            {...fileSeams}
-            lockedNodeIds={lockedNodeIds}
-            lockedEdgeIds={lockedEdgeIds}
-            onToggleNodeLock={setNodeLock}
-            onToggleEdgeLock={setEdgeLock}
-            paletteLeading={
-              <HistoryCluster
-                onUndo={() => void undo()}
-                onRedo={() => void redo()}
-                canUndo={canUndo()}
-                canRedo={canRedo()}
+          <div className="flex h-full min-h-0 flex-col">
+            {/* Same bar as the markdown branch. A spatial canvas has no body
+                to sit above, so it sits above the viewport instead — the
+                facets belong to the CANVAS, not to either editor. */}
+            <CanvasProperties
+              key={canvasId ?? 'no-canvas'}
+              meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}
+              onChange={(next) => {
+                setCoreFacets(next)
+                if (next.title !== coreFacets?.title) {
+                  void renameCanvas(next.title ?? '').catch(() => {
+                    // Surfaced through persistence state; the facet write is
+                    // independent and has already landed in the document.
+                  })
+                }
+              }}
+            />
+            <div className="relative min-h-0 flex-1">
+              {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
+                  gesture and open text editor all describe ONE canvas, and
+                  `SpatialCanvas` carries no id for the editor to notice a
+                  switch by. Without the key, switching canvases silently
+                  inherits the previous canvas's viewport. (The markdown
+                  branch keys for the same reason.) */}
+              <SpatialEditor
+                key={canvasId ?? 'no-canvas'}
+                canvas={canvas}
+                onChange={onChange}
+                externalVersion={externalVersion}
+                theme={resolvedTheme}
+                // File-node reference = browser-local canvas id; the current
+                // canvas is excluded (a self-reference card is pure noise).
+                fileRefOptions={canvases
+                  .filter((entry) => entry.id !== canvasId)
+                  .map((entry) => ({ file: entry.id, label: entry.name }))}
+                onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
+                {...fileSeams}
+                lockedNodeIds={lockedNodeIds}
+                lockedEdgeIds={lockedEdgeIds}
+                onToggleNodeLock={setNodeLock}
+                onToggleEdgeLock={setEdgeLock}
+                paletteLeading={
+                  <HistoryCluster
+                    onUndo={() => void undo()}
+                    onRedo={() => void redo()}
+                    canUndo={canUndo()}
+                    canRedo={canRedo()}
+                  />
+                }
               />
-            }
-          />
+            </div>
+          </div>
         )}
         {/* Markdown canvases keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial

@@ -8,8 +8,10 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import {
+  readCoreFacets,
   readSpatialCanvas,
   setNodeLock,
+  writeCoreFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-canvas-workspace'
 import type {
@@ -1027,6 +1029,88 @@ describe('createCanvasSyncSession', () => {
       const result = readSpatialCanvas(merged)
       expect(result.edges).toEqual([])
       expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ text: 'renamed-by-peer' })
+    })
+  })
+
+  // Core facets live in the doc's own sidecar map exactly like a lock: never
+  // part of the canvas VALUE, so they must not publish a canvas, and the
+  // consumer only learns about them through a subscription — which is why
+  // hydration has to notify.
+  describe('core facets', () => {
+    it('hydration reports the persisted facets, not the default (reload regression)', () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+
+      const doc = new LoroDoc()
+      writeSpatialCanvas(doc, twoNodeCanvas())
+      writeCoreFacets(doc, { type: 'diagram', title: 'Stored title' })
+      const listener = vi.fn()
+      session.subscribeCoreFacets(listener)
+
+      backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+      expect(session.getCoreFacets()).toEqual({ type: 'diagram', title: 'Stored title' })
+      expect(listener).toHaveBeenCalled()
+    })
+
+    it('reports undefined when the doc carries no core facets at all', () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+      expect(session.getCoreFacets()).toBeUndefined()
+    })
+
+    it('setCoreFacets pushes to peers and notifies, without publishing a canvas', async () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+      const canvasListener = vi.fn()
+      session.subscribe(canvasListener)
+      const facetListener = vi.fn()
+      session.subscribeCoreFacets(facetListener)
+      const pushesBefore = backend._ctrl.pushLocalUpdateCalls.length
+
+      session.setCoreFacets({ type: 'diagram', title: 'Renamed' })
+      await Promise.resolve()
+
+      expect(session.getCoreFacets()).toEqual({ type: 'diagram', title: 'Renamed' })
+      expect(facetListener).toHaveBeenCalled()
+      // A facet is not a canvas value — republishing would make the editor
+      // re-render its whole scene for a title edit.
+      expect(canvasListener).not.toHaveBeenCalled()
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(pushesBefore)
+    })
+
+    it('leaves the canvas value untouched when facets are written', () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+      // The canvas arrives as a snapshot; only the facet write travels as a
+      // pushed update, so a peer's view is snapshot THEN updates.
+      const snapshot = makeSnapshot(twoNodeCanvas())
+      backend._ctrl.handlers!.onSnapshot(snapshot)
+
+      session.setCoreFacets({ type: 'diagram', title: 'Renamed' })
+
+      const peer = new LoroDoc()
+      peer.import(snapshot)
+      for (const update of backend._ctrl.pushLocalUpdateCalls) peer.import(update)
+      expect(readSpatialCanvas(peer).nodes).toHaveLength(twoNodeCanvas().nodes.length)
+      expect(readCoreFacets(peer)).toEqual({ type: 'diagram', title: 'Renamed' })
+    })
+
+    it('is a no-op before a doc exists rather than throwing', () => {
+      const backend = makeFakeBackend()
+      const session = createCanvasSyncSession(backend, makeDeps())
+      session.connect()
+
+      expect(() => session.setCoreFacets({ type: 'diagram' })).not.toThrow()
+      expect(session.getCoreFacets()).toBeUndefined()
     })
   })
 

@@ -204,6 +204,46 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     })
   })
 
+  it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
+    const store = new IndexedDBStore()
+    await store.setDefaultCanvasId('spatial-1')
+    await store.save({
+      id: 'spatial-1',
+      name: 'Diagram A',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
+    const first = render(<BrowserLocalCanvasPage store={store} />)
+    await screen.findByTestId('mock-spatial-editor')
+
+    // Facets belong to the CANVAS, so a spatial canvas has the bar too —
+    // its document just lives behind the sync session's delta protocol
+    // rather than the markdown hook's snapshot save.
+    const title = await screen.findByRole('textbox', { name: /title/i }, { timeout: 10_000 })
+    // A canvas that predates the facet bar shows its NAME as the title, not
+    // an empty box the user would have to retype.
+    expect((title as HTMLInputElement).value).toBe('Diagram A')
+
+    await userEvent.click(title)
+    await userEvent.keyboard('{Control>}a{/Control}')
+    await userEvent.keyboard('Architecture map')
+    // Regex rather than an exact name: the switcher's accessible name carries
+    // more than its label text, so a full-string match asserts the wrong thing.
+    await screen.findByRole('button', { name: /Architecture map/ }, { timeout: 10_000 })
+
+    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    first.unmount()
+
+    render(<BrowserLocalCanvasPage store={store} />)
+    await waitFor(
+      () => {
+        const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+        expect(restored.value).toBe('Architecture map')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
   it('spatial canvases still open the spatial editor after a markdown note exists', async () => {
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is
