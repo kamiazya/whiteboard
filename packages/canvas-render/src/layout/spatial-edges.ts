@@ -36,23 +36,96 @@ function sidePoint(rect: Rect, side: Side): Point {
   }
 }
 
+/** Strict interior: a point exactly on the border is NOT inside, so a node
+ * merely touching another (tidy adjacent layouts) never reads as occluding. */
+function strictlyInside(rect: Rect, point: Point): boolean {
+  return (
+    point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
+  )
+}
+
+function fullyContains(outer: Rect, inner: Rect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.w <= outer.x + outer.w &&
+    inner.y + inner.h <= outer.y + outer.h
+  )
+}
+
+function oppositeSide(side: Side): Side {
+  switch (side) {
+    case 'top':
+      return 'bottom'
+    case 'bottom':
+      return 'top'
+    case 'left':
+      return 'right'
+    case 'right':
+      return 'left'
+  }
+}
+
+/**
+ * Side preference for the FROM end, best first: the side facing the other
+ * node on the dominant axis (the pre-existing default, so an unoccluded
+ * canvas keeps its exact old sides), then the facing side of the other
+ * axis, then their opposites. Ties (equal offsets) prefer the horizontal
+ * axis — the same fixed tie-breaker the default derivation always had.
+ */
+function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] {
+  const h: Side = dx >= 0 ? 'right' : 'left'
+  const v: Side = dy >= 0 ? 'bottom' : 'top'
+  return Math.abs(dx) >= Math.abs(dy)
+    ? [h, v, oppositeSide(v), oppositeSide(h)]
+    : [v, h, oppositeSide(h), oppositeSide(v)]
+}
+
 /**
  * Deterministic default-side derivation for an edge with no explicit
- * fromSide/toSide: pick the axis with the larger center-to-center offset,
- * then the side facing the other node along that axis. Ties (equal
- * horizontal/vertical offset) prefer the horizontal axis — a fixed,
- * arbitrary-but-stable tie-breaker.
+ * fromSide/toSide, occlusion-aware: the preferred side is the pre-existing
+ * center-offset derivation, but a side whose midpoint anchor sits strictly
+ * INSIDE another node is skipped for the first exposed one. The endpoint
+ * rects themselves are never obstacles (the edge has to reach them), so an
+ * occluded anchor means the route legally cuts straight through the
+ * occluding node — moving to an exposed side is what keeps it outside.
+ *
+ * Not occluders: the edge's other endpoint (entering the shared region IS
+ * the edge's job), and any rect fully containing the endpoint node (a
+ * group frame around its member occludes every side equally, which says
+ * nothing about which side to prefer). With every side occluded the
+ * derivation falls back to the preferred side, so fully-boxed-in nodes
+ * keep the old behaviour.
  */
-function deriveDefaultSides(fromRect: Rect, toRect: Rect): { fromSide: Side; toSide: Side } {
+function deriveDefaultSides(
+  nodes: readonly SpatialNode[],
+  edge: CanvasEdge,
+  fromRect: Rect,
+  toRect: Rect,
+): { fromSide: Side; toSide: Side } {
   const fromCenter = centerOf(fromRect)
   const toCenter = centerOf(toRect)
   const dx = toCenter.x - fromCenter.x
   const dy = toCenter.y - fromCenter.y
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? { fromSide: 'right', toSide: 'left' } : { fromSide: 'left', toSide: 'right' }
+  const fromCandidates = facingSides(dx, dy)
+  // The to end's preferences mirror the from end's (the old derivation
+  // always returned opposite pairs), each end then skipping occlusion
+  // independently.
+  const toCandidates = fromCandidates.map(oppositeSide) as unknown as readonly [
+    Side,
+    Side,
+    Side,
+    Side,
+  ]
+  const foreign = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  const pick = (rect: Rect, candidates: readonly Side[]): Side => {
+    const occluders = foreign.filter((r) => !fullyContains(r, rect))
+    return (
+      candidates.find((side) => !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))) ??
+      candidates[0]!
+    )
   }
-  return dy >= 0 ? { fromSide: 'bottom', toSide: 'top' } : { fromSide: 'top', toSide: 'bottom' }
+  return { fromSide: pick(fromRect, fromCandidates), toSide: pick(toRect, toCandidates) }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
@@ -157,7 +230,7 @@ export function assignEdgeAnchors(
     const derived =
       edge.fromNode === edge.toNode
         ? { fromSide: 'right' as Side, toSide: 'right' as Side }
-        : deriveDefaultSides(fromRect, toRect)
+        : deriveDefaultSides(nodes, edge, fromRect, toRect)
     const ends: End[] = [
       {
         edgeId: edge.id,
@@ -462,7 +535,7 @@ export function routeEdge(
     }
   }
 
-  const derived = deriveDefaultSides(fromRect, toRect)
+  const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
   const fromSide = edge.fromSide ?? derived.fromSide
   const toSide = edge.toSide ?? derived.toSide
 

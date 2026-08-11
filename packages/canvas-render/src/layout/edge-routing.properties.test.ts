@@ -223,3 +223,61 @@ describe('routing properties: anchor fan-out', () => {
     },
   )
 })
+
+// Occlusion-aware side selection. The generator packs chunky boxes onto a
+// tight grid so overlap — and therefore an occluded default anchor — is
+// the common case (vacuous-generator rule; the mutation check is reverting
+// side selection to ignore occlusion, which must go red).
+const packedScenario = fc.record({
+  rects: fc.array(
+    fc.record({
+      x: fc.constantFrom(0, 40, 80, 120, 160),
+      y: fc.constantFrom(0, 40, 80, 120),
+      w: fc.constantFrom(60, 100, 140),
+      h: fc.constantFrom(60, 100, 140),
+    }),
+    { minLength: 3, maxLength: 6 },
+  ),
+  fromIndex: fc.nat({ max: 5 }),
+  toIndex: fc.nat({ max: 5 }),
+})
+
+describe('routing properties: occlusion-aware sides', () => {
+  fcTest.prop([packedScenario], withDefaults())(
+    'a derived side anchor is never strictly inside a foreign node unless every side is',
+    ({ rects, fromIndex, toIndex }) => {
+      const nodes = rects.map((r, i) => node(`n${i}`, 'text', r))
+      const from = nodes[fromIndex % nodes.length]!
+      const to = nodes[toIndex % nodes.length]!
+      if (from.id === to.id) return
+      const routed = routeEdge(nodes, { id: 'e', fromNode: from.id, toNode: to.id }, 'straight')
+
+      const sidePoint = (n: SpatialNode, side: string) => {
+        if (side === 'top') return { x: n.x + n.width / 2, y: n.y }
+        if (side === 'bottom') return { x: n.x + n.width / 2, y: n.y + n.height }
+        if (side === 'left') return { x: n.x, y: n.y + n.height / 2 }
+        return { x: n.x + n.width, y: n.y + n.height / 2 }
+      }
+      const strictlyInside = (r: SpatialNode, p: { x: number; y: number }) =>
+        p.x > r.x && p.x < r.x + r.width && p.y > r.y && p.y < r.y + r.height
+      const check = (self: SpatialNode, side: string) => {
+        const occluders = nodes.filter(
+          (n) =>
+            n.id !== from.id &&
+            n.id !== to.id &&
+            !(
+              self.x >= n.x &&
+              self.y >= n.y &&
+              self.x + self.width <= n.x + n.width &&
+              self.y + self.height <= n.y + n.height
+            ),
+        )
+        const occluded = (s: string) => occluders.some((o) => strictlyInside(o, sidePoint(self, s)))
+        const allOccluded = ['top', 'right', 'bottom', 'left'].every(occluded)
+        expect(allOccluded || !occluded(side)).toBe(true)
+      }
+      check(from, routed.fromSide)
+      check(to, routed.toSide)
+    },
+  )
+})
