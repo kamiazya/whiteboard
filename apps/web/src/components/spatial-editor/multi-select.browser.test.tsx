@@ -2,7 +2,7 @@
 // Marquee selection is deliberately deferred — it needs the pan-gesture
 // decision recorded on the task. Real pointer input throughout.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -180,6 +180,96 @@ it('dragging a non-primary member moves the primary too', async () => {
       c: [540, 120],
     })
   })
+})
+
+// Right-clicking OUTSIDE the selection must behave like left-clicking
+// outside it: the selection collapses to the target. Keeping the old
+// extras alongside a brand-new primary made later move/delete operations
+// silently act on nodes the user thought were deselected.
+it('a context-menu press on a non-member collapses the selection to it', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  press(root, 150, 130)
+  await frame()
+  press(root, 350, 130, { shift: true })
+  await frame()
+
+  // Right-click the unrelated node c.
+  const r = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.left + 550,
+      clientY: r.top + 130,
+      button: 2,
+    }),
+  )
+  await frame()
+
+  // No surviving extras: the menu offers no multi-selection actions.
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull(),
+  )
+  const items = [...container.querySelectorAll('[data-testid="context-menu"] [role="menuitem"]')]
+  expect(items.length).toBeGreaterThan(0)
+  expect(items.some((el) => (el.textContent ?? '').includes('Group selection'))).toBe(false)
+})
+
+// Creating from the palette while a multi-selection exists selects ONLY
+// the new node — the old extras must not ride along into the next move.
+it('palette creation replaces the whole selection with the new node', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  press(root, 150, 130)
+  await frame()
+  press(root, 350, 130, { shift: true })
+  await frame()
+
+  fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
+  fireEvent.click(
+    [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
+      (b) => b.getAttribute('aria-label') === 'Add note',
+    ) as HTMLElement,
+  )
+  await vi.waitFor(() => expect(latest.nodes.length).toBe(4))
+  const created = latest.nodes.find((n) => !['a', 'b', 'c'].includes(n.id)) as {
+    id: string
+    x: number
+    y: number
+  }
+
+  // Drag the new node; a and b must stay put.
+  const cr = root.getBoundingClientRect()
+  const grab = { x: created.x + 20, y: created.y + 20 }
+  fireEvent.pointerDown(root, {
+    pointerId: 8,
+    clientX: cr.left + grab.x,
+    clientY: cr.top + grab.y,
+    buttons: 1,
+  })
+  await frame()
+  fireEvent.pointerMove(root, {
+    pointerId: 8,
+    clientX: cr.left + grab.x + 30,
+    clientY: cr.top + grab.y + 30,
+    buttons: 1,
+  })
+  await frame()
+  fireEvent.pointerUp(root, {
+    pointerId: 8,
+    clientX: cr.left + grab.x + 30,
+    clientY: cr.top + grab.y + 30,
+  })
+
+  await vi.waitFor(() => {
+    const moved = latest.nodes.find((n) => n.id === created.id)
+    expect(moved?.x).not.toBe(created.x)
+  })
+  expect(latest.nodes.find((n) => n.id === 'a')).toMatchObject({ x: 100, y: 100 })
+  expect(latest.nodes.find((n) => n.id === 'b')).toMatchObject({ x: 300, y: 100 })
 })
 
 it('Delete removes every member of the multi-selection', async () => {

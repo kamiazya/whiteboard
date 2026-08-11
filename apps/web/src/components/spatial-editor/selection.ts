@@ -72,7 +72,10 @@ export function reduceSelection(state: SelectionState, event: SelectionEvent): S
       return { primaryId: state.primaryId, extraIds: extras }
     }
     case 'set-members': {
-      const [primary, ...rest] = event.ids
+      // Deduped defensively: a duplicated first id would otherwise sit as
+      // both primary and extra, violating I1 — the reducer is the invariant
+      // guarantor, not its callers.
+      const [primary, ...rest] = [...new Set(event.ids)]
       return { primaryId: primary ?? null, extraIds: new Set(rest) }
     }
     case 'promote': {
