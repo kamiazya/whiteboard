@@ -102,7 +102,7 @@ describe('docs snapshot — workspace list (renamed)', () => {
       if (!titleText.includes('Auth signup flow')) {
         throw new Error('renamed canvas display name not yet rendered')
       }
-      const cards = container.querySelectorAll('[data-testid="daemon-index-canvas-card"]')
+      const cards = container.querySelectorAll('[data-testid="canvas-list-card"]')
       if (cards.length !== 3) throw new Error('canvas grid not yet rendered')
       if (thumbnailFetchCount < 3) throw new Error('thumbnail fetches not yet started')
     })

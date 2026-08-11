@@ -1,7 +1,8 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
-import { ConflictError, canvasExists, saveCanvas } from '../../store/canvas-store.js'
+import { ConflictError, canvasExists, getCanvasKind, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import {
@@ -32,6 +33,7 @@ async function reconcileCommitSaveBroadcast(
   doc: LoroDoc,
   past: LoroDoc,
   label: string | undefined,
+  kind: CanvasKind | null = null,
 ): Promise<void> {
   const { sendRestoreEvent } = await import('../ws.js')
   sendRestoreEvent(workspaceId, targetSlug, 'started', label)
@@ -40,7 +42,10 @@ async function reconcileCommitSaveBroadcast(
     try {
       doc.import(past.export({ mode: 'snapshot' }))
       doc.commit()
-      await saveCanvas(workspaceId, targetSlug, doc, { overwrite: true })
+      await saveCanvas(workspaceId, targetSlug, doc, {
+        overwrite: true,
+        ...(kind !== null ? { kind } : {}),
+      })
     } catch (err) {
       // doc.import mutates the cached doc in place before commit/save
       // run, so any failure in this block leaves the cache ahead of
@@ -150,7 +155,20 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           const all = await versionStore.list(workspaceId, slug)
           const label = all.find((v) => v.id === id)?.label
           const targetDoc = await getDoc(workspaceId, targetSlug)
-          await reconcileCommitSaveBroadcast(workspaceId, targetSlug, targetDoc, past, label)
+          // The merged content is the source's own shape (spatial nodes/edges
+          // vs. a markdown body), same reasoning as the new-canvas branch
+          // below — the target's stored kind must follow it or a kind-aware
+          // consumer (editor routing) opens the overwritten canvas with the
+          // wrong editor.
+          const sourceKind = await getCanvasKind(workspaceId, slug)
+          await reconcileCommitSaveBroadcast(
+            workspaceId,
+            targetSlug,
+            targetDoc,
+            past,
+            label,
+            sourceKind,
+          )
           return c.json({
             canvasId: `${workspaceId}/${targetSlug}`,
             elementCount: countElements(targetDoc),
@@ -158,9 +176,17 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         }
 
         // Genuinely new canvas: no live doc and no connected clients, so
-        // there is nothing to reconcile against.
+        // there is nothing to reconcile against. The restored content is
+        // whatever the source canvas actually stores (spatial nodes/edges
+        // maps vs. a markdown 'body' text container), so the new row must
+        // carry the source's own kind rather than falling back to the
+        // saveCanvas default.
         try {
-          await saveCanvas(workspaceId, targetSlug, past, { overwrite: false })
+          const sourceKind = await getCanvasKind(workspaceId, slug)
+          await saveCanvas(workspaceId, targetSlug, past, {
+            overwrite: false,
+            ...(sourceKind !== null ? { kind: sourceKind } : {}),
+          })
         } catch (err) {
           if (err instanceof ConflictError) {
             return c.json(

@@ -921,11 +921,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return undefined
       }
       const liveNodes = [...liveNodesFor(canvas, gestureState, dragPreview.box, dragStatic.carried)]
-      // Sides FROZEN at their committed choices for the whole gesture:
-      // per-frame crossing optimization would both blow the frame budget
-      // and let routes flip sides mid-drag. Anchors and lanes still track
-      // the moved geometry; the drop's committed render re-optimizes.
-      const frozenSides = frozenSidesOf(scene)
+      // BYSTANDER sides stay frozen at their committed choices for the whole
+      // gesture: per-frame crossing optimization would both blow the frame
+      // budget and let unrelated routes flip sides mid-drag. Edges attached
+      // to a CARRIED node are exempt — their geometry is the thing changing,
+      // and a side frozen at gesture start points out of the wrong face for
+      // most of the drag, only to jump at drop. Leaving them out of the
+      // override map re-picks their sides per frame via the cheap local
+      // heuristic (the optimization loop stays skipped either way); the
+      // drop's committed render still runs the full optimization.
+      const carried = dragStatic.carried
+      const carriedEdgeIds = new Set(
+        canvas.edges
+          .filter((edge) => carried.has(edge.fromNode) || carried.has(edge.toNode))
+          .map((edge) => edge.id),
+      )
+      const frozenSides = new Map(
+        [...frozenSidesOf(scene)].filter(([id]) => !carriedEdgeIds.has(id)),
+      )
       const nodes = layoutSpatialEdges(
         { ...canvas, nodes: liveNodes },
         {

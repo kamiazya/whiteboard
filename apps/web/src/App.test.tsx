@@ -2,7 +2,7 @@ import { resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from './App.js'
+import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 // App reaches every page through React.lazy(), so a page renders only once
@@ -983,5 +983,18 @@ describe('App error boundary', () => {
       mockDaemonConnectionResult = { status: 'none' }
       reportSpy.mockRestore()
     }
+  })
+})
+
+describe('lazy page fallback', () => {
+  // Suspense commits this before a lazy page chunk resolves, so this IS the
+  // loading state: the structural page skeleton (pulsing header + canvas
+  // placeholders), not a bare line of centered text. Tested directly —
+  // through <App> the lazy chunks resolve once per module, so only the
+  // file's first render could ever observe the fallback.
+  it('renders the structural page skeleton with the message as its label', () => {
+    const { container } = render(<LazyPageFallback heightClass="h-full" message="Loading…" />)
+    expect(screen.getByLabelText('Loading…')).toBeTruthy()
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
   })
 })

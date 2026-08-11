@@ -83,6 +83,13 @@ drafts with generated titles — **do not use `--auto` here**, because every tit
 future squash-commit message and must be a Conventional Commit (see the PR Title Rule
 in AGENTS.md). `gh stack submit` re-run later updates existing PRs and their bases.
 
+In a non-interactive session (no editor), `gh stack submit` behaves like `--auto`:
+it creates the PR with a generated, non-Conventional title (the branch name with
+hyphens as spaces). Fix it immediately with `gh pr edit <n> --title "feat(...): ..."`
+— the `pr-title` check listens for the `edited` event, so the corrected title
+re-validates on its own; nothing else re-runs. Do NOT `gh run rerun` a failed title
+check: reruns re-read the ORIGINAL event payload and can never see the new title.
+
 ## Keeping the stack current
 
 When `main` moves:

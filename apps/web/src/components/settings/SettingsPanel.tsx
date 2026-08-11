@@ -1,6 +1,6 @@
-import { Monitor, Moon, Palette, Sun } from 'lucide-react'
+import { Grid2x2, Monitor, Moon, Palette, Sun, Waves } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useCallback, useId } from 'react'
+import { useCallback, useId, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { ThemeMode } from '@/hooks/useThemeMode'
+import type { FaviconStyle } from '@/lib/favicon'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 
 interface SettingsPanelProps {
@@ -18,6 +19,7 @@ interface SettingsPanelProps {
   onThemeChange: (next: ThemeMode) => void
   webMcpEnabled: boolean
   onWebMcpChange?: (enabled: boolean) => void
+  onFaviconStyleChange?: (style: FaviconStyle) => void
   // Host-supplied operational sections: the daemon
   // index passes its Paired-web-apps and Storage cards here so those
   // surfaces live under Settings instead of a top-level tab. Browser-local
@@ -31,6 +33,11 @@ const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }
   { value: 'system', label: 'System', icon: Monitor },
 ]
 
+const FAVICON_OPTIONS: Array<{ value: FaviconStyle; label: string; icon: typeof Sun }> = [
+  { value: 'minimap', label: 'Minimap', icon: Grid2x2 },
+  { value: 'dot', label: 'Dot only', icon: Waves },
+]
+
 const settingsStore = createUserSettingsStore()
 
 export function SettingsPanel({
@@ -40,9 +47,25 @@ export function SettingsPanel({
   onThemeChange,
   webMcpEnabled,
   onWebMcpChange,
+  onFaviconStyleChange,
   extraSections,
 }: SettingsPanelProps) {
   const themeGroupId = useId()
+  const faviconGroupId = useId()
+  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
+    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
+  )
+  const handleFaviconStyle = useCallback(
+    (next: FaviconStyle) => {
+      setFaviconStyle(next)
+      settingsStore.update((s) => ({
+        ...s,
+        appearance: { ...s.appearance, faviconStyle: next },
+      }))
+      onFaviconStyleChange?.(next)
+    },
+    [onFaviconStyleChange],
+  )
   const webMcpLabelId = useId()
   const webMcpDescId = useId()
 
@@ -87,6 +110,39 @@ export function SettingsPanel({
                     onClick={() => onThemeChange(value)}
                     className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-2.5 text-xs transition-colors ${
                       theme === value
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="mt-4">
+              <legend className="mb-2 text-xs text-muted-foreground">
+                Tab icon — Minimap mirrors the canvas content; Dot only keeps the plain mark. Both
+                carry the save/sync status dot.
+              </legend>
+              <div
+                className="grid grid-cols-2 gap-2"
+                role="radiogroup"
+                aria-labelledby={faviconGroupId}
+              >
+                <span id={faviconGroupId} className="sr-only">
+                  Tab icon
+                </span>
+                {FAVICON_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  // biome-ignore lint/a11y/useSemanticElements: same WAI-ARIA button-as-radio pattern as the theme picker above
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={faviconStyle === value}
+                    onClick={() => handleFaviconStyle(value)}
+                    className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-2.5 text-xs transition-colors ${
+                      faviconStyle === value
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
                     }`}

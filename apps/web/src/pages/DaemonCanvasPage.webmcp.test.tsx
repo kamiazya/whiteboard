@@ -70,7 +70,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
   beforeEach(() => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', updatedAt: '2026-01-01' }],
+      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 

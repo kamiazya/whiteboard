@@ -15,4 +15,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0002-canvases-last-compacted-at',
   '0003-canvas-doc-store',
   '0004-workspace-index',
+  '0005-canvases-kind',
 ] as const satisfies readonly string[]

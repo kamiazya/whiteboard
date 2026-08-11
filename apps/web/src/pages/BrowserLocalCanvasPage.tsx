@@ -31,6 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
@@ -38,6 +39,7 @@ import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
+import { browserLocalFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -319,6 +321,27 @@ export function BrowserLocalCanvasPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
+  // Tab favicon: persistence state as the status dot (degraded reads as
+  // offline — data is at risk either way), scene content as the minimap.
+  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
+    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
+  )
+  useFavicon({
+    style: faviconStyle,
+    status: browserLocalFaviconStatus(persistence.kind),
+    rects: useMemo(
+      () =>
+        canvas.nodes.map((n) => ({
+          x: n.x,
+          y: n.y,
+          w: n.width,
+          h: n.height,
+          color: resolveRectColor(n.color),
+        })),
+      [canvas.nodes],
+    ),
+  })
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -633,6 +656,7 @@ export function BrowserLocalCanvasPage({
         onThemeChange={setTheme}
         webMcpEnabled={webMcpEnabled}
         onWebMcpChange={setWebMcpEnabled}
+        onFaviconStyleChange={setFaviconStyle}
       />
     </main>
   )

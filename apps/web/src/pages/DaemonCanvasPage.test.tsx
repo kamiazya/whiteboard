@@ -99,8 +99,8 @@ describe('DaemonCanvasPage', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'main', updatedAt: '2026-01-01' },
-        { slug: 'second', updatedAt: '2026-01-02' },
+        { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
   })
@@ -208,12 +208,14 @@ describe('DaemonCanvasPage', () => {
       })
       mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
         if (workspaceId === 'w2') {
-          return Promise.resolve({ canvases: [{ slug: 'w2-main', updatedAt: '2026-02-01' }] })
+          return Promise.resolve({
+            canvases: [{ slug: 'w2-main', updatedAt: '2026-02-01', kind: 'spatial' }],
+          })
         }
         return Promise.resolve({
           canvases: [
-            { slug: 'main', updatedAt: '2026-01-01' },
-            { slug: 'second', updatedAt: '2026-01-02' },
+            { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+            { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
         })
       })
@@ -253,8 +255,8 @@ describe('DaemonCanvasPage', () => {
         if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
         return Promise.resolve({
           canvases: [
-            { slug: 'main', updatedAt: '2026-01-01' },
-            { slug: 'second', updatedAt: '2026-01-02' },
+            { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+            { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
         })
       })
@@ -287,8 +289,8 @@ describe('DaemonCanvasPage', () => {
       })
       mockListCanvases.mockResolvedValueOnce({
         canvases: [
-          { slug: 'main', updatedAt: '2026-01-01' },
-          { slug: 'second', updatedAt: '2026-01-02' },
+          { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+          { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
       })
 
@@ -516,8 +518,8 @@ describe('DaemonCanvasPage', () => {
       if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
       return Promise.resolve({
         canvases: [
-          { slug: 'main', updatedAt: '2026-01-01' },
-          { slug: 'second', updatedAt: '2026-01-02' },
+          { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+          { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
       })
     })
@@ -682,7 +684,7 @@ describe('DaemonCanvasPage', () => {
     mockListCanvases.mockResolvedValueOnce({ canvases: [] })
     mockCreateCanvas.mockResolvedValue({ slug: 'untitled' })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'untitled', updatedAt: '2026-01-03' }],
+      canvases: [{ slug: 'untitled', updatedAt: '2026-01-03', kind: 'spatial' }],
     })
 
     await act(async () => {

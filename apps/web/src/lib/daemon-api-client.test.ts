@@ -142,7 +142,12 @@ describe('listCanvases', () => {
       .fn()
       .mockResolvedValue(jsonResponse({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] }))
     const result = await listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')
-    expect(result).toEqual({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] })
+    // kind is absent from the mocked daemon response (pre-change shape) and
+    // defaults to 'spatial' — the back-compat rule that lets a new client
+    // parse an old daemon's kind-less list.
+    expect(result).toEqual({
+      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    })
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
@@ -171,6 +176,20 @@ describe('createCanvas', () => {
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
     await expect(createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
+  })
+
+  it('sends kind in the POST body when given, omits it otherwise', async () => {
+    const sentBody = (fetchFn: ReturnType<typeof vi.fn>) => {
+      const init = fetchFn.mock.calls[0]![1] as RequestInit
+      return JSON.parse(init.body as string)
+    }
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ slug: 'x' }))
+    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
+    expect(sentBody(fetchFn)).toEqual({ slug: 'x', kind: 'markdown' })
+    fetchFn.mockClear()
+    fetchFn.mockResolvedValue(jsonResponse({ slug: 'y' }))
+    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
+    expect(sentBody(fetchFn)).toEqual({ slug: 'y' })
   })
 })
 

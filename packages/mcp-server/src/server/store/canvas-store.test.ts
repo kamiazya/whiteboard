@@ -26,6 +26,7 @@ const {
   scheduleAutoCompact,
   setAutoCompactTrigger,
   disposeAutoCompact,
+  getCanvasKind,
   _inFlightAutoCompactCountForTests,
   _isDisposingAutoCompactForTests,
 } = await import('./canvas-store.js')
@@ -295,6 +296,32 @@ describe('listCanvases', () => {
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
+  it('persists kind: markdown and lists it back', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+  })
+
+  it('lists kind: spatial when saveCanvas is called without a kind option (back-compat)', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'canvas-a')?.kind).toBe('spatial')
+  })
+
+  it('does not reset kind on an overwrite:true re-save', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    await saveCanvas('session1', 'note', new LoroDoc(), { overwrite: true })
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+  })
+
+  it('syncs kind on an overwrite:true re-save when kind is explicitly passed', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'spatial' })
+    await saveCanvas('session1', 'note', new LoroDoc(), { overwrite: true, kind: 'markdown' })
+    const list = await listCanvases('session1')
+    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+  })
+
   it('recursively lists nested slugs as session-relative paths', async () => {
     await saveCanvas('session1', 'top-level', new LoroDoc())
     await saveCanvas('session1', '621/header', new LoroDoc())
@@ -327,6 +354,34 @@ describe('listCanvases', () => {
   // tests against directory traversal failures and broken non-directory
   // paths no longer apply now that the listing is a SELECT against the
   // canvases table.
+})
+
+describe('getCanvasKind', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('returns null when the canvas does not exist', async () => {
+    expect(await getCanvasKind('session1', 'missing')).toBeNull()
+  })
+
+  it('returns the persisted kind for an existing canvas', async () => {
+    await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    expect(await getCanvasKind('session1', 'note')).toBe('markdown')
+  })
+
+  it('defaults to spatial when saveCanvas was called without a kind option', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    expect(await getCanvasKind('session1', 'canvas-a')).toBe('spatial')
+  })
 })
 
 describe('saveCanvas / loadCanvas - slug validation', () => {

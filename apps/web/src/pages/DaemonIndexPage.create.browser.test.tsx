@@ -37,7 +37,12 @@ function stubFetch(onCreateCanvas: (workspaceId: string, slug: string) => void) 
         return Promise.resolve(jsonResponse({ slug: body.slug }))
       }
       if (canvasesMatch) {
-        return Promise.resolve(jsonResponse({ canvases: [] }))
+        // Non-empty: the toolbar (search + the New canvas menu trigger) only
+        // renders when the list has rows — an empty list shows the empty
+        // state instead.
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'existing', updatedAt: '2026-01-01T00:00:00Z' }] }),
+        )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     }),
@@ -57,7 +62,7 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
     await userEvent.unhover(button)
   })
 
-  it('reveals the tooltip on real keyboard focus, and Enter activates it', async () => {
+  it('reveals the tooltip on real keyboard focus, and Enter opens the kind menu whose entry creates', async () => {
     const created: Array<[string, string]> = []
     stubFetch((workspaceId, slug) => created.push([workspaceId, slug]))
     const onOpenCanvas = vi.fn()
@@ -75,6 +80,10 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
 
     await expect.element(page.getByRole('tooltip', { name: 'New canvas' })).toBeVisible()
 
+    // Enter opens the kind menu (focus lands on it), Enter again picks the
+    // focused "New canvas" entry — the whole creation is keyboard-reachable.
+    await userEvent.keyboard('{Enter}')
+    await expect.element(page.getByRole('menuitem', { name: 'New canvas' })).toBeVisible()
     await userEvent.keyboard('{Enter}')
     await expect.poll(() => created).toEqual([['ws-a', 'untitled']])
     await expect.poll(() => onOpenCanvas.mock.calls).toEqual([['ws-a', 'untitled']])

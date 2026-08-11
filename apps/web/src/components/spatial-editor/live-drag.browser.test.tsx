@@ -241,12 +241,13 @@ it('a multi-selection ghost carries every member, not only the grabbed node', as
   expect(container.querySelector('[data-testid="member-outlines"]')).toBeNull()
 })
 
-it('freezes edge sides at their committed choices for the whole drag', async () => {
+it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
   // Committed: yellow sits below-right of red, so the optimizer settles
   // orange onto red's RIGHT side. The drag hauls yellow far to red's LEFT
-  // — a fresh optimization of the moved canvas would flip the arrival to
-  // red's left side, so the live layer still routing to the RIGHT border
-  // is only explainable by the frozen committed sides.
+  // — the carried edge re-picks its sides per frame, so the live arrival
+  // flips to red's LEFT border mid-drag, matching where the drop lands
+  // instead of pointing out of the stale right side for the whole drag.
+  // (Bystander freezing is pinned in live-drag-side-tracking.)
   const crossing: SpatialCanvas = {
     nodes: [
       { id: 'red', type: 'text', x: 300, y: 100, width: 200, height: 100, text: 'Red' },
@@ -268,10 +269,10 @@ it('freezes edge sides at their committed choices for the whole drag', async () 
 
   const live = container.querySelector('[data-testid="live-edges"]')
   expect(live).not.toBeNull()
-  // The orange arrival still terminates ON red's right border (x = 500),
-  // exactly where the committed render put it.
+  // The orange arrival now terminates ON red's LEFT border (x = 300): the
+  // carried edge's fresh side choice, not the stale committed right side.
   const points = [...(live?.querySelectorAll('polyline') ?? [])].flatMap((p) =>
     (p.getAttribute('points') ?? '').split(' ').map((pair) => pair.split(',').map(Number)),
   )
-  expect(points.some(([x, y]) => x === 500 && y! >= 100 && y! <= 200)).toBe(true)
+  expect(points.some(([x, y]) => x === 300 && y! >= 100 && y! <= 200)).toBe(true)
 })
