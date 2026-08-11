@@ -317,3 +317,42 @@ describe('routing properties: zero-bend alignment', () => {
     },
   )
 })
+
+// Stub lane depth. All spokes sit far right of the hub, so every edge's
+// from-end lands in the hub's (right) group; each member must exit through
+// its own corridor (distinct stub x), lane 0 at exactly base depth, and no
+// stub ever inside the hub itself. Mutation check: reverting the depth to
+// the bare constant collapses every corridor onto one x.
+const laneScenario = fc.record({
+  count: fc.integer({ min: 1, max: 12 }),
+  // Per-spoke jitter only: spokes are stacked at y = 150 + i*130 (+ jitter),
+  // clear of the hub's own tangent span, so the zero-bend alignment can
+  // never absorb the stub and every route actually exits through one.
+  jitters: fc.array(fc.integer({ min: 0, max: 40 }), { minLength: 12, maxLength: 12 }),
+})
+
+describe('routing properties: stub lane depth', () => {
+  fcTest.prop([laneScenario], withDefaults())(
+    'every member of a shared side exits through a distinct corridor outside its node',
+    ({ count, jitters }) => {
+      const hub = node('hub', 'text', { x: 0, y: 0, w: 100, h: 100 })
+      const spokes = Array.from({ length: count }, (_, i) =>
+        node(`s${i}`, 'text', { x: 2000, y: 150 + i * 130 + jitters[i]!, w: 100, h: 100 }),
+      )
+      const edges: CanvasEdge[] = spokes.map((s, i) => ({
+        id: `e${i}`,
+        fromNode: 'hub',
+        toNode: s.id,
+      }))
+      const anchors = assignEdgeAnchors([hub, ...spokes], edges)
+      const exits = edges.map((e) => {
+        const routed = routeEdge([hub, ...spokes], e, 'orthogonal', anchors.get(e.id))
+        return routed.path[1]!.x
+      })
+      // The full lane ladder, not just uniqueness: base 120, step 12.
+      expect([...exits].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, i) => 120 + i * 12),
+      )
+    },
+  )
+})
