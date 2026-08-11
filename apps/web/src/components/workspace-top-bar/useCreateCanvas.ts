@@ -35,15 +35,21 @@ export function useCreateCanvas({
   mountedRef,
 }: UseCreateCanvasOptions) {
   const [newCanvasError, setNewCanvasError] = useState<string | null>(null)
-  // A ref, not state: state read from this closure is stale for a second call
+  // Two carriers on purpose: the STATE renders the accessible "Creating…"
+  // status (the deleted dialog's disabled Create button was the flow's only
+  // in-flight indication — accessibility criterion 5 requires an announced
+  // replacement), while the REF is the double-fire guard, because state read
+  // from this closure is stale for a second call
   // in the same tick, which is exactly the double-fire this guard exists to
   // stop (the same reasoning that removed the state-read guard from
   // DaemonIndexPage — an unprovable guard is worse than none).
   const busyRef = useRef(false)
+  const [newCanvasBusy, setNewCanvasBusy] = useState(false)
 
   const openNewCanvas = () => {
     if (busyRef.current) return
     busyRef.current = true
+    setNewCanvasBusy(true)
     setNewCanvasError(null)
     void (async () => {
       try {
@@ -79,12 +85,14 @@ export function useCreateCanvas({
         if (mountedRef.current) setNewCanvasError('Failed to create canvas.')
       } finally {
         busyRef.current = false
+        if (mountedRef.current) setNewCanvasBusy(false)
       }
     })()
   }
 
   return {
     newCanvasError,
+    newCanvasBusy,
     openNewCanvas,
   }
 }

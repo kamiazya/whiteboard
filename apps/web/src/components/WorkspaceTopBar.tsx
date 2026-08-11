@@ -185,7 +185,7 @@ export default function WorkspaceTopBar({
     mountedRef,
   })
 
-  const { newCanvasError, openNewCanvas } = useCreateCanvas({
+  const { newCanvasError, newCanvasBusy, openNewCanvas } = useCreateCanvas({
     workspaceId,
     canvases,
     slug,
@@ -292,8 +292,15 @@ export default function WorkspaceTopBar({
           </div>
         )}
 
-        {/* Both modes: immediate create has no dialog to surface its error
-            in, so it renders here beside the switcher. */}
+        {/* Both modes: immediate create has no dialog, so its in-flight and
+            failure states render here beside the switcher. The status line
+            replaces the deleted dialog's disabled "Creating…" button as the
+            flow's announced busy indication (accessibility criterion 5). */}
+        {newCanvasBusy && (
+          <span aria-live="polite" role="status" className="text-xs text-muted-foreground">
+            Creating canvas…
+          </span>
+        )}
         {newCanvasError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newCanvasError}

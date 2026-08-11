@@ -20,6 +20,47 @@ function options(overrides: Partial<Parameters<typeof useCreateCanvas>[0]> = {})
 }
 
 describe('useCreateCanvas — immediate create', () => {
+  it('exposes an in-flight busy flag while the create is pending', async () => {
+    let resolveFetch: ((r: Response) => void) | undefined
+    const daemonFetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        }),
+    )
+    const { result } = renderHook(() =>
+      useCreateCanvas(options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch })),
+    )
+    act(() => result.current.openNewCanvas())
+    expect(result.current.newCanvasBusy).toBe(true)
+    await act(async () =>
+      resolveFetch?.(new Response(JSON.stringify({ slug: 'untitled' }), { status: 200 })),
+    )
+    expect(result.current.newCanvasBusy).toBe(false)
+  })
+
+  // Restores the dialog-era unmount-safety intent this diff had dropped without a successor:
+  // a create that fails after the top bar unmounted must not setState into the void.
+  it('does not set an error once mountedRef flips false mid-create', async () => {
+    const mountedRef = { current: true }
+    let rejectFetch: ((e: Error) => void) | undefined
+    const daemonFetch = vi.fn(
+      () =>
+        new Promise<Response>((_r, reject) => {
+          rejectFetch = reject
+        }),
+    )
+    const { result } = renderHook(() =>
+      useCreateCanvas(
+        options({ mountedRef, daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
+      ),
+    )
+    act(() => result.current.openNewCanvas())
+    mountedRef.current = false
+    await act(async () => rejectFetch?.(new Error('boom')))
+    expect(result.current.newCanvasError).toBeNull()
+  })
+
   it('local mode hands off to onCreateCanvas without any fetch', async () => {
     const onCreateCanvas = vi.fn()
     const daemonFetch = vi.fn() as unknown as typeof globalThis.fetch
@@ -33,7 +74,8 @@ describe('useCreateCanvas — immediate create', () => {
 
   it('daemon mode derives within the current group and POSTs it', async () => {
     const daemonFetch = vi.fn(
-      async () => new Response(JSON.stringify({ slug: 'x' }), { status: 200 }),
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify({ slug: 'x' }), { status: 200 }),
     )
     const onNavigateToCanvas = vi.fn()
     const { result } = renderHook(() =>
