@@ -266,6 +266,32 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.slug).toBeNull()
   })
 
+  // The empty-state caller derives its next slug from `canvases`. If a create fails because
+  // another client already took that slug, `canvases` is stale by definition — without a
+  // refresh here, a retry re-derives the SAME losing slug from the same stale list forever.
+  it('createCanvas re-reads the canvas list after a failure so a retry does not repeat the same slug', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockCreateCanvas.mockRejectedValue(new Error('slug already exists'))
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'untitled', updatedAt: '2026-01-01' }],
+    })
+
+    await act(async () => {
+      await result.current.createCanvas('untitled')
+    })
+
+    expect(result.current.createError).toBe('slug already exists')
+    // The refreshed list now shows the slug another client already took.
+    expect(result.current.canvases).toEqual([{ slug: 'untitled', updatedAt: '2026-01-01' }])
+  })
+
   it('createCanvas is a no-op before workspaceId has resolved', async () => {
     // Never resolves during this test, so workspaceId stays null past mount.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))

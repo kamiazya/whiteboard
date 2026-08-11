@@ -657,7 +657,7 @@ describe('DaemonCanvasPage', () => {
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
   })
 
-  it('renders a create-canvas form when the workspace has zero canvases', async () => {
+  it('renders a create-canvas button, not a form, when the workspace has zero canvases (ADR-0006)', async () => {
     mockListCanvases.mockResolvedValue({ canvases: [] })
 
     await act(async () => {
@@ -672,14 +672,17 @@ describe('DaemonCanvasPage', () => {
     )
     expect(screen.queryByLabelText('Canvases')).toBeNull()
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
-    expect(screen.getByLabelText('New canvas name')).toBeTruthy()
+    // No form, no name-first input: creation is immediate, naming follows (ADR-0006 point 3).
+    expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
+    expect(screen.queryByRole('form')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Create a canvas' })).toBeTruthy()
   })
 
-  it('submits the create-canvas form and mounts the editor once the canvas exists', async () => {
+  it('clicking Create a canvas derives a slug and mounts the editor once the canvas exists', async () => {
     mockListCanvases.mockResolvedValueOnce({ canvases: [] })
-    mockCreateCanvas.mockResolvedValue({ slug: 'brand-new' })
+    mockCreateCanvas.mockResolvedValue({ slug: 'untitled' })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'brand-new', updatedAt: '2026-01-03' }],
+      canvases: [{ slug: 'untitled', updatedAt: '2026-01-03' }],
     })
 
     await act(async () => {
@@ -693,21 +696,17 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
 
-    const input = screen.getByLabelText('New canvas name') as HTMLInputElement
-    const form = input.closest('form')!
-
     await act(async () => {
-      fireEvent.change(input, { target: { value: 'brand-new' } })
-    })
-    await act(async () => {
-      fireEvent.submit(form)
+      fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     })
 
+    // No name typed by the user — the slug is derived, same as the daemon
+    // index page's own empty-state control.
     expect(mockCreateCanvas).toHaveBeenCalledWith(
       expect.anything(),
       DAEMON_BASE_URL,
       'w1',
-      'brand-new',
+      'untitled',
     )
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     // Hand (view-only) is the default tool; the host history cluster only
@@ -730,18 +729,18 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
 
-    const input = screen.getByLabelText('New canvas name') as HTMLInputElement
-    const form = input.closest('form')!
-
     await act(async () => {
-      fireEvent.change(input, { target: { value: 'brand-new' } })
-    })
-    await act(async () => {
-      fireEvent.submit(form)
+      fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     })
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
+    // The control recovers (not left permanently disabled) so the user can retry.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Create a canvas' }).hasAttribute('disabled')).toBe(
+        false,
+      ),
+    )
   })
 
   describe('manual save version', () => {
