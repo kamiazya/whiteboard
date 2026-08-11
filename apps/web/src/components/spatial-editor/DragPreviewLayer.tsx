@@ -76,11 +76,9 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
           opacity={0.9}
         />
       ) : (
-        <line
-          x1={preview.from.x}
-          y1={preview.from.y}
-          x2={preview.to.x}
-          y2={preview.to.y}
+        <polyline
+          points={preview.path.map((p) => `${p.x},${p.y}`).join(' ')}
+          fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
           strokeDasharray={dashArray}

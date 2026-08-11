@@ -79,17 +79,36 @@ describe('computeDragPreview — resizing', () => {
 })
 
 describe('computeDragPreview — connecting', () => {
-  it('yields a line from the source box centre to the live point', () => {
-    const boxes: readonly NodeBox[] = [{ id: 'n1', box: { x: 0, y: 0, width: 100, height: 50 } }]
+  const boxes: readonly NodeBox[] = [{ id: 'n1', box: { x: 0, y: 0, width: 100, height: 50 } }]
+  const connect = {
+    canvas: {
+      nodes: [{ id: 'n1', type: 'text' as const, x: 0, y: 0, width: 100, height: 50, text: '' }],
+      edges: [],
+    },
+    selectableBoxes: boxes,
+  }
+
+  it('routes from the border anchor facing the pointer to the pointer itself', () => {
     const state = connectingState()
-    const preview = computeDragPreview(state, boxes, { x: 300, y: 400 })
-    expect(preview).toEqual({ kind: 'line', from: { x: 50, y: 25 }, to: { x: 300, y: 400 } })
+    const preview = computeDragPreview(state, boxes, { x: 300, y: 25 }, connect)
+    expect(preview).toEqual({
+      kind: 'line',
+      path: [
+        { x: 100, y: 25 },
+        { x: 300, y: 25 },
+      ],
+    })
   })
 
   it('returns undefined when the fromNode id is absent from boxes', () => {
     const state = connectingState()
-    const preview = computeDragPreview(state, [], { x: 300, y: 400 })
+    const preview = computeDragPreview(state, [], { x: 300, y: 400 }, connect)
     expect(preview).toBeUndefined()
+  })
+
+  it('returns undefined without a connect context', () => {
+    const state = connectingState()
+    expect(computeDragPreview(state, boxes, { x: 300, y: 400 })).toBeUndefined()
   })
 })
 

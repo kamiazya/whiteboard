@@ -886,13 +886,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /**
      * The in-flight preview geometry, derived per frame from the gesture's own
-     * start snapshot plus the live pointer — never from `canvas`. See
-     * drag-preview.ts for why that matters and for the single-source
-     * `resizeBoxByDelta` guarantee it documents.
+     * start snapshot plus the live pointer. Move/resize never read `canvas`
+     * (see drag-preview.ts for why, and for the single-source
+     * `resizeBoxByDelta` guarantee it documents); the connecting branch does —
+     * it routes the prospective edge through the committed producer, a few
+     * routeEdge calls per frame.
      */
     const dragPreview = useMemo(
-      () => computeDragPreview(gestureState, boxes, livePoint),
-      [gestureState, livePoint, boxes],
+      () => computeDragPreview(gestureState, boxes, livePoint, { canvas, selectableBoxes }),
+      [gestureState, livePoint, boxes, canvas, selectableBoxes],
     )
 
     /**
