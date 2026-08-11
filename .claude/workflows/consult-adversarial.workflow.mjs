@@ -17,7 +17,15 @@ export const meta = {
 
 // --- inputs (runtime delivers args as a JSON string) ---
 const A = (() => {
-  try { return typeof args === 'string' ? JSON.parse(args) : (args && typeof args === 'object' ? args : {}) } catch { return {} }
+  if (typeof args !== 'string') return args && typeof args === 'object' ? args : {}
+  // Malformed args is a caller bug with no sane default. Falling back to {} does not stop the
+  // run — it completes against empty inputs and reports "nothing was specified" after spending
+  // the whole agent budget, which reads as a finding rather than the input error it is.
+  try {
+    return JSON.parse(args)
+  } catch (err) {
+    throw new Error(`args is not valid JSON (${err.message}): ${args.slice(0, 200)}`)
+  }
 })()
 const QUESTION = A.question || ''
 const CWD = A.cwd || null
@@ -26,6 +34,12 @@ const BUDGET = A.verifyBudget || 'bounded'
 const PANEL = ({ minimal: 2, bounded: 3, generous: 5 })[BUDGET] || 3
 const MAX_ROUNDS = Number(A.maxRounds || 3)
 const CODEX = A.codex !== false
+
+// An unavailable Codex is "no second opinion", never a gate failure. `agent()` resolves to null
+// when a subagent dies, but an agentType the host has no plugin for REJECTS instead — so without
+// this the whole workflow aborts on any machine where the Codex plugin isn't installed, which is
+// the opposite of the "Codex unavailable never blocks" rule it is supposed to implement.
+const optionalLane = (run) => run().catch(() => null)
 const GIT = CWD ? `git -C ${CWD}` : 'git'
 const cwdHint = CWD ? ` Read the repo under ${CWD} (run git as \`${GIT} ...\`).` : ' Read the repo to ground your reasoning.'
 
@@ -60,6 +74,10 @@ const VERDICT_SCHEMA = {
 // --- consultant (the "council"): produce an answer to a brief ---
 async function consult(brief, round) {
   if (CONSULTANT === 'codex') {
+    // Deliberately NOT wrapped in optionalLane. Here Codex is the answer, not a second opinion:
+    // the caller opted in explicitly (the default consultant is 'agent'), so an unavailable Codex
+    // has no meaningful null to degrade to — swallowing it would hand back an empty answer as if
+    // the consultation had happened. Let it reject and say so.
     return agent(`${brief}\n\n${cwdHint} Give a concrete, grounded answer with assumptions made.`,
       { label: `consult:codex:${round}`, phase: 'Consult', agentType: 'codex:codex-rescue', schema: ANSWER_SCHEMA })
   }
@@ -128,8 +146,9 @@ while (true) {
   if (CODEX && claims.length) {
     const c0 = claims[0]
     skeptics.push(() =>
-      agent(`Adversarially refute the most load-bearing claim in this answer if you can.\nQUESTION: ${QUESTION}\nCLAIM: ${c0.claim}\n${cwdHint} refuted:true only with concrete repo evidence.`,
-        { label: `skeptic:${round}:codex`, phase: 'Verify', agentType: 'codex:codex-rescue', schema: VERDICT_SCHEMA }))
+      optionalLane(() =>
+        agent(`Adversarially refute the most load-bearing claim in this answer if you can.\nQUESTION: ${QUESTION}\nCLAIM: ${c0.claim}\n${cwdHint} refuted:true only with concrete repo evidence.`,
+          { label: `skeptic:${round}:codex`, phase: 'Verify', agentType: 'codex:codex-rescue', schema: VERDICT_SCHEMA })))
   }
   const verdicts = (await parallel(skeptics)).filter(Boolean)
   const survived = verdicts.filter((v) => v.refuted)

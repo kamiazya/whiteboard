@@ -14,7 +14,15 @@ export const meta = {
 // --- inputs (override via Workflow args) ---
 // The runtime delivers `args` as a JSON *string* (not an object), so normalize first.
 const A = (() => {
-  try { return typeof args === 'string' ? JSON.parse(args) : (args && typeof args === 'object' ? args : {}) } catch { return {} }
+  if (typeof args !== 'string') return args && typeof args === 'object' ? args : {}
+  // Malformed args is a caller bug with no sane default. Falling back to {} does not stop the
+  // run — it completes against empty inputs and reports "nothing was specified" after spending
+  // the whole agent budget, which reads as a finding rather than the input error it is.
+  try {
+    return JSON.parse(args)
+  } catch (err) {
+    throw new Error(`args is not valid JSON (${err.message}): ${args.slice(0, 200)}`)
+  }
 })()
 // range: a git range understood by `git diff`/`git log` (default: changes since branch diverged from origin/main).
 const RANGE = A.range || 'origin/main...HEAD'
