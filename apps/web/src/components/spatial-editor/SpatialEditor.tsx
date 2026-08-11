@@ -3072,12 +3072,36 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 },
               })
               items.push(
-                colorRow(node.color, (color) =>
+                colorRow(node.color, (color) => {
+                  // Recoloring FROM a multi-selection styles the whole
+                  // selected AREA: every member, and every edge that runs
+                  // between two members — the closest executable reading of
+                  // "select a region, recolor it". An edge leaving the
+                  // selection keeps its color (only one endpoint is inside),
+                  // and a target outside the selection styles itself alone.
+                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+                  const nodeTargets = members.has(node.id) ? [...members] : [node.id]
+                  const edgeTargets =
+                    nodeTargets.length > 1
+                      ? canvas.edges.filter(
+                          (edge) =>
+                            !isEdgeLocked(edge.id) &&
+                            members.has(edge.fromNode) &&
+                            members.has(edge.toNode),
+                        )
+                      : []
                   applyResult({
                     state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-color', id: node.id, color }],
-                  }),
-                ),
+                    commands: [
+                      ...nodeTargets.map((id) => ({ kind: 'set-node-color' as const, id, color })),
+                      ...edgeTargets.map((edge) => ({
+                        kind: 'set-edge-color' as const,
+                        id: edge.id,
+                        color,
+                      })),
+                    ],
+                  })
+                }),
               )
               // Z-order as one-tap options — the touch path to the [ / ]
               // keyboard shortcuts (see shortcuts.ts). Not a picker: no

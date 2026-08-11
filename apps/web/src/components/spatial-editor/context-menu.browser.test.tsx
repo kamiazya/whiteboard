@@ -423,3 +423,55 @@ it('the edge Color row recolors the stroke via the palette preset', async () => 
     ).not.toBeNull(),
   )
 })
+
+// Recoloring FROM a multi-selection styles the whole selected area: every
+// member node, and every edge that runs between two members. It used to
+// touch only the right-clicked node, silently ignoring the rest of the
+// selection — and edges could not follow an area recolor at all.
+it('the Color row from a multi-selection recolors every member and the edges between them', async () => {
+  const areaStart: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
+      { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
+      { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
+    ],
+    edges: [
+      { id: 'ab', fromNode: 'a', toNode: 'b' },
+      { id: 'bc', fromNode: 'b', toNode: 'c' },
+    ],
+  }
+  const latest: { canvas: SpatialCanvas } = { canvas: areaStart }
+  function AreaHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(areaStart)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<AreaHost />)
+  const root = rootOf(container)
+
+  // Select a + b (c stays out), then right-click member a.
+  await userEvent.click(root, { position: { x: 160, y: 130 } })
+  await userEvent.click(root, { position: { x: 360, y: 130 }, modifiers: ['Shift'] })
+  rightClick(root, 160, 130)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  clickOption(container, 'Color', 'Red')
+
+  await vi.waitFor(() => {
+    expect(latest.canvas.nodes.find((n) => n.id === 'a')?.color).toBe('1')
+    expect(latest.canvas.nodes.find((n) => n.id === 'b')?.color).toBe('1')
+  })
+  // The edge INSIDE the selected area follows; the edge leaving it does not.
+  expect(latest.canvas.edges.find((e) => e.id === 'ab')?.color).toBe('1')
+  expect(latest.canvas.edges.find((e) => e.id === 'bc')?.color).toBeUndefined()
+  expect(latest.canvas.nodes.find((n) => n.id === 'c')?.color).toBeUndefined()
+})
