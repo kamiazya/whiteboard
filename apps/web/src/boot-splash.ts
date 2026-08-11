@@ -25,6 +25,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Elapsed time since the splash first PAINTED, not since the navigation
+ * time origin: on a slow HTML fetch the first paint lags the origin, and
+ * an origin-based clock would count time the user never saw the splash,
+ * cutting the hold short. First paint precedes module execution, so the
+ * paint entry is normally recorded by the time this runs; when it is not
+ * (jsdom, very old browsers), fall back to the time origin.
+ */
+export function elapsedSinceFirstPaint(): number {
+  const paints =
+    typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('paint') : []
+  const fcp = paints.find((entry) => entry.name === 'first-contentful-paint')
+  return Math.max(0, performance.now() - (fcp?.startTime ?? 0))
+}
+
+/**
  * Hold the splash out to its minimum visible time, then fade it out.
  * Resolves once the splash is invisible and safe to replace. Reduced
  * motion skips both the artificial hold and the fade — those users get
@@ -32,7 +47,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function dismissBootSplash({
   doc = document,
-  elapsedMs = performance.now(),
+  elapsedMs = elapsedSinceFirstPaint(),
   reducedMotion = typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches,
 }: {

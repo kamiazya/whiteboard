@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   dismissBootSplash,
+  elapsedSinceFirstPaint,
   SPLASH_FADE_MS,
   SPLASH_MIN_VISIBLE_MS,
   splashHoldMs,
@@ -17,6 +18,26 @@ describe('splashHoldMs', () => {
 
   it('never holds under reduced motion', () => {
     expect(splashHoldMs(0, true)).toBe(0)
+  })
+})
+
+describe('elapsedSinceFirstPaint', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  // A slow HTML fetch delays first paint past the time origin; the clock
+  // must start when the splash became visible, not when navigation began.
+  it('measures from first-contentful-paint, not the time origin', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(2000)
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+      { name: 'first-contentful-paint', startTime: 1800 } as PerformanceEntry,
+    ])
+    expect(elapsedSinceFirstPaint()).toBe(200)
+  })
+
+  it('falls back to the time origin when no paint entry exists', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(700)
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([])
+    expect(elapsedSinceFirstPaint()).toBe(700)
   })
 })
 
