@@ -990,6 +990,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * node (~0.4ms) and `dragStatic.measure` memoizes text metrics for the
      * gesture: the first frame warms the cache and later frames re-wrap
      * with zero new measure calls.
+     *
+     * File-node LOD (card vs inline embed) deliberately stays at its
+     * COMMITTED decision for the whole gesture — the same freeze-then-
+     * settle rule edge sides follow: a mid-gesture card/embed swap is
+     * exactly the kind of flicker the freeze exists to prevent, and the
+     * expansion hysteresis is stateful over the committed canvas. The
+     * crossing of a size threshold takes effect on release.
      */
     const liveNode = useMemo(() => {
       if (
