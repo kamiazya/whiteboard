@@ -161,6 +161,12 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
+import {
+  EMPTY_SELECTION,
+  reduceSelection,
+  type SelectionEvent,
+  type SelectionState,
+} from './selection.js'
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
@@ -427,7 +433,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const rootRef = useRef<HTMLDivElement | null>(null)
 
     const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
-    const [selectedId, setSelectedId] = useState<string | null>(null)
+    /**
+     * The multi-selection lives in ONE state object and every transition
+     * routes through the pure `reduceSelection` (selection.ts), so its
+     * invariants (primary never inside extras; extras only with a primary)
+     * hold by construction — never hand-write a primary/extras update pair.
+     * Functional updates make sequential events inside one handler compose
+     * instead of clobbering each other through stale closures.
+     */
+    const [selectionState, setSelectionState] = useState<SelectionState>(EMPTY_SELECTION)
+    const selectedId = selectionState.primaryId
+    const applySelection = (event: SelectionEvent) =>
+      setSelectionState((prev) => reduceSelection(prev, event))
     const [gestureState, setGestureState] = useState<GestureState>(createIdleState())
     /**
      * Live pointer position during an in-flight move/resize/connect, in canvas
@@ -467,7 +484,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * expand into per-member commands at commit time (see the pointerup and
      * delete paths). Cleared whenever the primary selection clears.
      */
-    const [extraIds, setExtraIds] = useState<ReadonlySet<string>>(new Set())
+    const extraIds = selectionState.extraIds
     /**
      * Armed by a second same-target press inside the double-press window;
      * RESOLVED at pointerup: zero movement opens the editor (node) or
@@ -717,15 +734,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (gestureState.kind === 'moving' || gestureState.kind === 'resizing') {
         if (isLocked(gestureState.nodeId)) setGestureState(createIdleState())
       }
-      const survivingExtras = [...extraIds].filter((id) => !isLocked(id))
-      const primaryLocked = selectedId !== null && isLocked(selectedId)
-      if (!primaryLocked) {
-        if (survivingExtras.length !== extraIds.size) setExtraIds(new Set(survivingExtras))
-        return
-      }
-      const [promoted, ...rest] = survivingExtras
-      setSelectedId(promoted ?? null)
-      setExtraIds(new Set(rest))
+      const lockedMembers = new Set(
+        [...extraIds, ...(selectedId !== null ? [selectedId] : [])].filter(isLocked),
+      )
+      if (lockedMembers.size > 0) applySelection({ type: 'drop-locked', lockedIds: lockedMembers })
       // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
     }, [lockEnabled, lockedNodeIds, selectedId, extraIds, gestureState])
 
@@ -947,7 +959,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setSnapGuides(null)
       }
       setGestureState(result.state)
-      if (result.selectedId !== undefined) setSelectedId(result.selectedId)
+      if (result.selectedId !== undefined) {
+        applySelection({ type: 'set-primary', id: result.selectedId })
+      }
       let running = canvasRef.current
       for (const command of result.commands) {
         running = applyCommand(running, command)
@@ -1034,24 +1048,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // selected edge FIRST, so an edge left selected here would be what a
       // Delete on the node multi-selection actually removes.
       setSelectedEdgeId(null)
-      if (primaryId === null) {
-        setSelectedId(hitId)
-        return
-      }
-      if (hitId === primaryId) {
-        // Deselecting the primary promotes an extra, if any.
-        const [next, ...rest] = [...extraIds]
-        setSelectedId(next ?? null)
-        setExtraIds(new Set(rest))
-        return
-      }
-      setSelectedId(primaryId)
-      setExtraIds((prev) => {
-        const next = new Set(prev)
-        if (next.has(hitId)) next.delete(hitId)
-        else next.add(hitId)
-        return next
-      })
+      // The caller supplies the anchor primary (the in-flight gesture's, not
+      // yet applied); extras come from the latest state via the functional
+      // update.
+      setSelectionState((prev) =>
+        reduceSelection(
+          { primaryId, extraIds: prev.extraIds },
+          { type: 'toggle-member', id: hitId },
+        ),
+      )
     }
 
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1188,7 +1193,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
       if (hitId === undefined) {
         setMarquee({ start: point, current: point })
-        setExtraIds(new Set())
+        applySelection({ type: 'collapse-extras' })
         if (hitEdge !== undefined) {
           setSelectedEdgeId(hitEdge.id)
           applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
@@ -1199,22 +1204,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return
       }
       // A plain press on a NON-member collapses the multi-selection; a press
-      // on a member keeps it (that press starts a group move).
-      if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
-        setExtraIds(new Set())
-      } else if (hitId !== undefined && extraIds.has(hitId)) {
-        // Grabbing an EXTRA promotes it to primary (the reducer selects the
-        // pressed node), so the old primary must swap into the extras — same
-        // promotion the context-menu path does. Without it the old primary
-        // silently drops out of the selection and stays behind on a group
-        // move.
-        setExtraIds((prev) => {
-          const next = new Set(prev)
-          next.delete(hitId)
-          if (selectedId !== null && selectedId !== hitId) next.add(selectedId)
-          return next
-        })
-      }
+      // on a member keeps the whole set and leads with the pressed node —
+      // the reducer owns both transitions.
+      applySelection({ type: 'press', id: hitId })
       setSelectedEdgeId(null)
       // Connect tool: the FIRST node press arms the connect (the same
       // reducer arm the keyboard/handle flows use). While 'connecting', a
@@ -1256,17 +1248,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // the other object type selected makes Delete remove the wrong thing.
       if (hitId !== undefined && !isLocked(hitId)) {
         // Right-clicking a member of an existing multi-selection must not
-        // shrink it: promote the target to primary and keep the old primary
-        // in the extras, or "Group selection" silently loses a node.
-        if (extraIds.has(hitId)) {
-          setExtraIds((prev) => {
-            const next = new Set(prev)
-            next.delete(hitId)
-            if (selectedId !== null && selectedId !== hitId) next.add(selectedId)
-            return next
-          })
-        }
-        setSelectedId(hitId)
+        // shrink it: the target is promoted to primary and the old primary
+        // stays in the extras, or "Group selection" silently loses a node.
+        applySelection({ type: 'promote', id: hitId })
         setSelectedEdgeId(null)
       }
       // Same edge tolerance as the click path: the object under the pointer
@@ -1280,8 +1264,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           : undefined
       if (hitEdge !== undefined) {
         setSelectedEdgeId(hitEdge.id)
-        setSelectedId(null)
-        setExtraIds(new Set())
+        applySelection({ type: 'clear' })
       }
       setContextMenu({
         x: screenPoint.x,
@@ -1422,9 +1405,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               entry.box.y + entry.box.height > rect.y,
           )
           .map((entry) => entry.id)
-        const [primary, ...rest] = hitIds
-        setSelectedId(primary ?? null)
-        setExtraIds(new Set(rest))
+        applySelection({ type: 'set-members', ids: hitIds })
         // A drag that began on an edge line was a marquee, not an edge click
         // — drop the press-time edge selection so Delete acts on the nodes.
         setSelectedEdgeId(null)
@@ -1643,10 +1624,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const running = applyCommand(current, command)
       if (running === current) return false
       onChange(running, command)
-      const [first, ...rest] = reminted.nodes.map((node) => node.id)
-      if (first !== undefined) {
-        setSelectedId(first)
-        setExtraIds(new Set(rest))
+      const remintedIds = reminted.nodes.map((node) => node.id)
+      if (remintedIds.length > 0) {
+        applySelection({ type: 'set-members', ids: remintedIds })
         setSelectedEdgeId(null)
       }
       return true
@@ -1679,8 +1659,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const running = applyCommand(canvasRef.current, command)
       if (running === canvasRef.current) return false
       onChange(running, command)
-      setSelectedId(null)
-      setExtraIds(new Set())
+      applySelection({ type: 'clear' })
       setSelectedEdgeId(null)
       return true
     }
@@ -1701,8 +1680,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const running = applyCommand(canvasRef.current, command)
       if (running === canvasRef.current) return
       onChange(running, command)
-      setSelectedId(node.id)
-      setExtraIds(new Set())
+      applySelection({ type: 'set-members', ids: [node.id] })
       setSelectedEdgeId(null)
     }
 
@@ -1757,10 +1735,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const running = applyCommand(current, command)
       if (running === current) return false
       onChange(running, command)
-      const [first, ...rest] = reminted.nodes.map((node) => node.id)
-      if (first !== undefined) {
-        setSelectedId(first)
-        setExtraIds(new Set(rest))
+      const remintedIds = reminted.nodes.map((node) => node.id)
+      if (remintedIds.length > 0) {
+        applySelection({ type: 'set-members', ids: remintedIds })
         setSelectedEdgeId(null)
       }
       return true
@@ -1773,12 +1750,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * highlighting the whole page. A handled no-op still consumes it.
      */
     const selectAllNodes = (): boolean => {
-      const [first, ...rest] = canvasRef.current.nodes
-        .map((node) => node.id)
-        .filter((id) => !isLocked(id))
-      if (first === undefined) return true
-      setSelectedId(first)
-      setExtraIds(new Set(rest))
+      const allIds = canvasRef.current.nodes.map((node) => node.id).filter((id) => !isLocked(id))
+      if (allIds.length === 0) return true
+      applySelection({ type: 'set-members', ids: allIds })
       setSelectedEdgeId(null)
       return true
     }
@@ -1802,8 +1776,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const next = !isLocked(selection.id)
       for (const id of ids) onToggleNodeLock(id, next)
       if (next) {
-        setSelectedId(null)
-        setExtraIds(new Set())
+        applySelection({ type: 'clear' })
       }
       return true
     }
@@ -1943,7 +1916,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           commands: ids.map((id) => ({ kind: 'delete-node' as const, id })),
           selectedId: null,
         })
-        setExtraIds(new Set())
         return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
@@ -2463,7 +2435,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ],
         selectedId: id,
       })
-      setExtraIds(new Set())
+      applySelection({ type: 'collapse-extras' })
     }
 
     return (
@@ -2687,8 +2659,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               if (gestureState.kind !== 'idle') {
                 applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
               }
-              setSelectedId(null)
-              setExtraIds(new Set())
+              applySelection({ type: 'clear' })
               setSelectedEdgeId(null)
               setEdgeLabelEditId(null)
               setGroupLabelEditId(null)
