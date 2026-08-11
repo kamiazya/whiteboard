@@ -3579,8 +3579,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           {/* Which nodes are in the selection. The overlay above outlines the
             region the handles act on, which says nothing about membership —
             outlining only the extras left the primary looking untouched, so a
-            Select All over three nodes read as though it had skipped one. */}
-          {isMultiSelection && (
+            Select All over three nodes read as though it had skipped one.
+            Hidden while a move is in flight: every member travels with the
+            ghost, so these outlines (boxes and internal-edge highlights,
+            both derived from the committed scene) would mark geometry that
+            is no longer drawn there. */}
+          {isMultiSelection && gestureState.kind !== 'moving' && (
             <svg
               data-testid="member-outlines"
               aria-hidden="true"

@@ -234,4 +234,9 @@ it('a multi-selection ghost carries every member, not only the grabbed node', as
   expect(ghost?.innerHTML ?? '').toContain('Alpha')
   expect(ghost?.innerHTML ?? '').toContain('Gamma')
   expect(ghost?.innerHTML ?? '').not.toContain('Beta')
+
+  // Every member is travelling with the ghost, so the membership outlines
+  // (boxes AND internal-edge highlights, both derived from the committed
+  // scene) would mark stale geometry — they hide until the drop.
+  expect(container.querySelector('[data-testid="member-outlines"]')).toBeNull()
 })
