@@ -145,7 +145,7 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
-import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
+import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -160,6 +160,7 @@ import {
   scaleBoxWithin,
   unionBox,
 } from './geometry.js'
+import { carriedByGesture, frozenSidesOf, liveNodesFor } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
@@ -756,7 +757,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const dragContentSvg = useMemo(() => {
       if (gestureState.kind !== 'moving') return undefined
-      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
       const nodes = canvas.nodes.filter((n) => carried.has(n.id))
       if (nodes.length === 0) return undefined
       const rendered = renderCanvasToSvg(
@@ -798,10 +799,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const dragStatic = useMemo(() => {
       if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
-      const carried =
-        gestureState.kind === 'moving'
-          ? carriedWithDrag(canvas, gestureState, extraIds, isLocked)
-          : new Set([gestureState.nodeId])
+      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
       const base: SpatialCanvas = {
         ...canvas,
         nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
@@ -901,11 +899,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas around the pointer stays still and pointer frames skip the
       // crossing-optimization loop. The prospective edge itself derives
       // fresh each frame.
-      const frozenEdgeSides = new Map(
-        scene.nodes.flatMap((n) =>
-          n.kind === 'edge' ? [[n.id, { fromSide: n.fromSide, toSide: n.toSide }] as const] : [],
-        ),
-      )
+      const frozenEdgeSides = frozenSidesOf(scene)
       return computeDragPreview(gestureState, boxes, livePoint, {
         canvas,
         selectableBoxes,
@@ -933,37 +927,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         return undefined
       }
-      const liveNodes =
-        gestureState.kind === 'moving'
-          ? canvas.nodes.map((n) =>
-              dragStatic.carried.has(n.id)
-                ? {
-                    ...n,
-                    x: n.x + (dragPreview.box.x - gestureState.startX),
-                    y: n.y + (dragPreview.box.y - gestureState.startY),
-                  }
-                : n,
-            )
-          : canvas.nodes.map((n) =>
-              n.id === gestureState.nodeId
-                ? {
-                    ...n,
-                    x: dragPreview.box.x,
-                    y: dragPreview.box.y,
-                    width: dragPreview.box.width,
-                    height: dragPreview.box.height,
-                  }
-                : n,
-            )
+      const liveNodes = [...liveNodesFor(canvas, gestureState, dragPreview.box, dragStatic.carried)]
       // Sides FROZEN at their committed choices for the whole gesture:
       // per-frame crossing optimization would both blow the frame budget
       // and let routes flip sides mid-drag. Anchors and lanes still track
       // the moved geometry; the drop's committed render re-optimizes.
-      const frozenSides = new Map(
-        scene.nodes.flatMap((n) =>
-          n.kind === 'edge' ? [[n.id, { fromSide: n.fromSide, toSide: n.toSide }] as const] : [],
-        ),
-      )
+      const frozenSides = frozenSidesOf(scene)
       const nodes = layoutSpatialEdges(
         { ...canvas, nodes: liveNodes },
         {
@@ -1007,15 +976,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         return undefined
       }
-      const node = canvas.nodes.find((n) => n.id === gestureState.nodeId)
-      if (node === undefined) return undefined
-      const resized = {
-        ...node,
-        x: dragPreview.box.x,
-        y: dragPreview.box.y,
-        width: dragPreview.box.width,
-        height: dragPreview.box.height,
-      }
+      const resized = liveNodesFor(
+        canvas,
+        gestureState,
+        dragPreview.box,
+        new Set([gestureState.nodeId]),
+      ).find((n) => n.id === gestureState.nodeId)
+      if (resized === undefined) return undefined
       const rendered = renderCanvasToSvg(
         { nodes: [resized], edges: [] },
         {
@@ -1131,7 +1098,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // commit path exactly: that path refuses to move a locked member with
       // its frame, so the member stays put and remains a legitimate
       // alignment target. Dropping it here would silently discard one.
-      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
 
       const result = snapBox(
         candidate,
@@ -1695,13 +1662,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         const dy = moved.y - gestureState.startY
         // The SAME carried set the drag preview showed: selection extras
         // plus a grabbed group frame's geometrically contained members
-        // (minus locked ones). Going through `carriedWithDrag` — the one
+        // (minus locked ones). Going through `carriedByGesture` — the one
         // producer the ghost, snapping, and the live layers already share —
         // is what makes "what you saw travelling is what the commit moves"
         // structural rather than two hand-kept copies of the containment
         // rule.
         const followerMoves = [
-          ...carriedWithDrag(canvasRef.current, gestureState, extraIds, isLocked),
+          ...carriedByGesture(canvasRef.current, gestureState, extraIds, isLocked),
         ]
           .filter((id) => id !== moved.id)
           .flatMap((id) => {
