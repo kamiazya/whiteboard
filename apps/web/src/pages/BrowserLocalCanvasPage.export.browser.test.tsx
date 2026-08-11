@@ -54,11 +54,11 @@ async function renderLoaded(): Promise<void> {
   })
 }
 
-// Opening WorkspaceTopBar's "Canvas actions" dropdown occasionally does not
-// register on the first pointerdown the first time it's opened in a given
-// test file in real-browser mode (never reproduces in jsdom) — retry with a
-// full remount rather than let that tooling artifact fail a real behavioral
-// assertion. Mirrors the same pattern in BrowserLocalCanvasPage.rename.browser.test.tsx.
+// Export moved into the canvas row's "More actions" kebab (the canvas-level
+// operations home). Opening a Radix dropdown occasionally does not register
+// on the first pointerdown the first time in a given real-browser test file
+// (never reproduces in jsdom) — retry with a full remount rather than let
+// that tooling artifact fail a real behavioral assertion.
 async function openExportMenuItem(label: string): Promise<HTMLElement> {
   let item: HTMLElement | undefined
   for (let attempt = 0; attempt < 8 && !item; attempt++) {
@@ -66,11 +66,11 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
       cleanup()
       await renderLoaded()
     }
-    const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Canvas actions'), {
+    const allKebabs = await waitFor(() => screen.getAllByLabelText('More actions'), {
       timeout: 5000,
     })
-    const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    const kebab = allKebabs[allKebabs.length - 1]!
+    fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
     try {
       const allItems = await waitFor(() => screen.getAllByText(label), { timeout: 1500 })
       item = allItems[allItems.length - 1]!
@@ -78,7 +78,7 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
       // retry with a fresh remount
     }
   }
-  if (!item) throw new Error(`Canvas actions dropdown never opened after retries (${label})`)
+  if (!item) throw new Error(`More actions kebab never opened after retries (${label})`)
   return item
 }
 
@@ -143,7 +143,7 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
   // every click fails.
   it('never renders a JSON/Excalidraw export menu item', async () => {
     await renderLoaded()
-    fireEvent.pointerDown(screen.getByLabelText('Canvas actions'), {
+    fireEvent.pointerDown(screen.getByLabelText('More actions'), {
       button: 0,
       ctrlKey: false,
     })
