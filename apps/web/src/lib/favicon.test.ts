@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   applyFavicon,
+  browserLocalFaviconStatus,
+  daemonFaviconStatus,
   projectRectsToBoard,
   resolveRectColor,
   STATIC_FAVICON_HREF,
@@ -84,5 +86,32 @@ describe('resolveRectColor', () => {
   it('falls back to the neutral gray for missing or unknown values', () => {
     expect(resolveRectColor(undefined)).toBe('#909090')
     expect(resolveRectColor('7')).toBe('#909090')
+  })
+
+  // An invalid fillStyle assignment is IGNORED by canvas, which would leak
+  // the previous rect's color into this one — reject it here instead.
+  it('rejects malformed hex values', () => {
+    expect(resolveRectColor('#12345')).toBe('#909090')
+    expect(resolveRectColor('#12345g')).toBe('#909090')
+    expect(resolveRectColor('#')).toBe('#909090')
+  })
+})
+
+describe('status mappings', () => {
+  it('daemon: dirty beats saved, transport beats dirty, auth beats all', () => {
+    const base = { authError: false, syncStatus: 'connected' as const, isDirty: false }
+    expect(daemonFaviconStatus(base)).toBe('saved')
+    expect(daemonFaviconStatus({ ...base, isDirty: true })).toBe('unsaved')
+    expect(daemonFaviconStatus({ ...base, syncStatus: 'reconnecting', isDirty: true })).toBe(
+      'syncing',
+    )
+    expect(daemonFaviconStatus({ ...base, authError: true })).toBe('offline')
+  })
+
+  it('browser-local: persistence kinds map one-to-one', () => {
+    expect(browserLocalFaviconStatus('saved')).toBe('saved')
+    expect(browserLocalFaviconStatus('saving')).toBe('syncing')
+    expect(browserLocalFaviconStatus('pending')).toBe('unsaved')
+    expect(browserLocalFaviconStatus('degraded')).toBe('offline')
   })
 })

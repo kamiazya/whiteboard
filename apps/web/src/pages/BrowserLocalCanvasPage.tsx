@@ -39,7 +39,7 @@ import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import { type FaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { browserLocalFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -317,17 +317,9 @@ export function BrowserLocalCanvasPage({
   const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
     () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
   )
-  const faviconStatus: FaviconStatus =
-    persistence.kind === 'saved'
-      ? 'saved'
-      : persistence.kind === 'saving'
-        ? 'syncing'
-        : persistence.kind === 'pending'
-          ? 'unsaved'
-          : 'offline'
   useFavicon({
     style: faviconStyle,
-    status: faviconStatus,
+    status: browserLocalFaviconStatus(persistence.kind),
     rects: useMemo(
       () =>
         canvas.nodes.map((n) => ({

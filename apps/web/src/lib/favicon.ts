@@ -22,6 +22,7 @@ export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { fitMinimap, projectBox } from '../components/spatial-editor/minimap.js'
+import type { SyncStatus } from './canvas-sync-types.js'
 
 export interface FaviconRect {
   x: number
@@ -40,9 +41,44 @@ export interface FaviconRect {
  */
 export function resolveRectColor(color: string | undefined): string {
   if (color === undefined) return GRAY
-  if (color.startsWith('#')) return color
+  // Full-hex only: canvas silently IGNORES an invalid fillStyle assignment,
+  // which would leak the previous rect's color into this one.
+  if (color.startsWith('#')) return /^#[0-9a-f]{6}$/i.test(color) ? color : GRAY
   const preset = SPATIAL_LIGHT_PALETTE.presets[color as keyof typeof SPATIAL_LIGHT_PALETTE.presets]
   return preset?.stroke ?? GRAY
+}
+
+/**
+ * Status for the daemon canvas page. `isDirty` is the header save dot's own
+ * signal (changes since the last named version, useDirtyState) so the tab
+ * and the header never disagree; transport trouble outranks dirtiness, and
+ * a failed auth outranks everything.
+ */
+export function daemonFaviconStatus({
+  authError,
+  syncStatus,
+  isDirty,
+}: {
+  authError: boolean
+  syncStatus: SyncStatus
+  isDirty: boolean
+}): FaviconStatus {
+  if (authError) return 'offline'
+  if (syncStatus !== 'connected') return 'syncing'
+  return isDirty ? 'unsaved' : 'saved'
+}
+
+/** Status for the browser-local page: persistence kinds map one-to-one. */
+export function browserLocalFaviconStatus(
+  kind: 'saved' | 'saving' | 'pending' | 'degraded',
+): FaviconStatus {
+  return kind === 'saved'
+    ? 'saved'
+    : kind === 'saving'
+      ? 'syncing'
+      : kind === 'pending'
+        ? 'unsaved'
+        : 'offline'
 }
 
 export const STATIC_FAVICON_HREF = '/favicon.svg'
