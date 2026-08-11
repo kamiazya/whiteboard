@@ -139,3 +139,37 @@ describe('routing margin around foreign nodes', () => {
     }
   })
 })
+
+describe('rectilinear alignment of the clean end', () => {
+  it('slides the departure anchor along its side to meet the stub corridor squarely', () => {
+    // Cyan's approach stub sits at (540, 90). Rather than a diagonal from
+    // Red's right-center (190, 110), the departure slides up Red's right
+    // side to y = 90: one horizontal run, one right-angle drop.
+    const nodes = [
+      node('red', 40, 60, 150, 100),
+      node('green', 330, 140, 220, 140),
+      node('cyan', 460, 110, 160, 110),
+    ]
+    const routed = routeEdge(nodes, edge('red', 'cyan'), 'straight')
+    expect(routed.path).toEqual([
+      { x: 190, y: 90 },
+      { x: 540, y: 90 },
+      { x: 540, y: 110 },
+    ])
+  })
+
+  it('keeps the diagonal when the alignment target lies beyond the side span', () => {
+    // Shrink Red so y = 90 falls outside its right side (with corner inset):
+    // sliding cannot reach the corridor, so the stubbed diagonal stays.
+    const nodes = [
+      node('red', 40, 96, 150, 20),
+      node('green', 330, 140, 220, 140),
+      node('cyan', 460, 110, 160, 110),
+    ]
+    const routed = routeEdge(nodes, edge('red', 'cyan'), 'straight')
+    const last = routed.path[routed.path.length - 1]!
+    const beforeLast = routed.path[routed.path.length - 2]!
+    expect(last).toEqual({ x: 540, y: 110 })
+    expect(beforeLast).toEqual({ x: 540, y: 90 })
+  })
+})

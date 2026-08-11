@@ -400,6 +400,10 @@ function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Po
  * first, or it draws sliding along the node's own border and the arrowhead
  * meets the side edge-on.
  */
+/** Below this outward-to-tangential ratio (~14°), an approach reads as
+ * running along the side rather than into it. */
+const SIDEWAYS_RATIO = 0.25
+
 function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
   const vx = other.x - anchor.x
   const vy = other.y - anchor.y
@@ -407,25 +411,68 @@ function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
   // zero-length path stays minimal rather than growing stubs.
   if (vx === 0 && vy === 0) return false
   const normal = outwardNormal(side)
-  return normal.x * vx + normal.y * vy <= 0
+  const outward = normal.x * vx + normal.y * vy
+  const tangential = Math.abs(normal.x * vy - normal.y * vx)
+  return outward <= tangential * SIDEWAYS_RATIO
+}
+
+/** How close to a side's corner a slid anchor may sit, in px. */
+const SLIDE_CORNER_INSET_PX = 10
+
+/**
+ * The anchor slid along its side so the run to `target` is axis-aligned,
+ * or undefined when the target's coordinate falls outside the side's span
+ * (keeping a corner inset). A side midpoint is a default, not authored
+ * data — trading it for a rectilinear route is the better-looking edge.
+ */
+function slideAlongSide(anchor: Point, rect: Rect, side: Side, target: Point): Point | undefined {
+  if (side === 'left' || side === 'right') {
+    const lo = rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
+    const hi = rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
+    return target.y >= lo && target.y <= hi ? { x: anchor.x, y: target.y } : undefined
+  }
+  const lo = rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
+  const hi = rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
+  return target.x >= lo && target.x <= hi ? { x: target.x, y: anchor.y } : undefined
 }
 
 /**
  * The straight style, with a perpendicular stub inserted at any end whose
  * direct segment would graze along its own side (see `approachesSideways`).
  * With neither end sideways this is exactly `routeStraight`, so every
- * facing-pair canvas keeps its two-point segment.
+ * facing-pair canvas keeps its two-point segment. When exactly one end is
+ * sideways, the clean end's anchor slides along its own side to meet the
+ * stub corridor squarely — one long axis-aligned run plus one right-angle
+ * turn, instead of a diagonal into the stub.
  */
 function routeStraightWithApproach(
   start: Point,
   end: Point,
   fromSide: Side,
   toSide: Side,
+  fromRect: Rect,
+  toRect: Rect,
   obstacles: readonly Rect[],
 ): Point[] {
-  const exit = approachesSideways(start, end, fromSide) ? stubFrom(start, fromSide) : start
-  const entry = approachesSideways(end, start, toSide) ? stubFrom(end, toSide) : end
-  if (exit === start && entry === end) return routeStraight(start, end, obstacles)
+  const fromSideways = approachesSideways(start, end, fromSide)
+  const toSideways = approachesSideways(end, start, toSide)
+  if (!fromSideways && !toSideways) return routeStraight(start, end, obstacles)
+  if (toSideways && !fromSideways) {
+    const entry = stubFrom(end, toSide)
+    const slid = slideAlongSide(start, fromRect, fromSide, entry)
+    if (slid !== undefined) {
+      return withoutRepeats([...routeStraight(slid, entry, obstacles), end])
+    }
+  }
+  if (fromSideways && !toSideways) {
+    const exit = stubFrom(start, fromSide)
+    const slid = slideAlongSide(end, toRect, toSide, exit)
+    if (slid !== undefined) {
+      return withoutRepeats([start, ...routeStraight(exit, slid, obstacles)])
+    }
+  }
+  const exit = fromSideways ? stubFrom(start, fromSide) : start
+  const entry = toSideways ? stubFrom(end, toSide) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, obstacles), end])
 }
 
@@ -612,7 +659,7 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraightWithApproach(start, end, fromSide, toSide, obstacles)
+        ? routeStraightWithApproach(start, end, fromSide, toSide, fromRect, toRect, obstacles)
         : routeOrthogonal(start, end, fromSide, toSide, obstacles),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
