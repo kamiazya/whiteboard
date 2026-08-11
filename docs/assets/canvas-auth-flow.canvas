@@ -7,7 +7,8 @@
       "y": 200,
       "width": 160,
       "height": 80,
-      "text": "Client"
+      "text": "Client",
+      "color": "4"
     },
     {
       "id": "gateway",
@@ -16,7 +17,8 @@
       "y": 200,
       "width": 180,
       "height": 80,
-      "text": "API Gateway"
+      "text": "API Gateway",
+      "color": "5"
     },
     {
       "id": "token",
@@ -25,7 +27,8 @@
       "y": 200,
       "width": 190,
       "height": 80,
-      "text": "Token Service"
+      "text": "Token Service",
+      "color": "2"
     },
     {
       "id": "database",
@@ -34,7 +37,8 @@
       "y": 200,
       "width": 170,
       "height": 80,
-      "text": "Database"
+      "text": "Database",
+      "color": "6"
     },
     {
       "id": "cache",
@@ -43,7 +47,7 @@
       "y": 40,
       "width": 190,
       "height": 80,
-      "color": "#fff3bf",
+      "color": "3",
       "text": "Redis Cache"
     }
   ],
@@ -76,5 +80,11 @@
       "toEnd": "arrow",
       "label": "cache hit?"
     }
-  ]
+  ],
+  "x-whiteboard": {
+    "edgeRouting": {
+      "style": "orthogonal",
+      "lineJumps": "arc"
+    }
+  }
 }
