@@ -9,8 +9,6 @@ import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
-import { useFavicon } from '../hooks/useFavicon.js'
-import type { FaviconStatus, FaviconStyle } from '../lib/favicon.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
@@ -33,6 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
@@ -40,6 +39,7 @@ import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
+import { type FaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -329,7 +329,14 @@ export function BrowserLocalCanvasPage({
     style: faviconStyle,
     status: faviconStatus,
     rects: useMemo(
-      () => canvas.nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+      () =>
+        canvas.nodes.map((n) => ({
+          x: n.x,
+          y: n.y,
+          w: n.width,
+          h: n.height,
+          color: resolveRectColor(n.color),
+        })),
       [canvas.nodes],
     ),
   })

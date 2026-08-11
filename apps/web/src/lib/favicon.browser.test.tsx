@@ -27,6 +27,16 @@ describe('renderFavicon (real canvas)', () => {
     expect(filled).not.toBe(empty)
   })
 
+  it('node colors change the minimap pixels', () => {
+    const gray = renderFavicon({ style: 'minimap', status: 'saved', rects })
+    const colored = renderFavicon({
+      style: 'minimap',
+      status: 'saved',
+      rects: rects.map((r) => ({ ...r, color: '#dc2626' })),
+    })
+    expect(colored).not.toBe(gray)
+  })
+
   it('dot style ignores scene content', () => {
     const a = renderFavicon({ style: 'dot', status: 'saved', rects: [] })
     const b = renderFavicon({ style: 'dot', status: 'saved', rects })

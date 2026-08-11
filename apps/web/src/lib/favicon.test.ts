@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { applyFavicon, projectRectsToBoard, STATIC_FAVICON_HREF } from './favicon.js'
+import {
+  applyFavicon,
+  projectRectsToBoard,
+  resolveRectColor,
+  STATIC_FAVICON_HREF,
+} from './favicon.js'
 
 describe('projectRectsToBoard', () => {
   it('returns no rects for an empty scene (favicon falls back to the logo squiggle)', () => {
@@ -63,5 +68,21 @@ describe('applyFavicon', () => {
     const links = document.head.querySelectorAll('link[rel="icon"]')
     expect(links).toHaveLength(1)
     expect(links[0]?.getAttribute('href')).toBe(STATIC_FAVICON_HREF)
+  })
+})
+
+describe('resolveRectColor', () => {
+  it('maps a JSON Canvas preset key to its palette stroke', () => {
+    expect(resolveRectColor('1')).toBe('#dc2626')
+    expect(resolveRectColor('4')).toBe('#059669')
+  })
+
+  it('passes a hex color through', () => {
+    expect(resolveRectColor('#123abc')).toBe('#123abc')
+  })
+
+  it('falls back to the neutral gray for missing or unknown values', () => {
+    expect(resolveRectColor(undefined)).toBe('#909090')
+    expect(resolveRectColor('7')).toBe('#909090')
   })
 })

@@ -12,8 +12,6 @@ import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
-import { useFavicon } from '../hooks/useFavicon.js'
-import type { FaviconStatus, FaviconStyle } from '../lib/favicon.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
@@ -21,6 +19,7 @@ import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
@@ -28,6 +27,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { type FaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -274,7 +274,14 @@ export function DaemonCanvasPage({
     style: faviconStyle,
     status: faviconStatus,
     rects: useMemo(
-      () => canvasValue.nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+      () =>
+        canvasValue.nodes.map((n) => ({
+          x: n.x,
+          y: n.y,
+          w: n.width,
+          h: n.height,
+          color: resolveRectColor(n.color),
+        })),
       [canvasValue.nodes],
     ),
   })

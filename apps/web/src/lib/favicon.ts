@@ -20,11 +20,28 @@
 export type FaviconStatus = 'saved' | 'unsaved' | 'syncing' | 'offline'
 export type FaviconStyle = 'minimap' | 'dot'
 
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+
 export interface FaviconRect {
   x: number
   y: number
   w: number
   h: number
+  /** Fill for the minimap rect; resolveRectColor() supplies it. */
+  color?: string
+}
+
+/**
+ * Resolve a node's JSON Canvas color (preset key '1'-'6' or '#rrggbb') to a
+ * minimap fill. Presets use the light palette's STROKE values — at 32px the
+ * tint fills would wash out; the strong accents are what read. Colorless
+ * nodes stay the neutral gray.
+ */
+export function resolveRectColor(color: string | undefined): string {
+  if (color === undefined) return GRAY
+  if (color.startsWith('#')) return color
+  const preset = SPATIAL_LIGHT_PALETTE.presets[color as keyof typeof SPATIAL_LIGHT_PALETTE.presets]
+  return preset?.stroke ?? GRAY
 }
 
 export const STATIC_FAVICON_HREF = '/favicon.svg'
@@ -72,6 +89,7 @@ export function projectRectsToBoard(rects: readonly FaviconRect[]): FaviconRect[
     y: offsetY + (r.y - minY) * scale,
     w: Math.max(MIN_RECT_PX, r.w * scale),
     h: Math.max(MIN_RECT_PX, r.h * scale),
+    color: r.color,
   }))
 }
 
@@ -154,8 +172,10 @@ export function renderFavicon({
     drawSquiggle(ctx)
   } else {
     ctx.save()
-    ctx.fillStyle = GRAY
-    for (const r of projected) ctx.fillRect(r.x, r.y, r.w, r.h)
+    for (const r of projected) {
+      ctx.fillStyle = r.color ?? GRAY
+      ctx.fillRect(r.x, r.y, r.w, r.h)
+    }
     ctx.restore()
   }
   ctx.globalAlpha = 1
