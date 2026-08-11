@@ -319,6 +319,29 @@ describe('BrowserLocalCanvasPage', () => {
     expect((await canvasOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
   })
 
+  it('export lives in the canvas row kebab, not the top bar menu', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    // Export is a whole-document operation, so it sits with Duplicate and
+    // Delete in the canvas row's More actions kebab.
+    await openCanvasOpsMenu()
+    expect(await canvasOpsItem(/export as png/i)).toBeTruthy()
+    expect(await canvasOpsItem(/export as svg/i)).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    // The top bar's Canvas actions menu keeps rename/copy-URL only on this
+    // page (daemon mode, which has no canvas row, keeps its export there).
+    const topTrigger = await screen.findByLabelText('Canvas actions')
+    fireEvent.pointerDown(topTrigger, { button: 0, ctrlKey: false })
+    const topMenu = await screen.findByRole('menu')
+    expect(topMenu.textContent).not.toContain('Export')
+  })
+
   it('renders a human-readable save status instead of the raw state enum', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')

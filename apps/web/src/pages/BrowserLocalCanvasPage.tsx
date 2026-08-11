@@ -1,5 +1,5 @@
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { Copy, EllipsisVertical, Trash2 } from 'lucide-react'
+import { Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -29,6 +29,8 @@ import {
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
+import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
@@ -284,6 +286,15 @@ export function BrowserLocalCanvasPage({
     setCoreFacets,
   } = useCanvasSync(backend)
 
+  // Export rides the canvas row's operations kebab on this page (the top
+  // bar keeps its export only in daemon mode, which has no canvas row).
+  const canvasOpsFilenameBase = sanitizeExportFilenameBase(canvasName ?? 'canvas')
+  const { exportError, handleExport } = useSceneExport({
+    onExport: exportScene,
+    filenameBase: canvasOpsFilenameBase,
+    log,
+  })
+
   // The seams themselves are backend-agnostic (see use-canvas-file-seams.ts);
   // this page only supplies the browser-local binding and the staleness
   // stamps that make an edit made elsewhere show up on the next refresh.
@@ -407,6 +418,11 @@ export function BrowserLocalCanvasPage({
           {duplicateError}
         </div>
       )}
+      {exportError && (
+        <div role="alert" aria-live="assertive" className="text-destructive text-xs">
+          {exportError}
+        </div>
+      )}
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -426,6 +442,14 @@ export function BrowserLocalCanvasPage({
           <TooltipContent>More actions</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => void handleExport('png')}>
+            <Download aria-hidden="true" className="size-3.5" />
+            Export as PNG
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void handleExport('svg')}>
+            <Download aria-hidden="true" className="size-3.5" />
+            Export as SVG
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />
             Duplicate
@@ -528,7 +552,6 @@ export function BrowserLocalCanvasPage({
               branches: capabilities.branches,
               merge: capabilities.merge,
             }}
-            onExport={exportScene}
             onOpenSettings={handleOpenSettings}
           />
         </Suspense>
