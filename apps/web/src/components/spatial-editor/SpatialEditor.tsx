@@ -66,9 +66,12 @@ import type {
 } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import {
+  BODY_FONT_SIZE_PX,
   flattenRoundedEdgePath,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
+  SPATIAL_THEME_FONT_FAMILY,
+  SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -137,7 +140,7 @@ import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
-import { editorTextFill } from './editor-appearance.js'
+import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import {
@@ -328,6 +331,21 @@ export interface SpatialEditorHandle {
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
 const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
+
+/**
+ * Opaque surface + label typography for the edge/group label editors. The
+ * CSS reset makes form controls transparent, so without an explicit
+ * background the object being edited (an edge line, the frame border)
+ * shows through the draft.
+ */
+function labelEditorStyle(theme: ResolvedTheme) {
+  return {
+    background: theme === 'dark' ? 'oklch(0.145 0 0)' : '#ffffff',
+    color: editorTextFill(theme),
+    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    fontSize: SPATIAL_THEME_GEOMETRY.labelFontSizePx,
+  }
+}
 /** Screen-space px within which a press/right-click counts as hitting an
  * edge line; divided by the zoom for the canvas-space comparison. */
 const EDGE_HIT_TOLERANCE_PX = 6
@@ -3557,6 +3575,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   }}
                   initialText={edge.label ?? ''}
                   testId="edge-label-editor"
+                  style={labelEditorStyle(theme)}
                   onCommit={(label) => {
                     applyResult({
                       state: { kind: 'idle' },
@@ -3581,6 +3600,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
                   initialText={group.label ?? ''}
                   testId="group-label-editor"
+                  style={labelEditorStyle(theme)}
                   onCommit={(label) => {
                     applyResult({
                       state: { kind: 'idle' },
@@ -3600,6 +3620,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <TextNodeEditor
                 box={selection.box}
                 initialText={selectedNode.text}
+                style={(() => {
+                  const resolved = createEditorAppearance(theme).resolveNode(selectedNode)
+                  const fill = resolved.appearance?.fill
+                  return {
+                    // The node's own fill when it has one; dark-mode nodes are
+                    // unfilled outlines, so fall back to the canvas surface.
+                    background:
+                      fill !== undefined && fill !== 'none'
+                        ? fill
+                        : theme === 'dark'
+                          ? 'oklch(0.145 0 0)'
+                          : '#ffffff',
+                    color: editorTextFill(theme),
+                    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+                    fontSize: BODY_FONT_SIZE_PX,
+                    // The rendered layout advances one font-size per line.
+                    lineHeight: `${BODY_FONT_SIZE_PX}px`,
+                    padding: SPATIAL_THEME_GEOMETRY.paddingPx,
+                    borderRadius: resolved.radius,
+                  }
+                })()}
                 onCommit={(text) => {
                   applyResult(
                     reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }),

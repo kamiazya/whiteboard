@@ -1,7 +1,7 @@
 export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
 export * from './layout/embed-recursion.js'
 export type { MdastLayoutOptions } from './layout/mdast-blocks.js'
-export { layoutMdastBlocks } from './layout/mdast-blocks.js'
+export { BODY_FONT_SIZE_PX, layoutMdastBlocks } from './layout/mdast-blocks.js'
 export { scaleScene } from './layout/scale-scene.js'
 export type {
   SpatialAppearanceResolver,
