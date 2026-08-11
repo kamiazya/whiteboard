@@ -1,5 +1,6 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
+import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import type { NodeBox } from './geometry.js'
 import type { GestureState } from './gestures.js'
 
@@ -116,5 +117,33 @@ describe('isInFlightGesture', () => {
     expect(isInFlightGesture(connectingState())).toBe(true)
     expect(isInFlightGesture(idle)).toBe(false)
     expect(isInFlightGesture({ kind: 'editing-text', nodeId: 'n1', pendingText: '' })).toBe(false)
+  })
+})
+
+describe('carriedWithDrag', () => {
+  const gesture = { nodeId: 'g1', startX: 80, startY: 80 }
+  const canvas: SpatialCanvas = {
+    nodes: [
+      { id: 'g1', type: 'group', x: 80, y: 80, width: 300, height: 200 },
+      { id: 'in', type: 'text', x: 100, y: 100, width: 50, height: 40, text: 'in' },
+      { id: 'locked', type: 'text', x: 200, y: 100, width: 50, height: 40, text: 'l' },
+      { id: 'out', type: 'text', x: 500, y: 100, width: 50, height: 40, text: 'out' },
+    ],
+    edges: [],
+  }
+
+  it('carries the grabbed node and the extras', () => {
+    const carried = carriedWithDrag(
+      canvas,
+      { nodeId: 'in', startX: 100, startY: 100 },
+      new Set(['out']),
+      () => false,
+    )
+    expect(carried).toEqual(new Set(['in', 'out']))
+  })
+
+  it('a group frame carries its geometrically contained members, minus locked ones', () => {
+    const carried = carriedWithDrag(canvas, gesture, new Set(), (id) => id === 'locked')
+    expect(carried).toEqual(new Set(['g1', 'in']))
   })
 })

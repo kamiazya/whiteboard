@@ -68,10 +68,13 @@ import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-
 import {
   BODY_FONT_SIZE_PX,
   flattenRoundedEdgePath,
+  renderSceneToSvg,
+  routeEdge,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
   SPATIAL_THEME_GEOMETRY,
+  sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -140,7 +143,7 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
-import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
+import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -751,10 +754,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const dragContentSvg = useMemo(() => {
       if (gestureState.kind !== 'moving') return undefined
-      const node = canvas.nodes.find((n) => n.id === gestureState.nodeId)
-      if (node === undefined) return undefined
+      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+      const nodes = canvas.nodes.filter((n) => carried.has(n.id))
+      if (nodes.length === 0) return undefined
       const rendered = renderCanvasToSvg(
-        { nodes: [node], edges: [] },
+        { nodes, edges: [] },
         { measure: resolvedMeasure, theme, resolveFileLabel, resolveFileImage },
       )
       return {
@@ -762,7 +766,60 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         originX: gestureState.startX - rendered.bounds.x,
         originY: gestureState.startY - rendered.bounds.y,
       }
-    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel, resolveFileImage])
+      // isLocked closes over lockedNodeIds/lockEnabled, both listed.
+    }, [
+      gestureState,
+      canvas,
+      extraIds,
+      lockEnabled,
+      lockedNodeIds,
+      resolvedMeasure,
+      theme,
+      resolveFileLabel,
+      resolveFileImage,
+    ])
+
+    /**
+     * The scene WITHOUT everything the drag layers draw live: carried
+     * nodes travel as the ghost, and edges touching them re-route per
+     * frame in the live-edges layer. Rendered ONCE per drag (gestureState
+     * is reference-stable across pointermoves), so per-frame cost stays
+     * with the small layers.
+     * ponytail: full render at the drag boundary is ~30ms on an 80-node
+     * canvas; if start/commit jank appears on much larger canvases, move
+     * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
+     */
+    const dragStatic = useMemo(() => {
+      if (gestureState.kind !== 'moving') return undefined
+      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
+      const base: SpatialCanvas = {
+        ...canvas,
+        nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
+        edges: canvas.edges.filter((e) => !carried.has(e.fromNode) && !carried.has(e.toNode)),
+      }
+      const rendered = renderCanvasToSvg(base, {
+        measure: resolvedMeasure,
+        theme,
+        resolveFileLabel,
+        resolveFileCanvas,
+        expandFileNode,
+        resolveFileImage,
+      })
+      return { carried, svg: rendered.svg, bounds: rendered.bounds }
+      // isLocked closes over lockedNodeIds/lockEnabled, both listed.
+    }, [
+      gestureState,
+      canvas,
+      extraIds,
+      lockEnabled,
+      lockedNodeIds,
+      resolvedMeasure,
+      theme,
+      resolveFileLabel,
+      resolveFileCanvas,
+      expandFileNode,
+      resolveFileImage,
+    ])
 
     useImperativeHandle(
       forwardedRef,
@@ -821,6 +878,48 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => computeDragPreview(gestureState, boxes, livePoint),
       [gestureState, livePoint, boxes],
     )
+
+    /**
+     * Edges touching the carried nodes, re-routed at the ghost's snapped
+     * live position and rendered as a small overlay — the per-frame half
+     * of live drag rendering. A handful of routeEdge calls plus a small
+     * serialization per pointermove; line jumps (paint decoration) are
+     * recomputed at commit, not per frame.
+     */
+    const liveEdges = useMemo(() => {
+      if (
+        gestureState.kind !== 'moving' ||
+        dragPreview === undefined ||
+        dragPreview.kind !== 'box' ||
+        dragStatic === undefined
+      ) {
+        return undefined
+      }
+      const touched = canvas.edges.filter(
+        (e) => dragStatic.carried.has(e.fromNode) || dragStatic.carried.has(e.toNode),
+      )
+      if (touched.length === 0) return undefined
+      const dx = dragPreview.box.x - gestureState.startX
+      const dy = dragPreview.box.y - gestureState.startY
+      const liveNodes = canvas.nodes.map((n) =>
+        dragStatic.carried.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
+      )
+      const style = canvas['x-whiteboard']?.edgeRouting?.style
+      const resolver = createEditorAppearance(theme)
+      const nodes = touched.map((edge) => {
+        const routed = routeEdge(liveNodes, edge, style)
+        const appearance = resolver.resolveEdge(edge)
+        return appearance === undefined ? routed : { ...routed, appearance }
+      })
+      const liveBounds = sceneBounds({ nodes })
+      return {
+        svg: renderSceneToSvg(
+          { nodes },
+          { width: liveBounds.w, height: liveBounds.h, viewBox: liveBounds },
+        ),
+        bounds: liveBounds,
+      }
+    }, [gestureState, dragPreview, dragStatic, canvas, theme])
 
     /**
      * How far a snap guide extends, in canvas space: across all content plus
@@ -913,21 +1012,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // commit path exactly: that path refuses to move a locked member with
       // its frame, so the member stays put and remains a legitimate
       // alignment target. Dropping it here would silently discard one.
-      const movingNode = canvas.nodes.find((n) => n.id === gestureState.nodeId)
-      const carried = new Set<string>([gestureState.nodeId, ...extraIds])
-      if (movingNode?.type === 'group') {
-        for (const n of canvas.nodes) {
-          if (
-            !isLocked(n.id) &&
-            n.x >= gestureState.startX &&
-            n.y >= gestureState.startY &&
-            n.x + n.width <= gestureState.startX + movingNode.width &&
-            n.y + n.height <= gestureState.startY + movingNode.height
-          ) {
-            carried.add(n.id)
-          }
-        }
-      }
+      const carried = carriedWithDrag(canvas, gestureState, extraIds, isLocked)
 
       const result = snapBox(
         candidate,
@@ -3379,10 +3464,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }}
         >
           <div
+            data-testid="canvas-content"
             style={{
               position: 'absolute',
-              left: bounds.x,
-              top: bounds.y,
+              left: (dragStatic?.bounds ?? bounds).x,
+              top: (dragStatic?.bounds ?? bounds).y,
               // canvas-render's layoutMdastBlocks assigns no appearance to
               // markdown body text runs (they carry no `fill` attribute at
               // all), so they inherit this host element's SVG `fill`
@@ -3396,8 +3482,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
-            dangerouslySetInnerHTML={{ __html: svg }}
+            dangerouslySetInnerHTML={{ __html: dragStatic?.svg ?? svg }}
           />
+          {liveEdges !== undefined && (
+            <div
+              data-testid="live-edges"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: liveEdges.bounds.x,
+                top: liveEdges.bounds.y,
+                pointerEvents: 'none',
+              }}
+              // Same trusted producer as the committed scene (canvas-render's
+              // escaping serializer).
+              dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
+            />
+          )}
           {/* Editor-only iframe embeds for link nodes (never in exports).
               Rides the same transform as every canvas-space overlay; the
               LOD gate mirrors the canvas-embed thresholds. */}

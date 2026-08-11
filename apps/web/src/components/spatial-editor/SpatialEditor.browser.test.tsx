@@ -952,7 +952,7 @@ describe('SpatialEditor (browser)', () => {
     expect(next.edges).toEqual([{ id: 'edge-preview', fromNode: 'a', toNode: 'b' }])
   })
 
-  it('perf invariant: the committed scene is untouched and measure is not re-invoked while a drag is in flight', async () => {
+  it('perf invariant: pointer moves re-invoke neither measure nor the committed layout', async () => {
     const onChange = vi.fn()
     const measure = vi.fn(fakeMeasure)
     const { container } = render(
@@ -970,7 +970,6 @@ describe('SpatialEditor (browser)', () => {
       'svg:not([data-testid="drag-preview"]) rect',
     )
     const xBefore = committedRectBefore?.getAttribute('x')
-    const yBefore = committedRectBefore?.getAttribute('y')
     measure.mockClear()
 
     await editor.element().dispatchEvent(
@@ -998,10 +997,10 @@ describe('SpatialEditor (browser)', () => {
         }),
       )
     }
-    // No layout/measure work happened: `canvas` never changed mid-gesture, so
-    // the `useMemo` keyed on it never re-ran renderCanvasToSvg. The ONE
-    // allowed cost is the single-node drag-start render feeding the content
-    // preview; the invariant is that further moves add ZERO calls.
+    // The allowed cost is the DRAG-START pair of renders (the carried
+    // ghost and the static base without it); the invariant is that further
+    // moves add ZERO measure calls — per-frame work is edge routing and a
+    // small serialization only.
     const afterFirstMove = measure.mock.calls.length
     for (const dx of [12, 24, 36]) {
       await new Promise((resolve) => requestAnimationFrame(resolve))
@@ -1020,11 +1019,16 @@ describe('SpatialEditor (browser)', () => {
     // gives the guard teeth).
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(measure.mock.calls.length).toBe(afterFirstMove)
-    // The committed shape rect for node "a" is exactly where it started —
-    // only the overlay preview tracked the pointer, not the real scene.
-    const committedRectAfter = container.querySelector('svg:not([data-testid="drag-preview"]) rect')
-    expect(committedRectAfter?.getAttribute('x')).toBe(xBefore)
-    expect(committedRectAfter?.getAttribute('y')).toBe(yBefore)
+    // The static scene omits the dragged node — its motion is the ghost
+    // layer's job — while the stationary node's rect never moves. The
+    // committed canvas itself stays untouched until the drop.
+    const staticRects = [...container.querySelectorAll('[data-testid="canvas-content"] svg rect')]
+    expect(staticRects.some((rect) => rect.getAttribute('x') === xBefore)).toBe(false)
+    expect(
+      staticRects.some(
+        (rect) => rect.getAttribute('x') === '250' && rect.getAttribute('y') === '20',
+      ),
+    ).toBe(true)
     expect(onChange).not.toHaveBeenCalled()
 
     await editor
