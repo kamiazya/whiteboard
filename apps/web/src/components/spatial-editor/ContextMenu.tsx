@@ -19,7 +19,8 @@
  * discrete pointerdown loses the focus fight with mousedown's default
  * action, while click fires after those defaults.
  */
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { cn } from '@/lib/utils'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
@@ -58,6 +59,8 @@ export interface ContextMenuOptionsItem {
   readonly customColor?: {
     readonly value: string
     readonly ariaLabel: string
+    /** Whether the current color IS a custom hex (marks the trigger checked). */
+    readonly selected: boolean
     readonly onPick: (hex: string) => void
   }
 }
@@ -75,6 +78,44 @@ export interface ContextMenuProps {
   readonly y: number
   readonly items: readonly ContextMenuItem[]
   readonly onClose: () => void
+}
+
+/**
+ * Inline hex picker for the options-row custom color. Drag commits on
+ * pointer-up (not per drag frame — each commit is an undo entry); the hex
+ * field commits per valid 6-digit value. 3-digit shorthand never commits:
+ * the canvas color contract is presets or SIX-digit hex.
+ */
+function CustomColorPanel({
+  value,
+  onPick,
+}: {
+  readonly value: string
+  readonly onPick: (hex: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  const commit = (hex: string) => {
+    if (/^#[0-9a-fA-F]{6}$/.test(hex) && hex !== value) onPick(hex)
+  }
+  return (
+    <div
+      data-testid="custom-color-panel"
+      className="flex flex-col gap-2 px-3 py-2"
+      onPointerUp={() => commit(draft)}
+    >
+      <HexColorPicker color={draft} onChange={setDraft} style={{ width: '100%', height: 140 }} />
+      <HexColorInput
+        aria-label="Hex color"
+        color={draft}
+        prefixed
+        className="rounded border bg-background px-2 py-1 text-xs text-foreground"
+        onChange={(hex) => {
+          setDraft(hex)
+          commit(hex)
+        }}
+      />
+    </div>
+  )
 }
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
@@ -101,6 +142,9 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     }
     setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
   }, [x, y])
+
+  // Which options row's custom-color panel is expanded (by row label).
+  const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
 
   // Focus the menu on open so Escape works without an extra click, and close
   // on any pointerdown outside — both standard menu dismissal paths.
@@ -145,51 +189,72 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           // biome-ignore lint/suspicious/noArrayIndexKey: separators are positional by nature and the items list is rebuilt per open
           <hr key={`separator-${index}`} className="my-1 border-border" />
         ) : item.kind === 'options' ? (
-          <fieldset
-            key={item.label}
-            aria-label={item.label}
-            className="m-0 flex items-center justify-between gap-2 border-0 p-0 px-3 py-1"
-          >
-            <span className="text-xs text-muted-foreground">{item.label}</span>
-            <span className="flex items-center gap-0.5">
-              {item.options.map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={option.selected}
-                  aria-label={option.ariaLabel ?? option.label}
-                  className={cn(
-                    'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                    option.selected
-                      ? 'bg-accent font-medium text-foreground'
-                      : 'text-muted-foreground',
-                  )}
-                  // Applies immediately and keeps the menu open: option rows
-                  // are property pickers, and closing per pick would force a
-                  // reopen for every adjustment.
-                  onClick={option.onSelect}
-                >
-                  {option.icon !== undefined ? (
-                    <span aria-hidden="true" className="[&>svg]:size-3.5">
-                      {option.icon}
-                    </span>
-                  ) : (
-                    option.label
-                  )}
-                </button>
-              ))}
-              {item.customColor !== undefined && (
-                <input
-                  type="color"
-                  aria-label={item.customColor.ariaLabel}
-                  value={item.customColor.value}
-                  className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent p-0.5"
-                  onChange={(e) => item.customColor?.onPick(e.target.value)}
-                />
-              )}
-            </span>
-          </fieldset>
+          <Fragment key={item.label}>
+            <fieldset
+              aria-label={item.label}
+              className="m-0 flex items-center justify-between gap-2 border-0 p-0 px-3 py-1"
+            >
+              <span className="text-xs text-muted-foreground">{item.label}</span>
+              <span className="flex items-center gap-0.5">
+                {item.options.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={option.selected}
+                    aria-label={option.ariaLabel ?? option.label}
+                    className={cn(
+                      'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      option.selected
+                        ? 'bg-accent font-medium text-foreground'
+                        : 'text-muted-foreground',
+                    )}
+                    // Applies immediately and keeps the menu open: option rows
+                    // are property pickers, and closing per pick would force a
+                    // reopen for every adjustment.
+                    onClick={option.onSelect}
+                  >
+                    {option.icon !== undefined ? (
+                      <span aria-hidden="true" className="[&>svg]:size-3.5">
+                        {option.icon}
+                      </span>
+                    ) : (
+                      option.label
+                    )}
+                  </button>
+                ))}
+                {item.customColor !== undefined && (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={item.customColor.selected}
+                    aria-expanded={openCustomColor === item.label}
+                    aria-label={item.customColor.ariaLabel}
+                    className={cn(
+                      'flex h-7 min-w-7 items-center justify-center rounded px-1 transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      item.customColor.selected && 'bg-accent',
+                    )}
+                    onClick={() =>
+                      setOpenCustomColor((prev) => (prev === item.label ? null : item.label))
+                    }
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-3.5 rounded-full border border-border"
+                      style={{
+                        background: item.customColor.selected
+                          ? item.customColor.value
+                          : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                      }}
+                    />
+                  </button>
+                )}
+              </span>
+            </fieldset>
+            {item.customColor !== undefined && openCustomColor === item.label && (
+              <CustomColorPanel value={item.customColor.value} onPick={item.customColor.onPick} />
+            )}
+          </Fragment>
         ) : (
           <button
             key={item.label}

@@ -2799,6 +2799,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 customColor: {
                   value: current !== undefined && current.startsWith('#') ? current : '#808080',
                   ariaLabel: 'Custom color',
+                  selected: current !== undefined && current.startsWith('#'),
                   onPick: (hex: string) => apply(hex as CanvasColor),
                 },
               })
