@@ -185,7 +185,7 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(listJson.canvases.find((c) => c.slug === 'legacy')?.kind).toBe('spatial')
   })
 
-  it('returns 400 with Problem Details title on an invalid kind', async () => {
+  it('returns 400 with Problem Details title naming the actual failing field on an invalid kind', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/ws1/canvases', {
       method: 'POST',
@@ -195,6 +195,10 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(res.status).toBe(400)
     const json = (await res.json()) as { title?: string }
     expect(typeof json.title).toBe('string')
+    // A valid slug plus an invalid kind must not be told "slug is required" —
+    // that names the wrong field and gives no path to recovery.
+    expect(json.title).toMatch(/kind/i)
+    expect(json.title).not.toMatch(/slug is required/i)
   })
 
   it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
