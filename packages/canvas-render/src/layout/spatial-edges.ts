@@ -271,17 +271,33 @@ export function assignEdgeAnchors(
         a.edgeIndex - b.edgeIndex ||
         (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
     )
-    group.forEach((end, i) => {
-      const point = sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))
-      const depth = ORTHOGONAL_STUB_PX + i * STUB_LANE_STEP_PX
-      const entry = anchors.get(end.edgeId) ?? {}
+    const placed = group.map((end, i) => ({
+      end,
+      point: sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1)),
+      t: tangentCoordinate(end.side, sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))),
+    }))
+    for (const member of placed) {
+      // Depth by SWEEP RANK, not list index: a corridor travelling toward
+      // its far endpoint passes every anchor between its own and that
+      // direction, and must run deeper than all of their exit segments —
+      // an index-ordered ladder gives a sweeping corridor a shallow lane
+      // and forces a crossing right at the node that the connections
+      // themselves never required. Ends that sweep past nothing share the
+      // base depth; their corridors occupy disjoint tangent ranges.
+      const dir = Math.sign(tangentCoordinate(member.end.side, member.end.farCenter) - member.t)
+      const rank =
+        dir === 0
+          ? 0
+          : placed.filter((other) => (dir > 0 ? other.t > member.t : other.t < member.t)).length
+      const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
+      const entry = anchors.get(member.end.edgeId) ?? {}
       anchors.set(
-        end.edgeId,
-        end.role === 'from'
-          ? { ...entry, from: point, fromLaneDepth: depth }
-          : { ...entry, to: point, toLaneDepth: depth },
+        member.end.edgeId,
+        member.end.role === 'from'
+          ? { ...entry, from: member.point, fromLaneDepth: depth }
+          : { ...entry, to: member.point, toLaneDepth: depth },
       )
-    })
+    }
   }
   return anchors
 }

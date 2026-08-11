@@ -356,3 +356,54 @@ describe('routing properties: stub lane depth', () => {
     },
   )
 })
+
+type PointXY = { x: number; y: number }
+
+// Sweep-rank lanes. Spokes sit BOTH above and below the hub's right side,
+// so the group mixes upward- and downward-sweeping corridors; no member's
+// lane run may cross another member's exit segment right at the node.
+// Mutation check: reverting depth to the list index reintroduces the
+// crossing for a sweeping corridor given a shallow lane.
+const mixedLaneScenario = fc.record({
+  below: fc.integer({ min: 1, max: 5 }),
+  above: fc.integer({ min: 1, max: 5 }),
+  jitters: fc.array(fc.integer({ min: 0, max: 40 }), { minLength: 10, maxLength: 10 }),
+})
+
+describe('routing properties: sweep-rank lanes', () => {
+  fcTest.prop([mixedLaneScenario], withDefaults())(
+    'no lane run crosses another member exit at the node, for mixed sweep directions',
+    ({ below, above, jitters }) => {
+      const hub = node('hub', 'text', { x: 0, y: 0, w: 100, h: 100 })
+      const spokes = [
+        ...Array.from({ length: below }, (_, i) =>
+          node(`d${i}`, 'text', { x: 2000, y: 250 + i * 130 + jitters[i]!, w: 100, h: 100 }),
+        ),
+        ...Array.from({ length: above }, (_, i) =>
+          node(`u${i}`, 'text', { x: 2000, y: -250 - i * 130 - jitters[5 + i]!, w: 100, h: 100 }),
+        ),
+      ]
+      const edges: CanvasEdge[] = spokes.map((s, i) => ({
+        id: `e${i}`,
+        fromNode: 'hub',
+        toNode: s.id,
+      }))
+      const anchors = assignEdgeAnchors([hub, ...spokes], edges)
+      const routed = edges.map((e) =>
+        routeEdge([hub, ...spokes], e, 'orthogonal', anchors.get(e.id)),
+      )
+      const cross = (a1: PointXY, a2: PointXY, b1: PointXY, b2: PointXY) => {
+        const d = (p: PointXY, q: PointXY, r: PointXY) =>
+          (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
+        return d(b1, b2, a1) * d(b1, b2, a2) < 0 && d(a1, a2, b1) * d(a1, a2, b2) < 0
+      }
+      for (const a of routed) {
+        for (const b of routed) {
+          if (a === b || a.path.length < 3 || b.path.length < 2) continue
+          // a's lane run (stub to first turn) vs b's exit segment.
+          expect(cross(a.path[1]!, a.path[2]!, b.path[0]!, b.path[1]!)).toBe(false)
+        }
+      }
+    },
+  )
+})
