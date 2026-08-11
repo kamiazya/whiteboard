@@ -184,6 +184,25 @@
   }
 
   /*
+   * Skeletons appear only when the wait is real: invisible for a beat,
+   * then a gentle fade-in. A skeleton that pops for a single frame
+   * between a resolved chunk and first paint reads as a glitch, not as
+   * progress — fast loads should show quiet background, not a flash of
+   * pulsing placeholders. The reduced-motion floor below collapses the
+   * fade itself; the delay still suppresses the flash.
+   */
+  @keyframes skeleton-appear {
+    to {
+      opacity: 1;
+    }
+  }
+
+  .skeleton-appear {
+    opacity: 0;
+    animation: skeleton-appear var(--motion-duration-normal) var(--motion-ease-out) 300ms forwards;
+  }
+
+  /*
    * Reduced-motion floor: neutralize every animation and transition —
    * including tw-animate-css's data-state entrances — for users who asked
    * the OS for less motion. 0.01ms instead of 0 so `animationend` /

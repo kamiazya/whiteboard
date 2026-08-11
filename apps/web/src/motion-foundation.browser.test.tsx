@@ -47,6 +47,15 @@ describe('motion foundation', () => {
     expect(styles.getPropertyValue('--motion-ease-out').trim()).toContain('cubic-bezier')
   })
 
+  it('ships the delayed skeleton-appear rule (no placeholder flash on fast loads)', () => {
+    const css = collectCssText()
+    const ruleIdx = css.indexOf('.skeleton-appear')
+    expect(ruleIdx).toBeGreaterThan(-1)
+    const rule = css.slice(ruleIdx, css.indexOf('}', ruleIdx))
+    expect(rule).toContain('opacity: 0')
+    expect(rule).toMatch(/animation:.*0\.3s|animation:.*300ms/)
+  })
+
   it('ships a prefers-reduced-motion guard neutralizing animations and transitions', () => {
     const css = collectCssText()
     const mediaIdx = css.indexOf('prefers-reduced-motion: reduce')

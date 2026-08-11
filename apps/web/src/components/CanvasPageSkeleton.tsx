@@ -3,6 +3,9 @@
  * area placeholders instead of a lone sentence, so the page's shape is
  * stable from first paint. Announced politely to assistive tech via the
  * status role + label (the visible pulse carries no text).
+ *
+ * skeleton-appear keeps it invisible for a beat so a fast load never
+ * flashes placeholders (see index.css).
  */
 export function CanvasPageSkeleton({ label }: { label: string }) {
   return (
@@ -10,7 +13,7 @@ export function CanvasPageSkeleton({ label }: { label: string }) {
       role="status"
       aria-live="polite"
       aria-label={label}
-      className="flex h-full w-full flex-col"
+      className="skeleton-appear flex h-full w-full flex-col"
     >
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <div className="h-5 w-36 animate-pulse rounded bg-muted" />
