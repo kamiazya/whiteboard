@@ -1,5 +1,5 @@
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { Copy, Trash2 } from 'lucide-react'
+import { Copy, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -8,8 +8,14 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
-import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
   AlertDialog,
@@ -20,7 +26,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
@@ -134,6 +139,8 @@ export function BrowserLocalCanvasPage({
   // disable-while-in-flight guard (a second click during the async
   // read-then-write must not start a second copy) and the error surface.
   const [isDuplicating, setIsDuplicating] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const canvasOpsButtonRef = useRef<HTMLButtonElement | null>(null)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const handleDuplicate = async () => {
     if (isDuplicating) return
@@ -361,9 +368,10 @@ export function BrowserLocalCanvasPage({
     return <CanvasPageSkeleton label="Loading canvas" />
   }
 
-  // Right cluster of the canvas row: canvas STATE, then whole-document
-  // operations. One JSX value shared by both canvas-kind branches so the
-  // two rows cannot drift apart.
+  // Whole-document operations live behind a kebab: duplicate and delete
+  // are rare actions, and rare + destructive earns a menu (with words)
+  // over two always-visible icon buttons. One JSX value shared by both
+  // canvas-kind branches so the two rows cannot drift apart.
   const canvasRowActions = (
     <>
       {cleanupError && (
@@ -376,36 +384,47 @@ export function BrowserLocalCanvasPage({
           {duplicateError}
         </div>
       )}
-      <SaveStatusChip state={pageState.persistence} />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            aria-label="Duplicate canvas"
-            disabled={isDuplicating}
-            onClick={() => void handleDuplicate()}
-            variant="ghost"
-            size="sm"
-            className="size-7 p-0"
-          >
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                ref={canvasOpsButtonRef}
+                type="button"
+                aria-label="More canvas actions"
+                variant="ghost"
+                size="sm"
+                className="size-7 p-0"
+              >
+                <EllipsisVertical aria-hidden="true" className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More canvas actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Duplicate canvas</TooltipContent>
-      </Tooltip>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            type="button"
-            aria-label="Delete canvas"
-            variant="ghost"
-            size="sm"
-            className="size-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            Duplicate canvas
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+            onSelect={() => setConfirmDelete(true)}
           >
             <Trash2 aria-hidden="true" className="size-3.5" />
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
+            Delete canvas
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent
+          // The menu item that opened this dialog unmounted with the menu;
+          // default close-focus would fall to <body>, so hand it to the kebab.
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            canvasOpsButtonRef.current?.focus()
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -502,6 +521,7 @@ export function BrowserLocalCanvasPage({
             <div className="flex h-full min-h-0 flex-col">
               <CanvasProperties
                 key={canvasId ?? 'no-canvas'}
+                status={<SaveStatusChip state={pageState.persistence} />}
                 actions={canvasRowActions}
                 meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
                 onChange={(next) => {
@@ -539,6 +559,7 @@ export function BrowserLocalCanvasPage({
                 facets belong to the CANVAS, not to either editor. */}
             <CanvasProperties
               key={canvasId ?? 'no-canvas'}
+              status={<SaveStatusChip state={pageState.persistence} />}
               settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
               actions={canvasRowActions}
               meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}

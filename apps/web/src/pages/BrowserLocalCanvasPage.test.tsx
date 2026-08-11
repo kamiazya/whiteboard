@@ -79,6 +79,23 @@ const snap: CanvasSnapshot = {
   kind: 'spatial' as const,
 }
 
+// Radix DropdownMenuTrigger opens on pointerDown (not click); the menu
+// mounts asynchronously, and items select on pointerUp.
+async function openCanvasOpsMenu() {
+  const trigger = screen.getByRole('button', { name: 'More canvas actions' })
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+  return screen.findByRole('menu')
+}
+
+function canvasOpsItem(name: RegExp) {
+  return screen.findByRole('menuitem', { name })
+}
+
+async function openDeleteConfirm() {
+  await openCanvasOpsMenu()
+  fireEvent.pointerUp(await canvasOpsItem(/delete canvas/i))
+}
+
 describe('BrowserLocalCanvasPage', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => {
@@ -174,45 +191,44 @@ describe('BrowserLocalCanvasPage', () => {
   })
 
   it('renders cleanup-completed view after delete button click and confirm', async () => {
+    vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    // After act, load is complete and editing state is rendered — button must exist
-    const cleanupBtn = screen.getByRole('button', { name: /delete/i })
+    // After act, load is complete and the canvas row is rendered — the
+    // rare operations live behind the kebab.
     await act(async () => {
-      cleanupBtn.click()
+      await openDeleteConfirm()
     })
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
-      await vi.runAllTimersAsync()
     })
-    expect(screen.getByTestId('cleanup-completed')).toBeTruthy()
+    expect(await screen.findByTestId('cleanup-completed')).toBeTruthy()
   })
 
   it('does not delete the canvas when the confirmation dialog is cancelled', async () => {
+    vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    const cleanupBtn = screen.getByRole('button', { name: /delete canvas/i })
     await act(async () => {
-      cleanupBtn.click()
+      await openDeleteConfirm()
     })
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     const cancelBtn = screen.getByRole('button', { name: /cancel/i })
     await act(async () => {
       cancelBtn.click()
-      await vi.runAllTimersAsync()
     })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(screen.getByRole('main')).toBeTruthy()
   })
 
@@ -228,10 +244,8 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={loro} />)
     })
-    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i })
-    await act(async () => {
-      duplicateBtn.click()
-    })
+    await openCanvasOpsMenu()
+    fireEvent.pointerUp(await canvasOpsItem(/duplicate/i))
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
     })
@@ -259,24 +273,24 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={loro} />)
     })
-    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i }) as HTMLButtonElement
-    fireEvent.click(duplicateBtn)
-    await waitFor(() => expect(duplicateBtn.disabled).toBe(true))
-    // A second click while disabled must not start a second duplicate.
-    fireEvent.click(duplicateBtn)
+    await openCanvasOpsMenu()
+    fireEvent.pointerUp(await canvasOpsItem(/duplicate/i))
+    // The menu closes on select; while the duplicate is in flight the item
+    // is disabled, so a second attempt from the reopened menu is inert.
+    await openCanvasOpsMenu()
+    const inFlightItem = await canvasOpsItem(/duplicate/i)
+    await waitFor(() => expect(inFlightItem.getAttribute('aria-disabled')).toBe('true'))
+    fireEvent.pointerUp(inFlightItem)
     await act(async () => {
       releaseLoad?.()
     })
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
     })
-    // The actions cluster remounts with the canvas row when the page
-    // navigates to the copy (the row is keyed on canvas identity), so the
-    // re-enabled state is asserted on the CURRENT button, not the stale node.
-    const freshDuplicateBtn = screen.getByRole('button', {
-      name: /duplicate/i,
-    }) as HTMLButtonElement
-    expect(freshDuplicateBtn.disabled).toBe(false)
+    // The row remounts with the copy (keyed on canvas identity): the fresh
+    // menu offers Duplicate enabled again.
+    await openCanvasOpsMenu()
+    expect((await canvasOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
     const list = await store.listCanvases()
     expect(list.filter((c) => c.name === 'untitled (copy)')).toHaveLength(1)
   })
@@ -288,18 +302,21 @@ describe('BrowserLocalCanvasPage', () => {
     await store.save(snap)
     const loro = new FakeLoroStore()
     await loro.save('c1', new Loro().export({ mode: 'snapshot' }))
-    loro.load = async () => ({ kind: 'corrupt-snapshot' })
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={loro} />)
     })
-    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i }) as HTMLButtonElement
-    await act(async () => {
-      duplicateBtn.click()
-    })
+    // Break the Loro read only for the DUPLICATE — the canvas itself loaded
+    // fine, so the operations kebab is offered and the failure surfaces as
+    // an alert on an otherwise healthy page.
+    loro.load = async () => ({ kind: 'corrupt-snapshot' })
+    await openCanvasOpsMenu()
+    fireEvent.pointerUp(await canvasOpsItem(/duplicate/i))
     expect((await screen.findByRole('alert')).textContent).toMatch(/duplicat/i)
-    expect(duplicateBtn.disabled).toBe(false)
-    // No switch happened — still on the source canvas.
+    // No switch happened — still on the source canvas. (Asserted before
+    // reopening the menu: Radix's modal dropdown aria-hides the page.)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    await openCanvasOpsMenu()
+    expect((await canvasOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
@@ -309,29 +326,39 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    expect(screen.getByText('Saved')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy()
     // the raw "saved" enum token must not leak to the UI
     expect(screen.queryByText('saved')).toBeNull()
   })
 
   it('the canvas row carries state, settings and operations in ONE row (no separate strip)', async () => {
+    vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    // Save state is the colored chip, not a bare text span.
-    expect(screen.getByTestId('save-status-chip').textContent).toContain('Saved')
+    // Save state is the color-only dot, named for assistive tech.
+    expect(screen.getByTestId('save-status-chip').getAttribute('aria-label')).toBe('Saved')
     // A spatial canvas offers its display settings from the same row.
     expect(screen.getByRole('button', { name: 'Canvas display settings' })).toBeTruthy()
-    // The whole cluster lives inside the canvas row (CanvasProperties),
-    // beside the title — not in a second header strip of its own.
+    // The whole cluster lives inside the canvas row (CanvasProperties) —
+    // the dot LEFT of the title, the rare operations behind one kebab at
+    // the right edge — not in a second header strip of its own.
     const title = screen.getByRole('textbox', { name: /title/i })
-    const row = title.closest('div.border-b')
-    expect(row?.contains(screen.getByTestId('save-status-chip'))).toBe(true)
-    expect(row?.contains(screen.getByRole('button', { name: 'Duplicate canvas' }))).toBe(true)
-    expect(row?.contains(screen.getByRole('button', { name: 'Delete canvas' }))).toBe(true)
+    const row = title.closest('div.border-b') as HTMLElement
+    const chip = screen.getByTestId('save-status-chip')
+    expect(row.contains(chip)).toBe(true)
+    expect(chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const kebab = screen.getByRole('button', { name: 'More canvas actions' })
+    expect(row.contains(kebab)).toBe(true)
+    // Duplicate/Delete are menu items, not always-visible buttons.
+    expect(screen.queryByRole('button', { name: 'Duplicate canvas' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete canvas' })).toBeNull()
+    await openCanvasOpsMenu()
+    expect(await canvasOpsItem(/duplicate canvas/i)).toBeTruthy()
+    expect(await canvasOpsItem(/delete canvas/i)).toBeTruthy()
   })
 
   it('surfaces the degraded save message in the header when a save fails', async () => {
@@ -355,35 +382,34 @@ describe('BrowserLocalCanvasPage', () => {
     // A real save-failure round trip through SpatialEditor's onChange needs a
     // pointer gesture this suite does not drive; verify the persistence
     // state at least starts as Saved rather than immediately degraded.
-    expect(screen.getByText('Saved')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy()
   })
 
   it('offers a Start fresh action in the cleanup-completed view', async () => {
+    vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    const deleteBtn = screen.getByRole('button', { name: /delete/i })
     await act(async () => {
-      deleteBtn.click()
+      await openDeleteConfirm()
     })
-    const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
+    const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
-      await vi.runAllTimersAsync()
     })
     // cleanup-completed must not be a dead end: Start fresh mints a new canvas.
-    const startFresh = screen.getByRole('button', { name: /start fresh/i })
+    const startFresh = await screen.findByRole('button', { name: /start fresh/i })
     await act(async () => {
       startFresh.click()
-      await vi.runAllTimersAsync()
     })
-    expect(screen.getByRole('main')).toBeTruthy()
+    expect(await screen.findByRole('main')).toBeTruthy()
   })
 
   it('makes no network requests during load or cleanup', async () => {
+    vi.useRealTimers()
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('', { status: 200 }))
@@ -393,15 +419,14 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    const deleteBtn = screen.getByRole('button', { name: /delete/i })
     await act(async () => {
-      deleteBtn.click()
+      await openDeleteConfirm()
     })
-    const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
+    const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
-      await vi.runAllTimersAsync()
     })
+    await screen.findByTestId('cleanup-completed')
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
   })
@@ -418,8 +443,8 @@ describe('BrowserLocalCanvasPage', () => {
     expect(heading.textContent).toBe('untitled')
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
     expect(await screen.findByLabelText('Canvas actions')).toBeTruthy()
-    // Distinct from the Delete button's accessible name.
-    expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+    // Distinct from the canvas row's operations kebab.
+    expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
   })
 
   it("renaming through the top bar's canvas actions updates the heading and flushes a save", async () => {
@@ -472,8 +497,9 @@ describe('BrowserLocalCanvasPage', () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
     const switcher = await screen.findByRole('button', { name: 'untitled' })
-    // Accessible names must not collide with Delete or the canvas actions control.
-    expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+    // Accessible names must not collide with the operations kebab or the
+    // top bar's canvas actions control.
+    expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
     expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByText('Other canvas')
@@ -860,7 +886,7 @@ describe('BrowserLocalCanvasPage', () => {
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} />)
       })
-      expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
       expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
     })
   })

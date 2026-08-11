@@ -10,6 +10,11 @@ export interface CanvasPropertiesProps {
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
   /**
+   * Save-state indicator, rendered LEFT of the title — the canvas's "am I
+   * safe" signal reads before its name, like a title-bar dirty dot.
+   */
+  readonly status?: ReactNode
+  /**
    * Canvas display settings control, rendered beside the properties toggle.
    * Spatial canvases pass the settings popover; markdown canvases omit it —
    * edge routing has no meaning for a document with no spatial scene.
@@ -49,6 +54,7 @@ export function CanvasProperties({
   meta,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
+  status,
   settings,
   actions,
 }: CanvasPropertiesProps) {
@@ -90,6 +96,7 @@ export function CanvasProperties({
   return (
     <div className="border-border bg-background flex flex-col gap-2 border-b px-3 py-2">
       <div className="flex items-center gap-2">
+        {status}
         <label className="sr-only" htmlFor={`${suggestionsId}-title`}>
           Title
         </label>

@@ -42,10 +42,13 @@ async function renderLoaded(store = new IndexedDBStore()) {
   return store
 }
 
-// Click the header "Delete canvas" trigger and wait for the confirmation
-// dialog to appear.
+// Open the canvas row's operations kebab, pick "Delete canvas", and wait
+// for the confirmation dialog to appear.
 async function openDeleteDialog(): Promise<HTMLElement> {
-  screen.getByRole('button', { name: /delete canvas/i }).click()
+  const kebab = screen.getByRole('button', { name: 'More canvas actions' })
+  fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
+  const item = await screen.findByRole('menuitem', { name: /delete canvas/i })
+  fireEvent.pointerUp(item)
   return screen.findByRole('alertdialog', undefined, { timeout: 5000 })
 }
 
@@ -98,7 +101,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect(screen.getByText('Saved')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument()
   })
 
   it('cancelling via Escape keeps the canvas intact', async () => {
@@ -119,11 +122,9 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
     expect(dialog).toHaveAccessibleDescription(/permanently removes the canvas.*cannot be undone/i)
   })
 
-  it('focus moves into the dialog on open and returns to the trigger on close', async () => {
+  it('focus moves into the dialog on open and returns to the kebab on close', async () => {
     await renderLoaded()
-    const trigger = screen.getByRole('button', { name: /delete canvas/i })
-    trigger.click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true), {
       timeout: 5000,
     })
@@ -132,7 +133,10 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
       .getByRole('button', { name: /cancel/i })
       .click()
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
-    await waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 5000 })
+    // The menu item that opened the dialog is long unmounted — focus must
+    // land back on the kebab, not fall to <body>.
+    const kebab = screen.getByRole('button', { name: 'More canvas actions' })
+    await waitFor(() => expect(document.activeElement).toBe(kebab), { timeout: 5000 })
   })
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
