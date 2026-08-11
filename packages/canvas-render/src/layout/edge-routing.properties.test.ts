@@ -6,7 +6,7 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
-import { routeEdge } from './spatial-edges.js'
+import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 const node = (
   id: string,
@@ -134,6 +134,91 @@ describe('rounded-edge flattening properties', () => {
         expect(p.x).toBeLessThanOrEqual(maxX)
         expect(p.y).toBeGreaterThanOrEqual(minY)
         expect(p.y).toBeLessThanOrEqual(maxY)
+      }
+    },
+  )
+})
+
+// Anchor fan-out invariants. The generator is a HUB topology — every edge
+// touches node `hub`, so shared (node, side) groups are the common case
+// rather than a lucky draw (a sparse generator would pass vacuously; the
+// mutation check for this property is stacking every end back on the side
+// midpoint, which must go red).
+const hubScenario = fc.record({
+  spokes: fc.uniqueArray(fc.constantFrom('s1', 's2', 's3', 's4', 's5'), {
+    minLength: 2,
+    maxLength: 5,
+  }),
+  spokePositions: fc.array(
+    fc.record({
+      x: fc.constantFrom(-200, 300, 300, 300, -200),
+      y: fc.constantFrom(-150, 0, 150, 300, 450),
+    }),
+    { minLength: 5, maxLength: 5 },
+  ),
+  directions: fc.array(fc.boolean(), { minLength: 5, maxLength: 5 }),
+  explicitSides: fc.array(fc.constantFrom(undefined, 'top' as const, 'right' as const), {
+    minLength: 5,
+    maxLength: 5,
+  }),
+})
+
+describe('routing properties: anchor fan-out', () => {
+  fcTest.prop([hubScenario], withDefaults())(
+    'ends sharing a (node, side) never share a point, always sit on their side, and keep tangent order',
+    ({ spokes, spokePositions, directions, explicitSides }) => {
+      const hub: SpatialNode = {
+        id: 'hub',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        text: 'h',
+      }
+      const nodes: SpatialNode[] = [
+        hub,
+        ...spokes.map((id, i) => node(id, 'text', { ...spokePositions[i]!, w: 100, h: 100 })),
+      ]
+      const edges: CanvasEdge[] = spokes.map((id, i) => ({
+        id: `e-${id}`,
+        fromNode: directions[i]! ? 'hub' : id,
+        toNode: directions[i]! ? id : 'hub',
+        ...(explicitSides[i] === undefined
+          ? {}
+          : directions[i]!
+            ? { fromSide: explicitSides[i] }
+            : { toSide: explicitSides[i] }),
+      }))
+      const anchors = assignEdgeAnchors(nodes, edges)
+      const routed = edges.map((e) => routeEdge(nodes, e, 'straight', anchors.get(e.id)))
+
+      // Group the hub-side endpoint of every edge by reported side.
+      const bySide = new Map<string, { point: { x: number; y: number }; far: SpatialNode }[]>()
+      for (const [i, r] of routed.entries()) {
+        const hubIsFrom = edges[i]!.fromNode === 'hub'
+        const point = hubIsFrom ? r.path[0]! : r.path[r.path.length - 1]!
+        const side = hubIsFrom ? r.fromSide : r.toSide
+        const far = nodes.find((n) => n.id === spokes[i]!)!
+        const entry = bySide.get(side)
+        if (entry === undefined) bySide.set(side, [{ point, far }])
+        else entry.push({ point, far })
+      }
+      for (const [side, ends] of bySide) {
+        for (const { point } of ends) {
+          // Every anchor lies ON the hub's reported side segment.
+          if (side === 'left') expect(point.x).toBe(0)
+          if (side === 'right') expect(point.x).toBe(100)
+          if (side === 'top') expect(point.y).toBe(0)
+          if (side === 'bottom') expect(point.y).toBe(100)
+          expect(point.x).toBeGreaterThanOrEqual(0)
+          expect(point.x).toBeLessThanOrEqual(100)
+          expect(point.y).toBeGreaterThanOrEqual(0)
+          expect(point.y).toBeLessThanOrEqual(100)
+        }
+        // No two ends on one side share a point.
+        const keys = ends.map(({ point }) => `${point.x},${point.y}`)
+        expect(new Set(keys).size).toBe(keys.length)
       }
     },
   )

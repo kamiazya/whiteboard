@@ -91,6 +91,119 @@ function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
   }
 }
 
+/** An edge's resolved endpoint positions, when the fan-out pass moved them. */
+export interface EdgeAnchorPair {
+  readonly from?: Point
+  readonly to?: Point
+}
+
+/** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
+function tangentCoordinate(side: Side, point: Point): number {
+  return side === 'left' || side === 'right' ? point.y : point.x
+}
+
+/** The point a fraction of the way along a side, 0 at its top/left end. */
+function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
+  switch (side) {
+    case 'top':
+      return { x: rect.x + rect.w * fraction, y: rect.y }
+    case 'bottom':
+      return { x: rect.x + rect.w * fraction, y: rect.y + rect.h }
+    case 'left':
+      return { x: rect.x, y: rect.y + rect.h * fraction }
+    case 'right':
+      return { x: rect.x + rect.w, y: rect.y + rect.h * fraction }
+  }
+}
+
+/**
+ * Deterministic anchor positions for every edge end, spreading the ends
+ * that share one (node, side) instead of stacking them all on the side's
+ * midpoint. JSON Canvas authors a side but never a position along it, so
+ * the position is the renderer's to choose — and a stack of ends at one
+ * point makes edges with different colors or arrowheads read as a single
+ * line until they diverge.
+ *
+ * Within a shared side, ends sit at fractions 1/(n+1) … n/(n+1), ordered
+ * by where the FAR endpoint's center lies along the side's tangent axis so
+ * routes leave in the order of their destinations and never cross right at
+ * the node; ties (same far node, e.g. a bidirectional pair) fall back to
+ * edge document order, then from-before-to. A side with a single end keeps
+ * its midpoint, so canvases without shared sides render exactly as before.
+ *
+ * Edges with a missing endpoint get no entry — `routeEdge` already
+ * degrades those to a zero-length path on its own.
+ */
+export function assignEdgeAnchors(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+): ReadonlyMap<string, EdgeAnchorPair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  type End = {
+    readonly edgeId: string
+    readonly edgeIndex: number
+    readonly role: 'from' | 'to'
+    readonly rect: Rect
+    readonly side: Side
+    readonly farCenter: Point
+  }
+  const groups = new Map<string, End[]>()
+  edges.forEach((edge, edgeIndex) => {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) return
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const derived =
+      edge.fromNode === edge.toNode
+        ? { fromSide: 'right' as Side, toSide: 'right' as Side }
+        : deriveDefaultSides(fromRect, toRect)
+    const ends: End[] = [
+      {
+        edgeId: edge.id,
+        edgeIndex,
+        role: 'from',
+        rect: fromRect,
+        side: edge.fromSide ?? derived.fromSide,
+        farCenter: centerOf(toRect),
+      },
+      {
+        edgeId: edge.id,
+        edgeIndex,
+        role: 'to',
+        rect: toRect,
+        side: edge.toSide ?? derived.toSide,
+        farCenter: centerOf(fromRect),
+      },
+    ]
+    for (const end of ends) {
+      const key = `${end.role === 'from' ? edge.fromNode : edge.toNode} ${end.side}`
+      const group = groups.get(key)
+      if (group === undefined) groups.set(key, [end])
+      else group.push(end)
+    }
+  })
+
+  const anchors = new Map<string, { from?: Point; to?: Point }>()
+  for (const group of groups.values()) {
+    group.sort(
+      (a, b) =>
+        tangentCoordinate(a.side, a.farCenter) - tangentCoordinate(b.side, b.farCenter) ||
+        a.edgeIndex - b.edgeIndex ||
+        (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
+    )
+    group.forEach((end, i) => {
+      const point = sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))
+      const entry = anchors.get(end.edgeId) ?? {}
+      anchors.set(
+        end.edgeId,
+        end.role === 'from' ? { ...entry, from: point } : { ...entry, to: point },
+      )
+    })
+  }
+  return anchors
+}
+
 /** How far a detour keeps clear of the boxes it steps around, in px. */
 const OBSTACLE_CLEARANCE_PX = 16
 
@@ -302,6 +415,9 @@ export function routeEdge(
   nodes: readonly SpatialNode[],
   edge: CanvasEdge,
   style: EdgeRoutingStyle = 'straight',
+  // Endpoint override from `assignEdgeAnchors`'s fan-out pass; an absent
+  // field keeps the side midpoint, so single callers stay unchanged.
+  anchors?: EdgeAnchorPair,
 ): ResolvedEdgeNode {
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
   const toNode = nodes.find((n) => n.id === edge.toNode)
@@ -332,9 +448,9 @@ export function routeEdge(
   if (edge.fromNode === edge.toNode) {
     const fromSide: Side = edge.fromSide ?? 'right'
     const toSide: Side = edge.toSide ?? 'right'
-    const start = sidePoint(fromRect, fromSide)
+    const start = anchors?.from ?? sidePoint(fromRect, fromSide)
     const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
-    const end = sidePoint(toRect, toSide)
+    const end = anchors?.to ?? sidePoint(toRect, toSide)
     return {
       kind: 'edge',
       id: edge.id,
@@ -350,8 +466,8 @@ export function routeEdge(
   const fromSide = edge.fromSide ?? derived.fromSide
   const toSide = edge.toSide ?? derived.toSide
 
-  const start = sidePoint(fromRect, fromSide)
-  const end = sidePoint(toRect, toSide)
+  const start = anchors?.from ?? sidePoint(fromRect, fromSide)
+  const end = anchors?.to ?? sidePoint(toRect, toSide)
   // A rect that contains an endpoint can never be routed around — every
   // detour still has to reach the point inside it — so it is not an
   // obstacle. This is what lets an edge between two members of a group run

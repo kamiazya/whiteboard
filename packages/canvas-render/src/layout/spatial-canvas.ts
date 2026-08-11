@@ -40,7 +40,7 @@ import { computeEdgeJumps } from './edge-jumps.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import { routeEdge } from './spatial-edges.js'
+import { assignEdgeAnchors, type EdgeAnchorPair, routeEdge } from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
 
 /**
@@ -447,6 +447,7 @@ function composeEdge(
   canvas: SpatialCanvas,
   edge: CanvasEdge,
   options: ResolvedLayoutOptions,
+  anchors: EdgeAnchorPair | undefined,
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
@@ -454,7 +455,7 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
-  const routed = routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style)
+  const routed = routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style, anchors)
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
 }
@@ -546,7 +547,12 @@ function composeEdgesAndLabels(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): SceneNode[] {
-  const routedEdges = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
+  // One anchor pass for the whole edge set: fan-out needs to see every end
+  // sharing a side, which a per-edge route cannot.
+  const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges)
+  const routedEdges = canvas.edges.map((edge) =>
+    composeEdge(canvas, edge, resolved, anchors.get(edge.id)),
+  )
   // Canvas-wide today; the same resolution is where a per-edge
   // x-whiteboard override slots in later without touching the pipeline.
   const lineJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
