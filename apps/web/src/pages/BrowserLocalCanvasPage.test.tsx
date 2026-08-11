@@ -319,6 +319,31 @@ describe('BrowserLocalCanvasPage', () => {
     expect((await canvasOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
   })
 
+  it('Copy as JSON Canvas puts the extended document on the clipboard', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const written: string[] = []
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: (text: string) => {
+          written.push(text)
+          return Promise.resolve()
+        },
+      },
+    })
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    await openCanvasOpsMenu()
+    fireEvent.pointerUp(await canvasOpsItem(/copy as json canvas/i))
+    await waitFor(() => expect(written).toHaveLength(1))
+    const parsed = JSON.parse(written[0] as string) as { nodes: unknown[]; edges: unknown[] }
+    expect(Array.isArray(parsed.nodes)).toBe(true)
+    expect(Array.isArray(parsed.edges)).toBe(true)
+  })
+
   it('export lives in the canvas row kebab, not the top bar menu', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
