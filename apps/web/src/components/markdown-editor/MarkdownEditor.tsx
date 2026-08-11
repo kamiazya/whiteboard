@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { PreviewPane } from './PreviewPane.js'
 import { SourcePane } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
@@ -24,6 +25,8 @@ export interface MarkdownEditorProps {
   measure?: MeasureText
   /** Focus the source pane on mount (fresh-note flows). */
   autoFocus?: boolean
+  /** Resolved app theme; drives the preview's inherited text fill. */
+  theme?: ResolvedTheme
 }
 
 const DEFAULT_MAX_WIDTH = 480
@@ -65,6 +68,7 @@ export function MarkdownEditor({
   previewDebounceMs = DEFAULT_PREVIEW_DEBOUNCE_MS,
   measure,
   autoFocus = false,
+  theme = 'light',
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
@@ -165,7 +169,12 @@ export function MarkdownEditor({
         data-testid="markdown-preview-scroll"
         style={{ flex: 1, minWidth: 0, overflow: 'auto' }}
       >
-        <PreviewPane value={debouncedValue} maxWidth={maxWidth} measure={resolvedMeasure} />
+        <PreviewPane
+          value={debouncedValue}
+          maxWidth={maxWidth}
+          measure={resolvedMeasure}
+          theme={theme}
+        />
       </div>
     </div>
   )

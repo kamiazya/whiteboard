@@ -486,6 +486,7 @@ export function BrowserLocalCanvasPage({
               onChange={markdownBody.setBody}
               autoFocus
               className="h-full"
+              theme={resolvedTheme}
             />
           )
         ) : (
