@@ -13,7 +13,6 @@ import { HeaderSaveDot } from './HeaderSaveDot'
 import { CanvasActionsMenu } from './workspace-top-bar/CanvasActionsMenu'
 import { CanvasDropdown } from './workspace-top-bar/CanvasDropdown'
 import { sanitizeExportFilenameBase } from './workspace-top-bar/export-filename'
-import { NewCanvasDialog } from './workspace-top-bar/NewCanvasDialog'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import type { CanvasInfo } from './workspace-top-bar/types'
 import { useCanvasNames } from './workspace-top-bar/useCanvasNames'
@@ -186,18 +185,9 @@ export default function WorkspaceTopBar({
     mountedRef,
   })
 
-  const {
-    newCanvasOpen,
-    newCanvasSlug,
-    newCanvasError,
-    newCanvasBusy,
-    setNewCanvasOpen,
-    setNewCanvasSlug,
-    setNewCanvasError,
-    openNewCanvas,
-    submitNewCanvas,
-  } = useCreateCanvas({
+  const { newCanvasError, openNewCanvas } = useCreateCanvas({
     workspaceId,
+    canvases,
     slug,
     isLocalMode,
     onCreateCanvas,
@@ -302,10 +292,9 @@ export default function WorkspaceTopBar({
           </div>
         )}
 
-        {/* Local-mode-only: onCreateCanvas has no dialog to surface its error
-            in (local mode skips the daemon slug dialog entirely), so show it
-            here instead. */}
-        {isLocalMode && newCanvasError && (
+        {/* Both modes: immediate create has no dialog to surface its error
+            in, so it renders here beside the switcher. */}
+        {newCanvasError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newCanvasError}
           </span>
@@ -352,19 +341,6 @@ export default function WorkspaceTopBar({
         onToggleTheme={onToggleTheme}
         onEnterFullscreen={onEnterFullscreen}
         onOpenSettings={onOpenSettings}
-      />
-
-      <NewCanvasDialog
-        open={newCanvasOpen}
-        onOpenChange={setNewCanvasOpen}
-        slug={newCanvasSlug}
-        onSlugChange={(value) => {
-          setNewCanvasSlug(value)
-          if (newCanvasError) setNewCanvasError(null)
-        }}
-        error={newCanvasError}
-        busy={newCanvasBusy}
-        onSubmit={() => void submitNewCanvas()}
       />
     </header>
   )
