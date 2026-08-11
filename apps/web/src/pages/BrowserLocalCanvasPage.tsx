@@ -1,5 +1,6 @@
+import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
+import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -459,6 +460,19 @@ export function BrowserLocalCanvasPage({
           <DropdownMenuItem onSelect={() => void handleExport('svg')}>
             <Download aria-hidden="true" className="size-3.5" />
             Export as SVG
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              // Text on the clipboard survives any chat/paste channel intact,
+              // which a binary download cannot — the phone-friendly way to
+              // hand the exact canvas (coordinates included) to a debugger.
+              void navigator.clipboard
+                ?.writeText(serializeSpatial(canvas, 'extended'))
+                .catch(() => {})
+            }}
+          >
+            <Braces aria-hidden="true" className="size-3.5" />
+            Copy as JSON Canvas
           </DropdownMenuItem>
           <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />
