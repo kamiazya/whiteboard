@@ -466,23 +466,27 @@ function computeAnchorsFor(
  * platforms. */
 const COST_QUANTUM = 4
 
-type ConfigCost = readonly [overlap: number, illegible: number, crossings: number]
+type ConfigCost = readonly [overlap: number, illegible: number, crossings: number, bends: number]
 
 function lessCost(a: ConfigCost, b: ConfigCost): boolean {
   if (a[0] !== b[0]) return a[0] < b[0]
   if (a[1] !== b[1]) return a[1] < b[1]
-  return a[2] < b[2]
+  if (a[2] !== b[2]) return a[2] < b[2]
+  return a[3] < b[3]
 }
 
 /**
  * Global legibility cost of a routed configuration, as a lexicographic
  * integer tuple: total collinear axis-aligned overlap length (a parallel
  * overlap has no crossing point, so a line jump cannot express it —
- * heaviest), crossings too close to a segment end to render their jump
- * arc, then total crossings. Bends and length are deliberately NOT part
- * of the cost: they are governed by the per-edge pair ranking, and letting
- * them drive re-siding would let the optimizer reshuffle crossing-free
- * canvases that nothing is wrong with.
+ * heaviest; an edge RETRACING its own ink counts here too, via
+ * `selfScore`), crossings too close to a segment end to render their jump
+ * arc, total crossings, then total REALIZED bends. Bends sit last and the
+ * optimizer's short-circuit ignores them: they only break ties between
+ * configurations that already tie on every visibility problem — the
+ * abstract pair ranking (L before Z) can lie once obstacles force the L
+ * into a staircase, and this term is what corrects it. Length stays out
+ * of the cost entirely, governed by the per-edge pair ranking.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
   const q = (n: number) => Math.round(n * COST_QUANTUM)
@@ -532,11 +536,40 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
       }
     }
   }
-  return [overlap, illegible, crossings]
+  return [overlap, illegible, crossings, 0]
+}
+
+/**
+ * Per-edge quality of ONE routed path: collinear overlap with ITSELF
+ * (adjacent retraces included — the doubled-line arrival a facing-away
+ * side produces when the connector overshoots the entry stub through the
+ * node body) in the heaviest slot, and realized bend count in the last.
+ */
+function selfScore(path: readonly Point[]): ConfigCost {
+  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  let overlap = 0
+  for (let i = 1; i < path.length; i++) {
+    for (let j = i + 1; j < path.length; j++) {
+      const a1 = path[i - 1] as Point
+      const a2 = path[i] as Point
+      const b1 = path[j - 1] as Point
+      const b2 = path[j] as Point
+      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
+        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
+        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+        if (hi > lo) overlap += hi - lo
+      } else if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
+        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
+        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+        if (hi > lo) overlap += hi - lo
+      }
+    }
+  }
+  return [overlap, 0, 0, bendCount(path)]
 }
 
 function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
-  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2]]
+  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2], a[3] + sign * b[3]]
 }
 
 /**
@@ -589,7 +622,9 @@ function optimizeSideChoices(
   )
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
-  let currentCost: ConfigCost = [0, 0, 0]
+  const selfCosts: ConfigCost[] = paths.map((path) => selfScore(path))
+  let currentCost: ConfigCost = [0, 0, 0, 0]
+  for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
   for (let i = 0; i < edges.length; i++) {
     for (let j = i + 1; j < edges.length; j++) {
       const score = pairScore(paths[i]!, paths[j]!)
@@ -597,6 +632,9 @@ function optimizeSideChoices(
       currentCost = addCost(currentCost, score, 1)
     }
   }
+  // The bend term (index 3) is deliberately ABSENT from the short-circuit:
+  // a canvas with no overlap and no crossings is healthy, and reshuffling
+  // it purely to shave bends is churn, not repair.
   if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
 
   const evaluateTrial = (
@@ -607,6 +645,7 @@ function optimizeSideChoices(
     paths: (readonly Point[])[]
     touched: number[]
     updates: Map<number, ConfigCost>
+    selfUpdates: Map<number, ConfigCost>
   } => {
     const trialAnchors = computeAnchorsFor(nodes, edges, trialSides)
     const touched: number[] = []
@@ -620,6 +659,13 @@ function optimizeSideChoices(
     const touchedSet = new Set(touched)
     let cost = currentCost
     const updates = new Map<number, ConfigCost>()
+    const selfUpdates = new Map<number, ConfigCost>()
+    for (const i of touched) {
+      const next = selfScore(trialPaths[i]!)
+      cost = addCost(cost, selfCosts[i] ?? [0, 0, 0, 0], -1)
+      cost = addCost(cost, next, 1)
+      selfUpdates.set(i, next)
+    }
     for (const i of touched) {
       for (let j = 0; j < edges.length; j++) {
         if (j === i) continue
@@ -630,12 +676,12 @@ function optimizeSideChoices(
         // updates map; a pair with an untouched edge reuses its cached path.
         if (touchedSet.has(j) && j < i) continue
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0], -1)
+        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0, 0], -1)
         cost = addCost(cost, next, 1)
         updates.set(key, next)
       }
     }
-    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates }
+    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates, selfUpdates }
   }
 
   const candidatesFor = (edge: CanvasEdge): SidePair[] => {
@@ -655,8 +701,18 @@ function optimizeSideChoices(
       toRect,
       () => 0,
     )
+    // U-pairs (both ends on the SAME compass side) are outside the ranked
+    // vocabulary — the initial heuristic never wants them — but they are
+    // exactly what hooks OVER everything when every ranked pair crosses,
+    // overlaps, or retraces, and what a pair of overlapping nodes needs to
+    // arrive without doubling back. Offered last: the optimizer only
+    // adopts one on a strict cost decrease.
+    const uPairs = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
+      fromSide: side as Side,
+      toSide: side as Side,
+    }))
     const seen = new Set<string>()
-    return pairs
+    return [...pairs, ...uPairs]
       .map((pair) => ({
         fromSide: edge.fromSide ?? pair.fromSide,
         toSide: edge.toSide ?? pair.toSide,
@@ -685,6 +741,7 @@ function optimizeSideChoices(
           anchors = evaluated.anchors
           paths = evaluated.paths
           for (const [key, score] of evaluated.updates) matrix.set(key, score)
+          for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
           improved = true
           break
         }
