@@ -1,5 +1,5 @@
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { LayoutGrid, ListTree, Settings } from 'lucide-react'
+import { LayoutGrid, ListTree, Plus, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
@@ -7,6 +7,7 @@ import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { Button } from '../components/ui/button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -21,6 +22,7 @@ import {
 } from '../lib/daemon-api-client.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopySlug } from '../lib/derive-copy-slug.js'
+import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
@@ -126,9 +128,7 @@ export function DaemonIndexPage({
   // "genuinely empty", and rendering an empty state during the gap reads as
   // data loss.
   const [loaded, setLoaded] = useState(false)
-  const newCanvasInputRef = useRef<HTMLInputElement | null>(null)
   const [search, setSearch] = useState('')
-  const [newCanvasSlug, setNewCanvasSlug] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
@@ -217,24 +217,23 @@ export function DaemonIndexPage({
 
   const visible = useMemo(() => filterRows(rows, search), [rows, search])
 
+  // Creation is immediate — no name is collected up front (ADR-0006 point
+  // 3). A slug is derived from the loaded rows so it never collides with a
+  // canvas already in the list; naming happens afterwards, in the opened
+  // canvas's own top bar.
   const handleCreate = useCallback(async () => {
-    if (!selectedWorkspace || !newCanvasSlug.trim()) return
+    if (!selectedWorkspace) return
     setCreateError(null)
     try {
-      const created = await createCanvas(
-        daemonFetch,
-        daemonBaseUrl,
-        selectedWorkspace,
-        newCanvasSlug.trim(),
-      )
-      setNewCanvasSlug('')
+      const slug = deriveNewCanvasSlug(rows.map((r) => r.slug))
+      const created = await createCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, slug)
       onOpenCanvas(selectedWorkspace, created.slug)
     } catch (err) {
       // daemon-api-client errors are already sanitized (Problem Details
       // title or a generic status message) — safe to surface directly.
       setCreateError(err instanceof Error ? err.message : 'Failed to create canvas.')
     }
-  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, newCanvasSlug, onOpenCanvas])
+  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas])
 
   // Client-side copy through EXISTING daemon HTTP endpoints only (read
   // snapshot -> create canvas -> write snapshot -> rename), matching the
@@ -309,25 +308,20 @@ export function DaemonIndexPage({
                 placeholder="Search…"
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void handleCreate()
-                }}
-              >
-                <input
-                  ref={newCanvasInputRef}
-                  aria-label="New canvas name"
-                  placeholder="New canvas name…"
-                  value={newCanvasSlug}
-                  onChange={(event) => setNewCanvasSlug(event.target.value)}
-                  className="rounded-md border bg-background px-2 py-1 text-sm"
-                />
-                <Button type="submit" variant="outline" size="sm">
-                  Create canvas
-                </Button>
-              </form>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="New canvas"
+                    data-testid="new-canvas-button"
+                    onClick={() => void handleCreate()}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>New canvas</TooltipContent>
+              </Tooltip>
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
@@ -414,14 +408,9 @@ export function DaemonIndexPage({
           <div className="flex flex-col items-center gap-3 py-16 text-center animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             <p className="text-sm font-medium">No canvases yet</p>
             <p className="text-sm text-muted-foreground">
-              Name your first canvas and it opens ready to draw.
+              Create a canvas and it opens ready to draw.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => newCanvasInputRef.current?.focus()}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => void handleCreate()}>
               Create a canvas
             </Button>
           </div>
