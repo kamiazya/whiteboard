@@ -25,6 +25,13 @@ describe('indexNodeBoxes', () => {
       { id: 'b', box: { x: 200, y: 0, width: 80, height: 40 } },
     ])
   })
+
+  it('marks group frames as containers', () => {
+    const c = canvas([{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200 }])
+    expect(indexNodeBoxes(c)).toEqual([
+      { id: 'g', container: true, box: { x: 0, y: 0, width: 300, height: 200 } },
+    ])
+  })
 })
 
 describe('hitTest', () => {
@@ -51,6 +58,27 @@ describe('hitTest', () => {
       { id: 'top', box: { x: 20, y: 20, width: 50, height: 50 } },
     ]
     expect(hitTest(overlapping, { x: 40, y: 40 })).toBe('top')
+  })
+
+  // A group frame is an unfilled container: a member under the pointer is
+  // fully visible through it even when the frame paints later, so the
+  // click must land on what the user sees. The frame stays reachable
+  // through its padding area.
+  it('prefers a member over a container frame painted above it', () => {
+    const boxes = [
+      { id: 'member', box: { x: 20, y: 20, width: 50, height: 50 } },
+      { id: 'frame', container: true, box: { x: 0, y: 0, width: 200, height: 200 } },
+    ]
+    expect(hitTest(boxes, { x: 40, y: 40 })).toBe('member')
+    expect(hitTest(boxes, { x: 150, y: 150 })).toBe('frame')
+  })
+
+  it('falls back to the topmost container when only containers are hit', () => {
+    const boxes = [
+      { id: 'outer', container: true, box: { x: 0, y: 0, width: 300, height: 300 } },
+      { id: 'inner', container: true, box: { x: 50, y: 50, width: 100, height: 100 } },
+    ]
+    expect(hitTest(boxes, { x: 80, y: 80 })).toBe('inner')
   })
 })
 
