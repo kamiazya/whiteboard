@@ -1,6 +1,6 @@
 # ADR-0006: Object-oriented UI — create from the palette, act from the object
 
-**Status:** Accepted
+**Status:** Accepted — one known violation, recorded below
 
 ## Context
 
@@ -20,8 +20,7 @@ already selected instead of competing for room in a global menu.
 written, citing an "ooui-palette-vs-object-actions decision" that exists
 nowhere in the repository. That comment is the only place the rule is
 written down, so surfaces built elsewhere have not consistently followed it —
-see the violation this ADR recorded and fixed below. This ADR is that
-missing document.
+see the violation below. This ADR is that missing document.
 
 ## Decision
 
@@ -46,24 +45,19 @@ Concretely:
    `.claude/skills/review-gate/resources/accessibility.md`, which the design
    phases and the `accessibility` review dimension load.
 
-## Fixed violation
+## Known violation
 
-`DaemonIndexPage.tsx` used to mount a permanent creation **form** in the
-canvas-list toolbar: a `New canvas name…` text input plus a `Create canvas`
-text button. It violated points 1, 3, and 4 at once — a verb-first form,
-always present whether or not the user intended to create anything,
-demanding a name before the object existed.
-
-It now matches point 4: an icon-only `+` control (`aria-label="New canvas"`
-plus a tooltip) creates the canvas immediately with a derived, collision-free
-slug and opens it — no name is collected up front. Naming happens afterwards
-in the opened canvas's own top bar, matching point 3.
-`DaemonCanvasPage.tsx`'s separate empty-workspace form carries the same
-violation shape and is tracked as a follow-up.
+`DaemonCanvasPage.tsx` mounts a permanent creation **form** in its
+empty-workspace view: a `New canvas name…` text input plus a `Create canvas`
+text button. It violates points 1, 3, and 4 at once — a verb-first form,
+always present whether or not the user intends to create anything, demanding
+a name before the object exists.
 
 `CanvasDropdown.tsx` shows the conforming shape for the same capability in a
-different surface: a `New canvas…` entry with an icon **and** a label,
-because a dropdown is a reading surface.
+reading surface: a `New canvas…` entry with an icon **and** a label.
+
+This is recorded rather than quietly fixed so the ADR describes the shipped
+state. Correcting the page is follow-up work, not part of writing this down.
 
 ## Consequences
 
