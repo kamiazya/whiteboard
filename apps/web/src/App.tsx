@@ -21,6 +21,7 @@ const PairConsentPage = lazy(() =>
 )
 
 import {
+  browserLocalCanvasPath,
   type DaemonRoute,
   daemonRoutePath,
   parseBrowserLocalRoute,
@@ -50,6 +51,11 @@ const DaemonCanvasPage = lazy(() =>
 // DaemonCanvasPage above was already lazy.
 const BrowserLocalCanvasPage = lazy(() =>
   import('./pages/BrowserLocalCanvasPage.js').then((m) => ({ default: m.BrowserLocalCanvasPage })),
+)
+
+// Lazy so the list stays outside the loro-crdt chunk the editor drags in.
+const BrowserLocalIndexPage = lazy(() =>
+  import('./pages/BrowserLocalIndexPage.js').then((m) => ({ default: m.BrowserLocalIndexPage })),
 )
 
 // Same lazy-chunk rationale as DaemonCanvasPage above — the gallery only
@@ -202,13 +208,13 @@ export function App({ providerState }: AppProps) {
     return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
   })
 
-  // Read once at mount: a bookmarked/shared `/local/:canvasId` deep link
-  // seeds which browser-local canvas to open. BrowserLocalCanvasPage owns
-  // all subsequent URL<->canvas-id sync itself (switching canvases, back/
-  // forward) once mounted — this is only the cold-load entry point.
-  const [initialBrowserLocalCanvasId] = useState(
-    () => parseBrowserLocalRoute(location.pathname)?.canvasId,
-  )
+  // Derived per render, not read once at mount: '/' (no id) renders the
+  // canvas list, /local/:canvasId mounts the editor. Once mounted, the
+  // editor owns URL<->canvas-id sync for in-editor switching (it reads
+  // initialCanvasId a single time), so App re-routes only when the URL
+  // crosses the list/editor boundary — including browser Back from the
+  // editor to the list.
+  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.canvasId
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -222,6 +228,10 @@ export function App({ providerState }: AppProps) {
   const isFirstUrlSyncRef = useRef(true)
   useEffect(() => {
     if (isPairRoute) return
+    // /local/:canvasId belongs to the browser-local world, not daemonView —
+    // rewriting it to the daemon path would yank an open browser-local
+    // editor back to the list.
+    if (parseBrowserLocalRoute(location.pathname) !== null) return
     const path = daemonRoutePath(daemonView)
     // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
     // up navigating: a no-op first run (URL already matches the initial
@@ -529,11 +539,22 @@ export function App({ providerState }: AppProps) {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-            <BrowserLocalCanvasPage
-              store={browserLocalStore}
-              capabilities={effectiveState.capabilities}
-              initialCanvasId={initialBrowserLocalCanvasId}
-            />
+            {browserLocalCanvasId === undefined ? (
+              // '/' (and any non-/local path) lands on the canvas list. The
+              // editor mounts only for /local/:canvasId, whose in-editor
+              // canvas switching it keeps owning — App re-routes solely when
+              // the URL crosses the list/editor boundary.
+              <BrowserLocalIndexPage
+                store={browserLocalStore}
+                onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
+              />
+            ) : (
+              <BrowserLocalCanvasPage
+                store={browserLocalStore}
+                capabilities={effectiveState.capabilities}
+                initialCanvasId={browserLocalCanvasId}
+              />
+            )}
           </Suspense>
         </div>
       </div>
