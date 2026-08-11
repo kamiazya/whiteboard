@@ -19,8 +19,9 @@ interface MockRoutes {
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
   >
   onCreateCanvas?: (workspaceId: string, slug: string, kind?: string) => void
-  // Return a Response to override the default 200 {ok:true}.
-  onDeleteCanvas?: (workspaceId: string, slug: string) => Response | undefined
+  // Return a Response (or a pending promise of one) to override the
+  // default 200 {ok:true}.
+  onDeleteCanvas?: (workspaceId: string, slug: string) => Response | Promise<Response> | undefined
   snapshotByCanvas?: Record<string, Uint8Array>
   onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
   onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
@@ -944,6 +945,43 @@ describe('DaemonIndexPage', () => {
     expect(deleted).toEqual(['alpha'])
     await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
     expect(screen.getByText('beta')).toBeTruthy()
+  })
+
+  it('sends exactly one DELETE for two confirm presses inside a single tick', async () => {
+    // Same mechanism as the create tests: React flushes `deleting` before a
+    // second click can dispatch on the now-disabled confirm button.
+    let resolveDelete: ((res: Response) => void) | undefined
+    const deleted: string[] = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      onDeleteCanvas: (_ws, slug) => {
+        deleted.push(slug)
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve
+        })
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    const confirm = within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: 'Delete',
+    })
+    // No await between them: the disabled flush is the guard under test.
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(deleted).toEqual(['alpha']))
+    resolveDelete?.(jsonResponse({ ok: true }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(deleted).toEqual(['alpha'])
   })
 
   it('a failed Delete shows the sanitized error in the dialog and refreshes after dismissal', async () => {

@@ -162,6 +162,29 @@ describe('BrowserLocalIndexPage', () => {
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
+  it('a failed delete shows the fixed error in the dialog, which stays open, and Cancel clears it', async () => {
+    const store = await seededStore([
+      { id: 'id-a', name: 'Sticky', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+    ])
+    store.removeCanvas = () => Promise.reject(new Error('quota exceeded'))
+    renderPage(store)
+    await screen.findAllByTestId('canvas-list-card')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Sticky' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    // Fixed copy — never the raw error text — and the dialog stays open.
+    expect(
+      await within(dialog).findByText('Failed to delete the canvas from this browser.'),
+    ).toBeTruthy()
+    expect(within(dialog).queryByText(/quota exceeded/)).toBeNull()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
+  })
+
   it('suffixes colliding display slugs instead of repeating them', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Notes', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
