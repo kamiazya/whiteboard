@@ -10,12 +10,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  *
  * `getDataDir()` falls back to `~/.whiteboard` when `WHITEBOARD_DATA_DIR` is
  * unset, and enough of this suite boots the server to run migrations against
- * whatever lives there — the developer's REAL database, shared with anything
- * on the machine that uses the default. `.mcp.json` registers the PUBLISHED
- * `@kamiazya/whiteboard-mcp@latest`, which does exactly that with the
- * migration set of its own release, so this checkout then finds a migration
- * history it does not recognise and the whole run dies with unhandled
- * `IncompatibleDatabaseError` rejections while every test passes.
+ * whatever lives there — the developer's REAL database, shared with every
+ * other thing on the machine that uses the default.
+ *
+ * Any writer whose migration set differs from this checkout's is enough to
+ * stop work: the run then finds a migration history it does not recognise
+ * and dies with unhandled `IncompatibleDatabaseError` rejections while every
+ * test passes, failing the pre-push gate for reasons unrelated to the branch
+ * being pushed. The observed instance was a migration this checkout did not
+ * yet have because it was still unmerged on another branch — a sibling
+ * checkout on this same machine is as capable of leaving one behind as the
+ * published `@kamiazya/whiteboard-mcp` that `.mcp.json` registers. WHICH
+ * writer it was does not change the fix, which is why the fix is isolation
+ * rather than identifying a culprit.
  *
  * The repo's own dev daemons already avoid this: `with-dev-data-dir` points
  * them at a per-worktree `<repoRoot>/.dev-data` so parallel lanes cannot
