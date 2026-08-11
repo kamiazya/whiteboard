@@ -147,7 +147,7 @@ describe('CanvasProperties title typing (controlled-input round trip)', () => {
 describe('CanvasProperties as the canvas row', () => {
   it('the Properties toggle is an icon button with a real accessible name and controls link', () => {
     render(<CanvasProperties meta={{ type: 'markdown' }} onChange={vi.fn()} />)
-    const toggle = screen.getByRole('button', { name: 'Canvas properties' })
+    const toggle = screen.getByRole('button', { name: 'Properties' })
     // Icon-only: the word moved into aria-label + tooltip, off the surface.
     expect(toggle.textContent).not.toContain('Properties')
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -163,11 +163,11 @@ describe('CanvasProperties as the canvas row', () => {
       <CanvasProperties
         meta={{ type: 'markdown' }}
         onChange={vi.fn()}
-        settings={<button type="button" aria-label="Canvas display settings" />}
+        settings={<button type="button" aria-label="Display settings" />}
         actions={<span data-testid="row-actions">ops</span>}
       />,
     )
-    expect(screen.getByRole('button', { name: 'Canvas display settings' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy()
     expect(screen.getByTestId('row-actions')).toBeTruthy()
   })
 })

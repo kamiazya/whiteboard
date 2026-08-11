@@ -58,14 +58,14 @@ export function CanvasDisplaySettings({ canvas, onChange }: CanvasDisplaySetting
             <button
               type="button"
               data-testid="canvas-settings-button"
-              aria-label="Canvas display settings"
+              aria-label="Display settings"
               className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
             >
               <SlidersHorizontal aria-hidden="true" className="size-4" />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Canvas display settings</TooltipContent>
+        <TooltipContent>Display settings</TooltipContent>
       </Tooltip>
       <PopoverContent data-testid="canvas-settings-menu" className="w-auto min-w-52 p-2">
         <div className="flex flex-col gap-1">

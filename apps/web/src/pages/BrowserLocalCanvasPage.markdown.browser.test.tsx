@@ -50,7 +50,9 @@ const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
  * the condition these tests actually depend on before tearing the page down.
  */
 async function waitForSaved(): Promise<void> {
-  await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy(), { timeout: 15_000 })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy(), {
+    timeout: 15_000,
+  })
 }
 
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {

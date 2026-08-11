@@ -116,7 +116,7 @@ export function CanvasProperties({
             <button
               type="button"
               onClick={() => setOpen((current) => !current)}
-              aria-label="Canvas properties"
+              aria-label="Properties"
               aria-expanded={open}
               aria-controls={`${suggestionsId}-disclosure`}
               className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
@@ -124,7 +124,7 @@ export function CanvasProperties({
               <Info aria-hidden="true" className="size-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Canvas properties</TooltipContent>
+          <TooltipContent>Properties</TooltipContent>
         </Tooltip>
         {settings}
         {actions !== undefined && (

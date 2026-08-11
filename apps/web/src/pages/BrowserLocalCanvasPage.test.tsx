@@ -82,7 +82,7 @@ const snap: CanvasSnapshot = {
 // Radix DropdownMenuTrigger opens on pointerDown (not click); the menu
 // mounts asynchronously, and items select on pointerUp.
 async function openCanvasOpsMenu() {
-  const trigger = screen.getByRole('button', { name: 'More canvas actions' })
+  const trigger = screen.getByRole('button', { name: 'More actions' })
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
   return screen.findByRole('menu')
 }
@@ -93,7 +93,7 @@ function canvasOpsItem(name: RegExp) {
 
 async function openDeleteConfirm() {
   await openCanvasOpsMenu()
-  fireEvent.pointerUp(await canvasOpsItem(/delete canvas/i))
+  fireEvent.pointerUp(await canvasOpsItem(/^delete$/i))
 }
 
 describe('BrowserLocalCanvasPage', () => {
@@ -342,7 +342,7 @@ describe('BrowserLocalCanvasPage', () => {
     // Save state is the color-only dot, named for assistive tech.
     expect(screen.getByTestId('save-status-chip').getAttribute('aria-label')).toBe('Saved')
     // A spatial canvas offers its display settings from the same row.
-    expect(screen.getByRole('button', { name: 'Canvas display settings' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy()
     // The whole cluster lives inside the canvas row (CanvasProperties) —
     // the dot LEFT of the title, the rare operations behind one kebab at
     // the right edge — not in a second header strip of its own.
@@ -351,14 +351,14 @@ describe('BrowserLocalCanvasPage', () => {
     const chip = screen.getByTestId('save-status-chip')
     expect(row.contains(chip)).toBe(true)
     expect(chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const kebab = screen.getByRole('button', { name: 'More canvas actions' })
+    const kebab = screen.getByRole('button', { name: 'More actions' })
     expect(row.contains(kebab)).toBe(true)
     // Duplicate/Delete are menu items, not always-visible buttons.
-    expect(screen.queryByRole('button', { name: 'Duplicate canvas' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Delete canvas' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^duplicate$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^delete$/i })).toBeNull()
     await openCanvasOpsMenu()
-    expect(await canvasOpsItem(/duplicate canvas/i)).toBeTruthy()
-    expect(await canvasOpsItem(/delete canvas/i)).toBeTruthy()
+    expect(await canvasOpsItem(/^duplicate$/i)).toBeTruthy()
+    expect(await canvasOpsItem(/^delete$/i)).toBeTruthy()
   })
 
   it('surfaces the degraded save message in the header when a save fails', async () => {
@@ -444,7 +444,7 @@ describe('BrowserLocalCanvasPage', () => {
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
     expect(await screen.findByLabelText('Canvas actions')).toBeTruthy()
     // Distinct from the canvas row's operations kebab.
-    expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
   })
 
   it("renaming through the top bar's canvas actions updates the heading and flushes a save", async () => {
@@ -499,7 +499,7 @@ describe('BrowserLocalCanvasPage', () => {
     const switcher = await screen.findByRole('button', { name: 'untitled' })
     // Accessible names must not collide with the operations kebab or the
     // top bar's canvas actions control.
-    expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
     expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByText('Other canvas')
@@ -886,7 +886,7 @@ describe('BrowserLocalCanvasPage', () => {
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} />)
       })
-      expect(screen.getByRole('button', { name: 'More canvas actions' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
       expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
     })
   })

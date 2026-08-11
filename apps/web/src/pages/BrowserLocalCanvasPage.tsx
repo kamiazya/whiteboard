@@ -391,7 +391,7 @@ export function BrowserLocalCanvasPage({
               <Button
                 ref={canvasOpsButtonRef}
                 type="button"
-                aria-label="More canvas actions"
+                aria-label="More actions"
                 variant="ghost"
                 size="sm"
                 className="size-7 p-0"
@@ -400,19 +400,19 @@ export function BrowserLocalCanvasPage({
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>More canvas actions</TooltipContent>
+          <TooltipContent>More actions</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
           <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />
-            Duplicate canvas
+            Duplicate
           </DropdownMenuItem>
           <DropdownMenuItem
             className="text-destructive focus:bg-destructive/10 focus:text-destructive"
             onSelect={() => setConfirmDelete(true)}
           >
             <Trash2 aria-hidden="true" className="size-3.5" />
-            Delete canvas
+            Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

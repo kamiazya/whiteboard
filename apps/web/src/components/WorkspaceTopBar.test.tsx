@@ -776,7 +776,7 @@ describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
     const exposedGroup = screen.getByTestId('topbar-right-actions-exposed')
     expect(exposedGroup.className).toContain('max-[400px]:hidden')
 
-    const kebabTrigger = screen.getByRole('button', { name: 'More actions' })
+    const kebabTrigger = screen.getByRole('button', { name: 'View options' })
     expect(kebabTrigger.className).toContain('min-[400px]:hidden')
   })
 })
