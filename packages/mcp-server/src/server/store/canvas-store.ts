@@ -1,5 +1,6 @@
 import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
@@ -62,7 +63,7 @@ export async function saveCanvas(
   workspaceId: string,
   slug: string,
   doc: LoroDoc,
-  options: { overwrite?: boolean; kind?: 'spatial' | 'markdown' } = {},
+  options: { overwrite?: boolean; kind?: CanvasKind } = {},
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
@@ -451,7 +452,7 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<{ slug: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]> {
+): Promise<{ slug: string; updatedAt: string; kind: CanvasKind }[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
