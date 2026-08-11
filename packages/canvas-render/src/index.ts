@@ -8,7 +8,7 @@ export type {
   SpatialNodeAppearance,
 } from './layout/spatial-appearance.js'
 export type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout/spatial-canvas.js'
-export { layoutSpatialCanvas } from './layout/spatial-canvas.js'
+export { layoutSpatialCanvas, layoutSpatialEdges } from './layout/spatial-canvas.js'
 export { routeEdge } from './layout/spatial-edges.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'

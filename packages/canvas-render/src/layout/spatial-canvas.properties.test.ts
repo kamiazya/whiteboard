@@ -5,7 +5,7 @@ import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import { layoutSpatialCanvas } from './spatial-canvas.js'
+import { layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 
@@ -131,6 +131,77 @@ describe('layoutSpatialCanvas properties (PBT)', () => {
       const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, options), { padding: 4 })
       const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, options), { padding: 4 })
       expect(svgA).toBe(svgB)
+    },
+  )
+})
+
+/**
+ * Live-drag parity: a mid-drag preview built with `layoutSpatialEdges` over
+ * the moved canvas must equal the edge-and-label suffix of the committed
+ * `layoutSpatialCanvas` of that same moved canvas — detours around
+ * obstacles, line jumps, and label placement included. The generator is
+ * deliberately DENSE (chunky boxes on a coarse grid, edges across them,
+ * jumps enabled in half the runs) so blocked paths and crossings are the
+ * common case, not a lucky draw — a sparse generator would pass vacuously.
+ */
+const denseIds = ['a', 'b', 'c', 'd', 'e', 'f'] as const
+
+const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
+  fc
+    .record({
+      id: fc.constant(id),
+      type: fc.constantFrom('text' as const, 'group' as const),
+      x: fc.constantFrom(0, 80, 160, 240, 320, 400),
+      y: fc.constantFrom(0, 80, 160, 240, 320),
+      width: fc.constantFrom(60, 120, 240),
+      height: fc.constantFrom(60, 120, 240),
+    })
+    .map((n) => (n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }) as SpatialNode)
+
+const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
+  fc
+    .record({
+      id: fc.constant(`e${index}`),
+      fromNode: fc.constantFrom(...denseIds),
+      toNode: fc.constantFrom(...denseIds),
+      label: fc.option(fc.constant('flow'), { nil: undefined }),
+    })
+    .map(({ label, ...edge }) => (label === undefined ? edge : { ...edge, label }))
+
+const dragScenarioArb = fc.record({
+  nodes: fc.tuple(...denseIds.map(denseNodeArb)),
+  edges: fc
+    .array(fc.nat({ max: 4 }), { minLength: 1, maxLength: 5 })
+    .chain((indices) => fc.tuple(...indices.map((_, i) => denseEdgeArb(i)))),
+  routing: fc.record({
+    style: fc.constantFrom(
+      undefined,
+      'straight' as const,
+      'orthogonal' as const,
+      'curved' as const,
+    ),
+    lineJumps: fc.constantFrom(undefined, 'arc' as const),
+  }),
+  carried: fc.uniqueArray(fc.constantFrom(...denseIds), { minLength: 1, maxLength: 3 }),
+  dx: fc.constantFrom(-200, -80, 40, 160, 320),
+  dy: fc.constantFrom(-160, -40, 80, 240),
+})
+
+describe('live-drag parity property (PBT)', () => {
+  fcTest.prop([dragScenarioArb], withDefaults())(
+    'mid-drag edge layout equals the committed layout of the moved canvas, obstacles and jumps included',
+    ({ nodes, edges, routing, carried, dx, dy }) => {
+      const carriedSet = new Set<string>(carried)
+      const movedCanvas: SpatialCanvas = {
+        nodes: nodes.map((n) => (carriedSet.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n)),
+        edges: [...edges],
+        'x-whiteboard': { edgeRouting: routing },
+      }
+      const options = { measure, parseBody: fakeParseBody, appearance }
+      const committed = layoutSpatialCanvas(movedCanvas, options).nodes
+      const live = layoutSpatialEdges(movedCanvas, options)
+      expect(live.length).toBeGreaterThan(0)
+      expect(live).toEqual(committed.slice(committed.length - live.length))
     },
   )
 })

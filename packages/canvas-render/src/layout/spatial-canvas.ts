@@ -539,6 +539,13 @@ function layoutSpatialCanvasInternal(
   resolved: ResolvedLayoutOptions,
 ): Scene {
   const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
+  return { nodes: [...nodeContent, ...composeEdgesAndLabels(canvas, resolved)] }
+}
+
+function composeEdgesAndLabels(
+  canvas: SpatialCanvas,
+  resolved: ResolvedLayoutOptions,
+): SceneNode[] {
   const routedEdges = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
   // Canvas-wide today; the same resolution is where a per-edge
   // x-whiteboard override slots in later without touching the pipeline.
@@ -554,5 +561,26 @@ function layoutSpatialCanvasInternal(
   const labelContent = canvas.edges
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
     .filter((label): label is TextRunNode => label !== undefined)
-  return { nodes: [...nodeContent, ...edgeContent, ...labelContent] }
+  return [...edgeContent, ...labelContent]
+}
+
+/**
+ * The edge-and-label suffix of `layoutSpatialCanvas`'s scene, on its own:
+ * routing, line jumps, and centered labels through the exact code path the
+ * full layout uses, without laying out any node content. This exists for a
+ * consumer that already has the node layer rendered and needs ONLY the
+ * edges recomputed against updated node positions (the editor's live drag
+ * overlay) — a second edge pipeline there would drift from the committed
+ * result, which is the one-producer-per-geometry rule this export upholds.
+ */
+export function layoutSpatialEdges(
+  canvas: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): SceneNode[] {
+  return composeEdgesAndLabels(canvas, {
+    ...options,
+    geometry: resolveGeometry(options.geometry),
+    embedPath: new Set(),
+    embedDepth: 0,
+  })
 }
