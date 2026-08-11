@@ -42,7 +42,7 @@ const HEADING_FONT_SIZE_PX: Readonly<Record<1 | 2 | 3 | 4 | 5 | 6, number>> = {
   5: 18,
   6: 16,
 }
-const BODY_FONT_SIZE_PX = 16
+export const BODY_FONT_SIZE_PX = 16
 const BLOCK_GAP_PX = 8
 const LIST_INDENT_PX = 24
 const TABLE_ROW_HEIGHT_PX = 24

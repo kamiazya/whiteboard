@@ -16,7 +16,7 @@
  * `onCancel` unmounting synchronously is not guaranteed, so `mountedRef`
  * alone cannot prevent either.
  */
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from './geometry.js'
 
 export interface TextNodeEditorProps {
@@ -24,6 +24,15 @@ export interface TextNodeEditorProps {
   readonly initialText: string
   /** Overrides the testid for non-node uses (e.g. the edge label editor). */
   readonly testId?: string
+  /**
+   * Merged over the base style. Callers pass the edited object's own
+   * rendered appearance (fill, font, padding) so entering edit mode reads
+   * as "the text became editable" rather than a second box appearing —
+   * and an OPAQUE background here is load-bearing: the app's CSS reset
+   * makes form controls transparent, which would let the pre-edit SVG
+   * text show through under the draft.
+   */
+  readonly style?: CSSProperties
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
   /** Fires on every keystroke so a caller can track the in-progress value (e.g. to commit it if a gesture interrupts the edit). */
@@ -34,6 +43,7 @@ export function TextNodeEditor({
   box,
   initialText,
   testId = 'text-node-editor',
+  style,
   onCommit,
   onCancel,
   onChange,
@@ -45,7 +55,11 @@ export function TextNodeEditor({
 
   useEffect(() => {
     mountedRef.current = true
-    textareaRef.current?.focus()
+    const textarea = textareaRef.current
+    textarea?.focus()
+    // Continue typing where the text ends — programmatic focus leaves the
+    // caret at position 0, which reads as "my text got replaced".
+    textarea?.setSelectionRange(textarea.value.length, textarea.value.length)
     return () => {
       mountedRef.current = false
     }
@@ -80,6 +94,7 @@ export function TextNodeEditor({
         // inherits from it — without this the caret cannot select the text it
         // is editing.
         userSelect: 'text',
+        ...style,
       }}
       onChange={(e) => {
         setValue(e.target.value)
