@@ -6,6 +6,7 @@ import { EditorView, keymap } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { useEffect, useRef } from 'react'
+import { minimalChange } from './minimal-change.js'
 
 // Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
 // collapsed selection inserts an empty pair and parks the cursor between
@@ -152,9 +153,13 @@ export function SourcePane({ value, onChange, className, autoFocus = false }: So
     // every keystroke, since a controlled parent typically echoes the same
     // value straight back in via `onChange`.
     if (current === value) return
-    view.dispatch({
-      changes: { from: 0, to: current.length, insert: value },
-    })
+    // Only the span that actually differs. CodeMirror maps the selection
+    // through a change, so a whole-document replace collapses every caret
+    // and selection inside it to a boundary — which is the entire document.
+    // Confining the range keeps every position outside it untouched, and is
+    // what makes a remote CRDT update land without yanking the local caret
+    // out of the word being typed.
+    view.dispatch({ changes: minimalChange(current, value) })
   }, [value])
 
   return (
