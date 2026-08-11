@@ -14,4 +14,17 @@
  * without it is testing a layout no user ever sees. Loading it here removes
  * the per-file decision entirely.
  */
+import { configure } from '@testing-library/react'
 import '../index.css'
+
+/**
+ * Testing Library's `findBy*`/`waitFor` default is 1000ms, which is a
+ * fast-machine number: under parallel browser files it is routinely too
+ * short for a portal to mount or an IndexedDB round trip to land. Ten tests
+ * had already worked around it with a local `{ timeout: 10_000 }`, which is
+ * the smell of a global default set too low.
+ *
+ * Like the test timeout, this is a ceiling rather than a delay — raising it
+ * slows nothing down that succeeds.
+ */
+configure({ asyncUtilTimeout: 5_000 })

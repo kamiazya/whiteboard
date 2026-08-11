@@ -71,6 +71,18 @@ export default defineConfig({
   test: {
     name: 'web-browser',
     include: ['src/**/*.browser.test.tsx'],
+    // Browser mode's 15s default is a real ceiling here, not a safety net: a
+    // test that mounts a page, drives Radix through a portal and waits on
+    // IndexedDB spends most of its budget on machine time, and vitest runs
+    // these files in PARALLEL. On a loaded machine that tips whole files over
+    // at once — the observed failures are `Test timed out`, not assertion
+    // failures, and the same tests pass 4/4 when their file runs alone.
+    //
+    // A timeout costs nothing while tests pass; it only decides how long a
+    // genuinely hung test takes to report. 30s matches the precedent already
+    // set by vitest.docs-snapshots.config.ts.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // Every browser test renders against the app's real stylesheet — see
     // browser-setup.ts for what silently breaks without it.
     setupFiles: ['./src/test-utils/browser-setup.ts'],

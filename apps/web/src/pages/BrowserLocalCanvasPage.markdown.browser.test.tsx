@@ -40,8 +40,18 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
-// The body save is debounced (500ms) inside use-markdown-body; wait past it.
-const SAVE_SETTLE_MS = 800
+/**
+ * Waits until the page reports the debounced save as landed.
+ *
+ * The save is debounced 500ms and then has to reach IndexedDB, so a fixed
+ * sleep is a bet on machine speed — the timing-based assertion this repo
+ * treats as a recurring flake shape, and what tipped these tests over under
+ * load. `Saved` is the page's own report that the write completed, which is
+ * the condition these tests actually depend on before tearing the page down.
+ */
+async function waitForSaved(): Promise<void> {
+  await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy(), { timeout: 15_000 })
+}
 
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {
   beforeEach(async () => {
@@ -87,10 +97,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       expect(document.querySelector('.cm-content')?.textContent).toBe('# Persisted note')
     })
 
-    // Let the debounced Loro save land before tearing the page down.
-    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
-    const markdownCanvasId = await store.getDefaultCanvasId()
-    expect(markdownCanvasId).not.toBeNull()
+    await waitForSaved()
     first.unmount()
 
     // A fresh page against the same store reopens the markdown note with
@@ -123,7 +130,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // snapshot row, written from the same edit as the OKF core facet.
     await screen.findByRole('button', { name: 'リリース計画' }, { timeout: 10_000 })
 
-    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    await waitForSaved()
     first.unmount()
 
     // The facet itself round-trips through the Loro 'core' map, so the
@@ -164,7 +171,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(title)
     await userEvent.keyboard('Titled')
 
-    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    await waitForSaved()
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
@@ -231,7 +238,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // more than its label text, so a full-string match asserts the wrong thing.
     await screen.findByRole('button', { name: /Architecture map/ }, { timeout: 10_000 })
 
-    await new Promise((resolve) => setTimeout(resolve, SAVE_SETTLE_MS))
+    await waitForSaved()
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
