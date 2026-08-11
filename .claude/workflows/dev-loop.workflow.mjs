@@ -335,7 +335,7 @@ const simplify = await agent(
 
 // --- Phase 5: review (compose the review workflow over this task's commits) ---
 phase('Review')
-const reviewRange = `${BASE}..HEAD`
+const reviewRange = `${BASE}...HEAD`
 let review = await workflow(
   { scriptPath: '.claude/workflows/review.workflow.mjs' },
   { range: reviewRange, cwd: CWD, files: FILES, dogfood: DOGFOOD, appUrl: APP_URL, codex: CODEX, ...REVIEW_ARGS },
@@ -344,14 +344,37 @@ let review = await workflow(
 // --- Phase 6: triage / fix loop — resolve everything at/above threshold ON THE SPOT, loop until
 // review is clean. Break out to the integrator only when a finding needs a human decision, or the
 // round cap is hit. Tickets are the exception, not the default — leave nothing half-done. ---
-const RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 }
-const threshold = RANK[FIX_THRESHOLD] || RANK.MEDIUM
+// Mirrors .claude/workflows/lib/fix-loop.mjs (unit-tested via node:test — the workflow sandbox has
+// no module resolution, so the logic is duplicated rather than imported; keep both in sync).
+const SEVERITY_RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 }
+// A FAILED qa-scenario joins the confirmed findings here. Filtering confirmedFindings alone let a
+// reproduced defect be counted in the summary and then dropped, handing the bug to the integrator
+// with zero fix attempts. QA carries no severity, so it enters at HIGH — observed breakage
+// outranks a static finding of the same name. Total: a malformed report yields empty lists rather
+// than aborting the loop.
+function triageReview(review, threshold) {
+  const findings = Array.isArray(review?.confirmedFindings) ? review.confirmedFindings : []
+  const qa = Array.isArray(review?.qa) ? review.qa : []
+  const qaFindings = qa
+    .filter((q) => q && q.status === 'fail')
+    .map((q) => ({
+      severity: 'HIGH',
+      title: `QA scenario "${q.scenario}" failed`,
+      file: '(qa)',
+      detail: q.notes || '',
+    }))
+  const all = [...findings, ...qaFindings]
+  return {
+    actionable: all.filter((f) => (SEVERITY_RANK[f.severity] || 0) >= threshold),
+    below: all.filter((f) => (SEVERITY_RANK[f.severity] || 0) < threshold),
+  }
+}
+const threshold = SEVERITY_RANK[FIX_THRESHOLD] || SEVERITY_RANK.MEDIUM
 const openFollowups = []
 let decisions = []
 let round = 0
-while (review && Array.isArray(review.confirmedFindings)) {
-  const actionable = review.confirmedFindings.filter((f) => (RANK[f.severity] || 0) >= threshold)
-  const below = review.confirmedFindings.filter((f) => (RANK[f.severity] || 0) < threshold)
+while (review) {
+  const { actionable, below } = triageReview(review, threshold)
   below.forEach((f) => openFollowups.push({ title: f.title, severity: f.severity, file: f.file, detail: f.detail }))
 
   if (actionable.length === 0 || round >= MAX_FIX) {
