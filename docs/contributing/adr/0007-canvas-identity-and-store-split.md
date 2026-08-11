@@ -4,8 +4,10 @@
 
 ## Context
 
-The daemon holds "canvases" in two representations that share one SQLite
-file and nothing else:
+The daemon holds "canvases" in two representations that are co-located in
+one SQLite file but share no logical state — no common tables, no common
+byte store, and (as detailed below) no shared identity beyond the raw
+`workspaceId` string:
 
 - **Workspace/slug store.** Identity is `(workspaceId, slug)` (unique
   constraint `canvases_ws_slug_unq`); rows carry `displayName`, `kind`,

@@ -35,7 +35,8 @@ name up front) and is currently immutable; whether slugs become renamable
 is deliberately an open question (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md)).
 
-Browser-local canvases have no slug at all. The slug-shaped label under a
+Browser-local canvases have no persisted or canonical slug. The
+slug-shaped label under a
 card in the browser-local list is **cosmetic**: it is derived from the
 display name on every render, is never stored, and collisions are
 suffixed (`notes`, `notes-2`). It deliberately uses the same character
