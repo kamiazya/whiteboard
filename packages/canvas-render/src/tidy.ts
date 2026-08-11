@@ -18,14 +18,18 @@
  *    tidy has nothing to do: idempotence holds by construction (and is
  *    pinned by a property test).
  * 3. Edge legibility is deliberately NOT tidy's job — once nodes settle,
- *    canvas-render's edge optimizer re-routes and re-sides edges on the
+ *    the edge optimizer re-routes and re-sides edges on the
  *    committed render.
  *
- * Pure and total like align.ts: returns ONLY the boxes that actually
- * move; degenerate input never throws. Locked nodes never move and stand
- * as fixed obstacles; out-of-scope units likewise.
+ * Pure and total: returns ONLY the boxes that actually move; degenerate
+ * input never throws. Locked nodes never move and stand as fixed
+ * obstacles; out-of-scope units likewise.
  */
-import type { BoxMove } from './align.js'
+export interface TidyMove {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+}
 
 export interface TidyNode {
   readonly id: string
@@ -243,7 +247,7 @@ function resolveOverlaps(units: Unit[]): void {
 export function tidyNodes(
   nodes: readonly TidyNode[],
   options: TidyOptions = {},
-): readonly BoxMove[] {
+): readonly TidyMove[] {
   const clean = usable(nodes)
   if (clean.length < 2) return []
   const byId = new Map(clean.map((n) => [n.id, n]))
@@ -261,7 +265,7 @@ export function tidyNodes(
     resolveOverlaps(units)
     if (units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|') === before) break
   }
-  const moves: BoxMove[] = []
+  const moves: TidyMove[] = []
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue
     for (const id of unit.movableIds) {

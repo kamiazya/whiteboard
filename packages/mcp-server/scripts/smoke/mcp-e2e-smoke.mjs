@@ -131,6 +131,7 @@ const EXPECTED_TOOLS = [
   'facet_set',
   'node_lock',
   'node_patch',
+  'tidy_canvas',
   'version_list',
   'version_restore',
   'version_save',
@@ -250,6 +251,20 @@ async function main() {
     nodeId: 'okf-body',
     locked: false,
   })
+
+  // tidy_canvas: the canvas holds a single node here, so the contract answer
+  // is "nothing to tidy" — the call still runs the full pipeline (input
+  // parse → doc load → tidy → structuredContent vs outputSchema), which is
+  // the drift guard this smoke exists for. The geometry itself is covered by
+  // canvas-render's unit/property tests.
+  const tidied = await callTool('tidy_canvas', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+  })
+  if (tidied.canvasId !== canvasId || !Array.isArray(tidied.moved) || tidied.moved.length !== 0) {
+    throw new Error(`tidy_canvas returned unexpected shape: ${JSON.stringify(tidied)}`)
+  }
+  console.log('[e2e] tidy_canvas → single-node canvas reports no moves')
 
   // edge_lock reaches its ghost-id guard only: no MCP tool creates an edge
   // (edges come from the editor), so this is the whole of its reachable

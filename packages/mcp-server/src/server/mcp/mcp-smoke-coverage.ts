@@ -37,6 +37,7 @@ export const ALL_REGISTERED_TOOLS = [
   'facet_set',
   'node_lock',
   'node_patch',
+  'tidy_canvas',
   'version_list',
   'version_restore',
   'version_save',
@@ -49,6 +50,7 @@ export const ALL_REGISTERED_TOOLS = [
 export const COVERED_TOOLS = [
   'canvas_import_okf',
   'node_lock',
+  'tidy_canvas',
   'facet_set',
   'version_save',
   'version_restore',
