@@ -540,12 +540,13 @@ function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
 }
 
 /**
- * Edge-count gate for the improvement pass. The v1 loop rescores the whole
- * configuration per trial, and the live-drag overlay re-runs this every
- * pointer frame, so the bound keeps worst-case work inside a frame budget.
- * ponytail: full rescoring is O(E^2 * segments^2) per trial; incremental
- * delta scoring (re-route only the four affected anchor groups, patch the
- * pairwise matrix) is the upgrade path if this gate ever needs raising.
+ * Edge-count gate for the improvement pass. Trials evaluate incrementally
+ * (only changed-anchor edges re-route; the pairwise matrix is patched),
+ * but the initial matrix build is O(E^2) segment pairs and a committed
+ * render pays the loop on every edit, so the bound keeps worst-case work
+ * small (~24ms at the gate on a dev machine; per-frame surfaces opt out
+ * entirely via edgeSideOverrides). ponytail: a sweepline pair scan is the
+ * next rung if this gate ever needs raising.
  */
 const CROSSING_OPT_MAX_EDGES = 40
 const CROSSING_OPT_MAX_PASSES = 2
