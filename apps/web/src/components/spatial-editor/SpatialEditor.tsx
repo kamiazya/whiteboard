@@ -109,6 +109,7 @@ import {
   Pencil,
   Scissors,
   SendToBack,
+  Sparkles,
   SquareDashed,
   StickyNote,
   Tag,
@@ -178,6 +179,7 @@ import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
+import { tidyNodes } from './tidy.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   canvasToScreen,
@@ -3124,6 +3126,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     },
                   })
                 }
+                // Tidy needs a second node to tidy AGAINST — the item appears
+                // only once it can do something, like Align/Distribute above.
+                if (canvas.nodes.length >= 2) {
+                  emptyItems.push({ kind: 'separator' })
+                  emptyItems.push({
+                    label: 'Tidy canvas',
+                    icon: <Sparkles />,
+                    onSelect: () =>
+                      applyBoxMoves(tidyNodes(canvasRef.current.nodes, { locked: isLocked })),
+                  })
+                }
                 // Empty space IS the canvas, so canvas-wide settings are acted
                 // on from here — the recorded OOUI rule puts actions on an
                 // existing object with that object, and keeps the dock's "+"
@@ -3448,6 +3461,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     selected: false,
                     onSelect: () => applyBoxMoves(distributeBoxes(selectedAlignableBoxes(), axis)),
                   })),
+                })
+              }
+              if (alignableCount >= 2) {
+                items.push({
+                  label: 'Tidy',
+                  icon: <Sparkles />,
+                  onSelect: () =>
+                    applyBoxMoves(
+                      tidyNodes(canvasRef.current.nodes, {
+                        scope: new Set([node.id, ...extraIds]),
+                        locked: isLocked,
+                      }),
+                    ),
                 })
               }
               if (lockEnabled) {
