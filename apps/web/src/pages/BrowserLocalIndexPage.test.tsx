@@ -99,6 +99,34 @@ describe('BrowserLocalIndexPage', () => {
     expect(await store.listCanvases()).toHaveLength(1)
   })
 
+  it('keeps a create entry point when the list fails to load', async () => {
+    // A failed listCanvases must not dead-end the page: the create path
+    // does not need the list (fresh id + save), and success navigates away.
+    const store = new MemoryStore()
+    store.listCanvases = () => Promise.reject(new Error('idb blocked'))
+    const { onOpenCanvas } = renderPage(store)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('Failed to load canvases from this browser.')
+    fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+  })
+
+  it('surfaces a create failure and re-enables the create action', async () => {
+    const store = new MemoryStore()
+    store.save = () => Promise.reject(new Error('quota exceeded'))
+    const { onOpenCanvas } = renderPage(store)
+
+    const button = await screen.findByRole('button', { name: /create a canvas/i })
+    fireEvent.click(button)
+
+    const alert = await screen.findByRole('alert')
+    // Fixed copy — never the raw error text.
+    expect(alert.textContent).toBe('Failed to create a canvas in this browser.')
+    expect(onOpenCanvas).not.toHaveBeenCalled()
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+  })
+
   it('suffixes colliding display slugs instead of repeating them', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Notes', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },

@@ -107,7 +107,19 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
           onCreate={(kind) => void handleCreate(kind)}
           createDisabled={creating}
         />
-      ) : null}
+      ) : (
+        // Load failed (error set, snapshots never arrived): creating does
+        // not need the list — a fresh id + save routes around the broken
+        // read, and success navigates into the new canvas.
+        <button
+          type="button"
+          disabled={creating}
+          onClick={() => void handleCreate('spatial')}
+          className="self-start rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Create a canvas
+        </button>
+      )}
     </div>
   )
 }
