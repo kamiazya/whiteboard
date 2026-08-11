@@ -168,7 +168,7 @@ describe('WorkspaceTopBar browser mode', () => {
     expect(onToggleTheme).toHaveBeenLastCalledWith('light')
   })
 
-  it('new-canvas dialog: shows Problem Details title on 409 and shows fallback on missing title', async () => {
+  it('immediate create: shows Problem Details title on 409, then fallback without leaking internals on 500', async () => {
     let callCount = 0
     // Override the beforeEach fetch stub for this test only.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
@@ -180,15 +180,15 @@ describe('WorkspaceTopBar browser mode', () => {
       if (url.includes('/canvases') && init?.method === 'POST') {
         callCount++
         if (callCount === 1) {
-          // First POST → 409 Problem Details with title
+          // First activation → 409 Problem Details with title.
           return Promise.resolve(
-            new Response(JSON.stringify({ title: 'Canvas "design/foo" already exists' }), {
+            new Response(JSON.stringify({ title: 'Canvas "design/untitled" already exists' }), {
               status: 409,
               headers: { 'Content-Type': 'application/json' },
             }),
           )
         }
-        // Second POST → 500 without title → fallback message
+        // Second activation → 500 without title → fallback.
         return Promise.resolve(
           new Response(JSON.stringify({ error: 'internal' }), {
             status: 500,
@@ -209,30 +209,32 @@ describe('WorkspaceTopBar browser mode', () => {
     const switcherLeaf = screen.getByText('login-flow')
     const switcher = switcherLeaf.closest('button')!
     expect(switcher).toBeTruthy()
-    // pointerDown triggers Radix's open handler; pointerUp on the menu item selects it.
+
+    // First activation: immediate POST (no dialog ever appears), derived inside the
+    // current group — the 409 title surfaces in the alert line.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
     fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
-    await waitFor(() => screen.getByRole('dialog'))
-
-    // Submit a slug — first call returns 409 with Problem Details title.
-    const input = screen.getByPlaceholderText('e.g. design/login-flow')
-    fireEvent.change(input, { target: { value: 'design/foo' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
-
     await waitFor(() => {
-      expect(screen.getByText('Canvas "design/foo" already exists')).toBeTruthy()
+      expect(screen.getByText('Canvas "design/untitled" already exists')).toBeTruthy()
     })
-    // Dialog must still be open after an error.
-    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(
+      JSON.parse(String(fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')?.[1]?.body)),
+    ).toEqual({
+      slug: 'design/untitled',
+    })
 
-    // Second submit — 500 without title → fallback.
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    // Second activation: 500 without title → generic fallback, internals never shown.
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
     })
     // Sensitive server internals must never be exposed.
     expect(screen.queryByText(/internal/i)).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('does not dispatch excalidraw:version_saved when POST /versions returns invalid schema', async () => {
