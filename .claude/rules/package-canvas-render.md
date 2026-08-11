@@ -274,6 +274,15 @@ paths:
   endpoints, cycles, zero-sized nodes) — they degrade to a documented
   fallback instead, so one bad reference never aborts layout for the rest
   of the canvas.
+- **One producer per geometry, or a parity test.** Any geometry consumed
+  by more than one surface — painted by the SVG backend AND hit-tested,
+  bounded, translated, or exported — has exactly one producing function;
+  when two producers are unavoidable, a parity test pins their agreement
+  (precedents: `theme/spatial-geometry-parity.test.ts` for layout
+  geometry, `layout/edge-rounding.ts` for the drawn-vs-hit curve). Two
+  independently-grown producers of "the same" geometry is the pixel
+  version of the Zod schema/interface drift class, and it has shipped
+  real defects twice.
 
 ## Tests
 
@@ -306,3 +315,11 @@ paths:
   explicit sort + tie-breaker — makes the AI-facing JSON non-reproducible.
 - Importing MathJax, opentype.js, or any font/DOM API directly instead of
   going through the `measure`/`renderMath` injection seams.
+- Treating every non-endpoint node as a routing obstacle: a rect that
+  CONTAINS an edge's endpoint (a group enclosing its members) can never
+  be routed around — every detour still has to reach the point inside
+  it — so it must be excluded from the obstacle set, or the router falls
+  back to a garbage shortest-detour around the whole frame.
+- Adding a second producer for geometry that is both drawn and consumed
+  elsewhere (hit-testing, bounds) instead of sharing one decomposition —
+  the curved-edge highlight/hit mismatch was exactly this drift.
