@@ -412,6 +412,46 @@ describe('resolveServerModeExposure — deterministic contract anchors', () => {
 
 // Property 1: any https URL with a non-empty search/hash/credentials is
 // rejected, and the failure decision does not echo the raw URL.
+// Shared by the property and by the pinned counterexample below, so a regression in the assertion
+// itself is caught deterministically rather than only on the seeds that happen to generate a
+// colliding host.
+function assertRejectedWithoutEcho({
+  host,
+  suffix,
+  kind,
+}: {
+  host: string
+  suffix: string
+  kind: 'query' | 'fragment' | 'credentials'
+}) {
+  // Canary strings are long enough that they cannot be substrings of any
+  // failure code token.
+  const canary = `CANARY_${suffix}`
+  let url: string
+  switch (kind) {
+    case 'query':
+      url = `https://${host}?token=${canary}`
+      break
+    case 'fragment':
+      url = `https://${host}#${canary}`
+      break
+    case 'credentials':
+      url = `https://${canary}:${canary}@${host}`
+      break
+  }
+
+  const d: ServerModeExposureDecision = resolveServerModeExposure({
+    mode: 'server-mode',
+    bindHost: '0.0.0.0',
+    externalUrl: url,
+  })
+  expect(d.ok).toBe(false)
+  const serialized = JSON.stringify(d)
+  // The canary and the full URL must not appear in the failure decision.
+  expect(serialized).not.toContain(canary)
+  expect(serialized).not.toContain(url)
+}
+
 // We use a `CANARY_` prefix on generated values so short substrings cannot
 // accidentally appear inside error code tokens (e.g. "a" in "external").
 fcTest.prop(
@@ -429,35 +469,16 @@ fcTest.prop(
   withDefaults(),
 )(
   'any https URL with credentials/query/fragment is rejected and failure does not echo those pieces',
-  ({ host, suffix, kind }) => {
-    // Canary strings are long enough that they cannot be substrings of any
-    // failure code token.
-    const canary = `CANARY_${suffix}`
-    let url: string
-    switch (kind) {
-      case 'query':
-        url = `https://${host}?token=${canary}`
-        break
-      case 'fragment':
-        url = `https://${host}#${canary}`
-        break
-      case 'credentials':
-        url = `https://${canary}:${canary}@${host}`
-        break
-    }
-
-    const d: ServerModeExposureDecision = resolveServerModeExposure({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: url,
-    })
-    expect(d.ok).toBe(false)
-    const serialized = JSON.stringify(d)
-    // The canary and the full URL must not appear in the failure decision.
-    expect(serialized).not.toContain(canary)
-    expect(serialized).not.toContain(host)
-  },
+  (input) => assertRejectedWithoutEcho(input),
 )
+
+// The shrunk counterexample from the property above, pinned as an example: `e.ex` is a substring
+// of the failure's own constant code (`server_mod<e.ex>ternal_url_must_be_origin`), so asserting
+// the bare host collides with a token the decision is entitled to contain. Nothing leaked — the
+// assertion was wrong, and only some seeds reach a host short enough to expose it.
+it('does not treat a host that is a substring of the failure code as a leak', () => {
+  assertRejectedWithoutEcho({ host: 'e.ex', suffix: '10000000', kind: 'query' })
+})
 
 // Property 2: any accepted server-mode decision has an origin-only publicBaseUrl.
 fcTest.prop(
