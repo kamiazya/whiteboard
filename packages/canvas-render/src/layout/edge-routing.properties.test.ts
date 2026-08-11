@@ -287,3 +287,33 @@ describe('routing properties: occlusion-aware sides', () => {
     },
   )
 })
+
+// Zero-bend alignment. Vertically stacked pairs whose x-spans always
+// overlap (both contain 200..300): with nothing in the way, the orthogonal
+// route must be a single straight segment — anchors slide rather than
+// jogging. The mutation check is removing the alignment shortcut, which
+// reintroduces the stub-jog-stub elbow.
+const stackedPairArb = fc.record({
+  aX: fc.integer({ min: 0, max: 200 }),
+  aW: fc.integer({ min: 120, max: 400 }),
+  bX: fc.integer({ min: 0, max: 200 }),
+  bW: fc.integer({ min: 120, max: 400 }),
+  // Vertical offset dominates every reachable horizontal offset (max ~340),
+  // so side derivation always picks bottom/top — a 45-degree tie would pick
+  // the horizontal pair and step outside this property's claim.
+  gap: fc.integer({ min: 250, max: 500 }),
+})
+
+describe('routing properties: zero-bend alignment', () => {
+  fcTest.prop([stackedPairArb], withDefaults())(
+    'a facing vertical pair with overlapping spans routes as one straight segment',
+    ({ aX, aW, bX, bW, gap }) => {
+      // Both spans contain [200, 300], so an aligned lane always exists.
+      const a = node('a', 'text', { x: aX, y: 0, w: Math.max(aW, 300 - aX + 20), h: 100 })
+      const b = node('b', 'text', { x: bX, y: 100 + gap, w: Math.max(bW, 300 - bX + 20), h: 100 })
+      const routed = routeEdge([a, b], edge('a', 'b'), 'orthogonal')
+      expect(routed.path).toHaveLength(2)
+      expect(routed.path[0]!.x).toBe(routed.path[1]!.x)
+    },
+  )
+})

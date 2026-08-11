@@ -548,9 +548,58 @@ function routeOrthogonal(
   end: Point,
   fromSide: Side,
   toSide: Side,
+  fromRect: Rect,
+  toRect: Rect,
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
+  // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
+  // often share one tangent coordinate — anchors are renderer-chosen
+  // defaults, so sliding one end along its side buys a single straight
+  // segment instead of a stub-jog-stub elbow. Facing is required (each
+  // side's outward normal points toward the other end), or an authored
+  // opposing pair with the nodes swapped would draw a line backwards
+  // through both. A blocked lane falls through to the elbows.
+  if (fromSide === oppositeSide(toSide)) {
+    const fromNormal = outwardNormal(fromSide)
+    const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
+    if (facing) {
+      const span = (rect: Rect, side: Side): readonly [number, number] =>
+        side === 'left' || side === 'right'
+          ? [
+              rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+              rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+            ]
+          : [
+              rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+              rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+            ]
+      const withTangent = (anchor: Point, side: Side, t: number): Point =>
+        side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
+      const [fromLo, fromHi] = span(fromRect, fromSide)
+      const [toLo, toHi] = span(toRect, toSide)
+      const lo = Math.max(fromLo, toLo)
+      const hi = Math.min(fromHi, toHi)
+      if (lo <= hi) {
+        const startT = tangentCoordinate(fromSide, start)
+        const endT = tangentCoordinate(toSide, end)
+        // Keep an existing anchor when one already lies in the shared
+        // lane (departure first, then the arrival's fan position), else
+        // move as little as possible.
+        const t =
+          startT >= lo && startT <= hi
+            ? startT
+            : endT >= lo && endT <= hi
+              ? endT
+              : Math.min(hi, Math.max(lo, startT))
+        const alignedStart = withTangent(start, fromSide, t)
+        const alignedEnd = withTangent(end, toSide, t)
+        if (pathIsClear([alignedStart, alignedEnd], inflated)) {
+          return [alignedStart, alignedEnd]
+        }
+      }
+    }
+  }
   const exit = stubFrom(start, fromSide)
   const entry = stubFrom(end, toSide)
   const between = (middles: readonly Point[]) =>
@@ -692,7 +741,7 @@ export function routeEdge(
             obstacles,
             rawObstacles,
           )
-        : routeOrthogonal(start, end, fromSide, toSide, obstacles, rawObstacles),
+        : routeOrthogonal(start, end, fromSide, toSide, fromRect, toRect, obstacles, rawObstacles),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,
