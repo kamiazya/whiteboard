@@ -3387,6 +3387,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 pointerEvents: 'none',
               }}
             >
+              {/* Edges INSIDE the area (both endpoints are members) follow
+                area actions like recolor, so the highlight marks them along
+                with the member boxes — an edge leaving the area does not
+                follow and stays unmarked. */}
+              {(() => {
+                const memberIds = new Set(selectionMembers.map((member) => member.id))
+                return canvas.edges
+                  .filter((edge) => memberIds.has(edge.fromNode) && memberIds.has(edge.toNode))
+                  .flatMap((edge) => {
+                    const routed = edgePaths.find((entry) => entry.id === edge.id)
+                    return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]
+                  })
+                  .map(({ id, path }) => (
+                    <polyline
+                      key={`edge-${id}`}
+                      points={path.map((p) => `${p.x},${p.y}`).join(' ')}
+                      fill="none"
+                      stroke="#2563eb"
+                      strokeWidth={2.5 / viewport.zoom}
+                      strokeLinecap="round"
+                      opacity={0.5}
+                    />
+                  ))
+              })()}
               {selectionMembers.map(({ id, box }) => (
                 <rect
                   key={id}

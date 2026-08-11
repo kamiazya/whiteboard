@@ -287,3 +287,47 @@ it('Delete removes every member of the multi-selection', async () => {
     expect(latest.nodes.map((n) => n.id)).toEqual(['c'])
   })
 })
+
+// The member outlines must also mark the edges INSIDE the selected area
+// (both endpoints selected) — they follow area actions like recolor, so
+// the highlight has to say so before the user commits one.
+it('member outlines include the edges between members, not edges leaving the area', async () => {
+  const wired: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
+      { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
+      { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
+    ],
+    edges: [
+      { id: 'ab', fromNode: 'a', toNode: 'b' },
+      { id: 'bc', fromNode: 'b', toNode: 'c' },
+    ],
+  }
+  function WiredHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(wired)
+    latest = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<WiredHost />)
+  const root = rootOf(container)
+
+  press(root, 160, 130)
+  await frame()
+  press(root, 360, 130, { shift: true })
+  await frame()
+
+  await vi.waitFor(() =>
+    expect(container.querySelectorAll('[data-testid="member-outlines"] rect').length).toBe(2),
+  )
+  const edgeHighlights = container.querySelectorAll('[data-testid="member-outlines"] polyline')
+  expect(edgeHighlights.length).toBe(1)
+})
