@@ -36,23 +36,96 @@ function sidePoint(rect: Rect, side: Side): Point {
   }
 }
 
+/** Strict interior: a point exactly on the border is NOT inside, so a node
+ * merely touching another (tidy adjacent layouts) never reads as occluding. */
+function strictlyInside(rect: Rect, point: Point): boolean {
+  return (
+    point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
+  )
+}
+
+function fullyContains(outer: Rect, inner: Rect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.w <= outer.x + outer.w &&
+    inner.y + inner.h <= outer.y + outer.h
+  )
+}
+
+function oppositeSide(side: Side): Side {
+  switch (side) {
+    case 'top':
+      return 'bottom'
+    case 'bottom':
+      return 'top'
+    case 'left':
+      return 'right'
+    case 'right':
+      return 'left'
+  }
+}
+
+/**
+ * Side preference for the FROM end, best first: the side facing the other
+ * node on the dominant axis (the pre-existing default, so an unoccluded
+ * canvas keeps its exact old sides), then the facing side of the other
+ * axis, then their opposites. Ties (equal offsets) prefer the horizontal
+ * axis — the same fixed tie-breaker the default derivation always had.
+ */
+function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] {
+  const h: Side = dx >= 0 ? 'right' : 'left'
+  const v: Side = dy >= 0 ? 'bottom' : 'top'
+  return Math.abs(dx) >= Math.abs(dy)
+    ? [h, v, oppositeSide(v), oppositeSide(h)]
+    : [v, h, oppositeSide(h), oppositeSide(v)]
+}
+
 /**
  * Deterministic default-side derivation for an edge with no explicit
- * fromSide/toSide: pick the axis with the larger center-to-center offset,
- * then the side facing the other node along that axis. Ties (equal
- * horizontal/vertical offset) prefer the horizontal axis — a fixed,
- * arbitrary-but-stable tie-breaker.
+ * fromSide/toSide, occlusion-aware: the preferred side is the pre-existing
+ * center-offset derivation, but a side whose midpoint anchor sits strictly
+ * INSIDE another node is skipped for the first exposed one. The endpoint
+ * rects themselves are never obstacles (the edge has to reach them), so an
+ * occluded anchor means the route legally cuts straight through the
+ * occluding node — moving to an exposed side is what keeps it outside.
+ *
+ * Not occluders: the edge's other endpoint (entering the shared region IS
+ * the edge's job), and any rect fully containing the endpoint node (a
+ * group frame around its member occludes every side equally, which says
+ * nothing about which side to prefer). With every side occluded the
+ * derivation falls back to the preferred side, so fully-boxed-in nodes
+ * keep the old behaviour.
  */
-function deriveDefaultSides(fromRect: Rect, toRect: Rect): { fromSide: Side; toSide: Side } {
+function deriveDefaultSides(
+  nodes: readonly SpatialNode[],
+  edge: CanvasEdge,
+  fromRect: Rect,
+  toRect: Rect,
+): { fromSide: Side; toSide: Side } {
   const fromCenter = centerOf(fromRect)
   const toCenter = centerOf(toRect)
   const dx = toCenter.x - fromCenter.x
   const dy = toCenter.y - fromCenter.y
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? { fromSide: 'right', toSide: 'left' } : { fromSide: 'left', toSide: 'right' }
+  const fromCandidates = facingSides(dx, dy)
+  // The to end's preferences mirror the from end's (the old derivation
+  // always returned opposite pairs), each end then skipping occlusion
+  // independently.
+  const toCandidates = fromCandidates.map(oppositeSide) as unknown as readonly [
+    Side,
+    Side,
+    Side,
+    Side,
+  ]
+  const foreign = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  const pick = (rect: Rect, candidates: readonly Side[]): Side => {
+    const occluders = foreign.filter((r) => !fullyContains(r, rect))
+    return (
+      candidates.find((side) => !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))) ??
+      candidates[0]!
+    )
   }
-  return dy >= 0 ? { fromSide: 'bottom', toSide: 'top' } : { fromSide: 'top', toSide: 'bottom' }
+  return { fromSide: pick(fromRect, fromCandidates), toSide: pick(toRect, toCandidates) }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
@@ -157,7 +230,7 @@ export function assignEdgeAnchors(
     const derived =
       edge.fromNode === edge.toNode
         ? { fromSide: 'right' as Side, toSide: 'right' as Side }
-        : deriveDefaultSides(fromRect, toRect)
+        : deriveDefaultSides(nodes, edge, fromRect, toRect)
     const ends: End[] = [
       {
         edgeId: edge.id,
@@ -203,6 +276,9 @@ export function assignEdgeAnchors(
   }
   return anchors
 }
+
+/** How close a route may pass to a foreign node's border, in px. */
+const ROUTE_MARGIN_PX = 8
 
 /** How far a detour keeps clear of the boxes it steps around, in px. */
 const OBSTACLE_CLEARANCE_PX = 16
@@ -285,10 +361,25 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
-/** The candidate that clears every obstacle, shortest first; the shortest overall if none does. */
-function bestCandidate(candidates: readonly Point[][], obstacles: readonly Rect[]): Point[] {
+/**
+ * The best candidate by a two-tier clearance ranking, shortest first:
+ * clear of the inflated obstacles (full margin kept), else clear of the
+ * RAW node bodies (an anchor boxed inside a neighbour's margin band has
+ * to cross the band to escape — that is acceptable; crossing the node
+ * itself is not), else the shortest overall (layout has to return
+ * SOMETHING).
+ */
+function bestCandidate(
+  candidates: readonly Point[][],
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+): Point[] {
   const byLength = [...candidates].sort((a, b) => pathLength(a) - pathLength(b))
-  return byLength.find((path) => pathIsClear(path, obstacles)) ?? (byLength[0] as Point[])
+  return (
+    byLength.find((path) => pathIsClear(path, inflated)) ??
+    byLength.find((path) => pathIsClear(path, raw)) ??
+    (byLength[0] as Point[])
+  )
 }
 
 /** Ways past a blocking region: over it, under it, left of it, right of it. */
@@ -310,10 +401,100 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
   return unionRect(obstacles.filter((rect) => segmentCrossesRect(start, end, rect)))
 }
 
-function routeStraight(start: Point, end: Point, obstacles: readonly Rect[]): Point[] {
-  const region = blockingRegion(start, end, obstacles)
+function routeStraight(
+  start: Point,
+  end: Point,
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+): Point[] {
+  const region = blockingRegion(start, end, inflated)
   if (region === undefined) return [start, end]
-  return bestCandidate(detourCandidates(start, end, region), obstacles)
+  return bestCandidate(detourCandidates(start, end, region), inflated, raw)
+}
+
+/**
+ * Whether a straight run from `anchor` toward `other` would leave through
+ * the anchor side's outward half-plane. When it would not (the direction
+ * grazes along the side or points back across the node — the shape an
+ * occlusion-moved side produces), the edge needs a perpendicular stub
+ * first, or it draws sliding along the node's own border and the arrowhead
+ * meets the side edge-on.
+ */
+/** Below this outward-to-tangential ratio (~14°), an approach reads as
+ * running along the side rather than into it. */
+const SIDEWAYS_RATIO = 0.25
+
+function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
+  const vx = other.x - anchor.x
+  const vy = other.y - anchor.y
+  // Coincident anchors have no direction to graze along — the degenerate
+  // zero-length path stays minimal rather than growing stubs.
+  if (vx === 0 && vy === 0) return false
+  const normal = outwardNormal(side)
+  const outward = normal.x * vx + normal.y * vy
+  const tangential = Math.abs(normal.x * vy - normal.y * vx)
+  return outward <= tangential * SIDEWAYS_RATIO
+}
+
+/** How close to a side's corner a slid anchor may sit, in px. */
+const SLIDE_CORNER_INSET_PX = 10
+
+/**
+ * The anchor slid along its side so the run to `target` is axis-aligned,
+ * or undefined when the target's coordinate falls outside the side's span
+ * (keeping a corner inset). A side midpoint is a default, not authored
+ * data — trading it for a rectilinear route is the better-looking edge.
+ */
+function slideAlongSide(anchor: Point, rect: Rect, side: Side, target: Point): Point | undefined {
+  if (side === 'left' || side === 'right') {
+    const lo = rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
+    const hi = rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
+    return target.y >= lo && target.y <= hi ? { x: anchor.x, y: target.y } : undefined
+  }
+  const lo = rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
+  const hi = rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2)
+  return target.x >= lo && target.x <= hi ? { x: target.x, y: anchor.y } : undefined
+}
+
+/**
+ * The straight style, with a perpendicular stub inserted at any end whose
+ * direct segment would graze along its own side (see `approachesSideways`).
+ * With neither end sideways this is exactly `routeStraight`, so every
+ * facing-pair canvas keeps its two-point segment. When exactly one end is
+ * sideways, the clean end's anchor slides along its own side to meet the
+ * stub corridor squarely — one long axis-aligned run plus one right-angle
+ * turn, instead of a diagonal into the stub.
+ */
+function routeStraightWithApproach(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  fromRect: Rect,
+  toRect: Rect,
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+): Point[] {
+  const fromSideways = approachesSideways(start, end, fromSide)
+  const toSideways = approachesSideways(end, start, toSide)
+  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw)
+  if (toSideways && !fromSideways) {
+    const entry = stubFrom(end, toSide)
+    const slid = slideAlongSide(start, fromRect, fromSide, entry)
+    if (slid !== undefined) {
+      return withoutRepeats([...routeStraight(slid, entry, inflated, raw), end])
+    }
+  }
+  if (fromSideways && !toSideways) {
+    const exit = stubFrom(start, fromSide)
+    const slid = slideAlongSide(end, toRect, toSide, exit)
+    if (slid !== undefined) {
+      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw)])
+    }
+  }
+  const exit = fromSideways ? stubFrom(start, fromSide) : start
+  const entry = toSideways ? stubFrom(end, toSide) : end
+  return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
 }
 
 /** How far an orthogonal edge travels straight out of a node before turning. */
@@ -367,7 +548,8 @@ function routeOrthogonal(
   end: Point,
   fromSide: Side,
   toSide: Side,
-  obstacles: readonly Rect[],
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
 ): Point[] {
   const exit = stubFrom(start, fromSide)
   const entry = stubFrom(end, toSide)
@@ -375,8 +557,8 @@ function routeOrthogonal(
     withoutRepeats([start, exit, ...middles, entry, end])
 
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
-  if (elbows.some((path) => pathIsClear(path, obstacles))) {
-    return bestCandidate(elbows, obstacles)
+  if (elbows.some((path) => pathIsClear(path, inflated))) {
+    return bestCandidate(elbows, inflated, raw)
   }
 
   // Detours are needed when the paths this style actually travels are
@@ -384,7 +566,7 @@ function routeOrthogonal(
   // edge never travels it. Two obstacles can sit on the two elbows while
   // leaving that diagonal clear.
   const region = unionRect(
-    obstacles.filter((rect) =>
+    inflated.filter((rect) =>
       elbows.some((path) =>
         path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
       ),
@@ -397,7 +579,7 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, obstacles)
+  return bestCandidate(candidates, inflated, raw)
 }
 
 /**
@@ -462,7 +644,7 @@ export function routeEdge(
     }
   }
 
-  const derived = deriveDefaultSides(fromRect, toRect)
+  const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
   const fromSide = edge.fromSide ?? derived.fromSide
   const toSide = edge.toSide ?? derived.toSide
 
@@ -472,10 +654,23 @@ export function routeEdge(
   // detour still has to reach the point inside it — so it is not an
   // obstacle. This is what lets an edge between two members of a group run
   // inside the group's frame instead of detouring around it.
-  const obstacles = nodes
+  // Endpoint containment excludes an obstacle on its RAW bounds — a node
+  // whose margin band merely brushes an anchor must still block the route
+  // from crossing its body. Routing then tests the margin-inflated rects
+  // so a route keeps visible clearance from foreign borders; when an
+  // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
+  // second tier accepts a band crossing to escape rather than tunnelling
+  // through the node itself.
+  const rawObstacles = nodes
     .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
     .map(rectOf)
     .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const obstacles = rawObstacles.map((rect) => ({
+    x: rect.x - ROUTE_MARGIN_PX,
+    y: rect.y - ROUTE_MARGIN_PX,
+    w: rect.w + 2 * ROUTE_MARGIN_PX,
+    h: rect.h + 2 * ROUTE_MARGIN_PX,
+  }))
 
   return {
     kind: 'edge',
@@ -487,8 +682,17 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraight(start, end, obstacles)
-        : routeOrthogonal(start, end, fromSide, toSide, obstacles),
+        ? routeStraightWithApproach(
+            start,
+            end,
+            fromSide,
+            toSide,
+            fromRect,
+            toRect,
+            obstacles,
+            rawObstacles,
+          )
+        : routeOrthogonal(start, end, fromSide, toSide, obstacles, rawObstacles),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,
