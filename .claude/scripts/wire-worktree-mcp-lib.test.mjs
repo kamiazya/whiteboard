@@ -313,3 +313,45 @@ test('docs-lock: the manual fallback `claude mcp add` command in development.md 
 
   assert.equal(docsFragment, expectedFragment, 'docs fallback command argv order must match buildClaudeMcpAddArgs')
 })
+
+// --- linked-worktree project-key collision ---
+import { resolvesToAnotherProjectEntry } from './wire-worktree-mcp-lib.mjs'
+
+// Observed on every `new-worktree.mjs` run: the script reads ~/.claude.json under the WORKTREE
+// path, finds nothing, and calls `claude mcp add --scope local` — which fails with "MCP server
+// whiteboard already exists in local config". ~/.claude.json holds exactly one project key for
+// this repo (the main checkout), so the CLI resolves a linked worktree to the main project and
+// collides with the entry already there. The add can never succeed; attempting it just prints a
+// failed command (with a redacted bearer token) on every worktree creation.
+test('a linked worktree whose main checkout already holds the entry is reported, not retried', () => {
+  const config = { projects: { '/repo': { mcpServers: { whiteboard: { type: 'http' } } } } }
+  assert.equal(
+    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/.claude/worktrees/x', mainRoot: '/repo', name: 'whiteboard' }),
+    true,
+  )
+})
+
+test('the main checkout itself is never treated as a collision', () => {
+  const config = { projects: { '/repo': { mcpServers: { whiteboard: {} } } } }
+  assert.equal(
+    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo', mainRoot: '/repo', name: 'whiteboard' }),
+    false,
+  )
+})
+
+test('a worktree is not a collision when the main checkout has no such entry', () => {
+  const config = { projects: { '/repo': { mcpServers: {} } } }
+  assert.equal(
+    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/.claude/worktrees/x', mainRoot: '/repo', name: 'whiteboard' }),
+    false,
+  )
+})
+
+test('a missing or malformed config is not a collision', () => {
+  for (const config of [null, undefined, {}, { projects: null }]) {
+    assert.equal(
+      resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/wt', mainRoot: '/repo', name: 'whiteboard' }),
+      false,
+    )
+  }
+})

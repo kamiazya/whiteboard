@@ -38,6 +38,7 @@ import {
   redactBearerTokens,
   removeStaleEntriesFromConfig,
   resolveMainCheckoutRoot,
+  resolvesToAnotherProjectEntry,
   verifyPostWrite,
 } from './wire-worktree-mcp-lib.mjs'
 
@@ -169,6 +170,20 @@ function defaultLiveWorktreePaths(mainCheckoutRoot) {
   return Array.from(raw.matchAll(/^worktree (.+)$/gm), (m) => resolve(m[1].trim()))
 }
 
+// The main checkout of a linked worktree: `git rev-parse --git-common-dir` points at the main
+// repository's .git, whose parent is that checkout.
+function mainCheckoutRoot(repoRoot) {
+  try {
+    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim()
+    return resolve(commonDir, '..')
+  } catch {
+    return repoRoot
+  }
+}
+
 function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride }) {
   const repoRoot = resolve(worktreeRoot)
   const mainCheckout = isMainCheckoutOverride ?? isMainCheckout(repoRoot)
@@ -216,7 +231,26 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
     return
   }
 
-  // outcome === 'absent'
+  // outcome === 'absent' under THIS path — but `claude mcp add --scope local` keys its write by
+  // the project the CLI resolves, and a linked worktree resolves to the main checkout. If that
+  // entry already exists, the add fails with "already exists" no matter how often it is retried.
+  if (
+    resolvesToAnotherProjectEntry({
+      config: existingConfig,
+      repoRoot,
+      mainRoot: mainCheckoutRoot(repoRoot),
+      name: desired.name,
+    })
+  ) {
+    log(
+      `[wire-worktree-mcp] skipping: \`claude mcp add --scope local\` resolves a linked worktree to the ` +
+        `main checkout, which already registers "${desired.name}". ~/.claude.json holds one project key ` +
+        `per repository, so a per-worktree registration is not something the CLI can express. This ` +
+        `worktree's daemon still binds ${desired.url} — point a client at it directly if you need it.`,
+    )
+    return
+  }
+
   assertNotTrackedSettingsPath(CLAUDE_CONFIG_PATH)
   const addArgs = buildClaudeMcpAddArgs(desired)
   const result = spawn('claude', addArgs, { cwd: repoRoot })
