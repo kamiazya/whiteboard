@@ -787,6 +787,25 @@ describe('deleteCanvas', () => {
     expect(siblingRow).toBeDefined()
   })
 
+  it('removes the .pre-migrate-bak file the legacy migration leaves beside the blob', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { stat, writeFile } = await import('node:fs/promises')
+
+    await saveCanvas('session1', 'migrated', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'migrated')
+      .executeTakeFirstOrThrow()
+    const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
+    await writeFile(bakPath, new Uint8Array([9, 9, 9]))
+
+    await expect(deleteCanvas('session1', 'migrated')).resolves.toBe(true)
+    await expect(stat(bakPath)).rejects.toThrow()
+  })
+
   it('returns false for a missing canvas without throwing; deleting the same canvas twice returns true then false', async () => {
     await expect(deleteCanvas('session1', 'ghost')).resolves.toBe(false)
 
