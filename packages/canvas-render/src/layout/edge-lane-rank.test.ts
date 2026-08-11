@@ -41,9 +41,12 @@ describe('lane depth by sweep rank', () => {
       node('yellow', 450, 290, 260, 130),
       node('cyan', 630, 610, 280, 160),
     ]
+    // Sides authored: this pins the LANE mechanics on one shared side (the
+    // arrangement that used to cross); the bend-aware derivation would
+    // otherwise legitimately route these ends via different sides.
     const edges: CanvasEdge[] = [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      { id: 'e-orange', fromNode: 'yellow', toNode: 'red', toSide: 'right' },
+      { id: 'e-red', fromNode: 'red', toNode: 'cyan', fromSide: 'right' },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
