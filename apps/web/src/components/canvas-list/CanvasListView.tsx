@@ -20,7 +20,6 @@ export interface CanvasListRow {
   kind: CanvasKind
 }
 
-// Lifted verbatim from DaemonIndexPage (whose private copy S4 deletes).
 // Clock drift between client and daemon can make (now - t) negative; clamp
 // so the label never reads "-5s ago".
 export function formatRelative(iso: string): string {
@@ -36,8 +35,9 @@ export function formatRelative(iso: string): string {
 export interface CanvasListViewProps {
   rows: readonly CanvasListRow[]
   onOpen: (slug: string) => void
-  // Immediate create per ADR-0006: no name is collected up front. The kind
-  // menu exists because the daemon create API carries kind since S0.
+  // Immediate create per ADR-0006: no name is collected up front. The menu
+  // picks which CanvasKind the caller creates; everything else about the
+  // creation (slug derivation, the POST) is the caller's.
   onCreate: (kind: CanvasKind) => void
   // Capability slot: the daemon page passes CanvasThumb; browser-local omits
   // it and gets the label-only card. A render prop, NOT a scene render —
@@ -51,10 +51,10 @@ export interface CanvasListViewProps {
   createDisabled?: boolean
 }
 
-// The shared, capability-gated canvas list both modes render (stack base of
-// the UI-unification initiative; wired by the daemon and /local pages above
-// it). Purely presentational: rows in, callbacks out — no daemon client, no
-// zod, so the browser-local chunk never pays for the daemon's dependencies.
+// The shared, capability-gated canvas list that both the daemon and the
+// browser-local pages render. Purely presentational: rows in, callbacks
+// out — no daemon client, no zod, so the browser-local chunk never pays
+// for the daemon's dependencies.
 export function CanvasListView({
   rows,
   onOpen,
