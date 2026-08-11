@@ -83,6 +83,7 @@ export function ImportBrowserLocalPanel({
             daemonBaseUrl,
             workspaceId,
             canvasName: canvas.name,
+            canvasKind: canvas.kind,
             loroLoad,
           })
           if (result.kind === 'ok') {
