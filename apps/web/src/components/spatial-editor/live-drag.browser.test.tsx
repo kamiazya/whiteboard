@@ -240,3 +240,38 @@ it('a multi-selection ghost carries every member, not only the grabbed node', as
   // scene) would mark stale geometry — they hide until the drop.
   expect(container.querySelector('[data-testid="member-outlines"]')).toBeNull()
 })
+
+it('freezes edge sides at their committed choices for the whole drag', async () => {
+  // Committed: yellow sits below-right of red, so the optimizer settles
+  // orange onto red's RIGHT side. The drag hauls yellow far to red's LEFT
+  // — a fresh optimization of the moved canvas would flip the arrival to
+  // red's left side, so the live layer still routing to the RIGHT border
+  // is only explainable by the frozen committed sides.
+  const crossing: SpatialCanvas = {
+    nodes: [
+      { id: 'red', type: 'text', x: 300, y: 100, width: 200, height: 100, text: 'Red' },
+      { id: 'yellow', type: 'text', x: 620, y: 300, width: 160, height: 90, text: 'Yellow' },
+      { id: 'cyan', type: 'text', x: 700, y: 520, width: 160, height: 90, text: 'Cyan' },
+    ],
+    edges: [
+      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
+      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+    ],
+    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+  }
+  const { Host } = makeHost(crossing)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // Grab Yellow at its center (700, 345) and haul it left of Red — no release.
+  await dragWithoutRelease(root, [700, 345], [80, 345])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live).not.toBeNull()
+  // The orange arrival still terminates ON red's right border (x = 500),
+  // exactly where the committed render put it.
+  const points = [...(live?.querySelectorAll('polyline') ?? [])].flatMap((p) =>
+    (p.getAttribute('points') ?? '').split(' ').map((pair) => pair.split(',').map(Number)),
+  )
+  expect(points.some(([x, y]) => x === 500 && y! >= 100 && y! <= 200)).toBe(true)
+})

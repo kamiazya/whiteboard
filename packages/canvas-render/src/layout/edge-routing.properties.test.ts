@@ -414,10 +414,12 @@ describe('routing properties: sweep-rank lanes', () => {
 })
 
 // Crossing minimization. Dense chunky boxes with edges across them make
-// crossings the common case; the optimizer must never make the
-// configuration WORSE than the heuristic initial one, and must be a pure
-// deterministic function of the canvas. Mutation check: accepting a trial
-// without the strict cost decrease turns the never-worse property red.
+// crossings — and degenerate coincident stacks — the common case; the
+// property pins that optimizing stays a pure deterministic function of
+// the canvas, never throws, and never detaches an anchor from its
+// reported side. The optimizer's ACCEPTANCE criterion (adopt only on a
+// strict cost decrease) is pinned by the crossing-elimination example in
+// edge-crossing-min.test.ts, whose mutation check inverts the comparison.
 const clutterScenario = fc.record({
   rects: fc.array(
     fc.record({

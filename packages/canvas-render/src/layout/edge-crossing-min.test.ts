@@ -98,3 +98,87 @@ describe('frozen side overrides', () => {
     expect(red.fromSide).toBe('bottom')
   })
 })
+
+describe('edgeSideOverrides through layoutSpatialEdges', () => {
+  it('threads the frozen sides through the layout entry point apps/web calls', async () => {
+    const { layoutSpatialEdges } = await import('./spatial-canvas.js')
+    const { createFakeMeasure } = await import('../test-utils/fake-measure.js')
+    const canvas = {
+      nodes: [
+        node('red', 0, 100, 300, 120),
+        node('yellow', 450, 290, 260, 130),
+        node('cyan', 630, 610, 280, 160),
+      ],
+      edges: [
+        { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
+        { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      ],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' as const } },
+    }
+    const frozen = new Map([
+      ['e-orange', { fromSide: 'left' as const, toSide: 'bottom' as const }],
+      ['e-red', { fromSide: 'bottom' as const, toSide: 'left' as const }],
+    ])
+    const sceneNodes = layoutSpatialEdges(canvas, {
+      measure: createFakeMeasure(),
+      parseBody: () => ({ type: 'root' as const, children: [] }),
+      appearance: { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) },
+      edgeSideOverrides: frozen,
+    })
+    const orange = sceneNodes.find((n) => n.kind === 'edge' && n.id === 'e-orange')
+    // Without the pass-through the optimizer re-sides orange away from
+    // Red's bottom; the frozen side surviving proves the option reached
+    // assignEdgeAnchors.
+    expect(orange !== undefined && orange.kind === 'edge' && orange.toSide).toBe('bottom')
+  })
+})
+
+describe('optimization gate', () => {
+  const crossingPair = () => ({
+    nodes: [
+      node('red', 0, 100, 300, 120),
+      node('yellow', 450, 290, 260, 130),
+      node('cyan', 630, 610, 280, 160),
+    ],
+    edges: [
+      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
+      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+    ] as CanvasEdge[],
+  })
+
+  /** Far-away disjoint pairs that add edge COUNT without touching the scene. */
+  const padding = (count: number) => {
+    const nodes: SpatialNode[] = []
+    const edges: CanvasEdge[] = []
+    for (let i = 0; i < count; i++) {
+      nodes.push(
+        node(`pa${i}`, 5000 + i * 400, 0, 100, 60),
+        node(`pb${i}`, 5000 + i * 400, 300, 100, 60),
+      )
+      edges.push({ id: `pad${i}`, fromNode: `pa${i}`, toNode: `pb${i}` })
+    }
+    return { nodes, edges }
+  }
+
+  it('past the edge-count gate the pass is skipped and the crossing persists', () => {
+    const base = crossingPair()
+    const pad = padding(39) // 2 + 39 = 41 > 40
+    const nodes = [...base.nodes, ...pad.nodes]
+    const edges = [...base.edges, ...pad.edges]
+    const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+    const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
+    const red = routeEdge(nodes, edges[1]!, 'orthogonal', anchors.get('e-red'))
+    expect(crossings(orange.path, red.path)).toBeGreaterThan(0)
+  })
+
+  it('at the gate boundary the pass still runs and removes the crossing', () => {
+    const base = crossingPair()
+    const pad = padding(38) // 2 + 38 = 40 <= 40
+    const nodes = [...base.nodes, ...pad.nodes]
+    const edges = [...base.edges, ...pad.edges]
+    const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+    const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
+    const red = routeEdge(nodes, edges[1]!, 'orthogonal', anchors.get('e-red'))
+    expect(crossings(orange.path, red.path)).toBe(0)
+  })
+})
