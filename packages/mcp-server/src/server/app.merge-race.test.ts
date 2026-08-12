@@ -123,14 +123,8 @@ describe('performMerge vs rename race', () => {
     // while the merge request is paused mid-flight, matching the real
     // race: the read resolves before the rename runs, the write happens
     // after.
-    let releaseGetDoc: () => void = () => undefined
-    const getDocGate = new Promise<void>((resolve) => {
-      releaseGetDoc = resolve
-    })
-    let signalGetDocCalled: () => void = () => undefined
-    const getDocCalled = new Promise<void>((resolve) => {
-      signalGetDocCalled = resolve
-    })
+    const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
+    const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
     const actual =
       await vi.importActual<typeof import('./store/doc-cache.js')>('./store/doc-cache.js')
     vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, slug) => {
