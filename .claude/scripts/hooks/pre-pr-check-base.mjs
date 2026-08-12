@@ -41,11 +41,32 @@ try {
   git(['-C', repoRoot, 'fetch', 'origin', 'main'])
   const behind = git(['-C', repoRoot, 'rev-list', '--count', `${branch}..origin/main`])
   if (behind !== '0') {
+    // Being behind only matters when the advance can affect this branch's
+    // review context: block only when a behind-commit touches a file the
+    // branch also touches. A disjoint advance merges cleanly, and blocking
+    // on it turns a fast-merging main into a race against the pre-push
+    // hook's multi-minute runtime.
+    const changedFiles = (range) =>
+      new Set(
+        git(['-C', repoRoot, 'diff', '--name-only', range])
+          .split('\n')
+          .filter(Boolean),
+      )
+    const branchFiles = changedFiles(`origin/main...${branch}`)
+    const mainFiles = changedFiles(`${branch}...origin/main`)
+    const overlapping = [...branchFiles].filter((file) => mainFiles.has(file))
+    if (overlapping.length > 0) {
+      console.error(
+        `[pre-pr-check-base] branch '${branch}' is ${behind} commit(s) behind origin/main, ` +
+          `and the advance touches file(s) this branch also touches: ${overlapping.join(', ')}. ` +
+          `Merge origin/main into it first (use the pnpm-lock recipe in .claude/rules/integrator-flow.md if the lockfile conflicts), then re-run gh pr create.`,
+      )
+      process.exit(2)
+    }
     console.error(
-      `[pre-pr-check-base] branch '${branch}' is ${behind} commit(s) behind origin/main. ` +
-        `Merge origin/main into it first (use the pnpm-lock recipe in .claude/rules/integrator-flow.md if the lockfile conflicts), then re-run gh pr create.`,
+      `[pre-pr-check-base] branch '${branch}' is ${behind} commit(s) behind origin/main, ` +
+        `but the advance touches no file this branch touches — allowing gh pr create.`,
     )
-    process.exit(2)
   }
 } catch {
   process.exit(0)
