@@ -48,6 +48,20 @@ describe('vitest.setup shared teardown', () => {
     expect(vi.isFakeTimers()).toBe(false)
   })
 
+  it('unmounts a leaked RTL tree even when the same test also leaks fake timers', async () => {
+    render(<div data-testid="leak-probe-both" />)
+    vi.useFakeTimers()
+
+    await expect(
+      runSharedTestTeardown('a test that forgot both cleanup() and to restore timers'),
+    ).rejects.toThrow(/left fake timers active/)
+
+    // cleanup() must run before the fake-timer guard throws, or a file that
+    // leaks both never gets its tree torn down.
+    expect(document.body.querySelector('[data-testid="leak-probe-both"]')).toBeNull()
+    expect(vi.isFakeTimers()).toBe(false)
+  })
+
   describe('hook ordering', () => {
     afterEach(() => {
       readHookOrderLog().push('local-describe-afterEach')
