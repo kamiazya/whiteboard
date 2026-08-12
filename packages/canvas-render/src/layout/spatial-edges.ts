@@ -552,16 +552,11 @@ const CROSSING_OPT_MAX_EDGES = 200
  * Each pass gives every edge at most one improving re-side; a chain of N
  * DISTINCT improving candidates for the same edge needs N passes to fully
  * settle (greedy first-strict-improvement adoption, no backtracking).
- * Raised 2 -> 3 alongside endpoint-body-ink (edge-rules.ts): on an
- * overlapping-nodes canvas already needing 2 hops to clear border-tracing
- * (right-facing -> an L-pair -> the zero-border U-hook), endpoint-body-ink
- * legitimately needs a 3rd hop to move off that U-hook's endpoint-interior
- * ink onto the one candidate clear of BOTH problems — verified this is the
- * exact bound needed (2 passes settles on the border-clean-but-interior-
- * dirty route every time; 3 reaches the fully clean one) via
- * edge-endpoint-body-ink.test.ts's canvas. Still bounded (no complexity
- * blow-up: one more full edge-set sweep, same TRIAL_BUDGET_EDGES cap above
- * FULL_OPT_MAX_EDGES).
+ * 3 is the bound clearing border-tracing AND endpoint-body-ink together on
+ * an overlapping-nodes canvas (right-facing -> an L-pair -> the zero-border
+ * U-hook -> the route clear of both); at 2 it settles every time on the
+ * border-clean-but-interior-dirty U-hook, pinned by
+ * edge-endpoint-body-ink.test.ts.
  */
 const CROSSING_OPT_MAX_PASSES = 3
 /** At or under this many edges, every edge tries candidates (the exact

@@ -365,6 +365,43 @@ export function fullyContains(outer: Rect, inner: Rect): boolean {
 }
 
 /**
+ * Quantized length of an axis-aligned path's ink lying along `rects`, in the
+ * COST_QUANTUM-quantized integer space every ink-length term is measured in
+ * (so the term is integral by construction). `qualifies` is the ONE thing
+ * ink-length rules differ by: given a segment's fixed coordinate and the
+ * rect's two borders on that axis, whether the segment counts —
+ * border-tracing passes "on either border", endpoint-body-ink "strictly
+ * between them". Both take the single per-axis condition rather than two
+ * independent checks, which is what stops a zero-extent rect (near === far)
+ * from being charged twice for the same segment.
+ */
+function inkAlongRects(
+  path: readonly Point[],
+  rects: readonly Rect[],
+  qualifies: (fixed: number, near: number, far: number) => boolean,
+): number {
+  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  let total = 0
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    const horizontal = a.y === b.y
+    if (!horizontal && a.x !== b.x) continue
+    for (const r of rects) {
+      const near = horizontal ? r.y : r.x
+      const far = horizontal ? r.y + r.h : r.x + r.w
+      if (!qualifies(q(horizontal ? a.y : a.x), q(near), q(far))) continue
+      const p1 = horizontal ? a.x : a.y
+      const p2 = horizontal ? b.x : b.y
+      const lo = Math.max(q(Math.min(p1, p2)), q(horizontal ? r.x : r.y))
+      const hi = Math.min(q(Math.max(p1, p2)), q(horizontal ? r.x + r.w : r.y + r.h))
+      if (hi > lo) total += hi - lo
+    }
+  }
+  return total
+}
+
+/**
  * overlap-and-intrusion: collinear axis-aligned overlap (a parallel overlap
  * has no crossing point, so a line jump cannot express it) plus, from a
  * single path's own geometry, retracing its own ink (the doubled-line
@@ -449,11 +486,7 @@ const crossings: PenaltyRule = {
  * tunnel check) — the defect this rule exists to price is a segment riding
  * the SOURCE node's own border. A perpendicular departure/arrival only
  * touches its border at a point (zero-length overlap, costs 0); only
- * positive overlap length is priced, in COST_QUANTUM-quantized integer
- * space so the term is integral by construction. The single per-axis OR
- * condition (segment y equals the rect's top OR bottom, not two
- * independent checks) is what stops a zero-height rect (top === bottom)
- * from being charged twice for the same segment.
+ * positive overlap length is priced.
  *
  * Tier 3, BELOW crossings, because this rule is evaluated against the
  * optimizer's unaligned TRIAL paths (the pre-`slideAlongSide`
@@ -466,39 +499,15 @@ const crossings: PenaltyRule = {
  * sweep-rank scenario). Below crossings it still repairs the border-riding
  * defect, whose lower tiers are all-zero for every side-pair option, so the
  * lexicographic comparison falls through to this tier as the decisive one.
- *
- * A tier-3 placement (directly below crossings, ranking THIS rule ahead of
- * endpoint-body-ink) was tried and rejected: on the reported canvas it let
- * the optimizer accept eliminating a few px of border ink at the cost of
- * driving a route through ~120px of a bystander node's interior instead —
- * trading this rule's own defect for endpoint-body-ink's, not fixing either
- * for good, and it flipped this rule's own pin on that same canvas
- * (edge-border-trace.test.ts) from 0 to 120. This rule keeps tier 3.
+ * It must also stay ABOVE endpoint-body-ink: ranked below it, the optimizer
+ * trades this rule's defect for that one (see endpoint-body-ink's comment).
  */
 const borderTracing: PenaltyRule = {
   name: 'border-tracing',
   tier: 3,
   pairTerm: () => 0,
-  selfTerm: (path, _foreignBodies, nodeBorders) => {
-    const q = (n: number) => Math.round(n * COST_QUANTUM)
-    let overlap = 0
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1] as Point
-      const b = path[i] as Point
-      for (const r of nodeBorders) {
-        if (a.y === b.y && (q(a.y) === q(r.y) || q(a.y) === q(r.y + r.h))) {
-          const lo = Math.max(q(Math.min(a.x, b.x)), q(r.x))
-          const hi = Math.min(q(Math.max(a.x, b.x)), q(r.x + r.w))
-          if (hi > lo) overlap += hi - lo
-        } else if (a.x === b.x && (q(a.x) === q(r.x) || q(a.x) === q(r.x + r.w))) {
-          const lo = Math.max(q(Math.min(a.y, b.y)), q(r.y))
-          const hi = Math.min(q(Math.max(a.y, b.y)), q(r.y + r.h))
-          if (hi > lo) overlap += hi - lo
-        }
-      }
-    }
-    return overlap
-  },
+  selfTerm: (path, _foreignBodies, nodeBorders) =>
+    inkAlongRects(path, nodeBorders, (fixed, near, far) => fixed === near || fixed === far),
 }
 
 /**
@@ -506,12 +515,11 @@ const borderTracing: PenaltyRule = {
  * node's body — the departure/arrival stub cutting through the near or far
  * endpoint's interior, which overlapping nodes provoke (a stub leaving one
  * node's border can land inside a neighbour's overlapping body). Self-only,
- * and the exact interior complement of border-tracing: border-tracing prices
- * a segment collinear WITH AND overlapping a border (`q(a.y) === q(r.y)`),
- * this rule prices a segment STRICTLY BETWEEN a rect's two borders
- * (`q(r.y) < q(a.y) < q(r.y + r.h)`) — the two conditions are mutually
- * exclusive in quantized space, so the same segment is never charged by
- * both (see the per-(segment,rect) complementarity property).
+ * and the exact interior complement of border-tracing: that rule prices a
+ * segment ON a border, this one a segment STRICTLY BETWEEN a rect's two
+ * borders — mutually exclusive in quantized space, so the same segment is
+ * never charged by both (pinned by the per-(segment,rect) complementarity
+ * property).
  *
  * `foreignBodies`/`overlap-and-intrusion` already price a tunnel through a
  * FOREIGN node's body; this rule exists only because that check deliberately
@@ -526,44 +534,25 @@ const borderTracing: PenaltyRule = {
  * churn on it every layout.
  *
  * Tier 4, BELOW border-tracing, for the same trial-path-artifact reason
- * border-tracing itself was demoted off tier 1 (see its own comment): this
- * rule too is evaluated against the optimizer's unaligned TRIAL paths,
- * where an artifact can outrank a genuine improvement. A tier-3 placement
- * (ranked AHEAD of border-tracing) was tried and rejected — it flipped
- * border-tracing's own established pin on the reported canvas from 0 to
- * 120 (see border-tracing's comment); a rule fixing one visible-ink defect
- * must not reintroduce the other it sits beside. Kept at tier 4, this rule
- * needs one more optimizer PASS than border-tracing alone did to fully
- * settle the reported canvas — see CROSSING_OPT_MAX_PASSES in
- * spatial-edges.ts for why the bound moved from 2 to 3 alongside this rule.
+ * border-tracing itself was demoted off tier 1 (see its own comment). Ranked
+ * ABOVE border-tracing instead, the optimizer buys a few px of border ink
+ * back with ~120px of interior ink — trading one visible-ink defect for the
+ * other rather than clearing both. At tier 4 clearing both takes one more
+ * optimizer PASS than border-tracing alone needed: see
+ * CROSSING_OPT_MAX_PASSES in spatial-edges.ts.
  */
 const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
   tier: 4,
   pairTerm: () => 0,
-  selfTerm: (path, _foreignBodies, _nodeBorders, endpointRects) => {
-    const q = (n: number) => Math.round(n * COST_QUANTUM)
-    const priced = endpointRects.filter(
-      (r) => !endpointRects.some((other) => other !== r && fullyContains(r, other)),
-    )
-    let interior = 0
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1] as Point
-      const b = path[i] as Point
-      for (const r of priced) {
-        if (a.y === b.y && q(r.y) < q(a.y) && q(a.y) < q(r.y + r.h)) {
-          const lo = Math.max(q(Math.min(a.x, b.x)), q(r.x))
-          const hi = Math.min(q(Math.max(a.x, b.x)), q(r.x + r.w))
-          if (hi > lo) interior += hi - lo
-        } else if (a.x === b.x && q(r.x) < q(a.x) && q(a.x) < q(r.x + r.w)) {
-          const lo = Math.max(q(Math.min(a.y, b.y)), q(r.y))
-          const hi = Math.min(q(Math.max(a.y, b.y)), q(r.y + r.h))
-          if (hi > lo) interior += hi - lo
-        }
-      }
-    }
-    return interior
-  },
+  selfTerm: (path, _foreignBodies, _nodeBorders, endpointRects) =>
+    inkAlongRects(
+      path,
+      endpointRects.filter(
+        (r) => !endpointRects.some((other) => other !== r && fullyContains(r, other)),
+      ),
+      (fixed, near, far) => near < fixed && fixed < far,
+    ),
 }
 
 /** realized-bends: direction changes along ONE routed path. Self-only, and
