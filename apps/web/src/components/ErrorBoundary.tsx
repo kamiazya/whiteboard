@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { reportCrash } from '../lib/app-logger.js'
-import { BrandStatusPage, reloadPage } from './BrandStatusPage.js'
+import { ErrorFallback } from './status/ErrorFallback.js'
 
 // React error boundary for the whiteboard surface.
 // Keep the app recoverable instead of letting an Excalidraw, Loro, or routing error blank the whole root.
@@ -58,22 +58,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
     return (
       <div role="alert" className="h-full min-h-dvh">
-        {/*
-          Deliberately no error.message / error.stack here: the default
-          fallback is shown to end users, and raw error text can leak
-          implementation details. componentDidCatch already reports the full
-          error + stack through errorBoundaryLog; callers that need the
-          message visible can pass a custom `fallback`.
-        */}
-        <BrandStatusPage
-          variant="error"
-          title="Something went wrong"
-          description="The whiteboard hit an error it couldn't recover from. Your saved canvases are safe."
-          actions={[
-            { label: 'Try again', onClick: this.reset, primary: true },
-            { label: 'Reload', onClick: reloadPage },
-          ]}
-        />
+        <ErrorFallback onRetry={this.reset} />
       </div>
     )
   }

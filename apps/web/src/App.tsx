@@ -2,7 +2,13 @@ import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
-import { BrandStatusPage } from './components/BrandStatusPage.js'
+
+// Lazy: the not-found page renders on rare, dead-end navigations only —
+// it must not ride the critical-path bundle.
+const NotFoundPage = lazy(() =>
+  import('./components/status/NotFoundPage.js').then((m) => ({ default: m.NotFoundPage })),
+)
+
 import { CanvasPageSkeleton } from './components/CanvasPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
@@ -334,12 +340,9 @@ export function App({ providerState }: AppProps) {
   if (!isKnownAppPath(location.pathname)) {
     return (
       <div className="h-dvh">
-        <BrandStatusPage
-          variant="not-found"
-          title="There's nothing here"
-          description="The link may be wrong, or what it pointed at has moved."
-          actions={[{ label: 'Back to canvases', onClick: () => navigate('/'), primary: true }]}
-        />
+        <Suspense fallback={null}>
+          <NotFoundPage onBack={() => navigate('/')} />
+        </Suspense>
       </div>
     )
   }
