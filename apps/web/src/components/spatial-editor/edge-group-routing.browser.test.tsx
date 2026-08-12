@@ -51,12 +51,12 @@ it('routes an edge between two group members inside the group frame', async () =
   const paths = [...container.querySelectorAll('svg polyline')].map((el) =>
     parsePoints(el as SVGPolylineElement),
   )
-  const memberEdge = paths.find((p) => p[0]?.x === 420 && p[0]?.y === 350)
+  const memberEdge = paths.find((p) => p[0]?.y === 350 && p.at(-1)?.y === 420)
   expect(memberEdge).toBeDefined()
 
   // A clear straight run: endpoint to endpoint, never leaving the frame.
-  expect(memberEdge).toEqual([
-    { x: 420, y: 350 },
-    { x: 430, y: 420 },
-  ])
+  // The facing pair slides both anchors to the shared lane, so the run is
+  // vertical rather than the 10px diagonal the side midpoints used to make.
+  expect(memberEdge?.length).toBe(2)
+  expect(memberEdge?.[0]?.x).toBe(memberEdge?.at(-1)?.x)
 })

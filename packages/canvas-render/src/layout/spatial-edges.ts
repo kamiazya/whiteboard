@@ -418,6 +418,13 @@ function computeAnchorsFor(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   sides: ReadonlyMap<string, SidePair>,
+  // Alignment applies only to FINAL anchors, never inside the optimizer's
+  // trials: sliding anchors mid-optimization changes trial costs, which
+  // shifts side-choice equilibria on multi-edge canvases in ways the
+  // ranking never anticipated (observed: a bystander edge re-siding onto a
+  // worse face). Post-processing settled sides keeps the optimizer's
+  // decisions identical and only straightens the pairs it already chose.
+  align = true,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   type End = {
@@ -508,6 +515,8 @@ function computeAnchorsFor(
       )
     }
   }
+
+  if (!align) return anchors
 
   // A facing opposing pair whose ends are each ALONE on their side slides
   // both anchors to one tangent coordinate inside the shared lane —
@@ -736,7 +745,7 @@ function optimizeSideChoices(
   // pairs — everything else is carried over. This is what keeps a trial
   // O(affected * E) instead of O(E^2).
   let current = new Map(initial)
-  let anchors = computeAnchorsFor(nodes, edges, current)
+  let anchors = computeAnchorsFor(nodes, edges, current, false)
   let paths: (readonly Point[])[] = edges.map(
     (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
   )
@@ -770,7 +779,7 @@ function optimizeSideChoices(
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
   } => {
-    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides)
+    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, false)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
