@@ -69,7 +69,7 @@ import type { MeasureText, SpatialPresetKey, TextMetrics } from '@kamiazya/white
 import {
   BODY_FONT_SIZE_PX,
   edgeLabelAnchor,
-  flattenRoundedEdgePath,
+  flattenDrawnEdgePath,
   layoutSpatialEdges,
   renderSceneToSvg,
   SPATIAL_DARK_PALETTE,
@@ -655,10 +655,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
-    // distance-to-polyline test against a zoom-adjusted tolerance. A rounded
-    // edge is DRAWN as midpoint-quadratic corners, so its hit/highlight path
-    // is the flattened curve — the raw waypoints run through corners the ink
-    // never touches.
+    // distance-to-polyline test against a zoom-adjusted tolerance. The
+    // hit/highlight path is the DRAWN line — rounded corners flattened and
+    // line-jump hops arced over — via the same decomposition the SVG
+    // backend serializes, so a tap and the highlight land on the ink.
     const edgePaths = useMemo(
       () =>
         scene.nodes.flatMap((node) =>
@@ -666,7 +666,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             ? [
                 {
                   id: node.id,
-                  path: node.rounded === true ? flattenRoundedEdgePath(node.path) : node.path,
+                  path: flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true),
                 },
               ]
             : [],

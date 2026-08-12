@@ -1,3 +1,4 @@
+export { flattenDrawnEdgePath } from './layout/edge-flatten.js'
 export { edgeLabelAnchor } from './layout/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
 export * from './layout/embed-recursion.js'

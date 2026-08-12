@@ -239,9 +239,11 @@ export interface ResolvedEdgeNode {
   readonly kind: 'edge'
   readonly id: string
   /**
-   * Line-jump hops, present only when the canvas enables them. Paint-only
-   * decoration bounded by the jump radius: hit-testing and bounds keep
-   * reading the raw `path` (the deviation never exceeds the hit tolerance).
+   * Line-jump hops, present only when the canvas enables them. Bounds keep
+   * reading the raw `path` (the deviation is bounded by the jump radius);
+   * the editor's hit/highlight path follows the drawn hops via
+   * `flattenDrawnEdgePath`, the same decomposition the SVG backend
+   * serializes.
    */
   readonly jumps?: readonly EdgeJumpPoint[]
   readonly path: readonly { readonly x: number; readonly y: number }[]
