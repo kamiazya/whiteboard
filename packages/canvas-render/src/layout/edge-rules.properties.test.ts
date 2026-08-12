@@ -19,8 +19,10 @@ import {
 const rectArb: fc.Arbitrary<Rect> = fc.record({
   x: fc.integer({ min: -100, max: 100 }),
   y: fc.integer({ min: -100, max: 100 }),
-  w: fc.integer({ min: 10, max: 120 }),
-  h: fc.integer({ min: 10, max: 120 }),
+  // Zero stays a legal JSON Canvas size (canvas-model pins it): the
+  // framework invariants must hold for collapsed boxes too.
+  w: fc.integer({ min: 0, max: 120 }),
+  h: fc.integer({ min: 0, max: 120 }),
 })
 
 // Dense enough to land on every branch composeSidePairs takes: aligned
