@@ -2,6 +2,7 @@ import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
+import { BrandStatusPage } from './components/BrandStatusPage.js'
 import { CanvasPageSkeleton } from './components/CanvasPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
@@ -24,6 +25,7 @@ import {
   browserLocalCanvasPath,
   type DaemonRoute,
   daemonRoutePath,
+  isKnownAppPath,
   parseBrowserLocalRoute,
   parseDaemonRoute,
 } from './lib/app-routes.js'
@@ -232,6 +234,9 @@ export function App({ providerState }: AppProps) {
     // rewriting it to the daemon path would yank an open browser-local
     // editor back to the list.
     if (parseBrowserLocalRoute(location.pathname) !== null) return
+    // An unknown path is the not-found page's to keep: rewriting it to the
+    // daemon route would swallow the 404 into a silent redirect.
+    if (!isKnownAppPath(location.pathname)) return
     const path = daemonRoutePath(daemonView)
     // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
     // up navigating: a no-op first run (URL already matches the initial
@@ -320,6 +325,22 @@ export function App({ providerState }: AppProps) {
       <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
         <PairConsentPage daemonToken={daemonToken} />
       </Suspense>
+    )
+  }
+
+  // Outside the closed route set: say so instead of silently falling
+  // through to the default view — a mistyped or stale link should read as
+  // "not here", not as a mysteriously empty gallery.
+  if (!isKnownAppPath(location.pathname)) {
+    return (
+      <div className="h-dvh">
+        <BrandStatusPage
+          variant="not-found"
+          title="There's nothing here"
+          description="The link may be wrong, or what it pointed at has moved."
+          actions={[{ label: 'Back to canvases', onClick: () => navigate('/'), primary: true }]}
+        />
+      </div>
     )
   }
 

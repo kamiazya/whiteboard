@@ -956,9 +956,10 @@ describe('App URL routing', () => {
     expect(router.state.location.key).not.toBe('default')
   })
 
-  it('falls back to the unscoped index for an unrecognized path (no blank page)', async () => {
+  it('shows the not-found page for an unrecognized path (no blank page, no silent redirect)', () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/something/unrelated/entirely')
-    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(document.querySelector('[data-mark="not-found"]')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-index-page')).toBeNull()
   })
 })
 
@@ -1025,5 +1026,26 @@ describe('lazy page fallback', () => {
     const { container } = render(<LazyPageFallback heightClass="h-full" message="Loading…" />)
     expect(screen.getByLabelText('Loading…')).toBeTruthy()
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
+  })
+})
+
+describe('App not-found route', () => {
+  it('shows the not-found page for a path outside the closed route set', () => {
+    render(
+      <MemoryRouter initialEntries={['/definitely/not/a/route']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    expect(document.querySelector('[data-mark="not-found"]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /back to canvases/i })).toBeTruthy()
+  })
+
+  it('keeps known routes on their normal pages', () => {
+    render(
+      <MemoryRouter initialEntries={['/local/c9']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    expect(document.querySelector('[data-mark="not-found"]')).toBeNull()
   })
 })
