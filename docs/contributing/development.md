@@ -111,20 +111,16 @@ Do this only while no dev daemon is running — an already-running old daemon on
 >
 > Run it standalone against an existing worktree with `node .claude/scripts/wire-worktree-mcp.mjs <worktreePath>`, or repo-wide with `node .claude/scripts/wire-worktree-mcp.mjs --sweep` to remove `whiteboard` registrations left behind by worktrees that no longer exist — `--sweep` works whether it's run from the main checkout or from inside any linked worktree. Stale entries otherwise linger in `~/.claude.json` until you run `--sweep` after `git worktree remove`. If you change `WHITEBOARD_TOKEN` and registered a manual, directly-pointed HTTP entry via the fallback above, that entry's `--header 'Authorization: Bearer ...'` still carries the old token; `claude mcp remove <name> -s local` and reregister to pick up the new one. If the `claude` CLI isn't on PATH yet, wiring is skipped with a different message instead of failing worktree setup; install `claude` and rerun `wire-worktree-mcp.mjs` (or follow CONTRIBUTING.md's stdio-proxy registration directly).
 
-**Codex** — set in `~/.codex/config.toml`:
+**Codex** — nothing to do: the repo-tracked `.codex/config.toml` already registers the dev stdio proxy as `whiteboard_dev` (and disables the plugin-provided published server).
 
-```toml
-[mcp_servers.whiteboard]
-url = "http://127.0.0.1:3099/mcp"
-```
-
-**Claude Code**:
+**Claude Code** — register the stdio proxy once per checkout, per [CONTRIBUTING.md](../../CONTRIBUTING.md):
 
 ```bash
-claude mcp add --transport http whiteboard http://127.0.0.1:3099/mcp --scope local
+claude mcp add --scope local --transport stdio whiteboard -- \
+  node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
 ```
 
-Reserve `stdio` for packaged-distribution checks and standalone entrypoint validation. See [mcp-debugging.md](./mcp-debugging.md) for the standard debugging workflow.
+The proxy survives daemon watch restarts and never loses the session-start connection race, which is why it is preferred over registering the HTTP URL directly (see AGENTS.md's "MCP Development Mode"). Reserve the published package's own `stdio` entrypoint for packaged-distribution checks and standalone entrypoint validation. See [mcp-debugging.md](./mcp-debugging.md) for the standard debugging workflow.
 
 ## Repo-local config auto-override
 
