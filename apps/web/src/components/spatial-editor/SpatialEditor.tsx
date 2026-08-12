@@ -72,6 +72,7 @@ import type {
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  assignEdgeAnchors,
   BODY_FONT_SIZE_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
@@ -846,7 +847,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         metricsCache.set(key, metrics)
         return metrics
       }
-      return { carried, svg: rendered.svg, bounds: rendered.bounds, measure }
+      // The committed anchor state, captured once per gesture: liveEdges
+      // pins bystander edges to these exact points so a carried edge
+      // joining their (node, side) group cannot re-fraction them mid-drag.
+      const committedAnchors = assignEdgeAnchors(
+        canvas.nodes,
+        canvas.edges,
+        canvas['x-whiteboard']?.edgeRouting?.style,
+      )
+      return { carried, svg: rendered.svg, bounds: rendered.bounds, measure, committedAnchors }
       // isLocked closes over lockedNodeIds/lockEnabled, both listed.
     }, [
       gestureState,
@@ -968,7 +977,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           .map((edge) => edge.id),
       )
       const frozenSides = new Map(
-        [...frozenSidesOf(scene)].filter(([id]) => !carriedEdgeIds.has(id)),
+        [...frozenSidesOf(scene)]
+          .filter(([id]) => !carriedEdgeIds.has(id))
+          .map(([id, pair]) => {
+            const pin = dragStatic.committedAnchors.get(id)
+            return [
+              id,
+              {
+                ...pair,
+                from: pin?.from,
+                fromLaneDepth: pin?.fromLaneDepth,
+                to: pin?.to,
+                toLaneDepth: pin?.toLaneDepth,
+              },
+            ] as const
+          }),
       )
       const cacheKey = carriedSideCacheKey(carriedEdgeIds)
       const cache = carriedSideCacheRef.current

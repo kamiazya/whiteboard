@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
 let tempDir: string
 
@@ -93,6 +94,81 @@ describe('GET /api/debug', () => {
     expect(c2).toEqual(
       expect.objectContaining({
         slug: 'canvas-2',
+        totalElements: 1,
+        visibleElements: 1,
+        tombstones: 0,
+      }),
+    )
+  })
+
+  it('reports the real node count for a nodes-model canvas instead of 0', async () => {
+    await mkdir(join(tempDir, 'sess-nodes'), { recursive: true })
+    const doc = makeSpatialDoc({
+      nodes: [
+        { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    await saveCanvas('sess-nodes', 'canvas-1', doc)
+
+    const app = createDebugRouter()
+    const res = await app.request('/api/debug')
+    const json = (await res.json()) as {
+      workspaces: Array<{
+        workspaceId: string
+        canvases: Array<{
+          slug: string
+          totalElements: number
+          visibleElements: number
+          tombstones: number
+        }>
+      }>
+    }
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-nodes')
+    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    expect(canvas).toEqual(
+      expect.objectContaining({
+        slug: 'canvas-1',
+        totalElements: 2,
+        visibleElements: 2,
+        tombstones: 0,
+      }),
+    )
+  })
+
+  it('ignores stale legacy tombstones once a canvas has migrated to the nodes model', async () => {
+    await mkdir(join(tempDir, 'sess-mixed'), { recursive: true })
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    const legacy = doc.getMovableList('elements')
+    const map = legacy.insertContainer(legacy.length, new LoroMap())
+    map.set('id', 'stale-dead')
+    map.set('type', 'rectangle')
+    map.set('isDeleted', true)
+    doc.commit()
+    await saveCanvas('sess-mixed', 'canvas-1', doc)
+
+    const app = createDebugRouter()
+    const res = await app.request('/api/debug')
+    const json = (await res.json()) as {
+      workspaces: Array<{
+        workspaceId: string
+        canvases: Array<{
+          slug: string
+          totalElements: number
+          visibleElements: number
+          tombstones: number
+        }>
+      }>
+    }
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-mixed')
+    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    expect(canvas).toEqual(
+      expect.objectContaining({
+        slug: 'canvas-1',
         totalElements: 1,
         visibleElements: 1,
         tombstones: 0,

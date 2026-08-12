@@ -17,6 +17,7 @@
  * the caller).
  */
 
+import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   createChallengeNonce,
   getPinnedIdentity,
@@ -156,19 +157,18 @@ export async function consumeGrantFragment({
     if (!response.ok) {
       return { status: 'error', detail: `token exchange rejected (${response.status})` }
     }
-    const body = (await response.json()) as {
-      token?: unknown
-      expiresAt?: unknown
-      identity?: { publicKey?: unknown; signature?: unknown }
+    const parsed = pairingTokenResponseSchema.safeParse(await response.json())
+    if (!parsed.success) {
+      return { status: 'error', detail: 'token exchange returned a malformed response' }
     }
-    if (typeof body.token !== 'string' || body.token.length === 0) {
+    const body = parsed.data
+    if (body.token.length === 0) {
       return { status: 'error', detail: 'token exchange returned no token' }
     }
     if (fragment.identity !== null) {
       // The key the user just approved (fragment) must be the key that
       // signs the credential handed over — anything else is refused.
       const verified =
-        typeof body.expiresAt === 'string' &&
         body.identity?.publicKey === fragment.identity &&
         typeof body.identity?.signature === 'string' &&
         (await verifyIdentitySignature({
@@ -227,18 +227,15 @@ export async function renewPairingToken({
       body: JSON.stringify({ grantType: 'origin', ...(nonce !== undefined ? { nonce } : {}) }),
     })
     if (!response.ok) return { status: 'none' }
-    const body = (await response.json()) as {
-      token?: unknown
-      expiresAt?: unknown
-      identity?: { publicKey?: unknown; signature?: unknown }
-    }
-    if (typeof body.token !== 'string' || body.token.length === 0) return { status: 'none' }
+    const parsed = pairingTokenResponseSchema.safeParse(await response.json())
+    if (!parsed.success) return { status: 'none' }
+    const body = parsed.data
+    if (body.token.length === 0) return { status: 'none' }
     if (pinned !== null && nonce !== undefined) {
       // Verified against the PIN, never the advertised key: a squatter (or
       // a rotated daemon) fails closed here and the user re-approves on
       // /pair, which re-pins.
       const verified =
-        typeof body.expiresAt === 'string' &&
         body.identity?.publicKey === pinned.publicKey &&
         typeof body.identity?.signature === 'string' &&
         (await verifyIdentitySignature({

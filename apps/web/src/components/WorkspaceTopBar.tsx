@@ -7,6 +7,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
+import HomeMark from '../brand/home-mark.svg?react'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
 import { CanvasActionsMenu } from './workspace-top-bar/CanvasActionsMenu'
@@ -71,6 +72,10 @@ interface Props {
   // app's or Excalidraw's own) produces one.
   onExport?: (format: SceneExportFormat) => Promise<Blob | null>
   onOpenSettings?: () => void
+  /** Blue attention dot on the settings gear (outstanding setup todo or waiting update). */
+  settingsNudge?: boolean
+  /** Renders the brand mark as a go-home affordance when provided. */
+  onNavigateHome?: () => void
   // Right-side slot ahead of the secondary actions — the host page's
   // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
@@ -106,6 +111,8 @@ export default function WorkspaceTopBar({
   branchRefreshSignal,
   onExport,
   onOpenSettings,
+  settingsNudge,
+  onNavigateHome,
   statusSlot,
   workspaces,
   onSwitchWorkspace,
@@ -218,6 +225,21 @@ export default function WorkspaceTopBar({
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
       {/* Left side: back button, workspace name, and canvas switcher. */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
+        {onNavigateHome && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                aria-label="Home"
+                className="shrink-0 rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
+              >
+                <HomeMark className="h-[18px] w-7" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Home</TooltipContent>
+          </Tooltip>
+        )}
         {onNavigateBack && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -346,6 +368,7 @@ export default function WorkspaceTopBar({
         onToggleFullscreen={onToggleFullscreen}
         isFullscreen={isFullscreen}
         onOpenSettings={onOpenSettings}
+        settingsNudge={settingsNudge}
       />
     </header>
   )

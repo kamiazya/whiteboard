@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { pairingTokenResponseSchema } from '../../shared/api-contracts/pairing.js'
 import { buildSignedPayload, createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import {
@@ -65,7 +66,10 @@ describe('pairing routes', () => {
       codeVerifier,
     })
     expect(tokenRes.status).toBe(200)
-    const token = (await tokenRes.json()) as { token: string; origin: string; expiresAt: string }
+    // Executable mutation-check guard: parses the REAL HTTP body against the
+    // shared schema, so a server-side field drift (or a removed route-level
+    // .parse) turns this red instead of shipping silently.
+    const token = pairingTokenResponseSchema.parse(await tokenRes.json())
     expect(token.origin).toBe(HOSTED)
     expect(token.token.length).toBeGreaterThan(20)
   })
@@ -92,7 +96,9 @@ describe('pairing routes', () => {
 
     const res = await post(app, '/api/pairing/token', { grantType: 'origin' }, { Origin: HOSTED })
     expect(res.status).toBe(200)
-    expect(((await res.json()) as { origin: string }).origin).toBe(HOSTED)
+    // Same executable guard as the code-exchange leg above, for the
+    // renewal leg's response body.
+    expect(pairingTokenResponseSchema.parse(await res.json()).origin).toBe(HOSTED)
   })
 
   it('renewal rejects an ungranted origin and a missing Origin header', async () => {

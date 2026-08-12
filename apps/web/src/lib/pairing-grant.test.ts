@@ -106,6 +106,47 @@ describe('renewPairingToken', () => {
     })
     expect(result).toEqual({ status: 'none' })
   })
+
+  it('reports none on a 200 response missing the required token field', async () => {
+    const fetchFn = vi.fn(async () =>
+      Response.json({ expiresAt: '2099-01-01T00:00:00.000Z', origin: HOSTED }),
+    )
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'none' })
+  })
+
+  // origin is required by pairingTokenResponseSchema but unused by this
+  // function's own verification logic (no pin) — without schema.safeParse a
+  // response silently missing it would have been accepted as paired.
+  it('reports none on a 200 response missing the required origin field, even though this function never reads it', async () => {
+    const fetchFn = vi.fn(async () =>
+      Response.json({ token: 'renewed', expiresAt: '2099-01-01T00:00:00.000Z' }),
+    )
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'none' })
+  })
+
+  it('reports none on a 200 response carrying an unexpected extra field (strict schema)', async () => {
+    const fetchFn = vi.fn(async () =>
+      Response.json({
+        token: 'renewed',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        origin: HOSTED,
+        unexpected: 'drift',
+      }),
+    )
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'none' })
+  })
 })
 
 describe('consumeGrantFragment', () => {
@@ -189,6 +230,71 @@ describe('consumeGrantFragment', () => {
       }),
     })
     const fetchFn = vi.fn(async () => new Response('nope', { status: 403 }))
+    const result = await consumeGrantFragment({
+      hash: '#wb-grant=code&state=st',
+      sessionStorage: storage,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result.status).toBe('error')
+  })
+
+  it('rejects a 200 response missing the required token field', async () => {
+    const { storage } = makeStorage({
+      'whiteboard:pairing-transaction': JSON.stringify({
+        state: 'st',
+        codeVerifier: 'v',
+        daemonBaseUrl: DAEMON,
+      }),
+    })
+    const fetchFn = vi.fn(async () =>
+      Response.json({ expiresAt: '2099-01-01T00:00:00.000Z', origin: HOSTED }),
+    )
+    const result = await consumeGrantFragment({
+      hash: '#wb-grant=code&state=st',
+      sessionStorage: storage,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result.status).toBe('error')
+  })
+
+  // origin is required by pairingTokenResponseSchema but unused by this
+  // function's own verification logic — without schema.safeParse a response
+  // silently missing it would have been accepted as paired.
+  it('rejects a 200 response missing the required origin field, even though this function never reads it', async () => {
+    const { storage } = makeStorage({
+      'whiteboard:pairing-transaction': JSON.stringify({
+        state: 'st',
+        codeVerifier: 'v',
+        daemonBaseUrl: DAEMON,
+      }),
+    })
+    const fetchFn = vi.fn(async () =>
+      Response.json({ token: 'tok', expiresAt: '2099-01-01T00:00:00.000Z' }),
+    )
+    const result = await consumeGrantFragment({
+      hash: '#wb-grant=code&state=st',
+      sessionStorage: storage,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result.status).toBe('error')
+  })
+
+  it('rejects a 200 response carrying an unexpected extra field (strict schema)', async () => {
+    const { storage } = makeStorage({
+      'whiteboard:pairing-transaction': JSON.stringify({
+        state: 'st',
+        codeVerifier: 'v',
+        daemonBaseUrl: DAEMON,
+      }),
+    })
+    const fetchFn = vi.fn(async () =>
+      Response.json({
+        token: 'tok',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        origin: HOSTED,
+        unexpected: 'drift',
+      }),
+    )
     const result = await consumeGrantFragment({
       hash: '#wb-grant=code&state=st',
       sessionStorage: storage,

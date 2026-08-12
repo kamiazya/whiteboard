@@ -10,6 +10,7 @@ import { App } from './App.js'
 import { dismissBootSplash } from './boot-splash.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
+import { initInstallPromptCapture } from './lib/install-prompt-store.js'
 import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
 import './pwa/bootstrap.js'
 
@@ -17,6 +18,10 @@ import './pwa/bootstrap.js'
 // build may have left in localStorage, independent of whether this tab ever
 // opens the IndexedDB store (see purge-legacy-reconnect-credentials.ts).
 purgeLegacyReconnectCredentials()
+
+// beforeinstallprompt fires once, early — arm the capture before React mounts
+// so the settings journey's Install step can replay it later.
+initInstallPromptCapture()
 
 // Apply the persisted theme class before React mounts so the first paint
 // matches the user's saved preference (avoids a light→dark flash on reload).

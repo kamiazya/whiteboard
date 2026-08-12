@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 88 56" fill="none" data-mark="home" aria-hidden="true">
+  <!--
+    Static signature mark (BRAND.md): the plain squiggle, no frame, no
+    animation - the brand as a wayfinding affordance (click = go home).
+    currentColor follows the theme.
+  -->
+  <path d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+</svg>

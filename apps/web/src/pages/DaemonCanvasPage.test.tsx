@@ -591,6 +591,25 @@ describe('DaemonCanvasPage', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('lights the settings gear nudge when live sync drops to an auth error', async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Connected, nothing else actionable in jsdom: no dot.
+    expect(screen.queryByTestId('settings-nudge')).toBeNull()
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+    // The daemon connection now needs the user's action (re-pair lives in
+    // Settings -> Connections), so the gear carries the attention dot.
+    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+  })
+
   it('renders the "Sync off" indicator even when no canvas is selected', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
@@ -1859,6 +1878,33 @@ describe('DaemonCanvasPage', () => {
 
       fireEvent.click(screen.getByTestId('settings-trigger'))
       expect(router.state.location.pathname).toBe('/settings')
+      // The entry point rides along so the settings Back button can return
+      // here deterministically instead of popping history.
+      expect((router.state.location.state as { from?: string }).from).toBe('/')
+    })
+
+    it('the header brand mark navigates home', async () => {
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: (
+              <DaemonCanvasPage
+                daemonBaseUrl={DAEMON_BASE_URL}
+                createBackend={makeCreateBackend()}
+              />
+            ),
+          },
+        ],
+        { initialEntries: ['/canvas/ws-1/doc-a'] },
+      )
+      await act(async () => {
+        rtlRender(<RouterProvider router={router} />, { container: document.body })
+      })
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      expect(router.state.location.pathname).toBe('/')
     })
 
     it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {

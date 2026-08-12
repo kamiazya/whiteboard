@@ -96,6 +96,13 @@ Rules the grammar enforces:
 - Skeletons in the app (DESIGN.md's domain) stay invisible for a 300ms beat
   and fade in only when the wait is real — a placeholder that pops for one
   frame reads as a glitch, not progress.
+- **Celebration** (`src/lib/celebrate.ts`): a one-shot confetti burst in the
+  brand palette (blue spark first) marks a setup step completing — persistent
+  storage granted, the app installed. It fires only when the step completes
+  live, never because a page opened on an already-complete step, never on a
+  loop, and `disableForReducedMotion` suppresses it entirely. The burst
+  originates at the completed step's badge so the celebration reads as
+  belonging to the achievement, not the page.
 
 ## Browser and OS chrome
 
@@ -126,7 +133,7 @@ All commands run from `apps/web/`.
 
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
-| in-app marks (error / not-found / empty) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
+| in-app marks (error / not-found / empty / home) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |
 | `public/favicon.svg` | hand-authored static fallback | edit directly |

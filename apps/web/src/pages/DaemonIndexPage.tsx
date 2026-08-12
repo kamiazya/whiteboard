@@ -9,6 +9,7 @@ import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { settingsPath } from '../lib/app-routes.js'
 import {
   createCanvas,
@@ -92,6 +93,7 @@ export function DaemonIndexPage({
   onOpenCanvas,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  const settingsNudge = useSettingsNudge(true)
   const navigate = useNavigate()
 
   const [view, setView] = useState<ViewKey>('grid')
@@ -355,9 +357,20 @@ export function DaemonIndexPage({
             <button
               type="button"
               aria-label="Settings"
-              onClick={() => navigate(settingsPath())}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() =>
+                navigate(settingsPath(), {
+                  state: { from: `${window.location.pathname}${window.location.search}` },
+                })
+              }
+              className="relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
+              {settingsNudge && (
+                <span
+                  data-testid="settings-nudge"
+                  aria-hidden="true"
+                  className="absolute right-0.5 top-0.5 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+                />
+              )}
               <Settings className="size-4" />
             </button>
           </div>

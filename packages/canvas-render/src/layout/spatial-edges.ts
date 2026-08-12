@@ -106,9 +106,17 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
  * better through the one-bend perpendicular L. */
 const ZERO_LANE_MIN_OVERLAP_PX = 20
 
-/** Inset tangent spans of two facing sides share a lane wide enough to host
- * an anchor — a zero-bend segment is actually realizable. */
-function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
+/**
+ * The tangent interval where BOTH facing sides can host an anchor (corner
+ * insets applied), or undefined when it is narrower than the zero-bend
+ * minimum. One producer for the ranking (is a zero-bend lane available?)
+ * and the anchor alignment that realizes it.
+ */
+function facingLaneWindow(
+  fromRect: Rect,
+  toRect: Rect,
+  axis: 'h' | 'v',
+): readonly [number, number] | undefined {
   const span = (r: Rect): readonly [number, number] =>
     axis === 'h'
       ? [
@@ -121,7 +129,13 @@ function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): bool
         ]
   const [aLo, aHi] = span(fromRect)
   const [bLo, bHi] = span(toRect)
-  return Math.min(aHi, bHi) - Math.max(aLo, bLo) >= ZERO_LANE_MIN_OVERLAP_PX
+  const lo = Math.max(aLo, bLo)
+  const hi = Math.min(aHi, bHi)
+  return hi - lo >= ZERO_LANE_MIN_OVERLAP_PX ? [lo, hi] : undefined
+}
+
+function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
+  return facingLaneWindow(fromRect, toRect, axis) !== undefined
 }
 
 /**
@@ -331,6 +345,19 @@ export interface EdgeSides {
   readonly toSide: Side
 }
 
+/**
+ * A frozen edge's full anchor state, for overrides that must not MOVE
+ * mid-gesture: sides alone leave the anchor a fraction of its (node, side)
+ * group, so a carried edge joining the group re-fractions a stationary
+ * edge. Point/depth fields, when present, pin the committed positions.
+ */
+export interface EdgeAnchorOverride extends EdgeSides {
+  readonly from?: Point
+  readonly fromLaneDepth?: number
+  readonly to?: Point
+  readonly toLaneDepth?: number
+}
+
 type SidePair = EdgeSides
 
 /**
@@ -404,6 +431,18 @@ function computeAnchorsFor(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   sides: ReadonlyMap<string, SidePair>,
+  // Alignment applies only to FINAL anchors, never inside the optimizer's
+  // trials: sliding anchors mid-optimization changes trial costs, which
+  // shifts side-choice equilibria on multi-edge canvases in ways the
+  // ranking never anticipated (observed: a bystander edge re-siding onto a
+  // worse face). Post-processing settled sides keeps the optimizer's
+  // decisions identical and only straightens the pairs it already chose.
+  align = true,
+  // Committed anchor state to pin verbatim (live-drag bystanders): the
+  // pinned ends still COUNT toward their group's fan-out fractions, so a
+  // carried newcomer lands on a distinct lane, but their own placed
+  // point/depth is the committed one — a stationary edge never moves.
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   type End = {
@@ -494,6 +533,70 @@ function computeAnchorsFor(
       )
     }
   }
+
+  const applyPins = (): void => {
+    if (pins === undefined) return
+    for (const [id, pin] of pins) {
+      const entry = anchors.get(id)
+      if (entry === undefined) continue
+      anchors.set(id, {
+        ...entry,
+        ...(pin.from !== undefined ? { from: pin.from } : {}),
+        ...(pin.fromLaneDepth !== undefined ? { fromLaneDepth: pin.fromLaneDepth } : {}),
+        ...(pin.to !== undefined ? { to: pin.to } : {}),
+        ...(pin.toLaneDepth !== undefined ? { toLaneDepth: pin.toLaneDepth } : {}),
+      })
+    }
+  }
+
+  if (!align) {
+    applyPins()
+    return anchors
+  }
+
+  // A facing opposing pair whose ends are each ALONE on their side slides
+  // both anchors to one tangent coordinate inside the shared lane —
+  // realizing the straight segment the zero-bend rank promised, which the
+  // per-side fraction placement above only delivers when the two side
+  // midpoints happen to align. Multi-edge sides keep their fan-out
+  // fractions: collapsing two corridors onto one lane is worse than a jog.
+  for (const edge of edges) {
+    // A pinned edge holds its committed anchors; alignment must not move it.
+    if (pins?.get(edge.id)?.from !== undefined || pins?.get(edge.id)?.to !== undefined) continue
+    const chosen = sides.get(edge.id)
+    const entry = anchors.get(edge.id)
+    if (chosen === undefined || entry?.from === undefined || entry.to === undefined) continue
+    if (chosen.toSide !== oppositeSide(chosen.fromSide)) continue
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) continue
+    if ((groups.get(`${edge.fromNode} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
+    if ((groups.get(`${edge.toNode} ${chosen.toSide}`)?.length ?? 0) > 1) continue
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
+    // Interpenetrating boxes (authored sides can force them) have no
+    // forward-facing lane to slide into.
+    const gapOk =
+      axis === 'h'
+        ? chosen.fromSide === 'right'
+          ? fromRect.x + fromRect.w <= toRect.x
+          : toRect.x + toRect.w <= fromRect.x
+        : chosen.fromSide === 'bottom'
+          ? fromRect.y + fromRect.h <= toRect.y
+          : toRect.y + toRect.h <= fromRect.y
+    if (!gapOk) continue
+    const lane = facingLaneWindow(fromRect, toRect, axis)
+    if (lane === undefined) continue
+    const natural = (axis === 'h' ? entry.from.y + entry.to.y : entry.from.x + entry.to.x) / 2
+    const t = Math.min(lane[1], Math.max(lane[0], natural))
+    anchors.set(edge.id, {
+      ...entry,
+      from: axis === 'h' ? { x: entry.from.x, y: t } : { x: t, y: entry.from.y },
+      to: axis === 'h' ? { x: entry.to.x, y: t } : { x: t, y: entry.to.y },
+    })
+  }
+  applyPins()
   return anchors
 }
 
@@ -681,7 +784,7 @@ function optimizeSideChoices(
   // pairs — everything else is carried over. This is what keeps a trial
   // O(affected * E) instead of O(E^2).
   let current = new Map(initial)
-  let anchors = computeAnchorsFor(nodes, edges, current)
+  let anchors = computeAnchorsFor(nodes, edges, current, false)
   let paths: (readonly Point[])[] = edges.map(
     (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
   )
@@ -715,7 +818,7 @@ function optimizeSideChoices(
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
   } => {
-    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides)
+    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, false)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
@@ -832,7 +935,7 @@ export function assignEdgeAnchors(
   // side exactly as the committed render will; a map covering every edge
   // skips optimization wholesale (the live overlay's cached frames).
   // Sides settle again on the next committed render.
-  sideOverrides?: ReadonlyMap<string, EdgeSides>,
+  sideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
   if (sideOverrides !== undefined) {
@@ -855,7 +958,7 @@ export function assignEdgeAnchors(
     if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
       liveSides = optimizeSideChoices(nodes, edges, style, merged, locked)
     }
-    return computeAnchorsFor(nodes, edges, liveSides)
+    return computeAnchorsFor(nodes, edges, liveSides, true, sideOverrides)
   }
   if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
     sides = optimizeSideChoices(nodes, edges, style, sides)

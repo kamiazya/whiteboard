@@ -2,6 +2,16 @@
 
 **Status:** Accepted
 
+> **Superseded detail (2026-08-12):** the Bearer-token-in-tracked-`settings.json` /
+> `_comment_auth` design described below (Context bullet 4, Decision bullet 1,
+> and the "Extract Bearer token to settings.local.json" alternative) no longer
+> reflects the current setup. `.claude/settings.json` carries no `mcpServers`
+> field at all, and MCP dev access instead goes through a `--scope local`
+> `claude mcp add` registration of a stdio proxy script. See CONTRIBUTING.md's
+> "First-clone setup" and AGENTS.md's "MCP Development Mode" for the current
+> mechanism; the rest of this ADR's rationale (tracking `.claude/` in git,
+> repo-relative scriptPaths) still holds.
+
 ## Context
 
 This repository uses Claude Code workflows, agents, skills, and scripts under `.claude/` to orchestrate the local AI-assisted dev loop (plan → TDD implement → review → release). Initially `.claude/` was machine-local (gitignored). The question was whether to track it in the shared repository so contributors inherit the full dev-flow tooling.

@@ -262,4 +262,69 @@ describe('setupSwRegistration', () => {
 
     expect(() => onRegisteredSW('/sw.js', undefined)).not.toThrow()
   })
+
+  it('onRegisteredSW binds the manual update check in the sw-status store', async () => {
+    const { getSwStatus, checkForUpdates, resetSwStatusForTests } = await import(
+      './sw-status-store.js'
+    )
+    resetSwStatusForTests()
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(getSwStatus().supported).toBe(false)
+    const { onRegisteredSW } = registerSW.mock.calls[0][0]
+    const update = vi.fn().mockResolvedValue(undefined)
+    onRegisteredSW('/sw.js', { update } as unknown as ServiceWorkerRegistration)
+
+    expect(getSwStatus().supported).toBe(true)
+    await checkForUpdates()
+    expect(update).toHaveBeenCalledTimes(1)
+    resetSwStatusForTests()
+  })
+
+  it('onNeedRefresh marks an update ready and binds applyUpdate to updateServiceWorker(true)', async () => {
+    const { getSwStatus, applyUpdate, resetSwStatusForTests } = await import('./sw-status-store.js')
+    resetSwStatusForTests()
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+    // onNeedRefresh also lazy-loads the toast + idle-apply modules; stub them
+    // so this test only observes the store binding.
+    vi.doMock('./mount-update-toast.js', () => ({ mountUpdateToast: vi.fn() }))
+    vi.doMock('./sw-idle-apply.js', () => ({ startSwIdleAutoApply: vi.fn() }))
+
+    try {
+      setupSwRegistration({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister,
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(getSwStatus().updateReady).toBe(false)
+      const { onNeedRefresh } = registerSW.mock.calls[0][0]
+      onNeedRefresh()
+
+      expect(getSwStatus().updateReady).toBe(true)
+      await applyUpdate()
+      expect(updateServiceWorker).toHaveBeenCalledWith(true)
+    } finally {
+      vi.doUnmock('./mount-update-toast.js')
+      vi.doUnmock('./sw-idle-apply.js')
+      resetSwStatusForTests()
+    }
+  })
 })
