@@ -425,8 +425,10 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
           </div>
         </nav>
         <div className="min-w-0 flex-1 overflow-y-auto p-6">
-          <h1 className="mb-4 text-base font-semibold">{SECTION_TITLE[desktopSection]}</h1>
-          {sectionContent(desktopSection, sharedProps)}
+          <div className="max-w-2xl">
+            <h1 className="mb-4 text-base font-semibold">{SECTION_TITLE[desktopSection]}</h1>
+            {sectionContent(desktopSection, sharedProps)}
+          </div>
         </div>
       </div>
     </div>
