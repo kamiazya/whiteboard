@@ -6,6 +6,7 @@ import {
   bendCount,
   composeSidePairs,
   facingLaneWindow,
+  fullyContains,
   hasRepairableProblem,
   lessCost,
   oppositeSide,
@@ -55,15 +56,6 @@ function sidePoint(rect: Rect, side: Side): Point {
 function strictlyInside(rect: Rect, point: Point): boolean {
   return (
     point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
-  )
-}
-
-function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
   )
 }
 
@@ -614,8 +606,16 @@ function optimizeSideChoices(
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
   // check which must exclude the edge's endpoints.
   const nodeBorders = nodes.map(rectOf)
+  // Each edge's OWN endpoint rects (from, to) only — endpoint-body-ink's
+  // interior check, unlike border-tracing's outline check above, needs to
+  // know which two of nodeBorders belong to THIS edge.
+  const endpointRectsFor = edges.map((e) =>
+    [byId.get(e.fromNode), byId.get(e.toNode)]
+      .filter((n): n is SpatialNode => n !== undefined)
+      .map(rectOf),
+  )
   const selfCosts: ConfigCost[] = paths.map((path, i) =>
-    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders),
+    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders, endpointRectsFor[i]),
   )
   let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
@@ -658,7 +658,12 @@ function optimizeSideChoices(
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfPenalty(trialPaths[i]!, foreignBodiesFor[i]!, nodeBorders)
+      const next = selfPenalty(
+        trialPaths[i]!,
+        foreignBodiesFor[i]!,
+        nodeBorders,
+        endpointRectsFor[i],
+      )
       cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)
@@ -691,6 +696,9 @@ function optimizeSideChoices(
     const toRect = rectOf(toNode)
     const fromCenter = centerOf(fromRect)
     const toCenter = centerOf(toRect)
+    // The same-side U-hook fallback (for when every ranked-vocabulary pair
+    // crosses, overlaps, or retraces) comes from rankedSidePairs' last rule,
+    // `u-hook-span-exposed-first` — one producer, not a second list here.
     const pairs = rankedSidePairs(
       toCenter.x - fromCenter.x,
       toCenter.y - fromCenter.y,
@@ -698,18 +706,8 @@ function optimizeSideChoices(
       toRect,
       () => 0,
     )
-    // U-pairs (both ends on the SAME compass side) are outside the ranked
-    // vocabulary — the initial heuristic never wants them — but they are
-    // exactly what hooks OVER everything when every ranked pair crosses,
-    // overlaps, or retraces, and what a pair of overlapping nodes needs to
-    // arrive without doubling back. Offered last: the optimizer only
-    // adopts one on a strict cost decrease.
-    const uPairs = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
-      fromSide: side as Side,
-      toSide: side as Side,
-    }))
     const seen = new Set<string>()
-    return [...pairs, ...uPairs]
+    return pairs
       .map((pair) => ({
         fromSide: edge.fromSide ?? pair.fromSide,
         toSide: edge.toSide ?? pair.toSide,
