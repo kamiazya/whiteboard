@@ -1859,6 +1859,33 @@ describe('DaemonCanvasPage', () => {
 
       fireEvent.click(screen.getByTestId('settings-trigger'))
       expect(router.state.location.pathname).toBe('/settings')
+      // The entry point rides along so the settings Back button can return
+      // here deterministically instead of popping history.
+      expect((router.state.location.state as { from?: string }).from).toBe('/')
+    })
+
+    it('the header brand mark navigates home', async () => {
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: (
+              <DaemonCanvasPage
+                daemonBaseUrl={DAEMON_BASE_URL}
+                createBackend={makeCreateBackend()}
+              />
+            ),
+          },
+        ],
+        { initialEntries: ['/canvas/ws-1/doc-a'] },
+      )
+      await act(async () => {
+        rtlRender(<RouterProvider router={router} />, { container: document.body })
+      })
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      expect(router.state.location.pathname).toBe('/')
     })
 
     it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {

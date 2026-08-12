@@ -355,7 +355,11 @@ export function DaemonIndexPage({
             <button
               type="button"
               aria-label="Settings"
-              onClick={() => navigate(settingsPath())}
+              onClick={() =>
+                navigate(settingsPath(), {
+                  state: { from: `${window.location.pathname}${window.location.search}` },
+                })
+              }
               className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <Settings className="size-4" />

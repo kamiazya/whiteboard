@@ -29,6 +29,7 @@ function renderBar(overrides?: {
   onNavigateToCanvas?: (slug: string) => void
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
+  onNavigateHome?: () => void
 }) {
   // React 18 delegates events to the root container. Radix portals render into document.body,
   // which is a DOM sibling of the default test container. Using document.body as the React root
@@ -43,6 +44,7 @@ function renderBar(overrides?: {
       onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
       workspaces={overrides?.workspaces}
       onSwitchWorkspace={overrides?.onSwitchWorkspace}
+      onNavigateHome={overrides?.onNavigateHome}
     />,
     { container: document.body },
   )
@@ -1375,5 +1377,19 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
       target: { value: 'canvas-a' },
     })
     expect(screen.queryByText('Workspaces')).toBeNull()
+  })
+})
+
+describe('WorkspaceTopBar — brand mark home affordance', () => {
+  it('renders the brand mark as a Home button when onNavigateHome is provided', () => {
+    const onNavigateHome = vi.fn()
+    renderBar({ onNavigateHome })
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    expect(onNavigateHome).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders no home affordance without the callback', () => {
+    renderBar()
+    expect(screen.queryByRole('button', { name: 'Home' })).toBeNull()
   })
 })

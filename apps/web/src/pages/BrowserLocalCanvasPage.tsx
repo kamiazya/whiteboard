@@ -567,6 +567,7 @@ export function BrowserLocalCanvasPage({
           }
         >
           <WorkspaceTopBar
+            onNavigateHome={() => navigate('/')}
             statusSlot={
               <ConnectionStatus state="local">
                 <p className="text-muted-foreground">
@@ -612,7 +613,11 @@ export function BrowserLocalCanvasPage({
               branches: capabilities.branches,
               merge: capabilities.merge,
             }}
-            onOpenSettings={() => navigate(settingsPath())}
+            onOpenSettings={() =>
+              navigate(settingsPath(), {
+                state: { from: `${window.location.pathname}${window.location.search}` },
+              })
+            }
           />
         </Suspense>
       </div>

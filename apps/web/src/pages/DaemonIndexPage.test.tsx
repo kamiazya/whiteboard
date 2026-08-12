@@ -1062,6 +1062,8 @@ describe('DaemonIndexPage', () => {
     // route rather than an inline dialog — the gear button navigates.
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(router.state.location.pathname).toBe('/settings')
+    // Entry point for the settings Back button.
+    expect((router.state.location.state as { from?: string }).from).toBe('/')
   })
 
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {

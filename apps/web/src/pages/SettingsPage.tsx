@@ -9,15 +9,21 @@ import {
   Sun,
   Waves,
 } from 'lucide-react'
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { AppVersionRow } from '@/components/settings/AppVersionRow'
+import type { PersistStepState } from '@/components/settings/SetupJourney'
+import { findVisibleJourneyBadge, SetupJourney } from '@/components/settings/SetupJourney'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { useThemeMode } from '@/hooks/useThemeMode'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
+import { celebrate } from '@/lib/celebrate'
 import { createDaemonFetch } from '@/lib/daemon-api-client'
 import type { FaviconStyle } from '@/lib/favicon'
-import { queryPersistentStorage } from '@/lib/persistent-storage'
+import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
+import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
+import HomeMark from '../brand/home-mark.svg?react'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 
@@ -169,37 +175,6 @@ function GeneralSection({
   )
 }
 
-function DataSection({
-  persisted,
-  persistedKnown,
-}: {
-  persisted: boolean | null
-  persistedKnown: boolean
-}) {
-  return (
-    <section>
-      <h2 className="mb-3 text-sm font-medium">Storage</h2>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm">Persistent storage</p>
-          <p className="text-xs text-muted-foreground">
-            Protects browser-stored canvases from being evicted under storage pressure.
-          </p>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {!persistedKnown
-            ? '…'
-            : persisted === null
-              ? 'Managed by the browser'
-              : persisted
-                ? 'Granted'
-                : 'Not granted yet'}
-        </span>
-      </div>
-    </section>
-  )
-}
-
 // Duplicate mount cost (this renders once per visible layout — mobile detail
 // and desktop pane both exist in the DOM at once, see the module doc comment
 // below) is an accepted tradeoff: PairedOriginsCard/StorageReportCard already
@@ -240,8 +215,10 @@ function sectionContent(
     onFaviconStyleChange: (next: FaviconStyle) => void
     webMcpEnabled: boolean
     onWebMcpToggle: () => void
-    persisted: boolean | null
-    persistedKnown: boolean
+    persistStep: PersistStepState
+    protecting: boolean
+    onProtect: () => void
+    installStatus: 'installed' | 'installable' | 'not-captured'
     daemon?: { baseUrl: string; token: string | null }
   },
 ) {
@@ -258,7 +235,21 @@ function sectionContent(
         />
       )
     case 'data':
-      return <DataSection persisted={props.persisted} persistedKnown={props.persistedKnown} />
+      return (
+        <div>
+          <SetupJourney
+            persist={props.persistStep}
+            protecting={props.protecting}
+            onProtect={props.onProtect}
+            install={props.installStatus}
+            onInstall={() => void promptInstall()}
+            daemonConnected={props.daemon !== undefined}
+          />
+          <div className="mt-6 border-t pt-4">
+            <AppVersionRow />
+          </div>
+        </div>
+      )
     case 'connections':
       return <ConnectionsSection daemon={props.daemon} />
   }
@@ -328,14 +319,53 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
     }
   }, [])
 
+  const [protecting, setProtecting] = useState(false)
+  const handleProtect = useCallback(() => {
+    setProtecting(true)
+    void ensurePersistentStorage()
+      .then(() => queryPersistentStorage())
+      .then((state) => setPersisted(state))
+      .finally(() => setProtecting(false))
+  }, [])
+
+  const installState = useSyncExternalStore(subscribeInstallState, getInstallState)
+
+  const persistStep: PersistStepState = !persistedKnown
+    ? 'unknown'
+    : persisted === true
+      ? 'granted'
+      : persisted === null
+        ? 'browser-managed'
+        : 'todo'
+
+  // Celebrate a step completing LIVE — never the page merely opening on an
+  // already-complete step. The baseline is not recorded until the initial
+  // persistence query answers, so the unknown->granted settle on mount does
+  // not read as a transition.
+  const persistDone = persisted === true
+  const installDone = installState.status === 'installed'
+  const celebratedBaseline = useRef<{ persist: boolean; install: boolean } | null>(null)
+  useEffect(() => {
+    if (!persistedKnown) return
+    const prev = celebratedBaseline.current
+    celebratedBaseline.current = { persist: persistDone, install: installDone }
+    if (prev === null) return
+    if (!prev.persist && persistDone) void celebrate(findVisibleJourneyBadge('protect'))
+    if (!prev.install && installDone) void celebrate(findVisibleJourneyBadge('install'))
+  }, [persistedKnown, persistDone, installDone])
+
+  // Where "Back" leaves to. Captured once on mount from the state the gear
+  // button passes; NOT a history pop — wandering between sections must never
+  // change where Back exits, and a pop would land on the previous settings
+  // section instead of leaving settings. Deep links and reloads have no
+  // entry state and exit to the app root.
+  const [entryPoint] = useState<string>(() => {
+    const from = (location.state as { from?: unknown } | null)?.from
+    return typeof from === 'string' ? from : '/'
+  })
   const handleBackToApp = useCallback(() => {
-    // react-router's history sets `state.idx` on every entry it pushes;
-    // idx > 0 means there is in-app history to pop back into rather than
-    // landing outside the app (a fresh tab, a bookmark) where -1 would exit.
-    const idx = (window.history.state as { idx?: number } | null)?.idx
-    if (typeof idx === 'number' && idx > 0) navigate(-1)
-    else navigate('/')
-  }, [navigate])
+    navigate(entryPoint)
+  }, [navigate, entryPoint])
 
   const sharedProps = {
     theme,
@@ -344,8 +374,10 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
     onFaviconStyleChange: handleFaviconStyleChange,
     webMcpEnabled,
     onWebMcpToggle: handleWebMcpToggle,
-    persisted,
-    persistedKnown,
+    persistStep,
+    protecting,
+    onProtect: handleProtect,
+    installStatus: installState.status,
     daemon,
   }
 
@@ -357,6 +389,13 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
         {routeSection === null ? (
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
+              <Link
+                to="/"
+                aria-label="Home"
+                className="rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
+              >
+                <HomeMark className="h-4 w-6" />
+              </Link>
               <button
                 type="button"
                 onClick={handleBackToApp}
@@ -371,6 +410,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
                 <Link
                   key={section}
                   to={settingsPath(section)}
+                  state={location.state}
                   className="flex w-full items-center gap-3 border-b px-4 py-3 text-left text-sm hover:bg-accent"
                 >
                   <Icon className="size-4 text-muted-foreground" />
@@ -385,6 +425,8 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
             <div className="flex items-center gap-2 border-b px-4 py-3">
               <Link
                 to={settingsPath()}
+                replace
+                state={location.state}
                 className="rounded-md p-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <span aria-hidden="true">← </span>Settings
@@ -399,6 +441,13 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
       {/* Desktop (sm and up): sidebar + content pane. */}
       <div className="hidden h-full sm:flex sm:justify-center" data-testid="settings-desktop">
         <nav className="w-56 shrink-0 border-r p-4">
+          <Link
+            to="/"
+            aria-label="Home"
+            className="mb-2 inline-block rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
+          >
+            <HomeMark className="h-[18px] w-7" />
+          </Link>
           <button
             type="button"
             onClick={handleBackToApp}
@@ -411,6 +460,8 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
               <Link
                 key={section}
                 to={settingsPath(section)}
+                replace
+                state={location.state}
                 aria-current={desktopSection === section ? 'page' : undefined}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
                   desktopSection === section
