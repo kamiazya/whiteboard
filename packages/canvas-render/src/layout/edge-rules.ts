@@ -330,6 +330,10 @@ export function bendCount(path: readonly Point[]): number {
  * parameter is every node's border rect (INCLUDING the path's own endpoints
  * — unlike `foreignBodies`, which deliberately excludes them), for rules
  * that price ink drawn on a node's OUTLINE rather than through its interior.
+ * The fourth parameter is the edge's OWN endpoint rects (`from`/`to` node
+ * borders only), for rules that price ink through an endpoint's own
+ * interior — the complementary case `foreignBodies` cannot see, since it
+ * deliberately excludes the edge's own endpoints for the tunnel check.
  */
 export type PenaltyRule = {
   readonly name: string
@@ -339,7 +343,25 @@ export type PenaltyRule = {
     path: readonly Point[],
     foreignBodies: readonly Rect[],
     nodeBorders: readonly Rect[],
+    endpointRects: readonly Rect[],
   ) => number
+}
+
+/**
+ * Whether `outer` fully contains `inner` (inclusive borders). A rect that
+ * FULLY CONTAINS an edge's endpoint node (a group frame around its member)
+ * can never be treated as an obstacle to route around — every route out of
+ * the contained node still has to cross it — so both `deriveDefaultSides`'s
+ * occlusion filter (spatial-edges.ts) and `endpoint-body-ink`'s exclusion
+ * below reuse this SAME predicate rather than each inventing their own.
+ */
+export function fullyContains(outer: Rect, inner: Rect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.w <= outer.x + outer.w &&
+    inner.y + inner.h <= outer.y + outer.h
+  )
 }
 
 /**
@@ -444,6 +466,14 @@ const crossings: PenaltyRule = {
  * sweep-rank scenario). Below crossings it still repairs the border-riding
  * defect, whose lower tiers are all-zero for every side-pair option, so the
  * lexicographic comparison falls through to this tier as the decisive one.
+ *
+ * A tier-3 placement (directly below crossings, ranking THIS rule ahead of
+ * endpoint-body-ink) was tried and rejected: on the reported canvas it let
+ * the optimizer accept eliminating a few px of border ink at the cost of
+ * driving a route through ~120px of a bystander node's interior instead —
+ * trading this rule's own defect for endpoint-body-ink's, not fixing either
+ * for good, and it flipped this rule's own pin on that same canvas
+ * (edge-border-trace.test.ts) from 0 to 120. This rule keeps tier 3.
  */
 const borderTracing: PenaltyRule = {
   name: 'border-tracing',
@@ -471,6 +501,71 @@ const borderTracing: PenaltyRule = {
   },
 }
 
+/**
+ * endpoint-body-ink: ink drawn STRICTLY INSIDE an edge's OWN endpoint
+ * node's body — the departure/arrival stub cutting through the near or far
+ * endpoint's interior, which overlapping nodes provoke (a stub leaving one
+ * node's border can land inside a neighbour's overlapping body). Self-only,
+ * and the exact interior complement of border-tracing: border-tracing prices
+ * a segment collinear WITH AND overlapping a border (`q(a.y) === q(r.y)`),
+ * this rule prices a segment STRICTLY BETWEEN a rect's two borders
+ * (`q(r.y) < q(a.y) < q(r.y + r.h)`) — the two conditions are mutually
+ * exclusive in quantized space, so the same segment is never charged by
+ * both (see the per-(segment,rect) complementarity property).
+ *
+ * `foreignBodies`/`overlap-and-intrusion` already price a tunnel through a
+ * FOREIGN node's body; this rule exists only because that check deliberately
+ * excludes an edge's own endpoints (a rect containing an endpoint can never
+ * be routed around) — but that reasoning only rules out routing AROUND the
+ * endpoint's rect, not ink running through it beyond the anchor point.
+ *
+ * MANDATORY EXCLUSION: a rect that `fullyContains` another endpoint rect (a
+ * group frame around its member) is skipped — every route out of the
+ * contained node crosses the container, so pricing it would make the edge
+ * permanently 'repairable' with no better option, and the optimizer would
+ * churn on it every layout.
+ *
+ * Tier 4, BELOW border-tracing, for the same trial-path-artifact reason
+ * border-tracing itself was demoted off tier 1 (see its own comment): this
+ * rule too is evaluated against the optimizer's unaligned TRIAL paths,
+ * where an artifact can outrank a genuine improvement. A tier-3 placement
+ * (ranked AHEAD of border-tracing) was tried and rejected — it flipped
+ * border-tracing's own established pin on the reported canvas from 0 to
+ * 120 (see border-tracing's comment); a rule fixing one visible-ink defect
+ * must not reintroduce the other it sits beside. Kept at tier 4, this rule
+ * needs one more optimizer PASS than border-tracing alone did to fully
+ * settle the reported canvas — see CROSSING_OPT_MAX_PASSES in
+ * spatial-edges.ts for why the bound moved from 2 to 3 alongside this rule.
+ */
+const endpointBodyInk: PenaltyRule = {
+  name: 'endpoint-body-ink',
+  tier: 4,
+  pairTerm: () => 0,
+  selfTerm: (path, _foreignBodies, _nodeBorders, endpointRects) => {
+    const q = (n: number) => Math.round(n * COST_QUANTUM)
+    const priced = endpointRects.filter(
+      (r) => !endpointRects.some((other) => other !== r && fullyContains(r, other)),
+    )
+    let interior = 0
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as Point
+      const b = path[i] as Point
+      for (const r of priced) {
+        if (a.y === b.y && q(r.y) < q(a.y) && q(a.y) < q(r.y + r.h)) {
+          const lo = Math.max(q(Math.min(a.x, b.x)), q(r.x))
+          const hi = Math.min(q(Math.max(a.x, b.x)), q(r.x + r.w))
+          if (hi > lo) interior += hi - lo
+        } else if (a.x === b.x && q(r.x) < q(a.x) && q(a.x) < q(r.x + r.w)) {
+          const lo = Math.max(q(Math.min(a.y, b.y)), q(r.y))
+          const hi = Math.min(q(Math.max(a.y, b.y)), q(r.y + r.h))
+          if (hi > lo) interior += hi - lo
+        }
+      }
+    }
+    return interior
+  },
+}
+
 /** realized-bends: direction changes along ONE routed path. Self-only, and
  * deliberately the last tier — the optimizer's short-circuit
  * (`hasRepairableProblem`) and worst-offender filter both ignore it, since
@@ -478,7 +573,7 @@ const borderTracing: PenaltyRule = {
  * and reshuffling it purely to shave bends is churn, not repair. */
 const realizedBends: PenaltyRule = {
   name: 'realized-bends',
-  tier: 4,
+  tier: 5,
   pairTerm: () => 0,
   selfTerm: (path) => bendCount(path),
 }
@@ -494,6 +589,7 @@ export const PENALTY_RULES: readonly PenaltyRule[] = [
   illegibility,
   crossings,
   borderTracing,
+  endpointBodyInk,
   realizedBends,
 ]
 
@@ -520,19 +616,23 @@ export function pairPenalty(
 /**
  * The self half of the composition (`optimizeSideChoices`, spatial-edges.ts):
  * map one routed path's self-geometry into a full cost array, one rule per
- * declared tier. `nodeBorders` defaults to `[]` ("no border ink declared")
- * rather than falling back to `foreignBodies` — a caller that passes no
- * border rects gets 0 from `border-tracing`, exactly as if the rule did not
+ * declared tier. `nodeBorders` and `endpointRects` each default to `[]`
+ * ("no border/endpoint ink declared") rather than falling back to
+ * `foreignBodies` or to each other — a caller that passes none gets 0 from
+ * `border-tracing`/`endpoint-body-ink`, exactly as if the rule did not
  * exist.
  */
 export function selfPenalty(
   path: readonly Point[],
   foreignBodies: readonly Rect[],
   nodeBorders: readonly Rect[] = [],
+  endpointRects: readonly Rect[] = [],
   rules: readonly PenaltyRule[] = PENALTY_RULES,
 ): number[] {
   const cost = zeroPenalty(rules)
-  for (const rule of rules) cost[rule.tier] = rule.selfTerm(path, foreignBodies, nodeBorders)
+  for (const rule of rules) {
+    cost[rule.tier] = rule.selfTerm(path, foreignBodies, nodeBorders, endpointRects)
+  }
   return cost
 }
 

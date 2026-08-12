@@ -6,6 +6,7 @@ import {
   bendCount,
   composeSidePairs,
   facingLaneWindow,
+  fullyContains,
   hasRepairableProblem,
   lessCost,
   oppositeSide,
@@ -55,15 +56,6 @@ function sidePoint(rect: Rect, side: Side): Point {
 function strictlyInside(rect: Rect, point: Point): boolean {
   return (
     point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
-  )
-}
-
-function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
   )
 }
 
@@ -556,7 +548,22 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
  * raising further.
  */
 const CROSSING_OPT_MAX_EDGES = 200
-const CROSSING_OPT_MAX_PASSES = 2
+/**
+ * Each pass gives every edge at most one improving re-side; a chain of N
+ * DISTINCT improving candidates for the same edge needs N passes to fully
+ * settle (greedy first-strict-improvement adoption, no backtracking).
+ * Raised 2 -> 3 alongside endpoint-body-ink (edge-rules.ts): on an
+ * overlapping-nodes canvas already needing 2 hops to clear border-tracing
+ * (right-facing -> an L-pair -> the zero-border U-hook), endpoint-body-ink
+ * legitimately needs a 3rd hop to move off that U-hook's endpoint-interior
+ * ink onto the one candidate clear of BOTH problems — verified this is the
+ * exact bound needed (2 passes settles on the border-clean-but-interior-
+ * dirty route every time; 3 reaches the fully clean one) via
+ * edge-endpoint-body-ink.test.ts's canvas. Still bounded (no complexity
+ * blow-up: one more full edge-set sweep, same TRIAL_BUDGET_EDGES cap above
+ * FULL_OPT_MAX_EDGES).
+ */
+const CROSSING_OPT_MAX_PASSES = 3
 /** At or under this many edges, every edge tries candidates (the exact
  * pre-sweep behavior); above it, only the worst offenders do. */
 const FULL_OPT_MAX_EDGES = 40
@@ -614,8 +621,16 @@ function optimizeSideChoices(
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
   // check which must exclude the edge's endpoints.
   const nodeBorders = nodes.map(rectOf)
+  // Each edge's OWN endpoint rects (from, to) only — endpoint-body-ink's
+  // interior check, unlike border-tracing's outline check above, needs to
+  // know which two of nodeBorders belong to THIS edge.
+  const endpointRectsFor = edges.map((e) =>
+    [byId.get(e.fromNode), byId.get(e.toNode)]
+      .filter((n): n is SpatialNode => n !== undefined)
+      .map(rectOf),
+  )
   const selfCosts: ConfigCost[] = paths.map((path, i) =>
-    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders),
+    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders, endpointRectsFor[i]),
   )
   let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
@@ -658,7 +673,12 @@ function optimizeSideChoices(
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfPenalty(trialPaths[i]!, foreignBodiesFor[i]!, nodeBorders)
+      const next = selfPenalty(
+        trialPaths[i]!,
+        foreignBodiesFor[i]!,
+        nodeBorders,
+        endpointRectsFor[i],
+      )
       cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)

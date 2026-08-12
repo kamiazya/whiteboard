@@ -159,7 +159,7 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
     (path, foreignBodies, nodeBorders) => {
       const cost = selfPenalty(path, foreignBodies, nodeBorders)
       for (const rule of PENALTY_RULES) {
-        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies, nodeBorders))
+        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies, nodeBorders, []))
       }
     },
   )
@@ -300,6 +300,178 @@ describe('border-tracing: dense-on-borders property (mutation-checked)', () => {
     'agrees with an independently-computed collinear overlap length',
     ({ path, nodeBorders }) => {
       expect(selfPenalty(path, [], nodeBorders)[3]).toBe(referenceBorderTrace(path, nodeBorders))
+    },
+  )
+})
+
+// endpoint-body-ink-specific properties: analogous to the border-tracing
+// block above, but the dense domain snaps generated points to the
+// STRICT INTERIOR of a rect (rather than its border) so the property has a
+// real chance of finding a positive interior chord instead of passing
+// vacuously.
+const interiorPointArb = (rect: Rect): fc.Arbitrary<Point> =>
+  fc.oneof(
+    // y strictly between the rect's top and bottom (when the rect is tall
+    // enough for one to exist), x ranging generously so the clipping
+    // branch is exercised too.
+    fc.record({
+      x: fc.integer({ min: rect.x - 50, max: rect.x + rect.w + 50 }),
+      y:
+        rect.h >= 2
+          ? fc.integer({ min: rect.y + 1, max: rect.y + rect.h - 1 })
+          : fc.constant(rect.y),
+    }),
+    // x strictly between the rect's left and right.
+    fc.record({
+      x:
+        rect.w >= 2
+          ? fc.integer({ min: rect.x + 1, max: rect.x + rect.w - 1 })
+          : fc.constant(rect.x),
+      y: fc.integer({ min: rect.y - 50, max: rect.y + rect.h + 50 }),
+    }),
+    pointArb,
+  )
+
+const endpointRectArb: fc.Arbitrary<Rect> = borderRectArb
+
+// The rect a chord was BUILT from is folded into endpointRects (alongside
+// independently generated extras, and a chance of a CONTAINER rect around
+// it) so the oracle-equality property below always has a real chance of
+// exercising both the interior-chord branch and the containment exclusion.
+const endpointBodyInkScenarioArb: fc.Arbitrary<{
+  path: readonly Point[]
+  endpointRects: readonly Rect[]
+}> = fc.tuple(endpointRectArb, foreignBodiesArb, fc.boolean()).chain(([rect, extras, wrapped]) =>
+  fc.array(interiorPointArb(rect), { minLength: 0, maxLength: 6 }).map((path) => ({
+    path,
+    endpointRects: wrapped
+      ? [{ x: rect.x - 10, y: rect.y - 10, w: rect.w + 20, h: rect.h + 20 }, rect, ...extras]
+      : [rect, ...extras],
+  })),
+)
+
+/** Independent oracle (never calls production code): total STRICTLY
+ * interior chord length, container rects excluded. All generator
+ * coordinates are integers, so multiplying by COST_QUANTUM at the end is
+ * exact — no quantization drift from the production rule's `q()`. */
+function referenceEndpointBodyInk(path: readonly Point[], rects: readonly Rect[]): number {
+  const containsRect = (outer: Rect, inner: Rect): boolean =>
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.w <= outer.x + outer.w &&
+    inner.y + inner.h <= outer.y + outer.h
+  const priced = rects.filter((r) => !rects.some((other) => other !== r && containsRect(r, other)))
+  let total = 0
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    for (const r of priced) {
+      if (a.y === b.y && a.y > r.y && a.y < r.y + r.h) {
+        const lo = Math.max(Math.min(a.x, b.x), r.x)
+        const hi = Math.min(Math.max(a.x, b.x), r.x + r.w)
+        if (hi > lo) total += hi - lo
+      } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w) {
+        const lo = Math.max(Math.min(a.y, b.y), r.y)
+        const hi = Math.min(Math.max(a.y, b.y), r.y + r.h)
+        if (hi > lo) total += hi - lo
+      }
+    }
+  }
+  return total * COST_QUANTUM
+}
+
+describe('endpoint-body-ink: dense-interior property (mutation-checked)', () => {
+  fcTest.prop([endpointBodyInkScenarioArb], withDefaults())(
+    'the endpoint-body-ink term is a finite, non-negative, integral, deterministic total',
+    ({ path, endpointRects }) => {
+      const cost1 = selfPenalty(path, [], [], endpointRects)
+      const cost2 = selfPenalty(path, [], [], endpointRects)
+      expect(cost1[4]).toBe(cost2[4])
+      expect(Number.isInteger(cost1[4])).toBe(true)
+      expect(cost1[4]).toBeGreaterThanOrEqual(0)
+    },
+  )
+
+  fcTest.prop([endpointBodyInkScenarioArb], withDefaults())(
+    'is invariant under permutation of the endpoint-rect array (a sum must not depend on order)',
+    ({ path, endpointRects }) => {
+      const shuffled = [...endpointRects].reverse()
+      expect(selfPenalty(path, [], [], endpointRects)[4]).toBe(
+        selfPenalty(path, [], [], shuffled)[4],
+      )
+    },
+  )
+
+  // The property that actually catches a "returns 0" or otherwise-wrong
+  // mutation: totality/purity/order-invariance above all hold trivially for
+  // a stub that always returns 0, so this is the one that must go red under
+  // mutation (verified: reverting endpointBodyInk.selfTerm to `() => 0`
+  // fails this test, confirming the dense generator reaches real interior
+  // chords — including through the containment-exclusion branch).
+  fcTest.prop([endpointBodyInkScenarioArb], withDefaults())(
+    'agrees with an independently-computed strictly-interior chord length',
+    ({ path, endpointRects }) => {
+      expect(selfPenalty(path, [], [], endpointRects)[4]).toBe(
+        referenceEndpointBodyInk(path, endpointRects),
+      )
+    },
+  )
+})
+
+// No-double-charge: the SAME segment/rect pair must never be priced by both
+// border-tracing (collinear ON the border) and endpoint-body-ink (STRICTLY
+// between the two borders) — the two conditions are exact complements in
+// quantized space. Generated segments mix on-border, strictly-interior, and
+// exterior coordinates so the property has a real chance of making EITHER
+// term positive.
+const axisSegmentArb = (rect: Rect): fc.Arbitrary<{ a: Point; b: Point }> => {
+  const yCandidates = fc.oneof(
+    fc.constantFrom(rect.y, rect.y + rect.h),
+    rect.h >= 2 ? fc.integer({ min: rect.y + 1, max: rect.y + rect.h - 1 }) : fc.constant(rect.y),
+    fc.integer({ min: rect.y - 50, max: rect.y + rect.h + 50 }),
+  )
+  const xCandidates = fc.oneof(
+    fc.constantFrom(rect.x, rect.x + rect.w),
+    rect.w >= 2 ? fc.integer({ min: rect.x + 1, max: rect.x + rect.w - 1 }) : fc.constant(rect.x),
+    fc.integer({ min: rect.x - 50, max: rect.x + rect.w + 50 }),
+  )
+  return fc.oneof(
+    fc
+      .record({
+        y: yCandidates,
+        x1: fc.integer({ min: rect.x - 50, max: rect.x + rect.w + 50 }),
+        x2: fc.integer({ min: rect.x - 50, max: rect.x + rect.w + 50 }),
+      })
+      .map(({ y, x1, x2 }) => ({ a: { x: x1, y }, b: { x: x2, y } })),
+    fc
+      .record({
+        x: xCandidates,
+        y1: fc.integer({ min: rect.y - 50, max: rect.y + rect.h + 50 }),
+        y2: fc.integer({ min: rect.y - 50, max: rect.y + rect.h + 50 }),
+      })
+      .map(({ x, y1, y2 }) => ({ a: { x, y: y1 }, b: { x, y: y2 } })),
+  )
+}
+
+const complementarityArb: fc.Arbitrary<{ rect: Rect; a: Point; b: Point }> = borderRectArb.chain(
+  (rect) => axisSegmentArb(rect).map(({ a, b }) => ({ rect, a, b })),
+)
+
+function penaltyRule(name: string): (typeof PENALTY_RULES)[number] {
+  const rule = PENALTY_RULES.find((r) => r.name === name)
+  if (rule === undefined) throw new Error(`no such rule: ${name}`)
+  return rule
+}
+const borderTracingRule = penaltyRule('border-tracing')
+const endpointBodyInkRule = penaltyRule('endpoint-body-ink')
+
+describe('border-tracing / endpoint-body-ink: no double-charge', () => {
+  fcTest.prop([complementarityArb], withDefaults())(
+    'never charges the same single-segment/single-rect pair on both tiers',
+    ({ rect, a, b }) => {
+      const border = borderTracingRule.selfTerm([a, b], [], [rect], [])
+      const endpointInk = endpointBodyInkRule.selfTerm([a, b], [], [], [rect])
+      expect(Math.min(border, endpointInk)).toBe(0)
     },
   )
 })
