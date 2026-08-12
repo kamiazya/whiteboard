@@ -1,4 +1,4 @@
-import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { WorkspaceTree, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc, type TreeID } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -18,6 +18,7 @@ import type {
   listCanvasesInputSchema,
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
+import { saveDocSnapshot } from './canvas-doc-io.js'
 import { generateCanvasId } from './generate-canvas-id.js'
 import {
   loadWorkspaceTree,
@@ -64,6 +65,14 @@ export async function wbCanvasCreate(
   const canvasId = generateCanvasId()
   tree.createNode(canvasId, input.segment, parentId)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+
+  // Persist the document, not only its place in the tree. Creation used to
+  // write the node alone and leave the document to be conjured on first
+  // write, which is why nothing could say what a document was: there was no
+  // document yet to ask. The kind is written once, at birth.
+  const doc = new LoroDoc()
+  writeDocumentKind(doc, input.kind)
+  await saveDocSnapshot(deps, canvasId, doc)
 
   return { canvasId, segment: input.segment }
 }

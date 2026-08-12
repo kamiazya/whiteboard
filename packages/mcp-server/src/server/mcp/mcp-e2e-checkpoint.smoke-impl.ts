@@ -63,6 +63,7 @@ export function triggerDaemonCanvasCreate(
     callTool('wb_document_create', {
       workspaceId: WORKSPACE_ID,
       segment: 'e2e-src',
+      kind: 'spatial',
       createWorkspace: true,
     })
   return options.retryDaemonStartup

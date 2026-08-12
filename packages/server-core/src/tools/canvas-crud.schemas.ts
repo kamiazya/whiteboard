@@ -1,4 +1,8 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import {
+  canvasIdSchema,
+  canvasKindSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 
 // Matches WorkspaceTree's own segment validation
@@ -18,6 +22,9 @@ export const createCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     segment: segmentSchema,
+    kind: canvasKindSchema.describe(
+      'What the document is. `markdown` serialises as OKF, `spatial` as JSON Canvas. Required: the format follows from the document rather than from a read parameter, so a document created without one cannot be read back.',
+    ),
     parentId: treeIdSchema.optional(),
     // Workspaces are never materialized implicitly: a typo'd or hallucinated
     // workspaceId must fail loudly instead of silently writing data into a

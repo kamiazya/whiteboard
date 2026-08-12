@@ -17,6 +17,7 @@ describe('createCanvasInputSchema', () => {
   it('accepts valid input with segment only', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'my-doc',
     })
     expect(result.success).toBe(true)
@@ -25,6 +26,7 @@ describe('createCanvasInputSchema', () => {
   it('accepts valid input with optional parentId', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'child',
       parentId: 'some-tree-node-id',
     })
@@ -34,6 +36,7 @@ describe('createCanvasInputSchema', () => {
   it('accepts single-character segment', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'a',
     })
     expect(result.success).toBe(true)
@@ -42,6 +45,7 @@ describe('createCanvasInputSchema', () => {
   it('accepts segment with hyphens and underscores in the middle', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'my-doc_v2',
     })
     expect(result.success).toBe(true)
@@ -50,6 +54,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects segment with leading hyphen', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: '-leading',
     })
     expect(result.success).toBe(false)
@@ -58,6 +63,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects segment with trailing hyphen', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'trailing-',
     })
     expect(result.success).toBe(false)
@@ -66,6 +72,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects empty segment', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: '',
     })
     expect(result.success).toBe(false)
@@ -74,6 +81,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects segment with spaces', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'has space',
     })
     expect(result.success).toBe(false)
@@ -82,6 +90,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects segment with dots', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'file.txt',
     })
     expect(result.success).toBe(false)
@@ -90,6 +99,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects empty workspaceId', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: '',
+      kind: 'spatial',
       segment: 'doc',
     })
     expect(result.success).toBe(false)
@@ -98,6 +108,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'doc',
       extra: true,
     })
@@ -107,6 +118,7 @@ describe('createCanvasInputSchema', () => {
   it('rejects empty parentId', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
+      kind: 'spatial',
       segment: 'doc',
       parentId: '',
     })
