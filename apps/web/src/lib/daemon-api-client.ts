@@ -28,8 +28,7 @@ export { createDaemonFetch }
 
 /** Thrown by `fetchAndParse` on a non-ok response, carrying the HTTP status
  *  so callers can branch on it (e.g. 404 vs. a real failure) instead of
- *  parsing the message string. Additive: message text and Error-ness are
- *  unchanged for every existing `instanceof Error` caller. */
+ *  parsing the message string. */
 export class DaemonApiError extends Error {
   readonly status: number
   constructor(message: string, status: number) {
