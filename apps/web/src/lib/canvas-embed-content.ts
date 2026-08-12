@@ -9,11 +9,11 @@
  * take down the page.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
-import { isImageRef, newImageRef } from './canvas-file-ref.js'
 import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
