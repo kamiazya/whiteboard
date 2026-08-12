@@ -90,14 +90,27 @@ export class WorkspaceTree {
     return kids.map(toWorkspaceNode)
   }
 
+  /**
+   * Alias derivation is a pure function of tree state (ADR-0008 point 5): a
+   * CRDT merge can legally leave two siblings with the same raw segment, and
+   * nothing may rewrite the tree to fix that on read. So at each level of
+   * the root-to-leaf walk, the raw segment is replaced by its disambiguated
+   * form among live siblings at that level (see `disambiguateSegments`).
+   * ponytail: recomputes the sibling group at every level of every call
+   * (O(depth x siblings log siblings) per resolve); fine at workspace
+   * scale, memoize per-parent within one derivation pass if this shows up
+   * on a profile.
+   */
   resolveAlias(id: TreeID): string | undefined {
     const node = this.#tree.getNodeByID(id)
     if (!node || this.#tree.isNodeDeleted(id)) return undefined
     const segments: string[] = []
     let current: LoroTreeNode<{ canvasId: string; segment: string }> | undefined = node
     while (current) {
-      segments.unshift(current.data.get('segment') as string)
-      current = current.parent()
+      const parent = current.parent()
+      const disambiguated = disambiguateSegments(this.children(parent?.id))
+      segments.unshift(disambiguated.get(current.id) ?? (current.data.get('segment') as string))
+      current = parent
     }
     return segments.join('/')
   }
@@ -111,7 +124,8 @@ export class WorkspaceTree {
     let matched: LoroTreeNode<{ canvasId: string; segment: string }> | undefined
 
     for (const part of parts) {
-      matched = candidates.find((n) => (n.data.get('segment') as string) === part)
+      const disambiguated = disambiguateSegments(candidates.map(toWorkspaceNode))
+      matched = candidates.find((n) => disambiguated.get(n.id) === part)
       if (!matched) return undefined
       candidates = matched.children() ?? []
     }
@@ -131,6 +145,13 @@ export class WorkspaceTree {
     return node
   }
 
+  /**
+   * A courtesy check on local mutations only (ADR-0008 point 5): it refuses
+   * a conflict this peer can see coming, but a CRDT merge of two concurrent
+   * creates on different peers is not an operation anyone can decline, so
+   * duplicate sibling segments are legal tree state. `resolveAlias`/
+   * `findByAlias` disambiguate them at read time instead.
+   */
   #assertNoSiblingConflict(
     parentId: TreeID | undefined,
     segment: string,
@@ -159,4 +180,61 @@ function toWorkspaceNode(node: LoroTreeNode<{ canvasId: string; segment: string 
     canvasId: node.data.get('canvasId') as string,
     segment: node.data.get('segment') as string,
   }
+}
+
+/** Plain code-unit string compare — never `localeCompare`, whose collation is environment-dependent. */
+function compareCanvasId(a: WorkspaceNode, b: WorkspaceNode): number {
+  if (a.canvasId < b.canvasId) return -1
+  if (a.canvasId > b.canvasId) return 1
+  return 0
+}
+
+/**
+ * Derives a unique alias segment per node among `siblings` (one parent's
+ * live children). Non-colliding raw segments pass through unchanged
+ * (identity). A group of nodes sharing a raw segment is ordered by
+ * `canvasId` — the winner keeps the bare segment, the rest take the first
+ * free `segment-2`, `segment-3`, ... candidate, skipping any candidate
+ * already taken by another sibling's raw segment or by an earlier
+ * assignment in this same pass (so a real sibling literally named
+ * `notes-2` can never collide with a generated suffix). Pure function of
+ * `siblings` — reads no Loro state and performs no write, which is what
+ * keeps derivation idempotent and identical on every peer.
+ */
+function disambiguateSegments(siblings: readonly WorkspaceNode[]): Map<TreeID, string> {
+  const result = new Map<TreeID, string>()
+  const rawCounts = new Map<string, number>()
+  for (const node of siblings) {
+    rawCounts.set(node.segment, (rawCounts.get(node.segment) ?? 0) + 1)
+  }
+
+  const taken = new Set(siblings.map((node) => node.segment))
+  const collisionGroups = new Map<string, WorkspaceNode[]>()
+  for (const node of siblings) {
+    if ((rawCounts.get(node.segment) ?? 0) > 1) {
+      const group = collisionGroups.get(node.segment) ?? []
+      group.push(node)
+      collisionGroups.set(node.segment, group)
+    } else {
+      result.set(node.id, node.segment)
+    }
+  }
+
+  for (const [segment, group] of collisionGroups) {
+    const [winner, ...rest] = [...group].sort(compareCanvasId)
+    result.set(winner!.id, segment)
+    let suffix = 2
+    for (const node of rest) {
+      let candidate = `${segment}-${suffix}`
+      while (taken.has(candidate)) {
+        suffix += 1
+        candidate = `${segment}-${suffix}`
+      }
+      result.set(node.id, candidate)
+      taken.add(candidate)
+      suffix += 1
+    }
+  }
+
+  return result
 }
