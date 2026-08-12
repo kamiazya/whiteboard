@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { createServer as createOpenCanvasServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
@@ -621,13 +620,7 @@ export function createApp(options: AppOptions) {
                 changedElementIds.push(id)
               }
             }
-            const conflictElementIds = Array.from(
-              new Set(
-                (badges as Array<Record<string, unknown>>)
-                  .map((b) => (typeof b.elementId === 'string' ? b.elementId : ''))
-                  .filter((v) => v.length > 0),
-              ),
-            )
+            const conflictElementIds = Array.from(new Set(badges.map((b) => b.elementId)))
 
             if (dryRun) {
               // For dry runs, return every current node + edge so MergeDialog can
@@ -635,8 +628,7 @@ export function createApp(options: AppOptions) {
               // nodes-model equivalent of the retired Excalidraw-style elements
               // list; the field stays untyped (z.array(z.unknown())) and no
               // consumer reads it today.
-              const { nodes, edges } = readSpatialCanvas(previewDoc)
-              const previewElements = [...nodes, ...edges]
+              const previewElements = [...pMap.values()]
               return {
                 previewElementCount,
                 targetElementCount,

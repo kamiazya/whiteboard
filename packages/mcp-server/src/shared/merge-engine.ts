@@ -44,7 +44,7 @@ function refTargetIdsOf(el: ElementSnap): string[] {
   return ids
 }
 
-export interface DetectArgs {
+interface DetectArgs {
   base: LoroDoc
   target: LoroDoc
   source: LoroDoc
