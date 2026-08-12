@@ -114,6 +114,7 @@ the laid-out projection `canvas-render` already calls a **scene**.
    every new format re-litigate how metadata is represented.
 
 4. **A document's format follows from the document, not from a parameter.**
+   *(Not implementable yet — see the note under Consequences.)*
    Because the structures are separate, "read this document as OKF" is only
    meaningful for an OKF document. `wb_document_get` returns the document in
    its own format; `wb_document_set` replaces it in that format.
@@ -152,6 +153,26 @@ the laid-out projection `canvas-render` already calls a **scene**.
    are a UI contract with the MCP Apps host, not part of this data plane.
 
 ## Consequences
+
+- **Decisions 3 and 4 describe a target, not the shipped state.** Implementing
+  point 5 surfaced that the OpenCanvas document persists no format at all:
+  `canvas-crud.schemas.ts` has no `kind`/`format` field, so document creation
+  records none, and `loro-bridge.ts` stores none. Both exporters consequently
+  work on *any* document — `canvas-export-okf.ts` says so itself, using a
+  placeholder `type: 'canvas'` for "a spatial-only canvas that never went
+  through" the set path. One Loro document still holds `core`, `facets`,
+  `nodes` and `edges` together.
+
+  The format does exist, in the *other* store: `canvasKindSchema` and the
+  daemon's workspace/slug `kind` column. These tools read the OpenCanvas doc
+  store. This is ADR-0007's two-store split again, the same wall ADR-0008
+  point 4 met with alias history.
+
+  So `canvas_export_okf` and `canvas_export_json_canvas` keep their old names
+  until a format is persisted — the tool surface is seventeen renamed plus
+  those two. Inferring the format from content ("does it have nodes?") is
+  specifically rejected: a markdown document gains a node the moment anyone
+  embeds one, and the inference flips silently.
 
 - **Every one of the nineteen tools changes name.** Even the four already
   prefixed `wb_canvas_*` move, because point 1 makes the container a
