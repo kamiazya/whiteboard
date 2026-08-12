@@ -10,7 +10,7 @@ brand-surface change.
 
 The signature is a single pen squiggle:
 
-```
+```text
 M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x66 box)
 ```
 
@@ -45,18 +45,23 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
 - **Marks**: `#909090` ink, `#9ca3af` at ~55–62% opacity for frames. Chosen
   to read on both light and dark grounds, because several surfaces render
   inside `<img>` where the page theme cannot reach.
-- **The blue spark `#3b6ecc` is the AI's hand** — the only accent color on
-  any brand surface. It appears when the AI acts (the tidy phase of the
-  splash story, the spark on the OG card) and nowhere else. Do not use it
-  decoratively; its meaning is the point.
+- **The blue spark `#3b6ecc` is the AI's hand** — the only *accent* on any
+  brand surface. It appears when the AI acts (the tidy phase of the splash
+  story, the spark on the OG card). Do not use it decoratively; its meaning
+  is the point.
 - **Status colors** (favicon dot): green `#16a34a` saved / amber `#d97706`
   unsaved / blue `#3b6ecc` syncing / gray + **dashed frame** + faded mark =
-  offline. The dashed frame is the load-bearing metaphor: the frame is the
-  connection, and offline breaks it. Legible even at 16px.
+  offline. These are *state* colors, not accents; the syncing dot reuses
+  the spark's hue deliberately — "the system is at work" is the same
+  semantic family as the AI acting. The dashed frame is the load-bearing
+  metaphor: the frame is the connection, and offline breaks it. Legible
+  even at 16px.
 
-In-app state colors are governed by DESIGN.md; the favicon mirrors the
-header's own signals (`useDirtyState`, sync status) so tab and header never
-disagree.
+In-app chrome state colors are DESIGN.md's domain and use a different
+palette (emerald/amber on the connection chip — picked against chrome
+surfaces, not a 16px tab strip). What the favicon mirrors is the header's
+*signals* (`useDirtyState`, sync status), never its exact colors, so tab
+and header always agree on state even where their palettes differ.
 
 ## Motion grammar
 
@@ -109,7 +114,7 @@ All commands run from `apps/web/`.
 | dynamic favicon | `src/lib/favicon.ts` (+ `src/hooks/useFavicon.ts`) | code; style user-selectable in Settings → Appearance |
 | `public/icon-192.png` / `icon-512.png` | `scripts/generate-pwa-icons.mjs` | `node scripts/generate-pwa-icons.mjs` |
 | `public/og-image.png` | `scripts/generate-og-image.mjs` | `node scripts/generate-og-image.mjs` |
-| README / docs screenshots | `src/docs-snapshots/*.docs-snapshot.test.tsx` + hand-authored `docs/assets/*.canvas` | `pnpm docs:snapshots` (run twice; commit the second run) |
+| README / docs screenshots | `src/docs-snapshots/**/*.docs-snapshot.test.tsx` + hand-authored `docs/assets/*.canvas` | `pnpm docs:snapshots` (run twice; commit the second run) |
 
 ## Contract tests (the grammar, pinned)
 
