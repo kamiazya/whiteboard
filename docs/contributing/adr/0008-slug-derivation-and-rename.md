@@ -125,14 +125,24 @@ read time. We already have Drive's projection layer.
 3. **Rename is allowed, and is wired to the existing implementation.**
    `_renameCanvasSlug` gets a route and a caller. Renaming changes one column;
    branches, versions, blobs and stored links are unaffected because they key
-   on ids. The cost is external links, which is handled by point 4 rather than
-   by forbidding rename.
+   on ids. An external URL carrying the old slug 404s, and that is accepted —
+   see point 4 for why it is not fixed in the same increment.
 
-4. **An old slug keeps resolving.** `deriveAliasHistoryRows` stops being a
-   stub: a rename records the retired slug, and a lookup that misses the live
-   slug falls back to alias history and responds with a redirect to the
-   current one. This is the piece that makes point 3 safe for URLs that have
-   already left the building.
+4. **The old-slug redirect lands with ADR-0007's convergence, not with
+   rename.** The two halves of the obvious wiring live in different stores.
+   `_renameCanvasSlug` writes `canvases.slug` in the **workspace/slug store**,
+   which is what serves `/canvas/:ws/:slug`. `deriveAliasHistoryRows` takes no
+   arguments and is called from `deriveWorkspaceIndexRows({ workspaceId, tree,
+   canvases })` — it derives from the **workspace tree**, and its rows land in
+   `workspaceIndexAliasHistory`, which no production code reads today. Un-stub
+   it and it records history for OpenCanvas documents while the URLs needing a
+   redirect are served by the other world; the redirect would find nothing.
+
+   Rather than add a retired-slug table to a store ADR-0007 plans to converge
+   away, rename ships first and stale URLs 404 until there is one world to
+   redirect within. This ADR does not decide the redirect's storage; it records
+   that the redirect is **not** free once rename exists, which the earlier
+   draft of this point implied.
 
 5. **Duplicate sibling segments are legal, and the derived ALIAS
    disambiguates them.** The tree stores whatever the merge produced; nothing
@@ -151,9 +161,18 @@ read time. We already have Drive's projection layer.
 
 ## Consequences
 
-- `deriveDisplaySlug` and its tests are deleted, and `BrowserLocalIndexPage`
-  stops passing a `secondary` — the prop is already optional, so the row
-  renders one line instead of two.
+- Deleting `deriveDisplaySlug` reaches further than the module and its two
+  test files. `BrowserLocalIndexPage` stops passing a `secondary` (the prop is
+  already optional, so the row renders one line instead of two);
+  `BrowserLocalIndexPage.test.tsx` pins `meeting-notes`/`trip-plan` and the
+  `notes`/`notes-2` collision and has to be rewritten; and
+  `docs/assets/browser-local-list.png` is generated from that page by a
+  `docs-snapshot` test, so the committed screenshot in the getting-started
+  tutorial shows the derived slugs and must be regenerated.
+- ADR-0007 point 3 gives the derived slug a forward-looking rationale — a
+  later promotion to real slugs "needs no re-derivation" — that point 1
+  removes. ADR-0007 gets an as-built addendum saying so, the same convention
+  ADR-0004 already uses.
 - Point 2 makes the browser-local list simpler, not richer. The information it
   would have shown does not exist yet: browser-local canvases are addressed by
   UUID and have no slug.
@@ -161,10 +180,15 @@ read time. We already have Drive's projection layer.
   routing around: `WorkspaceTopBar` still owns rename precisely because
   `DaemonCanvasPage` has no canvas row, and moving copy-URL and export down
   waits on canvas-name resolution being lifted out of that component.
-- Alias history stops being write-only, which also gives the
-  `workspaceIndex*` tables their first production consumer — ADR-0007 notes
-  they are write-only today and must not be described as a lookup path until
-  something reads them. This is that something.
+- `workspaceIndexAliasHistory` stays write-only. ADR-0007 records that the
+  `workspaceIndex*` tables have no reader and must not be described as a
+  lookup path until something reads them; point 4 declines to make this ADR
+  that something, so the note stands unchanged.
+- The daemon gallery's secondary line will show `untitled-N` under a
+  meaningful display name for every canvas renamed by display name. That is
+  honest — it *is* the address — and it is the intended reading order: the
+  name carries meaning, the slug becomes visible only as the thing you can
+  paste into a URL. Point 3 is what keeps it from being permanent.
 - Point 5 adds no write path at all, which is the point: an earlier draft
   reconciled duplicates by mutating the tree on load, and a document rewritten
   on read is a class this codebase has rightly avoided. Deriving instead keeps
@@ -198,7 +222,15 @@ project, not a clause in this ADR.
 **Keep rename closed and rely on display names.** This is the status quo, and
 it is defensible only while renaming looks expensive. The measurement above
 removes that premise: the implementation exists, the internals are id-keyed,
-and only external URLs are exposed — which point 4 addresses directly.
+and only external URLs are exposed.
+
+**Add a retired-slug record to the workspace/slug store so rename never breaks
+a URL.** Rejected as sequencing, not as design: it would put a new table and a
+migration into the store ADR-0007 plans to converge away, to serve a redirect
+that has to be rebuilt on the other side afterwards. Point 4 takes the 404 in
+the interim instead. If rename turns out to be used often enough that stale
+URLs become a real complaint before convergence lands, this is the answer to
+revisit first.
 
 **Enforce sibling uniqueness by rejecting the merge.** Not possible: a CRDT
 merge is not an operation anyone can decline.
