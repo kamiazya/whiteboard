@@ -17,21 +17,10 @@ import {
  * screenshot diff in the browser project.
  */
 
-// listItem/tableRow are not top-level SceneNode kinds (they nest inside
-// list/table), so `node.kind` can never equal them here — omitted rather
-// than widened to a type Set<SceneNode['kind']> can't hold.
-const TEXT_BEARING_KINDS = new Set<SceneNode['kind']>([
-  'textRun',
-  'heading',
-  'paragraph',
-  'list',
-  'table',
-  'codeBlock',
-  'rawHtml',
-  'unresolvedReference',
-  'embedPlaceholder',
-  'embedResolved',
-])
+// Allowlist, not a denylist of text-bearing kinds: 'edge' and 'shape' are
+// the only kinds that carry no text (or text-bearing children), so anything
+// else — including a future fixture edit — fails loudly here.
+const GEOMETRY_ONLY_KINDS: readonly SceneNode['kind'][] = ['edge', 'shape']
 
 function collectCoordinates(node: SceneNode): number[] {
   switch (node.kind) {
@@ -46,9 +35,8 @@ function collectCoordinates(node: SceneNode): number[] {
       return numbers
     }
     default:
-      // Only 'edge'/'shape' are used today; the text-free assertion below
-      // already fails a fixture that introduces any other kind, so this
-      // stays total rather than growing a case per kind.
+      // Unreachable for committed fixtures — the allowlist test above
+      // rejects any kind but 'edge'/'shape' before this matters.
       return []
   }
 }
@@ -61,9 +49,9 @@ const SCENES: readonly (readonly [string, () => Scene])[] = [
 ]
 
 describe('pixel-golden fixtures stay text-free and integer-aligned', () => {
-  it.each(SCENES)('%s has no text-bearing scene node', (_name, build) => {
+  it.each(SCENES)('%s contains only geometry-only node kinds', (_name, build) => {
     for (const node of build().nodes) {
-      expect(TEXT_BEARING_KINDS.has(node.kind)).toBe(false)
+      expect(GEOMETRY_ONLY_KINDS).toContain(node.kind)
     }
   })
 
