@@ -21,11 +21,14 @@
 import type {
   CanvasColor,
   CanvasEdge,
+  ClipboardFragment,
   EdgeRoutingStyle,
   LineJumps,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
+import type { Point } from './viewport.js'
 
 export type EditorLeafCommand =
   | { readonly kind: 'move-node'; readonly id: string; readonly x: number; readonly y: number }
@@ -587,4 +590,51 @@ function reorderNodes(
   // anything move" (and undo history stays free of empty steps).
   if (next.every((node, index) => node === canvas.nodes[index])) return canvas
   return { ...canvas, nodes: next }
+}
+
+/** Standard duplicate-again cascade offset — also `pasteFragment`'s
+ * fallback when it is given no anchor point. */
+const DUPLICATE_OFFSET_PX = 16
+
+/**
+ * The shared core of `pasteFragment` and `duplicateSelection`: remint a
+ * fragment's ids against `canvas`'s existing ones, then batch it in as
+ * `create-node`/`create-edge`, offset either by the standard +16/+16
+ * duplicate cascade (no anchor) or so its bounding-box center lands on
+ * `anchor` (rounded) — the "Paste here" placement. Undefined for an
+ * empty-node fragment, matching every other command builder's totality
+ * contract: nothing to insert is nothing to command.
+ */
+export function buildFragmentInsertCommand(
+  canvas: SpatialCanvas,
+  fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+  createId: () => string,
+  anchor?: Point,
+): EditorCommand | undefined {
+  if (fragment.nodes.length === 0) return undefined
+  const existingIds = new Set([
+    ...canvas.nodes.map((node) => node.id),
+    ...canvas.edges.map((edge) => edge.id),
+  ])
+  const reminted = remintClipboardFragment(fragment, createId, existingIds)
+  let dx = DUPLICATE_OFFSET_PX
+  let dy = DUPLICATE_OFFSET_PX
+  if (anchor !== undefined) {
+    const minX = Math.min(...reminted.nodes.map((node) => node.x))
+    const minY = Math.min(...reminted.nodes.map((node) => node.y))
+    const maxX = Math.max(...reminted.nodes.map((node) => node.x + node.width))
+    const maxY = Math.max(...reminted.nodes.map((node) => node.y + node.height))
+    dx = Math.round(anchor.x - (minX + maxX) / 2)
+    dy = Math.round(anchor.y - (minY + maxY) / 2)
+  }
+  return {
+    kind: 'batch',
+    commands: [
+      ...reminted.nodes.map(
+        (node) =>
+          ({ kind: 'create-node', node: { ...node, x: node.x + dx, y: node.y + dy } }) as const,
+      ),
+      ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
+    ],
+  }
 }

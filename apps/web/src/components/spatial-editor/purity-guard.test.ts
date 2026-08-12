@@ -3,11 +3,22 @@ import { describe, expect, it } from 'vitest'
 const modules = import.meta.glob('./**/*.{ts,tsx}', { query: '?raw', import: 'default' })
 
 // The theme threading in editor-appearance.ts/scene-render.ts must stay a
-// pure function of its `theme` argument — no ambient DOM read. Scoped to
-// exactly these two files (not the whole directory) so a rename or a new
-// file silently falling out of the scan is caught by the explicit-path
-// assertion below, rather than the guard quietly covering zero files.
-const SCANNED_PATHS = ['./editor-appearance.ts', './scene-render.ts']
+// pure function of its `theme` argument — no ambient DOM read. viewport.ts
+// and node-factories.ts join for the same reason (pan/zoom math and node
+// construction must never read a global) — commands.ts does NOT join: its
+// existing prose ("...at another document. A stale subpath...") trips the
+// `document.`-tripwire below on a sentence boundary, not a real impurity,
+// and loosening the regex to admit it would weaken the guard for every
+// other file. Scoped to exactly this list (not the whole directory) so a
+// rename or a new file silently falling out of the scan is caught by the
+// explicit-path assertion below, rather than the guard quietly covering
+// zero files.
+const SCANNED_PATHS = [
+  './editor-appearance.ts',
+  './scene-render.ts',
+  './viewport.ts',
+  './node-factories.ts',
+]
 
 describe('theme resolver purity (no ambient DOM read)', () => {
   it('scans exactly the expected files', () => {
@@ -24,6 +35,24 @@ describe('theme resolver purity (no ambient DOM read)', () => {
       expect(source).not.toMatch(/\bdocument\./)
       expect(source).not.toMatch(/\bmatchMedia\(/)
       expect(source).not.toMatch(/\bnavigator\./)
+    })
+
+    // Id minting stays injected (a `createId` argument) precisely so a pure
+    // module never needs an ambient id source — these two catch a
+    // regression mechanically instead of relying on review. React
+    // imports/hooks are the other ambient-state door a "pure" module could
+    // sneak through (closing over component state via a hook).
+    it(`${path} imports no React and calls no React hook`, async () => {
+      const loader = modules[path]
+      const source = (await loader?.()) as string
+      expect(source).not.toMatch(/\bfrom ['"]react['"]/)
+      expect(source).not.toMatch(/\buse(State|Ref|Effect|Callback|Memo)\(/)
+    })
+
+    it(`${path} references no ambient crypto`, async () => {
+      const loader = modules[path]
+      const source = (await loader?.()) as string
+      expect(source).not.toMatch(/\bcrypto\./)
     })
   }
 

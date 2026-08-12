@@ -49,8 +49,8 @@ import {
 import type { MutableRefObject } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { hasClipboardFragment } from '../../lib/clipboard-store.js'
-import type { AlignableBox, BoxMove } from './align.js'
-import { alignBoxes, distributeBoxes } from './align.js'
+import type { BoxMove } from './align.js'
+import { alignableBoxesOf, alignBoxes, distributeBoxes } from './align.js'
 import type { FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
@@ -89,7 +89,6 @@ export interface CanvasContextMenuProps {
   readonly applyResult: (result: GestureResult) => void
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
-  readonly edgeLockEnabled: boolean
   readonly setEdgeLabelEditId: (id: string | null) => void
   readonly setSelectedEdgeId: (id: string | null) => void
   readonly setGroupLabelEditId: (id: string | null) => void
@@ -104,10 +103,8 @@ export interface CanvasContextMenuProps {
   readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
   readonly pendingBackgroundGroupIdRef: MutableRefObject<string | null>
   readonly isLocked: (nodeId: string) => boolean
-  readonly lockEnabled: boolean
   readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
   readonly applyBoxMoves: (moves: readonly BoxMove[]) => boolean
-  readonly selectedAlignableBoxes: () => AlignableBox[]
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
   readonly groupSelection: (memberIds: readonly string[]) => void
@@ -130,7 +127,6 @@ export function CanvasContextMenu({
   applyResult,
   isEdgeLocked,
   onToggleEdgeLock,
-  edgeLockEnabled,
   setEdgeLabelEditId,
   setSelectedEdgeId,
   setGroupLabelEditId,
@@ -145,10 +141,8 @@ export function CanvasContextMenu({
   imageInputRef,
   pendingBackgroundGroupIdRef,
   isLocked,
-  lockEnabled,
   onToggleNodeLock,
   applyBoxMoves,
-  selectedAlignableBoxes,
   extraIds,
   selectedId,
   groupSelection,
@@ -160,6 +154,15 @@ export function CanvasContextMenu({
   duplicateSelection,
   reorderSelection,
 }: CanvasContextMenuProps) {
+  // Both derive from whether the host wired the matching toggle callback —
+  // without one, the menu has nothing to call, so the affordance stays
+  // hidden rather than offering a lock that can never be released.
+  const lockEnabled = onToggleNodeLock !== undefined
+  const edgeLockEnabled = onToggleEdgeLock !== undefined
+  // Read from canvasRef (not the `canvas` prop) so a menu action never
+  // computes against a stale render closure.
+  const selectedAlignableBoxes = () =>
+    alignableBoxesOf(canvasRef.current.nodes, selectedId === null ? [] : [selectedId, ...extraIds])
   return (
     <ContextMenu
       x={contextMenu.x}

@@ -20,6 +20,31 @@ export interface AlignableBox {
   readonly height: number
 }
 
+interface PositionedNode {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * The alignable boxes for a selection: every node in `nodes` whose id is in
+ * `memberIds`, in canvas order. Pure projection so a caller (the context
+ * menu) can derive its align/distribute input from a canvas + selection ids
+ * it already holds, instead of needing a bound closure passed down as a
+ * prop.
+ */
+export function alignableBoxesOf(
+  nodes: readonly PositionedNode[],
+  memberIds: readonly string[],
+): AlignableBox[] {
+  const ids = new Set(memberIds)
+  return nodes
+    .filter((node) => ids.has(node.id))
+    .map(({ id, x, y, width, height }) => ({ id, x, y, width, height }))
+}
+
 export interface BoxMove {
   readonly id: string
   readonly x: number
