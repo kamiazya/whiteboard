@@ -1,6 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
-import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
+import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
 
 type Side = 'top' | 'right' | 'bottom' | 'left'
 type Point = { readonly x: number; readonly y: number }
@@ -628,51 +628,18 @@ function lessCost(a: ConfigCost, b: ConfigCost): boolean {
  * of the cost entirely, governed by the per-edge pair ranking.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
-  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  // Sums the SHARED narrow phase over every segment pair — the same
+  // function the initial sweep calls, so the incremental trial path and
+  // the broad-phase build cannot drift (see edge-crossing-sweep.ts).
   let overlap = 0
   let illegible = 0
   let crossings = 0
-  const clearance = EDGE_JUMP_RADIUS_PX + 1
   for (let ai = 1; ai < a.length; ai++) {
-    const a1 = a[ai - 1]!
-    const a2 = a[ai]!
     for (let bi = 1; bi < b.length; bi++) {
-      const b1 = b[bi - 1]!
-      const b2 = b[bi]!
-      // Collinear axis-aligned overlap.
-      if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
-        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
-        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
-        if (hi > lo) overlap += hi - lo
-        continue
-      }
-      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
-        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
-        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
-        if (hi > lo) overlap += hi - lo
-        continue
-      }
-      // Proper transversal crossing.
-      const dax = a2.x - a1.x
-      const day = a2.y - a1.y
-      const dbx = b2.x - b1.x
-      const dby = b2.y - b1.y
-      const denom = dax * dby - day * dbx
-      if (denom === 0) continue
-      const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom
-      const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
-      if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue
-      crossings++
-      const lenA = Math.hypot(dax, day)
-      const lenB = Math.hypot(dbx, dby)
-      if (
-        t * lenA < clearance ||
-        (1 - t) * lenA < clearance ||
-        u * lenB < clearance ||
-        (1 - u) * lenB < clearance
-      ) {
-        illegible++
-      }
+      const [o, il, c] = scoreSegmentPair(a[ai - 1]!, a[ai]!, b[bi - 1]!, b[bi]!)
+      overlap += o
+      illegible += il
+      crossings += c
     }
   }
   return [overlap, illegible, crossings, 0]
@@ -734,18 +701,25 @@ function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
 }
 
 /**
- * Edge-count gate for the improvement pass. Trials evaluate incrementally
- * (only changed-anchor edges re-route; the pairwise matrix is patched),
- * but the initial matrix build is O(E^2) segment pairs and a committed
- * render pays the loop on every edit, so the bound keeps worst-case work
- * small (~24ms at the gate on a dev machine; the live-drag overlay pays
- * it only once per travel step — see the editor's carried-side cache —
- * and skips it on cached frames via a full override map). ponytail: a
- * sweepline pair scan is the
- * next rung if this gate ever needs raising.
+ * Hard edge-count gate for the improvement pass. The initial matrix build
+ * is a sweep-and-prune (edge-crossing-sweep.ts, ~3ms at 200 edges); the
+ * remaining cost is the TRIAL loop, bounded above FULL_OPT_MAX_EDGES by
+ * trying candidates only for the worst-offending edges (pathological
+ * 200-edge canvases: ~150-200ms per committed layout on a dev machine —
+ * paid only while the canvas actually has crossings/overlap, and never on
+ * live-drag cached frames via the editor's carried-side cache). ponytail:
+ * trial-loop incrementalization (persist the matrix across edits instead
+ * of rebuilding per layout) is the next rung if this gate ever needs
+ * raising further.
  */
-const CROSSING_OPT_MAX_EDGES = 40
+const CROSSING_OPT_MAX_EDGES = 200
 const CROSSING_OPT_MAX_PASSES = 2
+/** At or under this many edges, every edge tries candidates (the exact
+ * pre-sweep behavior); above it, only the worst offenders do. */
+const FULL_OPT_MAX_EDGES = 40
+/** How many worst-offender edges try candidates per pass above the full
+ * size — the knob that bounds trial cost at any canvas size. */
+const TRIAL_BUDGET_EDGES = 16
 
 /**
  * Bounded global improvement over per-edge side choices: iterate edges in
@@ -796,12 +770,14 @@ function optimizeSideChoices(
   const selfCosts: ConfigCost[] = paths.map((path, i) => selfScore(path, foreignBodiesFor[i]!))
   let currentCost: ConfigCost = [0, 0, 0, 0]
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
-  for (let i = 0; i < edges.length; i++) {
-    for (let j = i + 1; j < edges.length; j++) {
-      const score = pairScore(paths[i]!, paths[j]!)
-      matrix.set(pairKey(i, j), score)
-      currentCost = addCost(currentCost, score, 1)
-    }
+  // Sweep-and-prune instead of the O(E^2) double loop: identical scores
+  // by construction (same narrow phase, canonical pair order), sparse for
+  // non-interacting pairs — evaluateTrial already zero-defaults absent
+  // keys.
+  for (const [key, [o, il, c]] of buildPairwiseScores(paths)) {
+    const score: ConfigCost = [o, il, c, 0]
+    matrix.set(key, score)
+    currentCost = addCost(currentCost, score, 1)
   }
   // The bend term (index 3) is deliberately ABSENT from the short-circuit:
   // a canvas with no overlap and no crossings is healthy, and reshuffling
@@ -896,9 +872,39 @@ function optimizeSideChoices(
       })
   }
 
+  // Above the full-optimization size, each pass tries candidates only for
+  // the WORST OFFENDERS — the edges contributing the most cost right now —
+  // so trial work stays bounded at any canvas size while the edges that
+  // actually look bad still improve. At or under the full size every edge
+  // iterates in document order, bit-identical to the unbounded loop.
+  const trialEdgesForPass = (): readonly CanvasEdge[] => {
+    if (edges.length <= FULL_OPT_MAX_EDGES) return edges
+    const contribution = (i: number): ConfigCost => {
+      let cost = selfCosts[i]!
+      for (let j = 0; j < edges.length; j++) {
+        if (j === i) continue
+        const [lo, hi] = i < j ? [i, j] : [j, i]
+        const pair = matrix.get(pairKey(lo, hi))
+        if (pair !== undefined) cost = addCost(cost, pair, 1)
+      }
+      return cost
+    }
+    const ranked = edges
+      .map((edge, i) => ({ edge, i, cost: contribution(i) }))
+      // An edge with no overlap, no illegibility, and no crossings has
+      // nothing to repair — reshuffling it to shave bends is churn, the
+      // same judgement the whole-config short-circuit makes.
+      .filter((r) => r.cost[0] > 0 || r.cost[1] > 0 || r.cost[2] > 0)
+      .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
+      .slice(0, TRIAL_BUDGET_EDGES)
+      // Document order within the budget keeps adoption sequencing stable.
+      .sort((a, b) => a.i - b.i)
+    return ranked.map((r) => r.edge)
+  }
+
   for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
     let improved = false
-    for (const edge of edges) {
+    for (const edge of trialEdgesForPass()) {
       if (locked?.has(edge.id)) continue
       const chosen = current.get(edge.id)
       if (chosen === undefined) continue

@@ -160,9 +160,24 @@ describe('optimization gate', () => {
     return { nodes, edges }
   }
 
-  it('past the edge-count gate the pass is skipped and the crossing persists', () => {
+  it('above the full-optimization size the worst offenders still get fixed', () => {
+    // 41 edges used to fall off a cliff (no optimization at all); the
+    // bounded pass now tries candidates for the highest-cost edges, so
+    // the one crossing pair — the worst offenders by construction —
+    // resolves exactly as it would on a small canvas.
     const base = crossingPair()
-    const pad = padding(39) // 2 + 39 = 41 > 40
+    const pad = padding(39) // 2 + 39 = 41 > FULL_OPT_MAX_EDGES
+    const nodes = [...base.nodes, ...pad.nodes]
+    const edges = [...base.edges, ...pad.edges]
+    const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+    const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
+    const red = routeEdge(nodes, edges[1]!, 'orthogonal', anchors.get('e-red'))
+    expect(crossings(orange.path, red.path)).toBe(0)
+  })
+
+  it('past the hard gate the pass is skipped and the crossing persists', () => {
+    const base = crossingPair()
+    const pad = padding(199) // 2 + 199 = 201 > 200
     const nodes = [...base.nodes, ...pad.nodes]
     const edges = [...base.edges, ...pad.edges]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
