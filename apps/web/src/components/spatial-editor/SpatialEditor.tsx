@@ -753,9 +753,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
       const nodes = canvas.nodes.filter((n) => carried.has(n.id))
       if (nodes.length === 0) return undefined
+      // Same embed options as the committed scene: a ghost that drops an
+      // expanded miniature back to a bare card mid-drag reads as data loss.
       const rendered = renderCanvasToSvg(
         { nodes, edges: [] },
-        { measure: resolvedMeasure, theme, resolveFileLabel, resolveFileImage },
+        {
+          measure: resolvedMeasure,
+          theme,
+          resolveFileLabel,
+          resolveFileCanvas,
+          expandFileNode,
+          resolveFileImage,
+        },
       )
       return {
         svg: rendered.svg,
@@ -772,6 +781,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       resolvedMeasure,
       theme,
       resolveFileLabel,
+      resolveFileCanvas,
+      expandFileNode,
       resolveFileImage,
     ])
 
