@@ -2,12 +2,34 @@ import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  type RenderOptions,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import type { ReactElement, ReactNode } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
+
+function MemoryRouterWrapper({ children }: { children: ReactNode }) {
+  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
+}
+
+// The page now reads useNavigate (Settings navigation), so every render
+// needs a Router ancestor. Using RTL's `wrapper` option (rather than hand-
+// wrapping the element) keeps this file's `rerender(...)` calls under the
+// same Router too — RTL re-applies `wrapper` on every rerender.
+function render(ui: ReactElement, options?: RenderOptions) {
+  return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
+}
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()

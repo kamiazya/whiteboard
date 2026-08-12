@@ -27,6 +27,12 @@ const PairConsentPage = lazy(() =>
   import('./pages/PairConsentPage.js').then((m) => ({ default: m.PairConsentPage })),
 )
 
+// Lazy for the same reason as the other secondary surfaces above: /settings
+// is a rare, dedicated navigation (not part of the canvas critical path).
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage.js').then((m) => ({ default: m.SettingsPage })),
+)
+
 import {
   browserLocalCanvasPath,
   type DaemonRoute,
@@ -34,6 +40,7 @@ import {
   isKnownAppPath,
   parseBrowserLocalRoute,
   parseDaemonRoute,
+  parseSettingsRoute,
 } from './lib/app-routes.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import {
@@ -240,6 +247,9 @@ export function App({ providerState }: AppProps) {
     // rewriting it to the daemon path would yank an open browser-local
     // editor back to the list.
     if (parseBrowserLocalRoute(location.pathname) !== null) return
+    // /settings is its own top-level surface, not a daemonView — without
+    // this the sync effect below would immediately rewrite it to '/'.
+    if (parseSettingsRoute(location.pathname) !== null) return
     // An unknown path is the not-found page's to keep: rewriting it to the
     // daemon route would swallow the 404 into a silent redirect.
     if (!isKnownAppPath(location.pathname)) return
@@ -324,6 +334,28 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grantConnection?.status])
 
+  // /settings renders on its own route ahead of (and independent from) the
+  // daemon/browser-local branch below, so its daemon connection needs
+  // resolving here rather than reusing a `payload`/`effectiveState` local
+  // that only exists inside one of those branches' own scope.
+  const grantPairedForSettings = grantConnection?.status === 'paired' ? grantConnection : null
+  const providerStateForSettings = providerState ?? defaultProviderState
+  const settingsDaemon: { baseUrl: string; token: string | null } | undefined = forcedBrowserLocal
+    ? undefined
+    : daemonConnection.status === 'paired'
+      ? {
+          baseUrl: daemonConnection.payload.baseUrl,
+          token:
+            daemonConnection.payload.authMode === 'bootstrap'
+              ? (daemonConnection.payload.bootstrapToken ?? null)
+              : null,
+        }
+      : grantPairedForSettings !== null
+        ? { baseUrl: grantPairedForSettings.daemonBaseUrl, token: grantPairedForSettings.token }
+        : providerStateForSettings.kind === 'local-daemon'
+          ? { baseUrl: providerStateForSettings.daemonBaseUrl, token: daemonToken ?? null }
+          : undefined
+
   // The daemon-served /pair consent page (pairing-grant flow) — rendered
   // in place of every other view; approving needs the R3-injected token.
   if (isPairRoute) {
@@ -348,6 +380,18 @@ export function App({ providerState }: AppProps) {
           </Suspense>
         </ErrorBoundary>
       </div>
+    )
+  }
+
+  if (parseSettingsRoute(location.pathname) !== null) {
+    return (
+      <ErrorBoundary>
+        <div className="h-dvh">
+          <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
+            <SettingsPage daemon={settingsDaemon} />
+          </Suspense>
+        </div>
+      </ErrorBoundary>
     )
   }
 
