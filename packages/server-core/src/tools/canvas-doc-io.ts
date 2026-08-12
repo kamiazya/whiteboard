@@ -19,7 +19,7 @@ export interface LoadedCanvasDoc {
 }
 
 /**
- * Loads a canvas doc for patching. Unlike `facet_set` (which tolerates a
+ * Loads a canvas doc for patching. Unlike `wb_wb_facet_set` (which tolerates a
  * missing doc — facets can be set on a brand-new canvas), a patch targets
  * an *existing* element by id, so there is nothing sensible to patch in a
  * doc that has never been saved. This deliberately throws instead of
@@ -40,7 +40,7 @@ export async function loadCanvasDoc(
 
 /**
  * Loads an existing canvas doc or creates a fresh one when no snapshot
- * exists yet. Used by `facet_set` where setting facets on a never-saved
+ * exists yet. Used by `wb_wb_facet_set` where setting facets on a never-saved
  * canvas is valid (unlike spatial patch tools, which require an existing
  * element to target).
  */
@@ -59,7 +59,7 @@ export async function loadOrCreateCanvasDoc(
 
 /**
  * Exports the LoroDoc as a chunked snapshot and persists it. Shared by
- * `saveCanvasDoc` (spatial patch tools) and `facet_set` (facet-only
+ * `saveCanvasDoc` (spatial patch tools) and `wb_wb_facet_set` (facet-only
  * mutations) so the chunk+save logic lives in one place.
  */
 export async function saveDocSnapshot(

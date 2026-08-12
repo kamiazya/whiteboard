@@ -493,9 +493,9 @@ describe('createApp daemon mutation auth', () => {
 
     await client.connect(transport)
     const tools = await client.listTools()
-    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_canvas_create')
+    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_document_create')
     const createResult = await client.callTool({
-      name: 'wb_canvas_create',
+      name: 'wb_document_create',
       arguments: { workspaceId: 'default', segment: 'via-mcp', createWorkspace: true },
     })
 
@@ -537,9 +537,9 @@ describe('createApp daemon mutation auth', () => {
     await client.connect(transport)
     expect(client.getProtocolEra()).toBe('modern')
     const tools = await client.listTools()
-    expect(tools.tools.some((tool) => tool.name === 'wb_canvas_create')).toBe(true)
+    expect(tools.tools.some((tool) => tool.name === 'wb_document_create')).toBe(true)
     const createResult = await client.callTool({
-      name: 'wb_canvas_create',
+      name: 'wb_document_create',
       arguments: { workspaceId: 'default', segment: 'via-modern-mcp', createWorkspace: true },
     })
     expect(createResult.structuredContent).toMatchObject({

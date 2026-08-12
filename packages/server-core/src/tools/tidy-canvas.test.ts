@@ -45,7 +45,7 @@ const box = (id: string, x: number, y: number) => ({
   text: id,
 })
 
-describe('tidy_canvas tool', () => {
+describe('wb_canvas_tidy tool', () => {
   test('tidies the whole canvas and persists the moved nodes', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     // A rough row: y 101/118/95 all sit within one band of the topmost

@@ -25,7 +25,7 @@ export type VersionListOutput = z.infer<typeof versionListOutputSchema>
 
 export function createVersionListTool(deps: ServerDeps) {
   return {
-    name: 'version_list' as const,
+    name: 'wb_wb_version_list' as const,
     inputSchema: versionListInputSchema,
     outputSchema: versionListOutputSchema,
     async execute(input: VersionListInput): Promise<VersionListOutput> {

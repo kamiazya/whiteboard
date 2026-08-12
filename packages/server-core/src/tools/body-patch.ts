@@ -77,7 +77,7 @@ function spliceLines(text: string, range: BodyPatchRange): string {
 
 export function createBodyPatchTool(deps: ServerDeps) {
   return {
-    name: 'body_patch' as const,
+    name: 'wb_wb_body_patch' as const,
     inputSchema: bodyPatchInputSchema,
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {

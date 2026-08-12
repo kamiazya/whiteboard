@@ -192,11 +192,11 @@ describe('WorkspaceTopBar browser mode', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('does not dispatch excalidraw:version_saved when POST /versions returns invalid schema', async () => {
+  it('does not dispatch excalidraw:wb_version_saved when POST /versions returns invalid schema', async () => {
     // The default beforeEach mock returns { ok: true } for POST /versions,
     // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
 
     renderTopBar()
 
@@ -221,10 +221,10 @@ describe('WorkspaceTopBar browser mode', () => {
 
     expect(versionSavedFired).not.toHaveBeenCalled()
 
-    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
+    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
-  it('dispatches excalidraw:version_saved with {workspaceId, slug} on a schema-conforming save, clearing the useDirtyState-driven HeaderSaveDot', async () => {
+  it('dispatches excalidraw:wb_version_saved with {workspaceId, slug} on a schema-conforming save, clearing the useDirtyState-driven HeaderSaveDot', async () => {
     // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
       const url =
@@ -243,7 +243,7 @@ describe('WorkspaceTopBar browser mode', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
 
     renderTopBar()
 
@@ -272,12 +272,12 @@ describe('WorkspaceTopBar browser mode', () => {
       expect(event.detail).toEqual({ workspaceId: 'sess_1', slug: 'design/login-flow' })
     })
 
-    // The dirty dot clears once useDirtyState observes the matching version_saved event.
+    // The dirty dot clears once useDirtyState observes the matching wb_version_saved event.
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /save/i })).toBeNull()
     })
 
-    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
+    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
   it('issues PUT /versions/:id/thumbnail after a valid save when getThumbnailBlob returns a Blob', async () => {
@@ -344,18 +344,18 @@ describe('WorkspaceTopBar browser mode', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
 
     renderTopBar({ getThumbnailBlob })
 
     fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
 
-    // The version_saved event must still fire even when the thumbnail upload rejects.
+    // The wb_version_saved event must still fire even when the thumbnail upload rejects.
     await waitFor(() => {
       expect(versionSavedFired).toHaveBeenCalledTimes(1)
     })
 
-    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
+    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
   // RED-first: the ~400px collapse is a new UX decision, not part of the

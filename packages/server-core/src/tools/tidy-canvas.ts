@@ -35,7 +35,7 @@ export type TidyCanvasOutput = z.infer<typeof tidyCanvasOutputSchema>
 
 export function createTidyCanvasTool(deps: ServerDeps) {
   return {
-    name: 'tidy_canvas' as const,
+    name: 'wb_canvas_tidy' as const,
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {

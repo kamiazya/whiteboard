@@ -36,7 +36,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('node_patch tool', () => {
+describe('wb_node_patch tool', () => {
   test('patches x/y/width/height/color on a text node and persists the change', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore, {

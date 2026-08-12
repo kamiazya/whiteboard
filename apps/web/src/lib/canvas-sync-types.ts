@@ -32,7 +32,7 @@ export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 // slice's scope, so changing the constant's NAME here must never change its
 // VALUE.
 export const CANVAS_SYNC_DOC_CHANGED_EVENT = 'excalidraw:doc_changed'
-export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:version_saved'
+export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:wb_version_saved'
 
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useCanvasSync (see there) so passing a fresh inline object on every render
@@ -53,7 +53,7 @@ export interface UseCanvasSyncOptions {
   onAuthError?: () => void
   // When set, drives the window-event contract that useDirtyState/HeaderSaveDot
   // listen for: 'excalidraw:doc_changed' on local/remote doc edits and
-  // 'excalidraw:version_saved' on a version_created broadcast. Read via
+  // 'excalidraw:wb_version_saved' on a version_created broadcast. Read via
   // optionsRef (never in the connect effect's dep array) so passing a fresh
   // identity object every render never forces a reconnect. Only dispatched
   // when both fields are present — a browser-local caller that never sets

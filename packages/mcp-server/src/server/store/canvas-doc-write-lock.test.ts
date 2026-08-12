@@ -216,7 +216,7 @@ describe('registered MCP handlers', () => {
     }
 
     const handlers = registeredHandlers(deps)
-    const nodePatch = handlers.get('node_patch')!
+    const nodePatch = handlers.get('wb_wb_node_patch')!
     await Promise.all([
       nodePatch(
         { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
@@ -254,11 +254,11 @@ describe('registered MCP handlers', () => {
       return save(input)
     }
 
-    const writing = handlers.get('node_patch')!(
+    const writing = handlers.get('wb_wb_node_patch')!(
       { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
       {},
     )
-    const read = await handlers.get('canvas_digest')!(
+    const read = await handlers.get('wb_scene_digest')!(
       { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID },
       {},
     )

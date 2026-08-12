@@ -51,7 +51,7 @@ async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySe
   return readEdgeLocks(doc)
 }
 
-describe('edge_lock tool', () => {
+describe('wb_edge_lock tool', () => {
   test('locks an edge and persists it, then unlocks it again', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore)

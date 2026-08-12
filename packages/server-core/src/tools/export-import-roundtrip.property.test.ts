@@ -83,7 +83,7 @@ async function setupTools() {
   }
 }
 
-describe('canvas_import_okf -> canvas_export_okf round-trip property', () => {
+describe('wb_document_set -> canvas_export_okf round-trip property', () => {
   fcTest.prop([okfDocumentArbitrary], withDefaults({ numRuns: 50 }))(
     'export(import(x)).frontmatter equals x.frontmatter up to canonical facet-key ordering, body verbatim',
     async (doc) => {

@@ -11,12 +11,12 @@ describe('createServer', () => {
     expect(app.fetch).toBeTypeOf('function')
   })
 
-  it('wires the facet_set tool', () => {
+  it('wires the wb_facet_set tool', () => {
     const { tools } = createServer({
       canvasDocStore: {} as never,
       blobStore: {} as never,
     })
-    expect(tools.facetSet.name).toBe('facet_set')
+    expect(tools.facetSet.name).toBe('wb_wb_facet_set')
     expect(tools.facetSet.execute).toBeTypeOf('function')
   })
 
@@ -27,8 +27,8 @@ describe('createServer', () => {
     })
 
     const expectations = [
-      { tool: tools.canvasRenderSvg, name: 'canvas_render_svg' },
-      { tool: tools.canvasDigest, name: 'canvas_digest' },
+      { tool: tools.canvasRenderSvg, name: 'wb_scene_render' },
+      { tool: tools.canvasDigest, name: 'wb_scene_digest' },
       { tool: tools.canvasExportOkf, name: 'canvas_export_okf' },
       { tool: tools.canvasExportJsonCanvas, name: 'canvas_export_json_canvas' },
     ]

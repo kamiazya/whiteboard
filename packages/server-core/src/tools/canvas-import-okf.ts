@@ -41,7 +41,7 @@ export class OkfParseError extends Error {
 
 export function createCanvasImportOkfTool(deps: ServerDeps) {
   return {
-    name: 'canvas_import_okf' as const,
+    name: 'wb_document_set' as const,
     inputSchema: canvasImportOkfInputSchema,
     outputSchema: canvasImportOkfOutputSchema,
     execute: async (input: CanvasImportOkfInput): Promise<CanvasImportOkfOutput> => {

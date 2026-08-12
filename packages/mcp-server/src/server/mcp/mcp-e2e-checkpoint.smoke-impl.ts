@@ -50,7 +50,7 @@ export function buildCheckpointChildEnv(
 }
 
 /**
- * Issues the first daemon-triggering tool call (wb_canvas_create), optionally
+ * Issues the first daemon-triggering tool call (wb_document_create), optionally
  * retried across bounded cold-start windows via retryDaemonStartup. Extracted
  * so the retry wiring is unit-testable against a fake callTool without spawning
  * a real MCP child process.
@@ -60,7 +60,7 @@ export function triggerDaemonCanvasCreate(
   options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
   const attempt = () =>
-    callTool('wb_canvas_create', {
+    callTool('wb_document_create', {
       workspaceId: WORKSPACE_ID,
       segment: 'e2e-src',
       createWorkspace: true,
@@ -213,9 +213,9 @@ export async function runE2eCheckpointSmoke({
     const toolsResult = (await rpc('tools/list', {})) as { tools: Array<{ name: string }> }
     const names = toolsResult.tools.map((t) => t.name)
     if (
-      !names.includes('version_save') ||
-      !names.includes('version_restore') ||
-      !names.includes('version_list')
+      !names.includes('wb_wb_version_save') ||
+      !names.includes('wb_wb_version_restore') ||
+      !names.includes('wb_wb_version_list')
     ) {
       throw new Error(`version tools missing from tools/list: ${names.join(', ')}`)
     }
@@ -241,7 +241,7 @@ export async function runE2eCheckpointSmoke({
       }
     }
 
-    // wb_canvas_create is the first daemon-dependent RPC, so its failure mode is
+    // wb_document_create is the first daemon-dependent RPC, so its failure mode is
     // the daemon cold-starting under contention. Retrying is opt-in: only the
     // tarball smoke (no fixed vitest testTimeout) enables it.
     const created = await triggerDaemonCanvasCreate(callTool, {
@@ -249,24 +249,24 @@ export async function runE2eCheckpointSmoke({
       maxDaemonStartupRetries,
     })
     if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
-      throw new Error(`wb_canvas_create returned unexpected shape: ${JSON.stringify(created)}`)
+      throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
     }
     const canvasId = created.canvasId
-    console.log(`[e2e] wb_canvas_create → ${canvasId}`)
+    console.log(`[e2e] wb_document_create → ${canvasId}`)
 
-    // facet_set seeds extension-facet state on the created canvas so the version
+    // wb_facet_set seeds extension-facet state on the created canvas so the version
     // saved below has content to round-trip through restore.
-    const facets = await callTool('facet_set', {
+    const facets = await callTool('wb_wb_facet_set', {
       workspaceId: WORKSPACE_ID,
       canvasId,
       facets: { 'e2e/1': { note: 'before-save' } },
     })
     if (facets.canvasId !== canvasId) {
-      throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
+      throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
     }
-    console.log('[e2e] facet_set → seeded canvas state')
+    console.log('[e2e] wb_facet_set → seeded canvas state')
 
-    const saved = await callTool('version_save', {
+    const saved = await callTool('wb_wb_version_save', {
       canvasId,
       label: 'e2e-version-1',
     })
@@ -277,21 +277,21 @@ export async function runE2eCheckpointSmoke({
       !saved.timestamp ||
       !saved.frontier
     ) {
-      throw new Error(`version_save returned unexpected shape: ${JSON.stringify(saved)}`)
+      throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
     }
-    console.log(`[e2e] version_save → ${saved.versionId}`)
+    console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
-    const versions = await callTool('version_list', { canvasId })
+    const versions = await callTool('wb_wb_version_list', { canvasId })
     if (versions.canvasId !== canvasId || !Array.isArray(versions.versions)) {
-      throw new Error(`version_list returned unexpected shape: ${JSON.stringify(versions)}`)
+      throw new Error(`wb_version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
     const versionEntries = versions.versions as Array<{ versionId: string }>
     if (!versionEntries.some((v) => v.versionId === saved.versionId)) {
-      throw new Error(`version_list missing saved versionId: ${JSON.stringify(versions)}`)
+      throw new Error(`wb_version_list missing saved versionId: ${JSON.stringify(versions)}`)
     }
-    console.log(`[e2e] version_list → ${versionEntries.length} version(s)`)
+    console.log(`[e2e] wb_version_list → ${versionEntries.length} version(s)`)
 
-    const restored = await callTool('version_restore', {
+    const restored = await callTool('wb_wb_version_restore', {
       workspaceId: WORKSPACE_ID,
       canvasId,
       versionId: saved.versionId,
@@ -302,9 +302,9 @@ export async function runE2eCheckpointSmoke({
       restored.label !== saved.label ||
       restored.frontier !== saved.frontier
     ) {
-      throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
+      throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
     }
-    console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
+    console.log(`[e2e] wb_version_restore → ${restored.restoredVersionId}`)
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {

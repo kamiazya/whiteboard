@@ -12,14 +12,14 @@ export type { DirtyEventDetail }
 //
 // Implementation notes:
 //  useWhiteboardSync dispatches excalidraw:doc_changed whenever doc.subscribe observes a local or remote edit.
-//  When version_created arrives, it dispatches excalidraw:version_saved.
+//  When version_created arrives, it dispatches excalidraw:wb_version_saved.
 //  This hook filters those events by workspaceId/slug and tracks dirty vs clean counts.
 //  Passing the doc reference around would couple tests to Loro internals, so this stays event-based.
 
 export interface UseDirtyStateResult {
   isDirty: boolean
   // Call this when the UI needs to mark the document clean explicitly, such as right after Cmd+S succeeds.
-  // Most callers can rely on excalidraw:version_saved instead.
+  // Most callers can rely on excalidraw:wb_version_saved instead.
   markSaved: () => void
 }
 
@@ -50,10 +50,10 @@ export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateR
       setIsDirty(false)
     }
     window.addEventListener('excalidraw:doc_changed', onChanged)
-    window.addEventListener('excalidraw:version_saved', onSaved)
+    window.addEventListener('excalidraw:wb_version_saved', onSaved)
     return () => {
       window.removeEventListener('excalidraw:doc_changed', onChanged)
-      window.removeEventListener('excalidraw:version_saved', onSaved)
+      window.removeEventListener('excalidraw:wb_version_saved', onSaved)
     }
   }, [workspaceId, slug])
 

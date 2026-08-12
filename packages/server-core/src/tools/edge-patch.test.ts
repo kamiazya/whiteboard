@@ -44,7 +44,7 @@ const BASE_CANVAS: SpatialCanvas = {
   edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
 }
 
-describe('edge_patch tool', () => {
+describe('wb_edge_patch tool', () => {
   test('patches color/label/fromSide/toSide on an existing edge', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore, BASE_CANVAS)

@@ -1923,7 +1923,7 @@ describe('DaemonCanvasPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/version_saved events', async () => {
+    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)

@@ -237,7 +237,7 @@ Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Test
 | Script | What it covers |
 |---|---|
 | `pnpm smoke` | Startup-only: MCP server starts without fatal errors and stays alive for 3 s |
-| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_canvas_create` → `facet_set` → version save/list/restore → `canvas_import_okf` → `canvas_export_okf` |
+| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_document_create` → `wb_facet_set` → version save/list/restore → `wb_document_set` → `canvas_export_okf` |
 
 Run all mcp-smoke tests together:
 

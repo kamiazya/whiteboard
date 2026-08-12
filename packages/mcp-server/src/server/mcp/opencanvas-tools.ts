@@ -245,7 +245,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
   )
 
-  // body_patch uses z.discriminatedUnion — flatten its options into a
+  // wb_body_patch uses z.discriminatedUnion — flatten its options into a
   // raw shape so registerToolWithAnnotations can consume it.
   const bp = tools.bodyPatch
   const bpOptions = bp.inputSchema.options
@@ -280,7 +280,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   // Canvas CRUD (wired as standalone MCP tools, not through createServer's Hono routes)
   registerToolWithAnnotations(
     server,
-    'wb_canvas_create',
+    'wb_document_create',
     { inputSchema: createCanvasInputSchema.shape, outputSchema: createCanvasOutputSchema },
     async (args) => {
       const parsed = createCanvasInputSchema.parse(args)
@@ -291,7 +291,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
-    'wb_canvas_list',
+    'wb_document_list',
     { inputSchema: listCanvasesInputSchema.shape, outputSchema: listCanvasesOutputSchema },
     async (args) => {
       const parsed = listCanvasesInputSchema.parse(args)
@@ -302,7 +302,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
-    'wb_canvas_get',
+    'wb_document_resolve',
     { inputSchema: getCanvasInputSchema.shape, outputSchema: getCanvasOutputSchema },
     async (args) => {
       const parsed = getCanvasInputSchema.parse(args)
@@ -313,7 +313,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
-    'wb_canvas_delete',
+    'wb_document_delete',
     { inputSchema: deleteCanvasInputSchema.shape, outputSchema: deleteCanvasOutputSchema },
     async (args) => {
       const parsed = deleteCanvasInputSchema.parse(args)

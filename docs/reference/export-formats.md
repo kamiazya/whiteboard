@@ -5,8 +5,8 @@ the canvas's persisted document — none of them require a connected browser cli
 
 | Tool | Output | Notes |
 | --- | --- | --- |
-| `canvas_render_svg` | Vector image (`.svg`) | Rendered from the canvas's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
-| `canvas_export_okf` | OKF Markdown document (YAML frontmatter + Markdown body) | Lossless round-trip with `canvas_import_okf`. |
+| `wb_scene_render` | Vector image (`.svg`) | Rendered from the canvas's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
+| `canvas_export_okf` | OKF Markdown document (YAML frontmatter + Markdown body) | Lossless round-trip with `wb_document_set`. |
 | `canvas_export_json_canvas` | JSON Canvas 1.0 (with the `x-whiteboard` extension) | Round-trips with other JSON Canvas-compatible tools; the `x-whiteboard` extension carries whiteboard-specific fields that a strict JSON Canvas reader can safely drop. |
 
 A `file` node renders as a labeled box when exported to SVG; its referenced image
@@ -51,7 +51,7 @@ therefore carries its exact node coordinates and edges, not just pixels; any
 PNG chunk reader can recover the document, and image viewers ignore the chunk.
 
 There is currently no raster (PNG) export tool and no tool that returns image
-bytes as MCP `ImageContent` — `canvas_render_svg` is the closest equivalent for
+bytes as MCP `ImageContent` — `wb_scene_render` is the closest equivalent for
 handing a rendered canvas back to an LLM.
 
 ← Back to [reference](README.md)

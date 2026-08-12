@@ -38,5 +38,5 @@ Concrete rules:
 ## Verify (always)
 
 - Compile-time guard: `pnpm --filter @kamiazya/whiteboard-mcp typecheck` and `pnpm build`.
-- Runtime guard for MCP tools: extend `pnpm smoke:e2e` (`scripts/mcp-e2e-smoke.mjs`) to call any new/changed tool at least once — the MCP SDK validates `structuredContent` against `outputSchema` at runtime, catching drift the type system can't see.
+- Runtime guard for MCP tools: extend `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) to call any new/changed tool at least once — the MCP SDK validates `structuredContent` against `outputSchema` at runtime, catching drift the type system can't see.
 - **Mutation-check** when fixing a drift: revert the production fix, confirm `pnpm build` OR `pnpm smoke:e2e` fails, then restore. Commit the test/smoke step that would have caught it.

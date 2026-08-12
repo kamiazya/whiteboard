@@ -36,7 +36,7 @@ export type FacetSetOutput = z.infer<typeof facetSetOutputSchema>
 
 export function createFacetSetTool(deps: ServerDeps) {
   return {
-    name: 'facet_set' as const,
+    name: 'wb_wb_facet_set' as const,
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {

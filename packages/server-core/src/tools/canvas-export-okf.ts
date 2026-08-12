@@ -34,10 +34,10 @@ export type CanvasExportOkfOutput = z.infer<typeof canvasExportOkfOutputSchema>
  * deliberately distinct document shapes (package-canvas-codec.md). `canvas`
  * is the fallback value used ONLY when no core meta was ever persisted for
  * this doc (every canvas created before this bridge existed, or a
- * spatial-only canvas that never went through `canvas_import_okf`). Once a
+ * spatial-only canvas that never went through `wb_document_set`). Once a
  * doc has stored core meta (via `writeCoreFacets`), that stored `type`
  * (and `title`/`tags`/`view`/`facetsRaw`) is echoed back instead — this is
- * what makes the `canvas_import_okf` -> `canvas_export_okf` round-trip
+ * what makes the `wb_document_set` -> `canvas_export_okf` round-trip
  * faithful.
  */
 const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'

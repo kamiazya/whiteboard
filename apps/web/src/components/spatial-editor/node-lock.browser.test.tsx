@@ -208,7 +208,7 @@ it('a lock arriving AFTER selection drops it, so keyboard edits cannot reach the
   pressAt(root, 400, 80) // select the (still free) node
   expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
 
-  // A peer — or an agent through node_lock — locks what is already selected.
+  // A peer — or an agent through wb_node_lock — locks what is already selected.
   fireEvent.click(container.querySelector('[data-testid="remote-lock"]') as HTMLElement)
   expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
 

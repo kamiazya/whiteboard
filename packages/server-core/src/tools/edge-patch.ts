@@ -51,7 +51,7 @@ export type EdgePatchOutput = z.infer<typeof edgePatchOutputSchema>
 
 export function createEdgePatchTool(deps: ServerDeps) {
   return {
-    name: 'edge_patch' as const,
+    name: 'wb_wb_edge_patch' as const,
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
     execute: async (input: EdgePatchInput): Promise<EdgePatchOutput> => {
@@ -63,7 +63,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
 
       // Checked before any write: the lock binds agents exactly as it binds
       // the pointer. Only the edge's OWN lock counts — a locked endpoint
-      // does not freeze the lines touching it (see edge_lock).
+      // does not freeze the lines touching it (see wb_edge_lock).
       if (readEdgeLocks(doc).has(input.edgeId)) {
         throw new EdgeLockedError(input.canvasId, input.edgeId)
       }
