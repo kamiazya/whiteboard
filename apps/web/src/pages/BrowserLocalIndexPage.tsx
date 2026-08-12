@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { deriveDisplaySlug } from '../lib/derive-display-slug.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
@@ -42,18 +41,16 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
   const rows = useMemo(() => {
     if (!snapshots) return []
     const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    const taken: string[] = []
-    return sorted.map((s) => {
-      const displaySlug = deriveDisplaySlug(s.name, taken)
-      taken.push(displaySlug)
-      return {
-        slug: s.id,
-        displayName: s.name,
-        secondary: displaySlug,
-        updatedAt: s.updatedAt,
-        kind: s.kind,
-      }
-    })
+    // No `secondary`: a browser-local canvas is addressed by UUID and has no
+    // slug. Deriving a label from the name instead collapses every non-Latin
+    // name to `untitled`/`untitled-2` — indistinguishable in the one column
+    // that exists to distinguish rows (ADR-0008).
+    return sorted.map((s) => ({
+      slug: s.id,
+      displayName: s.name,
+      updatedAt: s.updatedAt,
+      kind: s.kind,
+    }))
   }, [snapshots])
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; displayName: string } | null>(
