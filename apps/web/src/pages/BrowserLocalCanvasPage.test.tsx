@@ -96,10 +96,17 @@ async function openDeleteConfirm() {
   fireEvent.pointerUp(await canvasOpsItem(/^delete$/i))
 }
 
+// File-level: no vitest `globals`, so testing-library's auto-cleanup never
+// registers — every describe must unmount, or a page left mounted at file
+// end leaks its useFavicon debounce timer past environment teardown (a
+// timing-dependent CI "document is not defined" unhandled error).
+afterEach(() => {
+  cleanup()
+})
+
 describe('BrowserLocalCanvasPage', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => {
-    cleanup()
     vi.useRealTimers()
   })
 
