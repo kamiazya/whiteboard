@@ -29,3 +29,9 @@ describe('OG image', () => {
     expect(pngSize('./public/og-image.png')).toEqual({ width: 1200, height: 630 })
   })
 })
+
+describe('install-dialog screenshot', () => {
+  it('screenshot-wide.png matches its declared manifest size', () => {
+    expect(pngSize('./public/screenshot-wide.png')).toEqual({ width: 1152, height: 684 })
+  })
+})

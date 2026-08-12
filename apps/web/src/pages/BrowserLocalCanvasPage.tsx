@@ -43,6 +43,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { browserLocalFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -337,6 +338,35 @@ export function BrowserLocalCanvasPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
+
+  // Canvas data lives in IndexedDB; without an explicit persistence grant
+  // the browser may evict it under storage pressure. Fire-and-forget — the
+  // grant state is queryable from Settings.
+  useEffect(() => {
+    void ensurePersistentStorage()
+  }, [])
+
+  // Launcher shortcut (manifest `shortcuts`): /?new=canvas creates a fresh
+  // canvas once, then strips the param so a reload doesn't create another.
+  const shortcutHandledRef = useRef(false)
+  useEffect(() => {
+    if (shortcutHandledRef.current) return
+    shortcutHandledRef.current = true
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('new') !== 'canvas') return
+    params.delete('new')
+    const rest = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname + (rest ? `?${rest}` : ''),
+    )
+    // Fire-and-forget: the failure path already rolls back inside
+    // createCanvas, so the shortcut degrades to a plain load.
+    createCanvas().catch((err) => {
+      log.error('launcher shortcut create failed', err)
+    })
+  }, [createCanvas])
 
   // Tab favicon: persistence state as the status dot (degraded reads as
   // offline — data is at risk either way), scene content as the minimap.

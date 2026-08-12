@@ -159,3 +159,40 @@ describe('SettingsPanel — favicon style', () => {
     expect(screen.getByRole('radio', { name: /dot/i }).getAttribute('aria-checked')).toBe('true')
   })
 })
+
+describe('SettingsPanel — persistent storage state', () => {
+  afterEach(() => {
+    Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
+  })
+
+  test('shows Granted when the browser persisted our storage', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: { persisted: () => Promise.resolve(true) },
+      configurable: true,
+    })
+    render(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+      />,
+    )
+    expect(await screen.findByText(/persistent storage/i)).toBeTruthy()
+    expect(await screen.findByText('Granted')).toBeTruthy()
+  })
+
+  test('says the browser manages it where the API is unavailable', async () => {
+    render(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+      />,
+    )
+    expect(await screen.findByText('Managed by the browser')).toBeTruthy()
+  })
+})

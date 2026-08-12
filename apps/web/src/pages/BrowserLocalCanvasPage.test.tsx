@@ -962,3 +962,57 @@ describe('BrowserLocalCanvasPage', () => {
     })
   })
 })
+
+describe('?new=canvas launch shortcut', () => {
+  it('creates a fresh canvas on load and strips the param from the URL', async () => {
+    // An existing profile: auto-create is skipped, so the count isolates
+    // the shortcut's own create.
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    window.history.replaceState(null, '', '/?new=canvas')
+    rtlRender(
+      <MemoryRouter initialEntries={['/?new=canvas']}>
+        <BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />
+      </MemoryRouter>,
+    )
+    await waitFor(async () => {
+      expect((await store.listCanvases()).length).toBe(2)
+    })
+    expect(window.location.search).not.toContain('new=canvas')
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('does not create extras on a plain load', async () => {
+    const store = new MemoryStore()
+    render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    await waitFor(async () => {
+      expect((await store.listCanvases()).length).toBe(1)
+    })
+  })
+
+  it('a failed create rolls back the canvas and still strips the param', async () => {
+    // The shortcut create is fire-and-forget; a rejected Loro save must be
+    // caught by the page (not surface as an unhandled rejection) and the
+    // controller's rollback must remove the half-created metadata row.
+    class RejectingLoroStore extends FakeLoroStore {
+      override async save(): Promise<void> {
+        throw new Error('loro save failed')
+      }
+    }
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    window.history.replaceState(null, '', '/?new=canvas')
+    rtlRender(
+      <MemoryRouter initialEntries={['/?new=canvas']}>
+        <BrowserLocalCanvasPage store={store} loro={new RejectingLoroStore()} />
+      </MemoryRouter>,
+    )
+    expect(window.location.search).not.toContain('new=canvas')
+    await waitFor(async () => {
+      expect((await store.listCanvases()).length).toBe(1)
+    })
+    window.history.replaceState(null, '', '/')
+  })
+})
