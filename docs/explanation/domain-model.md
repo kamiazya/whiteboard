@@ -52,7 +52,7 @@ The daemon currently keeps **two separate stores** that both hold
   edits: the gallery, the editor, names, pins, kinds, branches, versions,
   and sync. Its writers are the daemon's HTTP API only.
 - The **OpenCanvas doc store** backs the agent-facing MCP tools
-  (`wb_canvas_*`, `wb_document_set`, node/edge patches, facets) and the
+  (`wb_document_*`, `wb_canvas_tidy`, node/edge patches, facets) and the
   `/api/v1` routes. It organizes canvases as a CRDT tree of
   ULID-identified documents with derived alias paths, and it is what the
   gallery's *tree view* renders.

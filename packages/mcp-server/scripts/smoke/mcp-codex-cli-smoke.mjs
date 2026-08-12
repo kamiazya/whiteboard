@@ -4,7 +4,7 @@
 //
 // Purpose:
 // Ensure the Codex subprocess can discover the repo-local Excalidraw MCP and
-// complete canvas_create -> annotate -> wb_version_save. The final response is
+// complete wb_document_create -> wb_node_patch -> wb_version_save. The final response is
 // constrained by JSON Schema, and the resulting files under WHITEBOARD_DATA_DIR
 // are also verified.
 //
