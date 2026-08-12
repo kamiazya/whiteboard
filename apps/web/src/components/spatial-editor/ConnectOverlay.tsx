@@ -4,16 +4,16 @@
  * (matching `reducePointerUpConnecting`'s `targetNodeId` contract).
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { Box } from './geometry.js'
-import { type GestureState, reduceGesture } from './gestures.js'
+import type { NodeBox } from './geometry.js'
+import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 
 export interface ConnectOverlayProps {
   readonly gestureState: Extract<GestureState, { kind: 'connecting' }>
   readonly canvas: SpatialCanvas
-  readonly boxes: readonly { readonly id: string; readonly box: Box }[]
-  readonly selectableBoxes: readonly { readonly id: string; readonly box: Box }[]
+  readonly boxes: readonly NodeBox[]
+  readonly selectableBoxes: readonly NodeBox[]
   readonly createId?: () => string
-  readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
+  readonly applyResult: (result: GestureResult) => void
 }
 
 export function ConnectOverlay({

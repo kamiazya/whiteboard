@@ -54,7 +54,7 @@ import { alignBoxes, distributeBoxes } from './align.js'
 import type { FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
-import { type GestureState, reduceGesture } from './gestures.js'
+import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { Point } from './viewport.js'
 
 /** Open right-click menu: screen position (root-relative) + hit target. */
@@ -86,7 +86,7 @@ export interface CanvasContextMenuProps {
   readonly canvasRef: MutableRefObject<SpatialCanvas>
   readonly theme: ResolvedTheme
   readonly gestureState: GestureState
-  readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
+  readonly applyResult: (result: GestureResult) => void
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
   readonly edgeLockEnabled: boolean

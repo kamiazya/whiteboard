@@ -4,22 +4,17 @@
  * outlining only the extras left the primary looking untouched, so a
  * Select All over three nodes read as though it had skipped one.
  */
-import type { Box } from './geometry.js'
+import type { NodeBox } from './geometry.js'
 import type { Point } from './viewport.js'
 
-interface RoutedEdgePath {
-  readonly id: string
-  readonly path: readonly Point[]
-}
-
 export interface MemberOutlinesOverlayProps {
-  readonly selectionMembers: readonly { readonly id: string; readonly box: Box }[]
+  readonly selectionMembers: readonly NodeBox[]
   readonly edges: readonly {
     readonly id: string
     readonly fromNode: string
     readonly toNode: string
   }[]
-  readonly edgePaths: readonly RoutedEdgePath[]
+  readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
 }
 
