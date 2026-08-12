@@ -1,7 +1,7 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AppShell } from './components/AppShell.js'
+import { AppShellLazy } from './components/AppShellLazy.js'
 
 // Lazy: the not-found page renders on rare, dead-end navigations only —
 // it must not ride the critical-path bundle.
@@ -387,7 +387,7 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShell daemon={settingsDaemon !== undefined} />
+          <AppShellLazy daemon={settingsDaemon !== undefined} />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
               <SettingsPage daemon={settingsDaemon} />
@@ -426,7 +426,7 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShell daemon={true} />
+            <AppShellLazy daemon={true} />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -513,7 +513,7 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShell daemon={true} />
+          <AppShellLazy daemon={true} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -557,7 +557,7 @@ export function App({ providerState }: AppProps) {
   return (
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
-        <AppShell daemon={false} />
+        <AppShellLazy daemon={false} />
         {grantConnection?.status === 'identity-mismatch' && !grantErrorDismissed && (
           // Fail-closed renewal refusal: a PINNED daemon answered with a
           // wrong or missing identity signature. Either the daemon rotated
