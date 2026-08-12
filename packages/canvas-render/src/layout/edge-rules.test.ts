@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
+import { scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
+  addCost,
+  COST_QUANTUM,
   dominantAxisOrder,
+  hasRepairableProblem,
+  lessCost,
+  PENALTY_RULES,
+  type PenaltyRule,
   type PreferenceRule,
+  pairPenalty,
   type Rect,
   SIDE_PREFERENCE_RULES,
+  selfPenalty,
   shouldAdoptCandidate,
   ZERO_LANE_MIN_OVERLAP_PX,
+  zeroPenalty,
 } from './edge-rules.js'
 
 function candidateRule(name: string): Extract<PreferenceRule, { kind: 'candidates' }> {
@@ -176,5 +186,218 @@ describe('SIDE_PREFERENCE_RULES', () => {
       'gap-valid-opposing-before-invalid',
       'incumbent-wins-ties',
     ])
+  })
+})
+
+describe('PENALTY_RULES', () => {
+  it('declares the four named tiers in tier order, realized-bends last', () => {
+    expect(PENALTY_RULES.map((r) => r.name)).toEqual([
+      'overlap-and-intrusion',
+      'illegibility',
+      'crossings',
+      'realized-bends',
+    ])
+    PENALTY_RULES.forEach((rule, i) => {
+      expect(rule.tier).toBe(i)
+    })
+    expect(PENALTY_RULES[PENALTY_RULES.length - 1]?.name).toBe('realized-bends')
+  })
+})
+
+describe('overlap-and-intrusion', () => {
+  it('pair term: collinear horizontal segments with 10px x-overlap contribute 10*COST_QUANTUM to tier 0', () => {
+    const triple = scoreSegmentPair(
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 10, y: 0 },
+      { x: 30, y: 0 },
+    )
+    expect(pairPenalty(triple)).toEqual([10 * COST_QUANTUM, 0, 0, 0])
+  })
+
+  it('self term: a path retracing its own ink contributes the quantized retrace length to tier 0', () => {
+    // Out to (20,0), back to (5,0): the [20,0]-[5,0] segment retraces
+    // [0,0]-[20,0] over x in [5,20], a 15px overlap.
+    const path = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 5, y: 0 },
+    ]
+    expect(selfPenalty(path, [])).toEqual([15 * COST_QUANTUM, 0, 0, 1])
+  })
+
+  it('self term: a segment through a foreign rect interior contributes the quantized chord length to tier 0', () => {
+    const path = [
+      { x: -10, y: 50 },
+      { x: 110, y: 50 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual([100 * COST_QUANTUM, 0, 0, 0])
+  })
+
+  it('self term: a segment riding exactly on the rect boundary contributes 0 (grazing exclusion)', () => {
+    const path = [
+      { x: -10, y: 0 },
+      { x: 110, y: 0 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual(zeroPenalty())
+  })
+})
+
+describe('illegibility', () => {
+  it('pair term: a transversal crossing near a segment end contributes 1 to tier 1 (and to tier 2, as a crossing), 0 to tier 0', () => {
+    // a: (0,0)-(10,10); b: (1,9)-(9,1) crosses near a's start.
+    const triple = scoreSegmentPair(
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+      { x: 1, y: 9 },
+      { x: 9, y: 1 },
+    )
+    expect(pairPenalty(triple)).toEqual([0, 1, 1, 0])
+  })
+
+  it('pair term: a transversal crossing far from every end contributes 0 to tier 1', () => {
+    const triple = scoreSegmentPair(
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+      { x: 0, y: 100 },
+      { x: 100, y: 0 },
+    )
+    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0])
+  })
+})
+
+describe('crossings', () => {
+  it('pair term: one clean X-crossing contributes 1 to tier 2', () => {
+    const triple = scoreSegmentPair(
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+      { x: 0, y: 100 },
+      { x: 100, y: 0 },
+    )
+    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0])
+  })
+
+  it('collinear overlap short-circuits the crossing count for that segment pair', () => {
+    const triple = scoreSegmentPair(
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 10, y: 0 },
+      { x: 30, y: 0 },
+    )
+    expect(triple[0]).toBeGreaterThan(0)
+    expect(pairPenalty(triple)[2]).toBe(0)
+  })
+})
+
+describe('realized-bends', () => {
+  it.each([
+    [
+      'straight',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      0,
+    ],
+    [
+      'L',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      1,
+    ],
+    [
+      'Z',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+      ],
+      2,
+    ],
+    ['single-point', [{ x: 0, y: 0 }], 0],
+    ['empty', [], 0],
+    [
+      'zero-length segment',
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      0,
+    ],
+  ] as const)('%s path contributes %i to tier 3', (_label, path, expected) => {
+    const cost = selfPenalty(path, [])
+    expect(cost[3]).toBe(expected)
+    expect(cost.every((n) => Number.isFinite(n) && n >= 0)).toBe(true)
+  })
+})
+
+describe('hasRepairableProblem', () => {
+  it('is false when the only nonzero tier is the last (realized-bends) tier', () => {
+    expect(hasRepairableProblem([0, 0, 0, 5])).toBe(false)
+  })
+
+  it.each([
+    [[1, 0, 0, 0]],
+    [[0, 1, 0, 0]],
+    [[0, 0, 1, 0]],
+    [[1, 1, 1, 5]],
+  ] as const)('is true when a non-final tier is nonzero: %j', (cost) => {
+    expect(hasRepairableProblem(cost)).toBe(true)
+  })
+
+  it('is false for the zero cost', () => {
+    expect(hasRepairableProblem(zeroPenalty())).toBe(false)
+  })
+
+  it('is false when rules is empty (guards Math.max(...[]) === -Infinity)', () => {
+    expect(hasRepairableProblem([1, 2, 3], [])).toBe(false)
+  })
+})
+
+describe('addCost', () => {
+  it('sums two cost arrays tier-by-tier with sign=1', () => {
+    expect(addCost([1, 2, 3, 4], [10, 20, 30, 40], 1)).toEqual([11, 22, 33, 44])
+  })
+
+  it('subtracts b from a tier-by-tier with sign=-1', () => {
+    expect(addCost([10, 20, 30, 40], [1, 2, 3, 4], -1)).toEqual([9, 18, 27, 36])
+  })
+
+  it('defaults a missing index in either operand to 0', () => {
+    const tier1Rule: PenaltyRule = {
+      name: 'tier1',
+      tier: 1,
+      pairTerm: () => 0,
+      selfTerm: () => 0,
+    }
+    // a has no index 1 at all; b does. a[rule.tier] ?? 0 must supply the 0.
+    expect(addCost([100], [0, 5], 1, [tier1Rule])).toEqual([0, 5])
+  })
+
+  it('composes over a non-default rules array', () => {
+    const rule0: PenaltyRule = { name: 'r0', tier: 0, pairTerm: () => 0, selfTerm: () => 0 }
+    expect(addCost([7], [3], 1, [rule0])).toEqual([10])
+  })
+})
+
+describe('lessCost', () => {
+  it('compares in tier order even when the rules array is passed out of order', () => {
+    const tier0Rule: PenaltyRule = { name: 'r0', tier: 0, pairTerm: () => 0, selfTerm: () => 0 }
+    const tier1Rule: PenaltyRule = { name: 'r1', tier: 1, pairTerm: () => 0, selfTerm: () => 0 }
+    // Declared out of tier order: tier1 first, tier0 second.
+    const outOfOrderRules = [tier1Rule, tier0Rule]
+    // tier0: a(5) > b(3) already decides "not less"; tier1 (a=1 < b=100)
+    // must never be consulted first, or this would wrongly read true.
+    const a = [5, 1]
+    const b = [3, 100]
+    expect(lessCost(a, b, outOfOrderRules)).toBe(false)
+    expect(lessCost(b, a, outOfOrderRules)).toBe(true)
   })
 })

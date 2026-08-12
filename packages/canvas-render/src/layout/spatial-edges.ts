@@ -2,14 +2,21 @@ import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteb
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
+  addCost,
+  bendCount,
   composeSidePairs,
   facingLaneWindow,
+  hasRepairableProblem,
+  lessCost,
   oppositeSide,
   type Point,
+  pairPenalty,
   type Rect,
   type Side,
   SLIDE_CORNER_INSET_PX,
+  selfPenalty,
   shouldAdoptCandidate,
+  zeroPenalty,
 } from './edge-rules.js'
 
 function rectOf(node: SpatialNode): Rect {
@@ -496,37 +503,32 @@ function computeAnchorsFor(
   return anchors
 }
 
-/** Quarter-pixel quantization: every cost term is integral, so candidate
- * comparison is exact integer arithmetic — no float tie can differ between
- * platforms. */
-const COST_QUANTUM = 4
-
-type ConfigCost = readonly [overlap: number, illegible: number, crossings: number, bends: number]
-
-function lessCost(a: ConfigCost, b: ConfigCost): boolean {
-  if (a[0] !== b[0]) return a[0] < b[0]
-  if (a[1] !== b[1]) return a[1] < b[1]
-  if (a[2] !== b[2]) return a[2] < b[2]
-  return a[3] < b[3]
-}
+/**
+ * The routing cost of a configuration as a lexicographic integer tuple, one
+ * slot per PENALTY_RULES tier (edge-rules.ts): total collinear axis-aligned
+ * overlap length (a parallel overlap has no crossing point, so a line jump
+ * cannot express it — heaviest; an edge RETRACING its own ink counts here
+ * too, via `selfScore`), crossings too close to a segment end to render
+ * their jump arc, total crossings, then total REALIZED bends. Bends sit
+ * last and the optimizer's short-circuit ignores them (`hasRepairableProblem`):
+ * they only break ties between configurations that already tie on every
+ * visibility problem — the abstract pair ranking (L before Z) can lie once
+ * obstacles force the L into a staircase, and this term is what corrects
+ * it. Length stays out of the cost entirely, governed by the per-edge pair
+ * ranking. `ConfigCost`'s length and slot order are DERIVED from
+ * PENALTY_RULES (edge-rules.ts's `zeroPenalty`/`pairPenalty`/`selfPenalty`),
+ * never hardcoded here.
+ */
+type ConfigCost = readonly number[]
 
 /**
- * Global legibility cost of a routed configuration, as a lexicographic
- * integer tuple: total collinear axis-aligned overlap length (a parallel
- * overlap has no crossing point, so a line jump cannot express it —
- * heaviest; an edge RETRACING its own ink counts here too, via
- * `selfScore`), crossings too close to a segment end to render their jump
- * arc, total crossings, then total REALIZED bends. Bends sit last and the
- * optimizer's short-circuit ignores them: they only break ties between
- * configurations that already tie on every visibility problem — the
- * abstract pair ranking (L before Z) can lie once obstacles force the L
- * into a staircase, and this term is what corrects it. Length stays out
- * of the cost entirely, governed by the per-edge pair ranking.
+ * `pairScore`'s composition over PENALTY_RULES: sums the SHARED narrow
+ * phase over every segment pair — the same function the initial sweep
+ * calls, so the incremental trial path and the broad-phase build cannot
+ * drift (see edge-crossing-sweep.ts) — then maps the summed triple into
+ * the declared tiers.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
-  // Sums the SHARED narrow phase over every segment pair — the same
-  // function the initial sweep calls, so the incremental trial path and
-  // the broad-phase build cannot drift (see edge-crossing-sweep.ts).
   let overlap = 0
   let illegible = 0
   let crossings = 0
@@ -538,62 +540,17 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
       crossings += c
     }
   }
-  return [overlap, illegible, crossings, 0]
+  return pairPenalty([overlap, illegible, crossings])
 }
 
 /**
- * Per-edge quality of ONE routed path, in the heaviest slot: collinear
- * overlap with ITSELF (adjacent retraces included — the doubled-line
- * arrival a facing-away side produces when the connector overshoots the
- * entry stub through the node body) plus the length of any segment
- * TUNNELLING through a bystander node's raw body — a line through a node
- * reads as though it connects that node, which no line jump can express,
- * so it outranks even an edge crossing. Realized bend count sits last.
+ * `selfScore`'s composition over PENALTY_RULES: per-edge quality of ONE
+ * routed path — collinear overlap with itself, tunnelling through a
+ * bystander node's raw body, and realized bend count, each contributed by
+ * its own named rule.
  */
 function selfScore(path: readonly Point[], foreignBodies: readonly Rect[]): ConfigCost {
-  const q = (n: number) => Math.round(n * COST_QUANTUM)
-  let overlap = 0
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1] as Point
-    const b = path[i] as Point
-    for (const r of foreignBodies) {
-      // Axis-aligned intrusion length, boundary grazing excluded: an
-      // anchor ON a neighbour's border or a segment riding the margin
-      // band is bestCandidate's business, not a tunnel.
-      const minX = Math.max(Math.min(a.x, b.x), r.x)
-      const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
-      const minY = Math.max(Math.min(a.y, b.y), r.y)
-      const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
-      if (maxX <= minX && maxY <= minY) continue
-      if (a.y === b.y && a.y > r.y && a.y < r.y + r.h && maxX > minX) {
-        overlap += q(maxX - minX)
-      } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w && maxY > minY) {
-        overlap += q(maxY - minY)
-      }
-    }
-  }
-  for (let i = 1; i < path.length; i++) {
-    for (let j = i + 1; j < path.length; j++) {
-      const a1 = path[i - 1] as Point
-      const a2 = path[i] as Point
-      const b1 = path[j - 1] as Point
-      const b2 = path[j] as Point
-      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
-        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
-        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
-        if (hi > lo) overlap += hi - lo
-      } else if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
-        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
-        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
-        if (hi > lo) overlap += hi - lo
-      }
-    }
-  }
-  return [overlap, 0, 0, bendCount(path)]
-}
-
-function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
-  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2], a[3] + sign * b[3]]
+  return selfPenalty(path, foreignBodies)
 }
 
 /**
@@ -664,21 +621,22 @@ function optimizeSideChoices(
     nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
   )
   const selfCosts: ConfigCost[] = paths.map((path, i) => selfScore(path, foreignBodiesFor[i]!))
-  let currentCost: ConfigCost = [0, 0, 0, 0]
+  let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
   // Sweep-and-prune instead of the O(E^2) double loop: identical scores
   // by construction (same narrow phase, canonical pair order), sparse for
   // non-interacting pairs — evaluateTrial already zero-defaults absent
   // keys.
   for (const [key, [o, il, c]] of buildPairwiseScores(paths)) {
-    const score: ConfigCost = [o, il, c, 0]
+    const score: ConfigCost = pairPenalty([o, il, c])
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
-  // The bend term (index 3) is deliberately ABSENT from the short-circuit:
-  // a canvas with no overlap and no crossings is healthy, and reshuffling
-  // it purely to shave bends is churn, not repair.
-  if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+  // The realized-bends tier is deliberately ABSENT from the short-circuit
+  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
+  // crossings is healthy, and reshuffling it purely to shave bends is
+  // churn, not repair.
+  if (!hasRepairableProblem(currentCost)) return current
 
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
@@ -705,7 +663,7 @@ function optimizeSideChoices(
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
       const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!)
-      cost = addCost(cost, selfCosts[i] ?? [0, 0, 0, 0], -1)
+      cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)
     }
@@ -719,7 +677,7 @@ function optimizeSideChoices(
         // updates map; a pair with an untouched edge reuses its cached path.
         if (touchedSet.has(j) && j < i) continue
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0, 0], -1)
+        cost = addCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
         cost = addCost(cost, next, 1)
         updates.set(key, next)
       }
@@ -789,8 +747,9 @@ function optimizeSideChoices(
       .map((edge, i) => ({ edge, i, cost: contribution(i) }))
       // An edge with no overlap, no illegibility, and no crossings has
       // nothing to repair — reshuffling it to shave bends is churn, the
-      // same judgement the whole-config short-circuit makes.
-      .filter((r) => r.cost[0] > 0 || r.cost[1] > 0 || r.cost[2] > 0)
+      // same judgement the whole-config short-circuit makes
+      // (hasRepairableProblem, edge-rules.ts).
+      .filter((r) => hasRepairableProblem(r.cost))
       .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
       .slice(0, TRIAL_BUDGET_EDGES)
       // Document order within the budget keeps adoption sequencing stable.
@@ -822,7 +781,7 @@ function optimizeSideChoices(
           break
         }
       }
-      if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+      if (!hasRepairableProblem(currentCost)) return current
     }
     if (!improved) break
   }
@@ -954,21 +913,6 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
-/** Direction changes along a polyline, ignoring repeated/collinear points. */
-function bendCount(path: readonly Point[]): number {
-  let bends = 0
-  let lastDir: string | undefined
-  for (let i = 1; i < path.length; i++) {
-    const dx = Math.sign((path[i] as Point).x - (path[i - 1] as Point).x)
-    const dy = Math.sign((path[i] as Point).y - (path[i - 1] as Point).y)
-    if (dx === 0 && dy === 0) continue
-    const dir = `${dx},${dy}`
-    if (lastDir !== undefined && dir !== lastDir) bends++
-    lastDir = dir
-  }
-  return bends
-}
-
 /**
  * The best candidate by a two-tier clearance ranking, shortest first:
  * clear of the inflated obstacles (full margin kept), else clear of the
