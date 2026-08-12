@@ -309,13 +309,10 @@ paths:
       collinear overlap plus self-retrace/body-intrusion), illegibility
       (tier 1), crossings (tier 2), and realized-bends (tier 3, self-only
       and deliberately last). `pairScore`/`selfScore` (`spatial-edges.ts`)
-      are thin compositions over the list (`pairPenalty`/`selfPenalty`);
-      `ConfigCost`'s slot order/length, the zero tuple, `addCost`, and
-      `lessCost` all derive from the declared tiers rather than a hardcoded
-      4-slot shape, and `hasRepairableProblem` ("any tier below the last
-      declared one is nonzero") is what the whole-config short-circuit and
-      the worst-offender contribution filter both consult in place of the
-      old hardcoded "first three slots" check.
+      compose over the list, and every cost-tuple helper (`ConfigCost`
+      shape, `addCost`, `lessCost`, `hasRepairableProblem`) derives from
+      the declared tiers, so a new penalty rule is one list entry, never
+      a new slot threaded by hand.
     - **Facet-driven rendering rides the injected-resolver pattern**
       (a future `resolveFileFacets`, same seam class as
       `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
