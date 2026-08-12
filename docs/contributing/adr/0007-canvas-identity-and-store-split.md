@@ -116,3 +116,13 @@ final storage engine.
 a background reconciler between two live CRDT-backed stores with
 different identity schemes is the most complex option and would ossify
 the split instead of removing it.
+
+## Addendum (2026-08-12): point 3's promotion rationale is withdrawn
+
+[ADR-0008](0008-slug-derivation-and-rename.md) measured what point 3's
+derived display slug actually produces for non-Latin names (mutually
+indistinguishable `untitled-N`) and decided that a slug is never derived
+from a name. The derivation this point said "needs no re-derivation on
+promotion" has been deleted; browser-local rows show the display name
+alone until browser-local canvases have real slugs. Point 3's first
+sentence — one always-present workspace, UUID identity — stands.

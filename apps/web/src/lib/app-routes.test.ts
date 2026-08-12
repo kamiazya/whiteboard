@@ -5,6 +5,7 @@ import {
   canvasPath,
   daemonRoutePath,
   indexPath,
+  isKnownAppPath,
   parseBrowserLocalRoute,
   parseDaemonRoute,
   workspacePath,
@@ -107,5 +108,19 @@ describe('malformed percent-encoding', () => {
     expect(parseDaemonRoute('/canvas/w1/ma%in')).toBeNull()
     expect(parseDaemonRoute('/w/%E0%A4%A')).toBeNull()
     expect(parseBrowserLocalRoute('/local/%zz')).toBeNull()
+  })
+})
+
+describe('isKnownAppPath', () => {
+  it('accepts every route in the closed set', () => {
+    for (const p of ['/', '/w/ws1', '/canvas/ws1/main', '/local', '/local/c1', '/pair']) {
+      expect(isKnownAppPath(p)).toBe(true)
+    }
+  })
+
+  it('rejects unknown paths so App can show not-found instead of silently falling through', () => {
+    for (const p of ['/nope', '/canvas/onlyws', '/local/a/b', '/w/', '/settings']) {
+      expect(isKnownAppPath(p)).toBe(false)
+    }
   })
 })

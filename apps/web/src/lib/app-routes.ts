@@ -78,3 +78,17 @@ export function parseBrowserLocalRoute(pathname: string): { canvasId: string } |
   const canvasId = decodeSegment(match[1])
   return canvasId === null ? null : { canvasId }
 }
+
+/**
+ * Whether a pathname belongs to the app's closed route set. App.tsx shows
+ * the not-found page for anything else, instead of silently falling through
+ * to the default view — a mistyped or stale link should say so.
+ */
+export function isKnownAppPath(pathname: string): boolean {
+  return (
+    pathname === '/pair' ||
+    pathname === browserLocalIndexPath() ||
+    parseBrowserLocalRoute(pathname) !== null ||
+    parseDaemonRoute(pathname) !== null
+  )
+}
