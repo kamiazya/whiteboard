@@ -12,7 +12,12 @@ export type {
 } from './layout/spatial-appearance.js'
 export type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout/spatial-canvas.js'
 export { layoutSpatialCanvas, layoutSpatialEdges } from './layout/spatial-canvas.js'
-export { assignEdgeAnchors, type EdgeSides, routeEdge } from './layout/spatial-edges.js'
+export {
+  assignEdgeAnchors,
+  type EdgeAnchorOverride,
+  type EdgeSides,
+  routeEdge,
+} from './layout/spatial-edges.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance } from './measure.js'
