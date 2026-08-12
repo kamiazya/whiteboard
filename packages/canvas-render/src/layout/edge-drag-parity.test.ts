@@ -25,6 +25,23 @@ const EDGES: CanvasEdge[] = [
 ]
 
 describe('interpenetrating boxes', () => {
+  it('hook around instead of routing backwards when collinear overlap leaves no L-pair', () => {
+    // Same-y boxes overlapping in x: dy === 0 produces no L-pairs, so
+    // without a guard the opposing fallback hands back the same
+    // interpenetrating right->left the zero-bend rank just excluded.
+    const nodes: SpatialNode[] = [
+      { id: 'B', type: 'text', x: 100, y: 570, width: 200, height: 100, text: '' },
+      { id: 'C', type: 'text', x: 280, y: 570, width: 200, height: 100, text: '' },
+    ]
+    const edge: CanvasEdge = { id: 'B-C', fromNode: 'B', toNode: 'C' }
+    const anchors = assignEdgeAnchors(nodes, [edge], 'orthogonal')
+    const bc = anchors.get('B-C')
+    expect([bc?.fromSide, bc?.toSide]).not.toEqual(['right', 'left'])
+    // The hook leaves and arrives on one shared side rather than through
+    // the overlap.
+    expect(bc?.fromSide).toBe(bc?.toSide)
+  })
+
   it('never take the facing pair whose sides overlap along the normal axis', () => {
     // A single edge gets its initial sides verbatim (no optimizer at n=1):
     // B's right edge (x=300) is past C's left edge (x=280), so right->left

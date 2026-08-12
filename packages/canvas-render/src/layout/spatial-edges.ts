@@ -177,9 +177,24 @@ function rankedSidePairs(
     const dominantFirst = Math.abs(dx) >= Math.abs(dy) ? [l1, l2] : [l2, l1]
     ls.push(...dominantFirst.sort((a, b) => crowding(a) - crowding(b)))
   }
-  const fallback = Math.abs(dx) >= Math.abs(dy) ? [opposingH, opposingV] : [opposingV, opposingH]
+  // The opposing fallbacks keep the list total, but a pair that failed the
+  // facing-gap check routes backwards through the overlap — offer it only
+  // after every alternative. When collinear overlap leaves no L-pair AND no
+  // valid opposing pair (same-axis boxes interpenetrating), a U-hook over a
+  // shared side is the sane default, so it goes ahead of the invalid pairs.
+  const ordered = Math.abs(dx) >= Math.abs(dy) ? [opposingH, opposingV] : [opposingV, opposingH]
+  const gapOk = (p: { fromSide: Side }) => facingGapOk(p.fromSide === h ? 'h' : 'v')
+  const fallback = [...ordered.filter(gapOk), ...ordered.filter((p) => !gapOk(p))]
+  const uHooks: { fromSide: Side; toSide: Side }[] = []
+  if (zero.length === 0 && ls.length === 0 && !ordered.some(gapOk)) {
+    const across: Side = Math.abs(dx) >= Math.abs(dy) ? (dy > 0 ? 'bottom' : 'top') : h
+    uHooks.push(
+      { fromSide: across, toSide: across },
+      { fromSide: oppositeSide(across), toSide: oppositeSide(across) },
+    )
+  }
   const seen = new Set<string>()
-  return [...zero, ...ls, ...fallback].filter((p) => {
+  return [...zero, ...ls, ...uHooks, ...fallback].filter((p) => {
     const key = `${p.fromSide} ${p.toSide}`
     if (seen.has(key)) return false
     seen.add(key)
