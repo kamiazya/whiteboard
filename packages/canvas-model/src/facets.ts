@@ -84,30 +84,3 @@ export const canvasCoreMetaSchema = coreFacetsSchema.extend({
 })
 
 export type CanvasCoreMeta = z.infer<typeof canvasCoreMetaSchema>
-
-/**
- * Typed companion for the `issue/1` extension-facet domain. This does NOT
- * replace `extensionFacetsSchema`'s `z.unknown()` payload handling — every
- * domain still round-trips unvalidated through the generic bucket. Callers
- * who specifically know they are working with `issue/1` payloads parse
- * through this schema themselves for typed access; a future incompatible
- * shape bumps to `issue/2` rather than widening this one, consistent with
- * the `{domain}/{version}` extension convention.
- *
- * `status` is an open string (not a closed enum) so user-defined workflows
- * aren't constrained to a fixed vocabulary; `due` requires ISO 8601 so
- * downstream sorting/filtering can rely on lexicographic-equals-chronological
- * ordering.
- */
-export const issueFacetPayloadSchema = z
-  .object({
-    status: z.string().min(1),
-    priority: z.string().optional(),
-    assignees: z.array(z.string()).optional(),
-    labels: z.array(z.string()).optional(),
-    due: z.iso.datetime().optional(),
-    summary: z.string().optional(),
-  })
-  .strict()
-
-export type IssueFacetPayload = z.infer<typeof issueFacetPayloadSchema>

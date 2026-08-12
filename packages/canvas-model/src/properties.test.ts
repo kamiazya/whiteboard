@@ -3,7 +3,6 @@ import {
   coreFacetsSchema,
   extensionFacetsSchema,
   facetsRawSchema,
-  issueFacetPayloadSchema,
   RESERVED_ROOT_KEYS,
 } from './facets.js'
 import { canvasIdSchema } from './ids.js'
@@ -27,7 +26,6 @@ import {
   coreFacetsArbitrary,
   extensionFacetsArbitrary,
   facetsRawArbitrary,
-  issueFacetPayloadArbitrary,
   markdownCanvasArbitrary,
   mdastFlowContentArbitrary,
   mdastPhrasingContentArbitrary,
@@ -56,25 +54,6 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
   fcTest.prop([facetsRawArbitrary], withDefaults())('facetsRawSchema', (value) => {
     expect(facetsRawSchema.safeParse(value).success).toBe(true)
   })
-
-  fcTest.prop([issueFacetPayloadArbitrary], withDefaults())('issueFacetPayloadSchema', (value) => {
-    expect(issueFacetPayloadSchema.safeParse(value).success).toBe(true)
-  })
-
-  fcTest.prop([issueFacetPayloadArbitrary], withDefaults())(
-    'issueFacetPayloadSchema payload is JSON-safe (required for YAML frontmatter serialization)',
-    (value) => {
-      const parsed = issueFacetPayloadSchema.parse(value)
-      expect(JSON.parse(JSON.stringify(parsed))).toEqual(parsed)
-    },
-  )
-
-  fcTest.prop([issueFacetPayloadArbitrary], withDefaults())(
-    'extensionFacetsSchema accepts any issue/1 payload regardless of issueFacetPayloadSchema validity',
-    (value) => {
-      expect(extensionFacetsSchema.safeParse({ 'issue/1': value }).success).toBe(true)
-    },
-  )
 
   fcTest.prop([spatialNodeArbitrary], withDefaults())('spatialNodeSchema', (value) => {
     expect(spatialNodeSchema.safeParse(value).success).toBe(true)
