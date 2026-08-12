@@ -539,10 +539,10 @@ function computeAnchorsFor(
           ? fromRect.y + fromRect.h <= toRect.y
           : toRect.y + toRect.h <= fromRect.y
     if (!gapOk) continue
-    const window = facingLaneWindow(fromRect, toRect, axis)
-    if (window === undefined) continue
+    const lane = facingLaneWindow(fromRect, toRect, axis)
+    if (lane === undefined) continue
     const natural = (axis === 'h' ? entry.from.y + entry.to.y : entry.from.x + entry.to.x) / 2
-    const t = Math.min(window[1], Math.max(window[0], natural))
+    const t = Math.min(lane[1], Math.max(lane[0], natural))
     anchors.set(edge.id, {
       ...entry,
       from: axis === 'h' ? { x: entry.from.x, y: t } : { x: t, y: entry.from.y },
