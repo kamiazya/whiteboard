@@ -11,7 +11,7 @@ import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
 import { createCanvasExportJsonCanvasTool } from './canvas-export-json-canvas.js'
 import { createCanvasExportOkfTool } from './canvas-export-okf.js'
 
-export const documentGetInputSchema = z
+const documentGetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     canvasId: canvasIdSchema,
@@ -30,7 +30,7 @@ export const documentGetInputSchema = z
   .strict()
 export type DocumentGetInput = z.infer<typeof documentGetInputSchema>
 
-export const documentGetOutputSchema = z
+const documentGetOutputSchema = z
   .object({
     kind: canvasKindSchema,
     content: z.string(),
