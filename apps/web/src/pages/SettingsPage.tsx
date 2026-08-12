@@ -397,7 +397,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
       </div>
 
       {/* Desktop (sm and up): sidebar + content pane. */}
-      <div className="hidden h-full sm:flex" data-testid="settings-desktop">
+      <div className="hidden h-full sm:flex sm:justify-center" data-testid="settings-desktop">
         <nav className="w-56 shrink-0 border-r p-4">
           <button
             type="button"
@@ -424,11 +424,9 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
             ))}
           </div>
         </nav>
-        <div className="min-w-0 flex-1 overflow-y-auto p-6">
-          <div className="max-w-2xl">
-            <h1 className="mb-4 text-base font-semibold">{SECTION_TITLE[desktopSection]}</h1>
-            {sectionContent(desktopSection, sharedProps)}
-          </div>
+        <div className="w-full min-w-0 max-w-2xl overflow-y-auto p-6">
+          <h1 className="mb-4 text-base font-semibold">{SECTION_TITLE[desktopSection]}</h1>
+          {sectionContent(desktopSection, sharedProps)}
         </div>
       </div>
     </div>
