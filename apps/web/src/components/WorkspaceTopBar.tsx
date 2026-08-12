@@ -72,6 +72,8 @@ interface Props {
   // app's or Excalidraw's own) produces one.
   onExport?: (format: SceneExportFormat) => Promise<Blob | null>
   onOpenSettings?: () => void
+  /** Blue attention dot on the settings gear (outstanding setup todo or waiting update). */
+  settingsNudge?: boolean
   /** Renders the brand mark as a go-home affordance when provided. */
   onNavigateHome?: () => void
   // Right-side slot ahead of the secondary actions — the host page's
@@ -109,6 +111,7 @@ export default function WorkspaceTopBar({
   branchRefreshSignal,
   onExport,
   onOpenSettings,
+  settingsNudge,
   onNavigateHome,
   statusSlot,
   workspaces,
@@ -365,6 +368,7 @@ export default function WorkspaceTopBar({
         onToggleFullscreen={onToggleFullscreen}
         isFullscreen={isFullscreen}
         onOpenSettings={onOpenSettings}
+        settingsNudge={settingsNudge}
       />
     </header>
   )

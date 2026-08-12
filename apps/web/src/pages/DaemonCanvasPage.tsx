@@ -21,6 +21,7 @@ import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
+import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { settingsPath } from '../lib/app-routes.js'
@@ -136,6 +137,8 @@ export function DaemonCanvasPage({
   const [settingsStore] = useState(() => createUserSettingsStore())
 
   const { resolvedTheme } = useThemeMode()
+
+  const settingsNudge = useSettingsNudge(true)
 
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -457,6 +460,7 @@ export function DaemonCanvasPage({
           {canvas && (
             <WorkspaceTopBar
               onNavigateHome={() => navigate('/')}
+              settingsNudge={settingsNudge}
               statusSlot={connectionStatus}
               workspaceId={canvas.workspaceId}
               slug={canvas.slug}

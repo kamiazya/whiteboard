@@ -30,6 +30,8 @@ function renderBar(overrides?: {
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
   onNavigateHome?: () => void
+  onOpenSettings?: () => void
+  settingsNudge?: boolean
 }) {
   // React 18 delegates events to the root container. Radix portals render into document.body,
   // which is a DOM sibling of the default test container. Using document.body as the React root
@@ -45,6 +47,8 @@ function renderBar(overrides?: {
       workspaces={overrides?.workspaces}
       onSwitchWorkspace={overrides?.onSwitchWorkspace}
       onNavigateHome={overrides?.onNavigateHome}
+      onOpenSettings={overrides?.onOpenSettings}
+      settingsNudge={overrides?.settingsNudge}
     />,
     { container: document.body },
   )
@@ -1391,5 +1395,17 @@ describe('WorkspaceTopBar — brand mark home affordance', () => {
   it('renders no home affordance without the callback', () => {
     renderBar()
     expect(screen.queryByRole('button', { name: 'Home' })).toBeNull()
+  })
+})
+
+describe('WorkspaceTopBar — settings nudge dot', () => {
+  it('shows the blue dot on the settings gear while a setup todo remains', () => {
+    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
+    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+  })
+
+  it('shows no dot when there is nothing actionable', () => {
+    renderBar({ onOpenSettings: () => {} })
+    expect(screen.queryByTestId('settings-nudge')).toBeNull()
   })
 })

@@ -34,6 +34,7 @@ import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.j
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
+import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute, settingsPath } from '../lib/app-routes.js'
@@ -164,6 +165,8 @@ export function BrowserLocalCanvasPage({
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
   const { resolvedTheme } = useThemeMode()
+  // Browser-local pages have no daemon by definition.
+  const settingsNudge = useSettingsNudge(false)
 
   // Fullscreen can also be left with Escape or the browser's own chrome, so
   // the button's label follows the DOCUMENT rather than our own click.
@@ -568,6 +571,7 @@ export function BrowserLocalCanvasPage({
         >
           <WorkspaceTopBar
             onNavigateHome={() => navigate('/')}
+            settingsNudge={settingsNudge}
             statusSlot={
               <ConnectionStatus state="local">
                 <p className="text-muted-foreground">

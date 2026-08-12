@@ -17,6 +17,8 @@ interface TopBarSecondaryActionsProps {
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
   onOpenSettings?: () => void
+  /** Blue attention dot on the settings entry points (outstanding setup todo or waiting update). */
+  settingsNudge?: boolean
 }
 
 // Right side: fullscreen and settings — plus the "View options" kebab that
@@ -29,6 +31,7 @@ export function TopBarSecondaryActions({
   onToggleFullscreen,
   isFullscreen = false,
   onOpenSettings,
+  settingsNudge,
 }: TopBarSecondaryActionsProps) {
   const fullscreenLabel = isFullscreen ? 'Exit fullscreen' : 'Fullscreen'
   const FullscreenIcon = isFullscreen ? Minimize2 : Maximize2
@@ -61,11 +64,18 @@ export function TopBarSecondaryActions({
               <Button
                 variant="ghost"
                 size="sm"
-                className="size-8 p-0"
+                className="relative size-8 p-0"
                 onClick={onOpenSettings}
                 aria-label="Settings"
                 data-testid="settings-trigger"
               >
+                {settingsNudge && (
+                  <span
+                    data-testid="settings-nudge"
+                    aria-hidden="true"
+                    className="absolute right-0.5 top-0.5 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+                  />
+                )}
                 <Settings className="size-3.5" />
               </Button>
             </TooltipTrigger>
@@ -80,8 +90,14 @@ export function TopBarSecondaryActions({
             type="button"
             aria-label="View options"
             data-testid="topbar-more-actions-trigger"
-            className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground min-[400px]:hidden"
+            className="relative shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground min-[400px]:hidden"
           >
+            {settingsNudge && onOpenSettings && (
+              <span
+                aria-hidden="true"
+                className="absolute right-0 top-0 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+              />
+            )}
             <EllipsisVertical className="size-4" />
           </button>
         </DropdownMenuTrigger>
@@ -96,6 +112,9 @@ export function TopBarSecondaryActions({
             <DropdownMenuItem onSelect={onOpenSettings} className="gap-2">
               <Settings className="size-3.5" />
               Settings
+              {settingsNudge && (
+                <span aria-hidden="true" className="ml-auto size-2 rounded-full bg-[#3b6ecc]" />
+              )}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
