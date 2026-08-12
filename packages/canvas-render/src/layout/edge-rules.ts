@@ -515,7 +515,6 @@ export function hasRepairableProblem(
   cost: readonly number[],
   rules: readonly PenaltyRule[] = PENALTY_RULES,
 ): boolean {
-  if (rules.length === 0) return false
   const lastTier = Math.max(...rules.map((r) => r.tier))
   return rules.some((r) => r.tier < lastTier && (cost[r.tier] ?? 0) !== 0)
 }

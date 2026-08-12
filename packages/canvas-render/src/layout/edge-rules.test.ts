@@ -355,6 +355,10 @@ describe('hasRepairableProblem', () => {
   it('is false for the zero cost', () => {
     expect(hasRepairableProblem(zeroPenalty())).toBe(false)
   })
+
+  it('is false when rules is empty (guards Math.max(...[]) === -Infinity)', () => {
+    expect(hasRepairableProblem([1, 2, 3], [])).toBe(false)
+  })
 })
 
 describe('addCost', () => {
