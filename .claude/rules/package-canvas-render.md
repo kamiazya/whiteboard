@@ -305,8 +305,17 @@ paths:
       `composeSidePairs` is the composition `rankedSidePairs`
       (`layout/spatial-edges.ts`) wraps, and `shouldAdoptCandidate` is the
       incumbent-wins-ties predicate `optimizeSideChoices` consults. The
-      PENALTY half (`pairScore`/`selfScore`'s cost-tuple terms, still inline
-      in `spatial-edges.ts`) is a named follow-up, "penalty-rules-extraction".
+      PENALTY half is `PENALTY_RULES`: overlap-and-intrusion (tier 0,
+      collinear overlap plus self-retrace/body-intrusion), illegibility
+      (tier 1), crossings (tier 2), and realized-bends (tier 3, self-only
+      and deliberately last). `pairScore`/`selfScore` (`spatial-edges.ts`)
+      are thin compositions over the list (`pairPenalty`/`selfPenalty`);
+      `ConfigCost`'s slot order/length, the zero tuple, `addCost`, and
+      `lessCost` all derive from the declared tiers rather than a hardcoded
+      4-slot shape, and `hasRepairableProblem` ("any tier below the last
+      declared one is nonzero") is what the whole-config short-circuit and
+      the worst-offender contribution filter both consult in place of the
+      old hardcoded "first three slots" check.
     - **Facet-driven rendering rides the injected-resolver pattern**
       (a future `resolveFileFacets`, same seam class as
       `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
