@@ -46,6 +46,43 @@ describe('renderSceneToSvg', () => {
     expect(svg).toContain('<text x="0" y="10">hi</text>')
   })
 
+  it('a halo emits a surface-colored pill behind the text box', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'textRun',
+          bbox: { x: 5, y: 10, w: 20, h: 16 },
+          text: 'hi',
+          appearance: { fill: '#404040', fontSize: 12, halo: '#ffffff' },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    // The pill covers the bbox plus 2px of breathing room (a glyph-outline
+    // halo would leave the crossed line peeking through word spaces), then
+    // the ordinary text paints over it.
+    expect(svg).toContain(
+      '<rect x="3" y="8" width="24" height="20" rx="2" fill="#ffffff"/>' +
+        '<text x="5" y="10" fill="#404040" font-size="12">hi</text>',
+    )
+  })
+
+  it('a run without a halo emits exactly one text element (byte-identical additivity)', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'textRun',
+          bbox: { x: 5, y: 10, w: 20, h: 16 },
+          text: 'hi',
+          appearance: { fill: '#404040', fontSize: 12 },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<text x="5" y="10" fill="#404040" font-size="12">hi</text>')
+    expect(svg.match(/<text /g)?.length).toBe(1)
+  })
+
   it('shifts a text run down by its baseline offset when present', () => {
     const scene: Scene = {
       nodes: [{ kind: 'textRun', bbox: { x: 0, y: 10, w: 20, h: 16 }, text: 'hi', baseline: 12.8 }],

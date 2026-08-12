@@ -1,3 +1,4 @@
+import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 // Ported verbatim from the original daemon-served UI's useWhiteboardSync
@@ -75,7 +76,8 @@ async function sendExportResponse(
     msg.theme !== undefined
       ? {
           theme: msg.theme,
-          viewBackgroundColor: msg.theme === 'dark' ? '#121212' : '#ffffff',
+          viewBackgroundColor:
+            msg.theme === 'dark' ? SPATIAL_DARK_PALETTE.surface : SPATIAL_LIGHT_PALETTE.surface,
         }
       : null
   const appState = {

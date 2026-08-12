@@ -108,6 +108,7 @@ describe('createSpatialTheme', () => {
     expect(theme.resolveLabel()).toEqual({
       fill: SPATIAL_LIGHT_PALETTE.labelFill,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
+      halo: SPATIAL_LIGHT_PALETTE.surface,
     })
   })
 

@@ -34,6 +34,7 @@ import {
   layoutSpatialCanvas,
   renderSceneToSvg as renderSceneToSvgString,
   SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 
 import { getLogger } from '../log.js'
@@ -70,8 +71,11 @@ export interface HeadlessExportOptions {
   theme?: 'light' | 'dark'
 }
 
-const DARK_DEFAULT_BACKGROUND = '#121212'
-const LIGHT_DEFAULT_BACKGROUND = '#ffffff'
+// The mode surfaces come from the shared palette — the same color the
+// label halo knocks text backgrounds out with, so an exported label pill
+// is invisible against the export background.
+const DARK_DEFAULT_BACKGROUND = SPATIAL_DARK_PALETTE.surface
+const LIGHT_DEFAULT_BACKGROUND = SPATIAL_LIGHT_PALETTE.surface
 const DEFAULT_PADDING_PX = 10
 
 export interface HeadlessExportResult {
