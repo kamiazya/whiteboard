@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dominantAxisOrder,
   type PreferenceRule,
   type Rect,
   SIDE_PREFERENCE_RULES,
-  ZERO_LANE_MIN_OVERLAP_PX,
-  dominantAxisOrder,
   shouldAdoptCandidate,
+  ZERO_LANE_MIN_OVERLAP_PX,
 } from './edge-rules.js'
 
 function candidateRule(name: string): Extract<PreferenceRule, { kind: 'candidates' }> {

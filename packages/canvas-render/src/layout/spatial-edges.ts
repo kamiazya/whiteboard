@@ -7,9 +7,9 @@ import {
   oppositeSide,
   type Point,
   type Rect,
-  shouldAdoptCandidate,
   type Side,
   SLIDE_CORNER_INSET_PX,
+  shouldAdoptCandidate,
 } from './edge-rules.js'
 
 function rectOf(node: SpatialNode): Rect {

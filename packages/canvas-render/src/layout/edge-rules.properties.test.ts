@@ -12,8 +12,8 @@ import {
   composeSidePairs,
   type PreferenceRuleContext,
   type Rect,
-  type SidePair,
   SIDE_PREFERENCE_RULES,
+  type SidePair,
 } from './edge-rules.js'
 
 const rectArb: fc.Arbitrary<Rect> = fc.record({
