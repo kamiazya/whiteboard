@@ -155,6 +155,48 @@ describe('detectMergeBadges', () => {
     expect(detectMergeBadges({ base, target, source, preview })).toEqual([])
   })
 
+  it('detects multiple badges at once in stable order', () => {
+    const base = makeSpatialDoc({
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'C', type: 'text', text: 'base', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n1', type: 'text', text: '1', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n2', type: 'text', text: '2', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    // Target deleted A and edited C, leaving n1/n2/e1 untouched.
+    const target = makeSpatialDoc({
+      nodes: [
+        { id: 'C', type: 'text', text: 'target-edit', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n1', type: 'text', text: '1', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n2', type: 'text', text: '2', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    // Source kept A, edited C, and kept n1/n2/e1 unchanged.
+    const source = makeSpatialDoc({
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'C', type: 'text', text: 'source-edit', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n1', type: 'text', text: '1', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n2', type: 'text', text: '2', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    // Corrupt the preview directly, bypassing deleteSpatialNode's edge
+    // cascade, so e1 becomes an orphan alongside the resurrected/field_merge
+    // cases already present from A and C.
+    source.getMap('nodes').delete('n2')
+    const preview = source
+    const badges = detectMergeBadges({ base, target, source, preview })
+    expect(badges).toEqual<MergeBadge[]>([
+      { type: 'resurrected', elementId: 'A' },
+      { type: 'orphan_ref', elementId: 'e1', missingRef: 'n2' },
+      { type: 'field_merge', elementId: 'C', fields: ['text'] },
+    ])
+  })
+
   // No-op merge identity: merging a doc against itself on every side must
   // never fire a badge, for any valid spatial canvas shape.
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
