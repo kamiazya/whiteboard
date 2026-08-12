@@ -74,8 +74,12 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       },
       { timeout: 15_000 },
     )
+    // A fresh note is focused for typing immediately (no click). Exact
+    // contentDOM identity — not .cm-editor containment — is what real
+    // keyboard-event delivery depends on; containment can pass while focus
+    // still sits on another in-flight descendant and race the first keys.
     await waitFor(() => {
-      expect(editable.closest('.cm-editor')?.contains(document.activeElement)).toBe(true)
+      expect(document.activeElement).toBe(editable)
     })
     await userEvent.keyboard('# From the list')
     await waitFor(() => {
