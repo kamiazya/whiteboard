@@ -45,7 +45,8 @@ async function renderLoaded(store = new IndexedDBStore()) {
 // Open the canvas row's operations kebab, pick "Delete", and wait
 // for the confirmation dialog to appear.
 async function openDeleteDialog(): Promise<HTMLElement> {
-  const kebab = screen.getByRole('button', { name: 'More actions' })
+  // The kebab lives in the (lazy) WorkspaceTopBar's merged row.
+  const kebab = await screen.findByRole('button', { name: 'More actions' })
   fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
   const item = await screen.findByRole('menuitem', { name: /^delete$/i })
   fireEvent.pointerUp(item)
@@ -135,7 +136,8 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     // The menu item that opened the dialog is long unmounted — focus must
     // land back on the kebab, not fall to <body>.
-    const kebab = screen.getByRole('button', { name: 'More actions' })
+    // The kebab lives in the (lazy) WorkspaceTopBar's merged row.
+    const kebab = await screen.findByRole('button', { name: 'More actions' })
     await waitFor(() => expect(document.activeElement).toBe(kebab), { timeout: 5000 })
   })
 
