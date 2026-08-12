@@ -66,7 +66,7 @@ describe('docs snapshot — canvas browser UI hero', () => {
 
     await waitForSnapshotContent(container, {
       sceneText: 'Whiteboard',
-      topBarDisplayName: 'System architecture',
+      topBarWorkspaceName: 'Main workspace',
     })
     await captureDocAsset(container, 'canvas-browser-ui-frame', 'canvas-browser-ui.png')
   })
