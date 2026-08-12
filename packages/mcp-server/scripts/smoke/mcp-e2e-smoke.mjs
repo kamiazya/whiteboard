@@ -174,12 +174,14 @@ async function main() {
   await expectToolError('wb_document_create', {
     workspaceId: WORKSPACE_ID,
     segment: 'e2e-src',
+    kind: 'spatial',
   })
 
   // wb_document_create: first daemon-dependent RPC (cold-start latency).
   const created = await callTool('wb_document_create', {
     workspaceId: WORKSPACE_ID,
     segment: 'e2e-src',
+    kind: 'spatial',
     createWorkspace: true,
   })
   if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {

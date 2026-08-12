@@ -1,7 +1,10 @@
+import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
 import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
+import { saveWorkspaceTree } from './tools/workspace-tree-io.js'
 
 function makeServer() {
   return createServer({
@@ -20,7 +23,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(201)
     const body = createCanvasOutputSchema.parse(await res.json())
@@ -33,7 +36,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: '-leading' }),
+      body: JSON.stringify({ segment: '-leading', kind: 'spatial' }),
     })
     expect(res.status).toBe(400)
   })
@@ -43,7 +46,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/..%2Ftraversal/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(400)
   })
@@ -53,7 +56,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/typo-probe-ws/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a' }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial' }),
     })
     expect(res.status).toBe(404)
   })
@@ -63,12 +66,12 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(409)
   })
@@ -78,7 +81,7 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases')
     expect(res.status).toBe(200)
@@ -97,7 +100,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -115,7 +118,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -137,7 +140,7 @@ describe('canvas OKF read route', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
     await tools.canvasImportOkf.execute({
@@ -152,15 +155,19 @@ describe('canvas OKF read route', () => {
     expect(body.markdown).toContain('Hello tree')
   })
 
-  it('GET okf for a canvas whose doc was never written returns 404', async () => {
-    const app = makeApp()
-    const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', createWorkspace: true }),
-    })
-    const created = createCanvasOutputSchema.parse(await createRes.json())
-    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.canvasId}/okf`)
+  it('GET okf for a tree node with no document returns 404', async () => {
+    // Creation now writes the document, so this state is no longer reachable
+    // by creating and not writing — it has to be built directly. It is still
+    // worth guarding: a node whose document was deleted, or written by an
+    // older build that created nodes lazily, lands here.
+    const store = createInMemoryCanvasDocStore()
+    const { app } = createServer({ canvasDocStore: store, blobStore: {} as never })
+    const tree = new WorkspaceTree(new LoroDoc())
+    const canvasId = '01ARZ3NDEKTSV4RRFFQ69G5FAA'
+    tree.createNode(canvasId, 'orphan')
+    await saveWorkspaceTree(store, 'ws-1', tree)
+
+    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}/okf`)
     expect(res.status).toBe(404)
   })
 
