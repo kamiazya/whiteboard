@@ -597,6 +597,29 @@ describe('BrowserLocalCanvasPage', () => {
 
     fireEvent.click(screen.getByTestId('settings-trigger'))
     expect(router.state.location.pathname).toBe('/settings')
+    // The entry point rides along so the settings Back button can return
+    // here deterministically instead of popping history.
+    expect((router.state.location.state as { from?: string }).from).toBe('/')
+  })
+
+  it('the header brand mark navigates home', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const router = createMemoryRouter(
+      [{ path: '*', element: <BrowserLocalCanvasPage store={store} /> }],
+      {
+        initialEntries: ['/local/c1'],
+      },
+    )
+    await act(async () => {
+      rtlRender(<RouterProvider router={router} />)
+    })
+    await screen.findByRole('button', { name: /^Workspace:/i })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    expect(router.state.location.pathname).toBe('/')
   })
 
   it('honors an explicit initialCanvasId prop over the store default canvas', async () => {
