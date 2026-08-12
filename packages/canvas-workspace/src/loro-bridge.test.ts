@@ -455,6 +455,21 @@ describe('core facets bridge', () => {
     expect(readCoreFacets(doc)).toBeUndefined()
   })
 
+  test('ignores a `__proto__` key in the underlying core map instead of throwing', () => {
+    // A LoroMap key is a CRDT string, so `__proto__` stores and enumerates
+    // like any other — and the doc this reads is untrusted input arriving
+    // over sync or import. Looking the key up on a plain-object schema table
+    // walks the prototype chain and answers with `Object.prototype`, which is
+    // truthy and has no `safeParse`.
+    const doc = makeDoc()
+    doc.getMap('core').set('__proto__', { polluted: true })
+    doc.getMap('core').set('type', 'spatial')
+    doc.commit()
+
+    expect(readCoreFacets(doc)).toEqual({ type: 'spatial' })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
   test('round-trips every core field', () => {
     const doc = makeDoc()
     const meta: CanvasCoreMeta = {
