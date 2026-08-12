@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { fingerprintPublicKey } from '@/lib/daemon-identity-pin'
+import { SquiggleLoader } from './SquiggleLoader.js'
 
 // Mirrors the daemon's GET /api/pairing/grants response (see
 // packages/mcp-server/src/server/routes/pairing.ts) — hydrated through the
@@ -134,7 +135,9 @@ export function PairedOriginsCard() {
           {revokeError}
         </p>
       )}
-      {state.kind === 'loading' && <p className="text-xs text-muted-foreground">Loading…</p>}
+      {state.kind === 'loading' && (
+        <SquiggleLoader label="Loading…" className="justify-start text-xs" />
+      )}
       {state.kind === 'error' && (
         <p className="text-xs text-muted-foreground">Could not load paired web apps.</p>
       )}

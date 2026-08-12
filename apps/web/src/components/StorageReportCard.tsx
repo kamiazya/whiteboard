@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { formatBytes } from '../lib/format-bytes.js'
+import { SquiggleLoader } from './SquiggleLoader.js'
 
 // Schema for the daemon's /api/v1/user-libraries response.
 // This is the sole definition — the former api-contracts/libraries.ts was
@@ -643,7 +644,7 @@ export function StorageReportCard() {
             </DialogDescription>
           </DialogHeader>
           {libsLoading ? (
-            <div className="text-sm text-muted-foreground">Loading…</div>
+            <SquiggleLoader label="Loading…" className="justify-start text-sm" />
           ) : libs.length === 0 && !libsError ? (
             // A failed fetch also leaves libs empty — that renders the error
             // line below instead of masquerading as "no libraries installed".

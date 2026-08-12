@@ -22,6 +22,7 @@ import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
 import { displayBranchName } from '@/lib/utils'
+import { SquiggleLoader } from './SquiggleLoader.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
 
 const log = getAppLogger('VersionTimeline')
@@ -236,7 +237,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
             // Until /branches resolves, `head` is the hook's 'main' default —
             // rendering rows filtered by it would offer the wrong branch's
             // versions as restore targets during the fetch race.
-            <div className="text-xs text-muted-foreground py-4 text-center">Loading…</div>
+            <SquiggleLoader label="Loading…" className="py-4 text-xs" />
           ) : visibleVersions.length === 0 ? (
             <div className="text-xs text-muted-foreground py-4 text-center">
               No versions on «{head}» yet.
