@@ -1598,7 +1598,10 @@ describe('versions API', () => {
       expect(restoreRes.status).toBe(200)
       const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
       expect(restoreBody.canvasId).toBe('session1/canvas-new')
-      expect(restoreBody.elementCount).toBe(0)
+      // The restored doc has one alive legacy element ("keep-me"); the
+      // fixed countAliveNodes reports the real count instead of the
+      // retired countElements(_doc) stub's always-0.
+      expect(restoreBody.elementCount).toBe(1)
     })
 
     it('restoring a markdown-kind canvas into a new target slug carries the source kind forward, not the spatial default', async () => {

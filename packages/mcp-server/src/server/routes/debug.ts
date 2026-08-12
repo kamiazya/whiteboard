@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { type LoroDoc, LoroMap } from 'loro-crdt'
 import { listCanvases, listWorkspaces, loadCanvas } from '../store/canvas-store.js'
+import { countAliveNodes } from '../store/count-alive-nodes.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { isAuthorized } from './auth.js'
 
@@ -17,30 +18,31 @@ type WorkspaceInfo = {
   canvases: CanvasInfo[]
 }
 
-function countElements(doc: LoroDoc): {
-  totalElements: number
-  visibleElements: number
-  tombstones: number
-} {
+// Legacy 'elements' movable-list entries never get pruned, only tombstoned
+// (isDeleted=true) -- so a tombstone count is legacy-list-only by
+// definition; a nodes-model doc has none, since deleteSpatialNode removes
+// the entry outright rather than marking it dead.
+function countLegacyTombstones(doc: LoroDoc): number {
   const list = doc.getMovableList('elements')
-  let total = 0
   let tombstones = 0
   for (let i = 0; i < list.length; i++) {
     const item = list.get(i)
     if (!(item instanceof LoroMap)) continue
-    total += 1
     if (item.get('isDeleted') === true) tombstones += 1
   }
-  return { totalElements: total, visibleElements: total - tombstones, tombstones }
+  return tombstones
 }
 
 async function summarizeCanvas(workspaceId: string, slug: string): Promise<CanvasInfo> {
   const cached = peekDoc(workspaceId, slug)
   const doc = cached ?? (await loadCanvas(workspaceId, slug))
-  const counts = countElements(doc)
+  const visibleElements = countAliveNodes(doc)
+  const tombstones = countLegacyTombstones(doc)
   return {
     slug,
-    ...counts,
+    totalElements: visibleElements + tombstones,
+    visibleElements,
+    tombstones,
     cached: cached !== undefined,
   }
 }

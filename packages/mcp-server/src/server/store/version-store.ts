@@ -11,6 +11,7 @@ import {
   validateVersionId,
   validateWorkspaceId,
 } from '../validators.js'
+import { countAliveNodes } from './count-alive-nodes.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -191,10 +192,11 @@ export class FileVersionStore implements VersionStore {
       const id = nanoid(12)
       validateVersionId(id)
 
+      // Fail-soft: a doc whose spatial read throws still saves, with an
+      // advisory 0 rather than blocking the save entirely.
       const elementCount = (() => {
         try {
-          const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
-          return list.filter((e) => !e.isDeleted).length
+          return countAliveNodes(doc)
         } catch {
           return 0
         }
