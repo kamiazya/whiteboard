@@ -411,7 +411,17 @@ export function readFacets(doc: LoroDoc): ExtensionFacets {
   return result
 }
 
-const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = canvasCoreMetaSchema.shape
+/**
+ * Prototype-less on purpose. The keys looked up here come from a LoroMap,
+ * whose keys are CRDT strings arriving over sync or import — so `__proto__`
+ * is a possible key, and on a plain object it would resolve up the chain to
+ * `Object.prototype`: truthy, past any `if (!schema)` guard, and without a
+ * `safeParse` to call. A null prototype makes every miss a real miss.
+ */
+const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
+  Object.create(null),
+  canvasCoreMetaSchema.shape,
+)
 
 /**
  * Core OKF facets (`type`/`title`/`tags`/`view`/`facetsRaw`) are stored the

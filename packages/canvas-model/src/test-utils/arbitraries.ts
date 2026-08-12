@@ -61,9 +61,34 @@ const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
   .tuple(domainArbitrary, versionArbitrary)
   .map(([domain, version]) => `${domain}/${version}`)
 
-export const extensionFacetsArbitrary = fc.dictionary(extensionFacetKeyArbitrary, fc.jsonValue(), {
-  maxKeys: 4,
-})
+/**
+ * `fc.jsonValue()` can place an own `__proto__` key inside a generated
+ * object, and that is legitimate JSON — `JSON.parse` defines it as an own
+ * property rather than touching the prototype. Nothing downstream can carry
+ * it: facet values reach storage through the Loro WASM boundary, which
+ * reconstructs plain objects without that key, so any preservation property
+ * over such a value is unsatisfiable. Narrow the generator rather than teach
+ * a parser to reproduce the key — the same call the `facetsRaw` key filter
+ * below makes, one nesting level down.
+ */
+function stripProtoKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripProtoKeys)
+  if (value === null || typeof value !== 'object') return value
+  const out: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (key === '__proto__') continue
+    out[key] = stripProtoKeys(child)
+  }
+  return out
+}
+
+const facetValueArbitrary = fc.jsonValue().map(stripProtoKeys)
+
+export const extensionFacetsArbitrary = fc.dictionary(
+  extensionFacetKeyArbitrary,
+  facetValueArbitrary,
+  { maxKeys: 4 },
+)
 
 const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 15 })
@@ -77,7 +102,7 @@ const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   // key; `facets.test.ts` pins the skip as deliberate behaviour.
   .filter((key) => key !== '__proto__')
 
-export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, fc.jsonValue(), {
+export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, facetValueArbitrary, {
   maxKeys: 4,
 })
 
