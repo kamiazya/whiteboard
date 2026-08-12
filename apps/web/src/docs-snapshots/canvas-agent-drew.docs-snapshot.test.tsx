@@ -48,7 +48,7 @@ describe('docs snapshot — agent drew the architecture diagram', () => {
 
     await waitForSnapshotContent(container, {
       sceneText: 'Whiteboard',
-      topBarDisplayName: 'System architecture',
+      topBarWorkspaceName: 'Main workspace',
     })
     await captureDocAsset(container, 'canvas-agent-drew-frame', 'canvas-agent-drew.png')
   })
