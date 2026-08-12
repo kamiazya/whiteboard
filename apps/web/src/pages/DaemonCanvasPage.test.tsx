@@ -654,6 +654,11 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
+    // The AppShell sits above the canvas gate, so Settings and Home stay
+    // reachable on the empty-workspace view — the recovery path when the
+    // canvas-gated chrome is gone.
+    expect(screen.getByTestId('shell-settings')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
   })
 
   it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
