@@ -31,6 +31,7 @@ paths:
   - **On the CANVAS** it holds rendering PREFERENCES for things JSON Canvas already models (today: `edgeRouting.style`). A consumer that drops it still renders every edge, just with its own routing. Nothing that changes what the document MEANS belongs here.
 - Both are the documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a document written by another version still parses. The reject-not-drop contract governs what others must honour; these keys are our own escape hatch, and the document survives either way.
 - A preference meant to be overridable at a finer scope later (an edge overriding the canvas's routing style) declares its schema ONCE — `edgeRoutingSchema` — and the override reuses it rather than restating the shape.
+- **`x-whiteboard` is the ONLY extension key** an emitted document may carry — never add a second non-standard field at any level. The contract is published as a generated JSON Schema (`json-schema.ts` → `docs/reference/x-whiteboard.schema.json`, held in sync by `json-schema.test.ts`; regenerate with `UPDATE_JSON_SCHEMA=1 pnpm vitest run --project canvas-model-node json-schema`) and enforced by canvas-codec's `extension-contract.property.test.ts` (foreign keys stripped on parse, emission stays within JSON Canvas 1.0 + `x-whiteboard`). Extending what lives INSIDE `x-whiteboard` means regenerating the artifact in the same increment.
 
 ## Tests
 
