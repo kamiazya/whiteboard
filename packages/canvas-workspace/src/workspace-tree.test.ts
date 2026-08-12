@@ -284,6 +284,32 @@ describe('WorkspaceTree', () => {
       expect(merged.resolveAlias(loserChild.id)).toBe('notes-2/child')
     })
 
+    it('resolves findByAlias against a duplicate segment at a non-root level', () => {
+      // Both peers share the same parent node (via a snapshot each starts
+      // from) so the collision this test targets is purely at the child
+      // level — the walk's non-root disambiguation call is what resolves it.
+      const { tree: seed } = makeTree()
+      const parentId = seed.createNode('canvas-folder', 'folder')
+      const seedBytes = seed.exportSnapshot()
+
+      const doc1 = new LoroDoc()
+      doc1.import(seedBytes)
+      const tree1 = new WorkspaceTree(doc1)
+      tree1.createNode('canvas-child-b', 'notes', parentId)
+
+      const doc2 = new LoroDoc()
+      doc2.import(seedBytes)
+      const tree2 = new WorkspaceTree(doc2)
+      tree2.createNode('canvas-child-a', 'notes', parentId)
+
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      expect(merged.children()).toHaveLength(1)
+      expect(merged.findByAlias('folder/notes')?.canvasId).toBe('canvas-child-a')
+      expect(merged.findByAlias('folder/notes-2')?.canvasId).toBe('canvas-child-b')
+    })
+
     it('returns the bare alias to the surviving duplicate once the winner is deleted', () => {
       const { doc: doc1, tree: tree1 } = makeTree()
       tree1.createNode('canvas-b', 'notes')
