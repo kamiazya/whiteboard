@@ -24,7 +24,7 @@ function renderPage(store: MemoryStore) {
 }
 
 describe('BrowserLocalIndexPage', () => {
-  it('lists snapshots most-recent first with name, derived display slug, and kind marker', async () => {
+  it('lists snapshots most-recent first with name and kind marker', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Trip Plan', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
       { id: 'id-b', name: 'Meeting Notes', updatedAt: '2026-08-10T00:00:00Z', kind: 'markdown' },
@@ -34,10 +34,8 @@ describe('BrowserLocalIndexPage', () => {
     const cards = await screen.findAllByTestId('canvas-list-card')
     expect(cards).toHaveLength(2)
     expect(within(cards[0]!).getByText('Meeting Notes')).toBeTruthy()
-    expect(within(cards[0]!).getByTestId('canvas-secondary').textContent).toBe('meeting-notes')
     expect(within(cards[0]!).getByText(/markdown/i)).toBeTruthy()
     expect(within(cards[1]!).getByText('Trip Plan')).toBeTruthy()
-    expect(within(cards[1]!).getByTestId('canvas-secondary').textContent).toBe('trip-plan')
     expect(within(cards[1]!).queryByText(/markdown/i)).toBeNull()
   })
 
@@ -185,17 +183,19 @@ describe('BrowserLocalIndexPage', () => {
     expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
   })
 
-  it('suffixes colliding display slugs instead of repeating them', async () => {
+  it('shows the name alone — a browser-local canvas has no slug to put under it', async () => {
+    // These names carry no ASCII, so any name-derived slug collapses them to
+    // `untitled` / `untitled-2` — indistinguishable in the very column a
+    // secondary line exists to distinguish.
     const store = await seededStore([
-      { id: 'id-a', name: 'Notes', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
-      { id: 'id-b', name: 'Notes', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      { id: 'id-a', name: '構成図', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
+      { id: 'id-b', name: '設計メモ', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
     renderPage(store)
 
     const cards = await screen.findAllByTestId('canvas-list-card')
-    const secondaries = cards.map((c) => within(c).getByTestId('canvas-secondary').textContent)
-    expect(new Set(secondaries).size).toBe(2)
-    expect(secondaries).toContain('notes')
-    expect(secondaries).toContain('notes-2')
+    expect(within(cards[0]!).getByText('構成図')).toBeTruthy()
+    expect(within(cards[1]!).getByText('設計メモ')).toBeTruthy()
+    expect(screen.queryAllByTestId('canvas-secondary')).toHaveLength(0)
   })
 })
