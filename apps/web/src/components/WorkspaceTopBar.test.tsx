@@ -1407,5 +1407,22 @@ describe('WorkspaceTopBar — settings nudge dot', () => {
   it('shows no dot when there is nothing actionable', () => {
     renderBar({ onOpenSettings: () => {} })
     expect(screen.queryByTestId('settings-nudge')).toBeNull()
+    expect(screen.queryByTestId('settings-nudge-overflow')).toBeNull()
+  })
+
+  it('carries the dot on the collapsed overflow trigger only when settings is reachable there', () => {
+    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
+    expect(screen.getByTestId('settings-nudge-overflow')).toBeTruthy()
+  })
+
+  it('shows no overflow dot when settings is not offered at all', () => {
+    renderBar({ settingsNudge: true })
+    expect(screen.queryByTestId('settings-nudge-overflow')).toBeNull()
+  })
+
+  it('marks the Settings item inside the opened overflow menu', async () => {
+    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'View options' }), { button: 0 })
+    expect(await screen.findByTestId('settings-nudge-item')).toBeTruthy()
   })
 })

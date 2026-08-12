@@ -1066,6 +1066,38 @@ describe('DaemonIndexPage', () => {
     expect((router.state.location.state as { from?: string }).from).toBe('/')
   })
 
+  it('lights the settings nudge dot when persistence is grantable but not granted', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: {
+        persisted: () => Promise.resolve(false),
+        persist: () => Promise.resolve(true),
+      },
+      configurable: true,
+    })
+    try {
+      installFetchMock({
+        workspaces: [{ workspaceId: 'ws-a' }],
+        canvasesByWorkspace: {
+          'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        },
+      })
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />,
+          },
+        ],
+        { initialEntries: ['/'] },
+      )
+      rtlRender(<RouterProvider router={router} />)
+      await screen.findByText('alpha')
+      expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
+    } finally {
+      Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
+    }
+  })
+
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'dTMMrBP3c5ah8_SXTRVvC' }],

@@ -602,6 +602,17 @@ describe('BrowserLocalCanvasPage', () => {
     expect((router.state.location.state as { from?: string }).from).toBe('/')
   })
 
+  it('always lights the settings nudge dot — a browser-local page has no daemon', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
+  })
+
   it('the header brand mark navigates home', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()

@@ -94,6 +94,7 @@ export function TopBarSecondaryActions({
           >
             {settingsNudge && onOpenSettings && (
               <span
+                data-testid="settings-nudge-overflow"
                 aria-hidden="true"
                 className="absolute right-0 top-0 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
               />
@@ -113,7 +114,11 @@ export function TopBarSecondaryActions({
               <Settings className="size-3.5" />
               Settings
               {settingsNudge && (
-                <span aria-hidden="true" className="ml-auto size-2 rounded-full bg-[#3b6ecc]" />
+                <span
+                  data-testid="settings-nudge-item"
+                  aria-hidden="true"
+                  className="ml-auto size-2 rounded-full bg-[#3b6ecc]"
+                />
               )}
             </DropdownMenuItem>
           )}

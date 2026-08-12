@@ -591,6 +591,25 @@ describe('DaemonCanvasPage', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('lights the settings gear nudge when live sync drops to an auth error', async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    // Connected, nothing else actionable in jsdom: no dot.
+    expect(screen.queryByTestId('settings-nudge')).toBeNull()
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+    // The daemon connection now needs the user's action (re-pair lives in
+    // Settings -> Connections), so the gear carries the attention dot.
+    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+  })
+
   it('renders the "Sync off" indicator even when no canvas is selected', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],

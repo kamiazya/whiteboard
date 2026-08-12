@@ -138,8 +138,6 @@ export function DaemonCanvasPage({
 
   const { resolvedTheme } = useThemeMode()
 
-  const settingsNudge = useSettingsNudge(true)
-
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
   // instead of repeating `workspaceId !== null && slug !== null`.
@@ -149,6 +147,11 @@ export function DaemonCanvasPage({
       : null
 
   const [authError, setAuthError] = useState(false)
+  // An auth error means the daemon connection needs the user's action
+  // (re-pair lives under Settings -> Connections), so it counts as
+  // disconnected for the gear's attention dot. Transient reconnects don't:
+  // they need no user action and would only make the dot flicker.
+  const settingsNudge = useSettingsNudge(!authError)
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
