@@ -1,4 +1,5 @@
 import { cleanup, render, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { DaemonIndexPage } from '../pages/DaemonIndexPage.js'
@@ -85,16 +86,18 @@ afterEach(() => {
 describe('docs snapshot — workspace list (renamed)', () => {
   it('writes docs/assets/workspace-list-renamed.png', async () => {
     const { container } = render(
-      <div
-        data-testid="workspace-list-renamed-frame"
-        style={{ width: '1100px', height: '640px', background: '#ffffff' }}
-      >
-        <DaemonIndexPage
-          daemonBaseUrl="http://127.0.0.1:3099"
-          initialWorkspaceId="ws_main"
-          onOpenCanvas={() => undefined}
-        />
-      </div>,
+      <MemoryRouter initialEntries={['/']}>
+        <div
+          data-testid="workspace-list-renamed-frame"
+          style={{ width: '1100px', height: '640px', background: '#ffffff' }}
+        >
+          <DaemonIndexPage
+            daemonBaseUrl="http://127.0.0.1:3099"
+            initialWorkspaceId="ws_main"
+            onOpenCanvas={() => undefined}
+          />
+        </div>
+      </MemoryRouter>,
     )
 
     await waitFor(() => {
