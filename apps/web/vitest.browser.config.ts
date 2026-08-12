@@ -8,49 +8,18 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
+import { mcpSourceAlias } from './mcp-source-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   resolve: {
     alias: {
+      ...mcpSourceAlias,
       // Matches vitest.config.ts and tsconfig's '@/*' path — needed once any
       // browser-tested component pulls in a components/ui/* file (they all
       // import '@/lib/utils' for the cn() helper).
       '@': resolve(__dirname, 'src'),
-      // Resolve browser-shared from source so tests run before `pnpm build`.
-      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/daemon-backend': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/daemon-backend.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-client': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-client.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-contracts': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-contracts/index.ts',
-      ),
-      // App-mounting browser tests reach DaemonCanvasPage's transport imports
-      // through Vite's dependency scan even though the page itself is lazy —
-      // resolved from source like the entries above, or the scan fails on a
-      // checkout that has not run `pnpm build`.
-      '@kamiazya/whiteboard-mcp/select-canvas-transport': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/select-canvas-transport.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/sse-backend': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/sse-backend.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/sse-stream-hub': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/sse-stream-hub.ts',
-      ),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(

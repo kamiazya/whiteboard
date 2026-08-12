@@ -9,12 +9,15 @@ const src = (file: string) => resolve(here, '../../packages/mcp-server/src/share
  * mcp-server subpaths resolved to SOURCE rather than to `dist`, so `pnpm dev`
  * and the test run work before anything is built.
  *
- * Shared by vite.config.ts and vitest.config.ts because keeping two copies in
- * step is not something either file can enforce: a subpath added to only one
- * of them resolves through the package export map instead, which silently
- * finds a stale `dist` on a machine that has built once and fails outright on
- * a clean checkout — so the miss surfaces in CI rather than locally. Each
- * config still adds its own entries on top (test-only subpaths, canvas-viewer).
+ * Shared by vite.config.ts, vitest.config.ts, vitest.browser.config.ts, and
+ * vitest.docs-snapshots.config.ts because keeping separate copies in step is
+ * not something any one file can enforce: a subpath added to only one of them
+ * resolves through the package export map instead, which silently finds a
+ * stale `dist` on a machine that has built once and fails outright on a
+ * clean checkout — so the miss surfaces in CI rather than locally. Each
+ * config still adds its own entries on top (test-only subpaths, canvas-viewer,
+ * '@docs-assets'). mcp-source-alias-coverage.test.ts pins that every config
+ * spreads this map rather than re-copying it.
  */
 export const mcpSourceAlias: Record<string, string> = {
   '@kamiazya/whiteboard-mcp/browser-shared': src('browser-shared-index.ts'),
