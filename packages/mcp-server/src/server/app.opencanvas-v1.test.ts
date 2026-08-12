@@ -74,11 +74,13 @@ describe('createApp /api/v1 OpenCanvas mount', () => {
     const unauthed = await app.request('/api/v1/workspaces/default/canvases')
     expect(unauthed.status).toBe(401)
 
+    // The daemon auth check runs ahead of the workspace-existence check, so
+    // an authed request against a never-created workspace 404s rather than
+    // 200-empty — list and create agree about workspace existence.
     const res = await app.request('/api/v1/workspaces/default/canvases', {
       headers: { Authorization: 'Bearer secret' },
     })
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ canvases: [] })
+    expect(res.status).toBe(404)
   })
 
   it('round-trips create → list with the derived alias', async () => {

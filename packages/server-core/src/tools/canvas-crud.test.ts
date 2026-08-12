@@ -76,13 +76,16 @@ describe('wbCanvasCreate', () => {
     ).rejects.toThrow(CanvasParentNotFoundError)
   })
 
-  it('throws WorkspaceNotFoundError for an unknown workspaceId without createWorkspace', async () => {
+  it('throws WorkspaceNotFoundError for an unknown workspaceId without createWorkspace, and list agrees', async () => {
     const deps = makeDeps()
     await expect(
       wbCanvasCreate(deps, { workspaceId: 'typo-probe-ws', segment: 'doc-a' }),
     ).rejects.toThrow(WorkspaceNotFoundError)
-    const listed = await wbCanvasList(deps, { workspaceId: 'typo-probe-ws' })
-    expect(listed.canvases).toEqual([])
+    // LIST and CREATE must derive workspace existence from the same signal —
+    // a typo'd workspace id should not look like an empty workspace.
+    await expect(wbCanvasList(deps, { workspaceId: 'typo-probe-ws' })).rejects.toThrow(
+      WorkspaceNotFoundError,
+    )
   })
 
   it('materializes the workspace when createWorkspace: true is passed', async () => {
@@ -126,8 +129,18 @@ describe('wbCanvasGet', () => {
 })
 
 describe('wbCanvasList', () => {
-  it('returns an empty list for an empty workspace', async () => {
+  it('throws WorkspaceNotFoundError for a workspace that was never created', async () => {
     const deps = makeDeps()
+    await expect(wbCanvasList(deps, { workspaceId: 'ws-1' })).rejects.toThrow(
+      WorkspaceNotFoundError,
+    )
+  })
+
+  it('returns an empty list for a workspace that was created but has no canvases', async () => {
+    const deps = makeDeps()
+    // Materialize the workspace tree without creating any canvas — existence
+    // is persisted-tree existence, never non-emptiness.
+    await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', new WorkspaceTree(new LoroDoc()))
     const result = await wbCanvasList(deps, { workspaceId: 'ws-1' })
     expect(result.canvases).toEqual([])
   })

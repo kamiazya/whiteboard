@@ -17,25 +17,28 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const OKF_DOC = '---\ntype: note\ntitle: Design\n---\n\n# Palette decisions'
 
-function installFetchMock() {
+function installFetchMock(
+  v1ListResponse: { status: number; body: unknown } = {
+    status: 200,
+    body: {
+      canvases: [
+        { canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: 'notes', alias: 'notes' },
+        {
+          canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
+          segment: 'design',
+          alias: 'notes/design',
+        },
+      ],
+    },
+  },
+) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces')) {
       return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
     }
     if (url.endsWith('/api/v1/workspaces/default/canvases')) {
-      return Promise.resolve(
-        jsonResponse({
-          canvases: [
-            { canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: 'notes', alias: 'notes' },
-            {
-              canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
-              segment: 'design',
-              alias: 'notes/design',
-            },
-          ],
-        }),
-      )
+      return Promise.resolve(jsonResponse(v1ListResponse.body, v1ListResponse.status))
     }
     if (url.endsWith('/api/v1/workspaces/default/canvases/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
       return Promise.resolve(
@@ -76,5 +79,29 @@ describe('DaemonIndexPage tree view', () => {
     await waitFor(() => {
       expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
     })
+  })
+
+  it('shows a calm no-tree message (not an alert) when the v1 list 404s', async () => {
+    installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+
+    await screen.findByText('This workspace has no OpenCanvas tree yet.')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('still shows the failure alert when the v1 list fails for a non-404 reason', async () => {
+    installFetchMock({ status: 500, body: { error: 'boom' } })
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Failed to load the workspace file tree.')
   })
 })
