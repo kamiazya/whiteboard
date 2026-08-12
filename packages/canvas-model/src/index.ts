@@ -1,6 +1,7 @@
 export * from './clipboard.js'
 export * from './facets.js'
 export * from './ids.js'
+export * from './json-schema.js'
 export * from './markdown.js'
 export * from './meta.js'
 export * from './spatial.js'
