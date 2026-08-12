@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; thumbnails live as PNG
@@ -63,6 +64,45 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.label).toBeUndefined()
     expect(entry.hasThumbnail).toBe(false)
     expect(entry.branchName).toBe('main')
+  })
+
+  it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
+    const doc = makeSpatialDoc({
+      nodes: [
+        { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'n3', type: 'text', text: 'c', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(entry.elementCount).toBe(3)
+    const [listed] = await store.list('sess-1', 'canvas-a')
+    expect(listed?.elementCount).toBe(3)
+  })
+
+  it('save falls back to counting alive legacy elements for a pre-migration doc', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    appendElement(doc, 'e2')
+    const list = doc.getMovableList('elements')
+    const dead = list.insertContainer(list.length, new LoroMap())
+    dead.set('id', 'e3')
+    dead.set('isDeleted', true)
+    doc.commit()
+
+    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(entry.elementCount).toBe(2)
+  })
+
+  it('save keeps its fail-soft 0 when the spatial read throws', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    vi.spyOn(doc, 'getMap').mockImplementation(() => {
+      throw new Error('boom')
+    })
+    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(entry.elementCount).toBe(0)
   })
 
   it('round-trips save({ operator }) through list()', async () => {

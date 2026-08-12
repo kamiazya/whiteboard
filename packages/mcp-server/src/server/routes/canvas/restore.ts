@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
 import { ConflictError, canvasExists, getCanvasKind, saveCanvas } from '../../store/canvas-store.js'
+import { countAliveNodes } from '../../store/count-alive-nodes.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
@@ -16,10 +17,6 @@ import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
 
 export interface RestoreRouterOptions {
   versionStore: VersionStore
-}
-
-function countElements(_doc: LoroDoc): number {
-  return 0
 }
 
 // Reconciles `past` onto `doc` (the LIVE cached doc for workspaceId/targetSlug),
@@ -182,7 +179,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
             )
             return c.json({
               canvasId: `${workspaceId}/${targetSlug}`,
-              elementCount: countElements(targetDoc),
+              elementCount: countAliveNodes(targetDoc),
             })
           }
 
@@ -215,7 +212,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           evictDoc(workspaceId, targetSlug)
           return c.json({
             canvasId: `${workspaceId}/${targetSlug}`,
-            elementCount: countElements(past),
+            elementCount: countAliveNodes(past),
           })
         }
 
