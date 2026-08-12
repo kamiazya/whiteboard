@@ -15,7 +15,13 @@
  * YAGNI + zod-schema-discipline this type deliberately carries no Zod schema.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { assignEdgeAnchors, type EdgeSides, routeEdge } from '@kamiazya/whiteboard-canvas-render'
+import {
+  assignEdgeAnchors,
+  type EdgeSides,
+  edgeArrowPolygons,
+  flattenDrawnEdgePath,
+  routeEdge,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { Box, NodeBox } from './geometry.js'
 import { hitTest, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
@@ -23,7 +29,13 @@ import type { Point } from './viewport.js'
 
 export type DragPreview =
   | { readonly kind: 'box'; readonly box: Box }
-  | { readonly kind: 'line'; readonly path: readonly Point[] }
+  | {
+      readonly kind: 'line'
+      /** The DRAWN line (rounded corners flattened), not raw waypoints. */
+      readonly path: readonly Point[]
+      /** Arrowhead polygons the committed edge will carry, tip first. */
+      readonly arrows: readonly (readonly Point[])[]
+    }
 
 /**
  * What the connecting branch needs to preview the REAL prospective edge:
@@ -136,7 +148,17 @@ export function computeDragPreview(
         canvas['x-whiteboard']?.edgeRouting?.style,
         anchors.get(tentative.id),
       )
-      return { kind: 'line', path: routed.path }
+      // The preview shows the DRAWN line the drop will produce: rounded
+      // corners flattened and the committed arrowheads, from the same
+      // producers the editor's committed render uses.
+      // ponytail: no line-jump hops here — computing them needs every
+      // other edge routed per frame; wire computeEdgeJumps in if the
+      // hopless preview ever reads as a bug.
+      return {
+        kind: 'line',
+        path: flattenDrawnEdgePath(routed.path, [], routed.rounded === true),
+        arrows: edgeArrowPolygons(routed).map((arrow) => arrow.points),
+      }
     }
     default:
       return undefined
