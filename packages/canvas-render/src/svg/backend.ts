@@ -1,4 +1,5 @@
 import { edgeArrowPolygons } from '../edge-arrows.js'
+import { hopEndpoints, jumpsWithinSpan } from '../layout/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edge-rounding.js'
 import { sceneBounds } from '../scene-bounds.js'
@@ -131,25 +132,24 @@ type EdgeJump = { readonly segment: number; readonly x: number; readonly y: numb
 
 /**
  * Path commands for one straight run from `from` to `to`, hopping over each
- * jump point with a half-circle arc (sweep 0 — the hop bulges to the left
- * of travel, drawio-style "over"). Jumps arrive ordered along the run.
+ * jump point with a half-circle arc. Sweep 1 bulges to the LEFT of travel
+ * in SVG's y-down coordinates (up, for a rightward run) — drawio-style
+ * "over", and the side `flattenDrawnEdgePath` samples for hit-testing and
+ * the selection highlight. Jumps arrive ordered along the run.
  */
 function lineWithJumps(
   from: EdgePoint,
   to: EdgePoint,
   jumps: readonly EdgeJump[],
 ): readonly string[] {
-  const len = Math.hypot(to.x - from.x, to.y - from.y)
-  if (len === 0 || jumps.length === 0) {
-    return [`L ${formatCoord(to.x)} ${formatCoord(to.y)}`]
-  }
-  const ux = (to.x - from.x) / len
-  const uy = (to.y - from.y) / len
-  const r = EDGE_JUMP_RADIUS_PX
   const parts: string[] = []
   for (const jump of jumps) {
-    parts.push(`L ${formatCoord(jump.x - ux * r)} ${formatCoord(jump.y - uy * r)}`)
-    parts.push(`A ${r} ${r} 0 0 0 ${formatCoord(jump.x + ux * r)} ${formatCoord(jump.y + uy * r)}`)
+    const hop = hopEndpoints(from, to, jump)
+    if (hop === undefined) continue
+    parts.push(`L ${formatCoord(hop.entry.x)} ${formatCoord(hop.entry.y)}`)
+    parts.push(
+      `A ${EDGE_JUMP_RADIUS_PX} ${EDGE_JUMP_RADIUS_PX} 0 0 1 ${formatCoord(hop.exit.x)} ${formatCoord(hop.exit.y)}`,
+    )
   }
   parts.push(`L ${formatCoord(to.x)} ${formatCoord(to.y)}`)
   return parts
@@ -170,29 +170,6 @@ function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]):
     )
   }
   return parts.join(' ')
-}
-
-/**
- * The jumps on original segment `segment` that fall INSIDE the drawn span
- * `from`->`to` with enough clearance for the arc. A rounded corner truncates
- * its segments to midpoints, so a hop computed near a corner may fall in the
- * curve zone — those are dropped rather than deforming the corner.
- */
-function jumpsWithinSpan(
-  jumps: readonly EdgeJump[],
-  segment: number,
-  from: EdgePoint,
-  to: EdgePoint,
-): readonly EdgeJump[] {
-  const len = Math.hypot(to.x - from.x, to.y - from.y)
-  if (len === 0) return []
-  const ux = (to.x - from.x) / len
-  const uy = (to.y - from.y) / len
-  return jumps.filter((jump) => {
-    if (jump.segment !== segment) return false
-    const t = (jump.x - from.x) * ux + (jump.y - from.y) * uy
-    return t > EDGE_JUMP_RADIUS_PX && t < len - EDGE_JUMP_RADIUS_PX
-  })
 }
 
 /**

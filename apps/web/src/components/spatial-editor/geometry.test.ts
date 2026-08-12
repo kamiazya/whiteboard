@@ -5,7 +5,6 @@ import {
   findFreeSpot,
   hitTest,
   indexNodeBoxes,
-  polylineMidpoint,
   resizeBoxByDelta,
   resizeHandleBoxes,
 } from './geometry.js'
@@ -164,28 +163,5 @@ describe('findFreeSpot', () => {
     const spot = findFreeSpot({ x: 500, y: 300 }, size, occupied)
     expect(Number.isFinite(spot.x)).toBe(true)
     expect(Number.isFinite(spot.y)).toBe(true)
-  })
-})
-
-describe('polylineMidpoint', () => {
-  it('returns the arc-length midpoint of a two-segment path', () => {
-    // Segments of length 10 then 30: midpoint is 20 along, i.e. 10 into segment 2.
-    const path = [
-      { x: 0, y: 0 },
-      { x: 10, y: 0 },
-      { x: 10, y: 30 },
-    ]
-    expect(polylineMidpoint(path)).toEqual({ x: 10, y: 10 })
-  })
-
-  it('degrades on degenerate paths instead of throwing', () => {
-    expect(polylineMidpoint([])).toEqual({ x: 0, y: 0 })
-    expect(polylineMidpoint([{ x: 3, y: 4 }])).toEqual({ x: 3, y: 4 })
-    expect(
-      polylineMidpoint([
-        { x: 5, y: 5 },
-        { x: 5, y: 5 },
-      ]),
-    ).toEqual({ x: 5, y: 5 })
   })
 })

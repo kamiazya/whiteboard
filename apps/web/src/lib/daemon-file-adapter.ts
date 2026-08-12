@@ -9,11 +9,11 @@
  * reference to bytes the daemon never stored.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
-import { imageRefId, isImageRef, newImageRef } from './canvas-file-ref.js'
 
 const log = getAppLogger('daemon-file-adapter')
 

@@ -1,3 +1,4 @@
+export * from './asset-ref.js'
 export * from './clipboard.js'
 export * from './facets.js'
 export * from './ids.js'

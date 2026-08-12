@@ -65,10 +65,16 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText, SpatialPresetKey, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  EdgeSides,
+  MeasureText,
+  SpatialPresetKey,
+  TextMetrics,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
-  flattenRoundedEdgePath,
+  edgeLabelAnchor,
+  flattenDrawnEdgePath,
   layoutSpatialEdges,
   renderSceneToSvg,
   SPATIAL_DARK_PALETTE,
@@ -156,12 +162,18 @@ import {
   HANDLE_SIGN,
   hitTest,
   indexNodeBoxes,
-  polylineMidpoint,
   resizeBoxByDelta,
   scaleBoxWithin,
   unionBox,
 } from './geometry.js'
-import { carriedByGesture, frozenSidesOf, liveNodesFor } from './gesture-view.js'
+import {
+  type CarriedSideCache,
+  canReuseCarriedSides,
+  carriedByGesture,
+  carriedSideCacheKey,
+  frozenSidesOf,
+  liveNodesFor,
+} from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
@@ -655,10 +667,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
-    // distance-to-polyline test against a zoom-adjusted tolerance. A rounded
-    // edge is DRAWN as midpoint-quadratic corners, so its hit/highlight path
-    // is the flattened curve — the raw waypoints run through corners the ink
-    // never touches.
+    // distance-to-polyline test against a zoom-adjusted tolerance. The
+    // hit/highlight path is the DRAWN line — rounded corners flattened and
+    // line-jump hops arced over — via the same decomposition the SVG
+    // backend serializes, so a tap and the highlight land on the ink.
     const edgePaths = useMemo(
       () =>
         scene.nodes.flatMap((node) =>
@@ -666,7 +678,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             ? [
                 {
                   id: node.id,
-                  path: node.rounded === true ? flattenRoundedEdgePath(node.path) : node.path,
+                  path: flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true),
                 },
               ]
             : [],
@@ -753,9 +765,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
       const nodes = canvas.nodes.filter((n) => carried.has(n.id))
       if (nodes.length === 0) return undefined
+      // Same embed options as the committed scene: a ghost that drops an
+      // expanded miniature back to a bare card mid-drag reads as data loss.
       const rendered = renderCanvasToSvg(
         { nodes, edges: [] },
-        { measure: resolvedMeasure, theme, resolveFileLabel, resolveFileImage },
+        {
+          measure: resolvedMeasure,
+          theme,
+          resolveFileLabel,
+          resolveFileCanvas,
+          expandFileNode,
+          resolveFileImage,
+        },
       )
       return {
         svg: rendered.svg,
@@ -772,6 +793,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       resolvedMeasure,
       theme,
       resolveFileLabel,
+      resolveFileCanvas,
+      expandFileNode,
       resolveFileImage,
     ])
 
@@ -790,6 +813,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * canvas; if start/commit jank appears on much larger canvases, move
      * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
      */
+    // Last optimized sides for the gesture's carried edges (see liveEdges).
+    const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
+    useEffect(() => {
+      if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') {
+        carriedSideCacheRef.current = null
+      }
+    }, [gestureState.kind])
+
     const dragStatic = useMemo(() => {
       if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
       const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
@@ -808,7 +839,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       })
       const metricsCache = new Map<string, TextMetrics>()
       const measure: MeasureText = (text, font) => {
-        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx} ${text}`
+        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx}\u0000${text}`
         const hit = metricsCache.get(key)
         if (hit !== undefined) return hit
         const metrics = resolvedMeasure(text, font)
@@ -922,14 +953,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       const liveNodes = [...liveNodesFor(canvas, gestureState, dragPreview.box, dragStatic.carried)]
       // BYSTANDER sides stay frozen at their committed choices for the whole
-      // gesture: per-frame crossing optimization would both blow the frame
-      // budget and let unrelated routes flip sides mid-drag. Edges attached
-      // to a CARRIED node are exempt — their geometry is the thing changing,
-      // and a side frozen at gesture start points out of the wrong face for
-      // most of the drag, only to jump at drop. Leaving them out of the
-      // override map re-picks their sides per frame via the cheap local
-      // heuristic (the optimization loop stays skipped either way); the
-      // drop's committed render still runs the full optimization.
+      // gesture: re-optimizing them per frame would let unrelated routes
+      // flip sides mid-drag. Edges attached to a CARRIED node re-optimize
+      // through the same side optimizer the committed render uses (so the
+      // drop cannot re-side an edge the preview never showed that way) —
+      // but only once per CARRIED_RESIDE_STEP_PX of travel: the optimizer's
+      // trial loop costs ~8-14ms and a side decision rarely changes within
+      // a few pixels, so in-between frames reuse the cached sides as a full
+      // override map, which skips the optimizer entirely.
       const carried = dragStatic.carried
       const carriedEdgeIds = new Set(
         canvas.edges
@@ -939,15 +970,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const frozenSides = new Map(
         [...frozenSidesOf(scene)].filter(([id]) => !carriedEdgeIds.has(id)),
       )
+      const cacheKey = carriedSideCacheKey(carriedEdgeIds)
+      const cache = carriedSideCacheRef.current
+      const reuse = canReuseCarriedSides(cache, cacheKey, dragPreview.box.x, dragPreview.box.y)
+      const overrides =
+        reuse && cache !== null ? new Map([...frozenSides, ...cache.sides]) : frozenSides
       const nodes = layoutSpatialEdges(
         { ...canvas, nodes: liveNodes },
         {
           measure: dragStatic.measure,
           parseBody: parseMarkdownBody,
           appearance: createEditorAppearance(theme),
-          edgeSideOverrides: frozenSides,
+          edgeSideOverrides: overrides,
         },
       )
+      if (!reuse) {
+        const sides = new Map<string, EdgeSides>()
+        for (const node of nodes) {
+          if (node.kind === 'edge' && carriedEdgeIds.has(node.id)) {
+            sides.set(node.id, { fromSide: node.fromSide, toSide: node.toSide })
+          }
+        }
+        carriedSideCacheRef.current = {
+          key: cacheKey,
+          anchorX: dragPreview.box.x,
+          anchorY: dragPreview.box.y,
+          sides,
+        }
+      }
       const liveBounds = sceneBounds({ nodes })
       return {
         svg: renderSceneToSvg(
@@ -3881,8 +3931,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             (() => {
               const edge = canvas.edges.find((entry) => entry.id === edgeLabelEditId)
               const path = edgePaths.find((entry) => entry.id === edgeLabelEditId)?.path
-              if (edge === undefined || path === undefined || path.length < 2) return null
-              const mid = polylineMidpoint(path)
+              if (edge === undefined || path === undefined) return null
+              // edgePaths is already the DRAWN (flattened) line, so the
+              // shared anchor needs no second rounding pass here.
+              const mid = edgeLabelAnchor(path)
+              if (mid === undefined) return null
               return (
                 <TextNodeEditor
                   box={{

@@ -164,6 +164,48 @@ describe('layoutSpatialCanvas', () => {
     expect(label?.appearance?.fill).toBe('#303030')
   })
 
+  it('centers a multi-segment edge label at the arc-length midpoint, not a corner vertex', () => {
+    // Diagonal neighbours route as an L with unequal legs; the label must
+    // sit halfway along the DRAWN line (the same anchor the editor's
+    // inline label editor uses), not on the index-middle waypoint, which
+    // for an L-route is the corner itself.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b', label: 'L' }
+    const scene = layoutSpatialCanvas(
+      { ...canvas([a, b], [edge]), 'x-whiteboard': { edgeRouting: { style: 'orthogonal' } } },
+      baseOptions(),
+    )
+    const routed = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun' && n.text === 'L')
+    expect(routed).toBeDefined()
+    expect(label).toBeDefined()
+    if (routed === undefined || label === undefined) return
+    // Independent arc-length midpoint of the routed path.
+    let total = 0
+    const lengths = routed.path.slice(1).map((p, i) => {
+      const l = Math.hypot(p.x - routed.path[i]!.x, p.y - routed.path[i]!.y)
+      total += l
+      return l
+    })
+    let remaining = total / 2
+    let expected = routed.path[0]!
+    for (let i = 0; i < lengths.length; i++) {
+      if (remaining <= lengths[i]!) {
+        const t = lengths[i] === 0 ? 0 : remaining / lengths[i]!
+        const from = routed.path[i]!
+        const to = routed.path[i + 1]!
+        expected = { x: from.x + t * (to.x - from.x), y: from.y + t * (to.y - from.y) }
+        break
+      }
+      remaining -= lengths[i]!
+    }
+    expect(label.bbox.x + label.bbox.w / 2).toBeCloseTo(expected.x, 6)
+    expect(label.bbox.y + label.bbox.h / 2).toBeCloseTo(expected.y, 6)
+  })
+
   it('emits no label run for an edge with no label', () => {
     const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })

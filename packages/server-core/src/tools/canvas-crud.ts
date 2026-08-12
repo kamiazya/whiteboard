@@ -82,7 +82,13 @@ export async function wbCanvasList(
   deps: ServerDeps,
   input: z.infer<typeof listCanvasesInputSchema>,
 ): Promise<z.infer<typeof listCanvasesOutputSchema>> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+  // Agree with wbCanvasCreate about workspace existence: a never-persisted
+  // workspace is an error, not an empty list — otherwise a typo'd
+  // workspaceId is indistinguishable from a genuinely empty workspace.
+  const tree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
+  if (tree === null) {
+    throw new WorkspaceNotFoundError(input.workspaceId)
+  }
   return {
     canvases: tree.snapshot().nodes.map((node) => ({
       canvasId: node.canvasId,

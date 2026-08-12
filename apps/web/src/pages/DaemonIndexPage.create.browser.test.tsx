@@ -2,10 +2,19 @@
 // (ADR-0006 point 4 / accessibility criterion 2): jsdom cannot be trusted to
 // portal-render Radix tooltip content, so this asserts on hover AND on
 // keyboard focus in a real browser instead of only structurally in jsdom.
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render as rtlRender, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
+
+// The page now reads useNavigate (Settings navigation), so every render
+// needs a Router ancestor — wrapping once here keeps the existing
+// `render(<DaemonIndexPage .../>)` call sites throughout this file unchanged.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 

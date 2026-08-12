@@ -89,3 +89,39 @@ export function frozenSidesOf(scene: Scene): ReadonlyMap<string, EdgeSides> {
     ),
   )
 }
+
+/**
+ * How far a carried node travels before its edges' sides are re-optimized.
+ * Re-siding every frame costs ~8-14ms (the optimizer's trial loop) and a
+ * side decision rarely changes within a few pixels, so live drag reuses
+ * the last optimized sides until the node has moved a full step; the drop
+ * still runs the full optimization on the committed render.
+ */
+export const CARRIED_RESIDE_STEP_PX = 16
+
+/** The last optimized sides for the gesture's carried edges, anchored at
+ * the preview position they were computed for. */
+export interface CarriedSideCache {
+  readonly key: string
+  readonly anchorX: number
+  readonly anchorY: number
+  readonly sides: ReadonlyMap<string, EdgeSides>
+}
+
+/** Order-independent identity of the carried edge set. */
+export function carriedSideCacheKey(carriedEdgeIds: ReadonlySet<string>): string {
+  return [...carriedEdgeIds].sort().join(' ')
+}
+
+export function canReuseCarriedSides(
+  cache: CarriedSideCache | null,
+  key: string,
+  x: number,
+  y: number,
+): boolean {
+  return (
+    cache !== null &&
+    cache.key === key &&
+    Math.hypot(x - cache.anchorX, y - cache.anchorY) < CARRIED_RESIDE_STEP_PX
+  )
+}

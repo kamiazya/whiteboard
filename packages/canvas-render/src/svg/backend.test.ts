@@ -780,8 +780,11 @@ describe('line-jump hops', () => {
     const svg = renderSceneToSvg({ nodes: [crossing] })
     expect(svg).not.toContain('<polyline')
     // Straight run to the hop entry, a half-circle over the crossing,
-    // straight run out: entry at x-r, exit at x+r, sweep 0 bulges up.
-    expect(svg).toContain('d="M 0 100 L 95 100 A 5 5 0 0 0 105 100 L 200 100"')
+    // straight run out: entry at x-r, exit at x+r. Sweep 1 is what bulges
+    // to the LEFT of travel (up, here) in SVG's y-down coordinates —
+    // sweep 0 rendered the hop UNDER the line while every comment and the
+    // flattened hit path said over.
+    expect(svg).toContain('d="M 0 100 L 95 100 A 5 5 0 0 1 105 100 L 200 100"')
   })
 
   it('a jump-free edge stays the byte-identical polyline', () => {
@@ -808,7 +811,7 @@ describe('line-jump hops', () => {
     }
     const svg = renderSceneToSvg({ nodes: [bent] })
     // The hop arc and the corner quadratic coexist in one path.
-    expect(svg).toContain('A 5 5 0 0 0 85 100')
+    expect(svg).toContain('A 5 5 0 0 1 85 100')
     expect(svg).toContain('Q 200 100')
   })
 })
