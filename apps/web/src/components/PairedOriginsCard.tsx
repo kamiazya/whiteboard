@@ -35,13 +35,10 @@ export function PairedOriginsCard() {
   // shown on the /pair consent page out-of-band. Best-effort: absent on
   // legacy daemons or while unreachable.
   useEffect(() => {
-    // `cancelled` (scoped to this effect run, flipped by its own cleanup) is
-    // the correct staleness guard here — it fires exactly when fetchApi
-    // changes (a different daemon) or the component unmounts. Comparing
-    // against the grants-load generationRef instead would be wrong: that
+    // `cancelled` is the staleness guard here, NOT generationRef: that
     // counter is bumped by the unrelated load()/revoke() effect on every
-    // mount, so this effect's captured value could never match again once
-    // that ran, and the fingerprint would silently never render.
+    // mount, so a value captured here could never match again and the
+    // fingerprint would silently never render.
     let cancelled = false
     void (async () => {
       try {
