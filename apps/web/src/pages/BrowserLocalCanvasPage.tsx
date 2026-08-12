@@ -1,7 +1,7 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
@@ -9,7 +9,6 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
-import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
@@ -37,7 +36,7 @@ import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
+import { browserLocalCanvasPath, parseBrowserLocalRoute, settingsPath } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
@@ -164,7 +163,7 @@ export function BrowserLocalCanvasPage({
   // Owned locally rather than threaded down from App.tsx: useThemeMode already
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
-  const { theme, resolvedTheme, setTheme } = useThemeMode()
+  const { resolvedTheme } = useThemeMode()
 
   // Fullscreen can also be left with Escape or the browser's own chrome, so
   // the button's label follows the DOCUMENT rather than our own click.
@@ -328,16 +327,11 @@ export function BrowserLocalCanvasPage({
     canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
   })
 
-  // Reactive: toggling in the SettingsPanel updates this state, which causes
-  // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
-  // internal AbortController; OFF→ON re-registers without a page reload).
-  const [webMcpEnabled, setWebMcpEnabled] = useState(
-    () => settingsStore.load().capabilities.webMcpEnabled !== false,
-  )
+  // Read once at mount: the routed /settings page is the only place this
+  // toggles, and navigating there and back remounts this page (a route
+  // change), which re-reads the store fresh — no in-mount reactivity needed.
+  const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
   useBrowserToolRegistry(commands, canvasId, webMcpEnabled)
-
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
   // Canvas data lives in IndexedDB; without an explicit persistence grant
   // the browser may evict it under storage pressure. Fire-and-forget — the
@@ -370,9 +364,9 @@ export function BrowserLocalCanvasPage({
 
   // Tab favicon: persistence state as the status dot (degraded reads as
   // offline — data is at risk either way), scene content as the minimap.
-  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
-    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
-  )
+  // Read once at mount for the same remount-re-reads reason as webMcpEnabled
+  // above — the style picker now lives on the routed /settings page.
+  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   useFavicon({
     style: faviconStyle,
     status: browserLocalFaviconStatus(persistence.kind),
@@ -618,7 +612,7 @@ export function BrowserLocalCanvasPage({
               branches: capabilities.branches,
               merge: capabilities.merge,
             }}
-            onOpenSettings={handleOpenSettings}
+            onOpenSettings={() => navigate(settingsPath())}
           />
         </Suspense>
       </div>
@@ -725,15 +719,6 @@ export function BrowserLocalCanvasPage({
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
       </div>
-      <SettingsPanel
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        theme={theme}
-        onThemeChange={setTheme}
-        webMcpEnabled={webMcpEnabled}
-        onWebMcpChange={setWebMcpEnabled}
-        onFaviconStyleChange={setFaviconStyle}
-      />
     </main>
   )
 }

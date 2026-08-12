@@ -1,6 +1,23 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  type RenderOptions,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
+
+// The page now reads useNavigate (Settings navigation), so every render
+// needs a Router ancestor — wrapping once here keeps the existing
+// `render(<DaemonIndexPage .../>)` call sites throughout this file unchanged.
+function render(ui: ReactElement, options?: RenderOptions) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
+}
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
@@ -1019,25 +1036,32 @@ describe('DaemonIndexPage', () => {
     await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
   })
 
-  it('has no Storage tab — storage and pairing live in Settings (design refactor D2)', async () => {
+  it('has no Storage tab — storage and pairing live on the routed Settings page (design refactor D2)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    const router = createMemoryRouter(
+      [
+        {
+          path: '*',
+          element: <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />,
+        },
+      ],
+      { initialEntries: ['/'] },
+    )
+    rtlRender(<RouterProvider router={router} />)
     await screen.findByText('alpha')
 
     // The top level is the canvas surface only: no tablist at all.
     expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Storage' })).toBeNull()
 
-    // The operational surfaces open from Settings instead.
+    // The operational surfaces (storage, pairing) now live on their own
+    // route rather than an inline dialog — the gear button navigates.
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(await screen.findByText('Storage usage')).toBeTruthy()
-    expect(screen.getByText('Paired web apps')).toBeTruthy()
-    // The canvas grid stays mounted behind the dialog.
-    expect(screen.getByTestId('canvas-list-card')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/settings')
   })
 
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {

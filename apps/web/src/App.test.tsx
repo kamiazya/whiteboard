@@ -96,6 +96,17 @@ vi.mock('./pages/DaemonCanvasPage.js', () => ({
   },
 }))
 
+// Captures the daemon prop so a test can assert App resolves it from the
+// active connection (paired fragment / local-daemon provider state) rather
+// than merely mounting the page on the /settings route.
+let receivedSettingsPageProps: Record<string, unknown> | undefined
+vi.mock('./pages/SettingsPage.js', () => ({
+  SettingsPage: (props: Record<string, unknown>) => {
+    receivedSettingsPageProps = props
+    return <div data-testid="settings-page" />
+  },
+}))
+
 let receivedDaemonIndexPageProps: Record<string, unknown> | undefined
 vi.mock('./pages/DaemonIndexPage.js', () => ({
   DaemonIndexPage: (props: Record<string, unknown>) => {
@@ -960,6 +971,120 @@ describe('App URL routing', () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/something/unrelated/entirely')
     expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+  })
+})
+
+describe('App /settings routing', () => {
+  beforeEach(() => {
+    receivedSettingsPageProps = undefined
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+  afterEach(() => {
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+
+  it('mounts SettingsPage for /settings and its sub-routes instead of the usual view', async () => {
+    for (const path of [
+      '/settings',
+      '/settings/general',
+      '/settings/data',
+      '/settings/connections',
+    ]) {
+      renderAppWithRouter(BROWSER_LOCAL_STATE, path)
+      expect(await screen.findByTestId('settings-page')).toBeTruthy()
+      cleanup()
+    }
+  })
+
+  it('does not rewrite /settings to the daemon route (the URL-sync guard)', async () => {
+    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(router.state.location.pathname).toBe('/settings')
+  })
+
+  it('passes no daemon prop in browser-local mode with no active connection', async () => {
+    renderAppWithRouter(BROWSER_LOCAL_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toBeUndefined()
+  })
+
+  it('passes the local-daemon baseUrl/token when the provider state is local-daemon', async () => {
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: LOCAL_DAEMON_STATE.kind === 'local-daemon' ? LOCAL_DAEMON_STATE.daemonBaseUrl : '',
+      token: null,
+    })
+  })
+
+  it('passes the paired fragment daemon baseUrl/token over the provider state', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: undefined,
+        slug: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    renderAppWithRouter(BROWSER_LOCAL_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: 'http://127.0.0.1:3099',
+      token: 'tok',
+    })
+  })
+
+  it('passes token: null for a paired fragment connection with authMode "none" (no bootstrap token)', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: undefined,
+        slug: undefined,
+        authMode: 'none',
+      },
+    }
+    renderAppWithRouter(BROWSER_LOCAL_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: 'http://127.0.0.1:3099',
+      token: null,
+    })
+  })
+
+  it('passes the daemon from a session grant established via the silent-renewal seam', async () => {
+    // Same mechanism as the "silent renewal" suite above: a stored
+    // localDaemonBaseUrl plus a 'paired' renewPairingToken result lands in
+    // grantConnection, which /settings must resolve exactly like a #wb-grant
+    // fragment consumed directly on this route would.
+    localStorage.clear()
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: 'http://127.0.0.1:3099',
+      token: 'tok-r',
+    })
+    renewPairingTokenMock.mockClear()
+    mockRenewResult = { status: 'none' }
+    localStorage.clear()
   })
 })
 

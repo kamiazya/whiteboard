@@ -11,9 +11,25 @@ import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  type RenderOptions,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+
+// The page now reads useNavigate (Settings navigation), so every render
+// needs a Router ancestor — wrapping once here keeps the existing
+// `render(<DaemonCanvasPage .../>)` call sites throughout this file unchanged.
+function render(ui: ReactElement, options?: RenderOptions) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
+}
 
 const capturedProps: { getThumbnailBlob?: () => Promise<Blob | null> }[] = []
 

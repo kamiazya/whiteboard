@@ -2,16 +2,14 @@ import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { LayoutGrid, ListTree, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
-import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
-import { StorageReportCard } from '../components/StorageReportCard.js'
-import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useThemeMode } from '../hooks/useThemeMode.js'
+import { settingsPath } from '../lib/app-routes.js'
 import {
   createCanvas,
   createDaemonFetch,
@@ -26,7 +24,6 @@ import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopySlug } from '../lib/derive-copy-slug.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
 // workspace selector picks which workspace's canvases populate the grid.
@@ -95,14 +92,9 @@ export function DaemonIndexPage({
   onOpenCanvas,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  const navigate = useNavigate()
 
   const [view, setView] = useState<ViewKey>('grid')
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const { theme, setTheme } = useThemeMode()
-  const [settingsStore] = useState(() => createUserSettingsStore())
-  const [webMcpEnabled, setWebMcpEnabled] = useState(
-    () => settingsStore.load().capabilities.webMcpEnabled !== false,
-  )
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   const [rows, setRows] = useState<CanvasRow[]>([])
@@ -363,7 +355,7 @@ export function DaemonIndexPage({
             <button
               type="button"
               aria-label="Settings"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => navigate(settingsPath())}
               className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <Settings className="size-4" />
@@ -488,24 +480,6 @@ export function DaemonIndexPage({
           description="This permanently removes the canvas, including its versions and branches. There is no undo."
           onCancel={closeDeleteDialog}
           onConfirm={() => void handleConfirmDelete()}
-        />
-        <SettingsPanel
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          theme={theme}
-          onThemeChange={setTheme}
-          webMcpEnabled={webMcpEnabled}
-          onWebMcpChange={setWebMcpEnabled}
-          extraSections={
-            <>
-              <section aria-label="Paired web apps">
-                <PairedOriginsCard />
-              </section>
-              <section aria-label="Storage">
-                <StorageReportCard />
-              </section>
-            </>
-          }
         />
       </div>
     </DaemonApiContext.Provider>

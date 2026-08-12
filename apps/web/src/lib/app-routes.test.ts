@@ -8,6 +8,8 @@ import {
   isKnownAppPath,
   parseBrowserLocalRoute,
   parseDaemonRoute,
+  parseSettingsRoute,
+  settingsPath,
   workspacePath,
 } from './app-routes.js'
 
@@ -113,14 +115,54 @@ describe('malformed percent-encoding', () => {
 
 describe('isKnownAppPath', () => {
   it('accepts every route in the closed set', () => {
-    for (const p of ['/', '/w/ws1', '/canvas/ws1/main', '/local', '/local/c1', '/pair']) {
+    for (const p of [
+      '/',
+      '/w/ws1',
+      '/canvas/ws1/main',
+      '/local',
+      '/local/c1',
+      '/pair',
+      '/settings',
+      '/settings/general',
+      '/settings/data',
+      '/settings/connections',
+    ]) {
       expect(isKnownAppPath(p)).toBe(true)
     }
   })
 
   it('rejects unknown paths so App can show not-found instead of silently falling through', () => {
-    for (const p of ['/nope', '/canvas/onlyws', '/local/a/b', '/w/', '/settings']) {
+    for (const p of ['/nope', '/canvas/onlyws', '/local/a/b', '/w/', '/settings/nope']) {
       expect(isKnownAppPath(p)).toBe(false)
     }
+  })
+})
+
+describe('settingsPath', () => {
+  it('builds the settings index path with no section', () => {
+    expect(settingsPath()).toBe('/settings')
+  })
+
+  it('builds a section-scoped settings path', () => {
+    expect(settingsPath('general')).toBe('/settings/general')
+    expect(settingsPath('data')).toBe('/settings/data')
+    expect(settingsPath('connections')).toBe('/settings/connections')
+  })
+})
+
+describe('parseSettingsRoute', () => {
+  it('parses the settings index route with a null section', () => {
+    expect(parseSettingsRoute('/settings')).toEqual({ section: null })
+  })
+
+  it('parses a section-scoped settings route', () => {
+    expect(parseSettingsRoute('/settings/general')).toEqual({ section: 'general' })
+    expect(parseSettingsRoute('/settings/data')).toEqual({ section: 'data' })
+    expect(parseSettingsRoute('/settings/connections')).toEqual({ section: 'connections' })
+  })
+
+  it('returns null for an unknown section or unrelated path', () => {
+    expect(parseSettingsRoute('/settings/nope')).toBeNull()
+    expect(parseSettingsRoute('/local')).toBeNull()
   })
 })
