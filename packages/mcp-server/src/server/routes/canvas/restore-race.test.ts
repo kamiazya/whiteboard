@@ -126,3 +126,84 @@ describe('restore targetSlug-overwrite vs delete race', () => {
     expect(listJson.canvases.map((c) => c.slug)).toEqual(['canvas-a'])
   })
 })
+
+describe('restore in-place vs delete race', () => {
+  beforeEach(() => {
+    clearCache()
+  })
+
+  afterEach(() => {
+    clearCache()
+  })
+
+  it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+    // Single canvas with a saved version to restore onto itself (no targetSlug).
+    const sourceDoc = new LoroDoc()
+    const svv0 = sourceDoc.version()
+    const sourceList = sourceDoc.getMovableList('elements')
+    const sm0 = sourceList.insertContainer(0, new LoroMap())
+    sm0.set('id', 'keep-me')
+    sourceDoc.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: sourceDoc.export({ mode: 'update', from: svv0 }),
+    })
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+    // Stall the restore route's getDoc(slug) call so a DELETE of the same
+    // canvas can be fired while the request is paused mid-flight, matching
+    // the real race: the read resolves before the delete runs, the write
+    // happens after.
+    const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
+    const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
+    const actual = await vi.importActual<typeof import('../../store/doc-cache.js')>(
+      '../../store/doc-cache.js',
+    )
+    let gateArmed = true
+    vi.mocked(getDoc).mockImplementation(async (workspaceId, slug) => {
+      if (gateArmed && slug === 'canvas-a') {
+        gateArmed = false
+        signalGetDocCalled()
+        await getDocGate
+      }
+      return actual.getDoc(workspaceId, slug)
+    })
+
+    const restorePromise = app.request(
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+      {
+        method: 'POST',
+      },
+    )
+
+    await getDocCalled
+
+    // Fire the delete of the canvas being restored while the restore is
+    // stalled mid-flight.
+    const deletePromise = app.request('/api/workspaces/session1/canvases/canvas-a', {
+      method: 'DELETE',
+    })
+    // Give the delete a chance to run before letting the stalled read continue.
+    await new Promise((r) => setTimeout(r, 20))
+    releaseGetDoc()
+
+    const [restoreRes, deleteRes] = await Promise.all([restorePromise, deletePromise])
+    expect(deleteRes.status).toBe(200)
+    expect(restoreRes.status).toBe(200)
+
+    // The delete serializes after the restore's write under the workspace
+    // lock, so canvas-a must be gone -- the restore must not have won a
+    // race that resurrects it after the delete.
+    const listRes = await app.request('/api/workspaces/session1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
+    expect(listJson.canvases.map((c) => c.slug)).toEqual([])
+  })
+})
