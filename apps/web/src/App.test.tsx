@@ -955,7 +955,29 @@ describe('App shell (single instance above the routed pages)', () => {
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
   })
 
+  it('the paired-fragment branch renders the shell too — Settings/Home must survive every entry path', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-canvas-page')
+    expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+  })
+
   it('daemon branch renders the shell and a reported auth error lights its attention dot', async () => {
+    mockDaemonConnectionResult = { status: 'none' }
     Object.defineProperty(navigator, 'storage', {
       value: { persisted: () => Promise.resolve(true) },
       configurable: true,

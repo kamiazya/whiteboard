@@ -425,37 +425,37 @@ export function App({ providerState }: AppProps) {
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
-          {/* Pages size to their allotted height (h-full) so app-level rows
-              like the beta banner can never clip them — this bannerless
-              branch supplies the viewport height itself. */}
-          <div className="h-dvh">
-            <Suspense
-              fallback={<LazyPageFallback heightClass="h-dvh" message="Connecting to daemon…" />}
-            >
-              {daemonView.kind === 'index' ? (
-                <DaemonIndexPage
-                  daemonBaseUrl={payload.baseUrl}
-                  token={pairedToken}
-                  initialWorkspaceId={daemonView.workspaceId}
-                  onOpenCanvas={(workspaceId, slug) =>
-                    setDaemonView({ kind: 'canvas', workspaceId, slug })
-                  }
-                />
-              ) : (
-                <DaemonCanvasPage
-                  key={`${daemonView.workspaceId}:${daemonView.slug}`}
-                  daemonBaseUrl={payload.baseUrl}
-                  workspaceId={daemonView.workspaceId}
-                  slug={daemonView.slug}
-                  token={pairedToken}
-                  onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-                  browserLocalStore={browserLocalStore}
-                  onNavigateBack={() =>
-                    setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
-                  }
-                />
-              )}
-            </Suspense>
+          <div className="flex h-dvh flex-col">
+            <AppShell daemon={true} />
+            <div className="min-h-0 flex-1">
+              <Suspense
+                fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
+              >
+                {daemonView.kind === 'index' ? (
+                  <DaemonIndexPage
+                    daemonBaseUrl={payload.baseUrl}
+                    token={pairedToken}
+                    initialWorkspaceId={daemonView.workspaceId}
+                    onOpenCanvas={(workspaceId, slug) =>
+                      setDaemonView({ kind: 'canvas', workspaceId, slug })
+                    }
+                  />
+                ) : (
+                  <DaemonCanvasPage
+                    key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                    daemonBaseUrl={payload.baseUrl}
+                    workspaceId={daemonView.workspaceId}
+                    slug={daemonView.slug}
+                    token={pairedToken}
+                    onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+                    browserLocalStore={browserLocalStore}
+                    onNavigateBack={() =>
+                      setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                    }
+                  />
+                )}
+              </Suspense>
+            </div>
           </div>
         </ErrorBoundary>
       )

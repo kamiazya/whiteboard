@@ -12,7 +12,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
