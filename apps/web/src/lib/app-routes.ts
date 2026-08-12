@@ -79,6 +79,27 @@ export function parseBrowserLocalRoute(pathname: string): { canvasId: string } |
   return canvasId === null ? null : { canvasId }
 }
 
+export type SettingsSection = 'general' | 'data' | 'connections'
+
+const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'data', 'connections']
+
+export function settingsPath(section?: SettingsSection): string {
+  return section === undefined ? '/settings' : `/settings/${section}`
+}
+
+// A null `section` distinguishes the settings index (mobile: section list,
+// desktop: General) from a section route; a null return value (the outer
+// null) means "not a settings route at all".
+export function parseSettingsRoute(pathname: string): { section: SettingsSection | null } | null {
+  if (pathname === '/settings') return { section: null }
+  const match = pathname.match(/^\/settings\/([^/]+)\/?$/)
+  if (!match) return null
+  const candidate = match[1]
+  return SETTINGS_SECTIONS.includes(candidate as SettingsSection)
+    ? { section: candidate as SettingsSection }
+    : null
+}
+
 /**
  * Whether a pathname belongs to the app's closed route set. App.tsx shows
  * the not-found page for anything else, instead of silently falling through
@@ -89,6 +110,7 @@ export function isKnownAppPath(pathname: string): boolean {
     pathname === '/pair' ||
     pathname === browserLocalIndexPath() ||
     parseBrowserLocalRoute(pathname) !== null ||
+    parseSettingsRoute(pathname) !== null ||
     parseDaemonRoute(pathname) !== null
   )
 }

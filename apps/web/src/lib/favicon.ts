@@ -1,6 +1,6 @@
 /**
  * Dynamic favicon: the boot-splash mark (board + squiggle) as a live status
- * surface. Two user-selectable styles (see SettingsPanel):
+ * surface. Two user-selectable styles (see the /settings General section):
  *
  * - 'minimap': the board is filled with an abstract minimap of the actual
  *   canvas (nodes as small filled rects); an empty canvas falls back to the

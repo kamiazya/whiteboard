@@ -2,9 +2,18 @@
  * Files tab: the OpenCanvas workspace file tree (/api/v1 alias world)
  * reachable from the daemon index page, with a read-only OKF preview.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
+
+// The page now reads useNavigate (Settings navigation), so every render
+// needs a Router ancestor — wrapping once here keeps the existing
+// `render(<DaemonIndexPage .../>)` call sites throughout this file unchanged.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 

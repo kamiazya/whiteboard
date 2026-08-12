@@ -4,6 +4,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
@@ -11,7 +12,6 @@ import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
-import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
@@ -23,6 +23,7 @@ import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { settingsPath } from '../lib/app-routes.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
@@ -87,6 +88,7 @@ export function DaemonCanvasPage({
   browserLocalStore,
   onNavigateBack,
 }: DaemonCanvasPageProps) {
+  const navigate = useNavigate()
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
@@ -133,7 +135,7 @@ export function DaemonCanvasPage({
   // current capabilities.webMcpEnabled value is needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  const { theme, resolvedTheme, setTheme } = useThemeMode()
+  const { resolvedTheme } = useThemeMode()
 
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -244,28 +246,21 @@ export function DaemonCanvasPage({
         : null,
   })
 
-  // Identity key = workspaceId+slug, matching this page's own canvas
-  // Reactive: toggling in the SettingsPanel updates this state, which causes
-  // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
-  // internal AbortController; OFF→ON re-registers without a page reload).
-  const [webMcpEnabled, setWebMcpEnabled] = useState(
-    () => settingsStore.load().capabilities.webMcpEnabled !== false,
-  )
+  // Identity key = workspaceId+slug, matching this page's own canvas.
+  // Read once at mount: the routed /settings page is the only place this
+  // toggles, and navigating there and back remounts this page (a route
+  // change), which re-reads the store fresh — no in-mount reactivity needed.
+  const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
   useBrowserToolRegistry(
     commands,
     canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null,
     webMcpEnabled,
   )
 
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
-
-  // Tab favicon: sync state as the status dot, scene content as the
-  // minimap (style user-selectable in SettingsPanel, reactive like
-  // webMcpEnabled above).
-  const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
-    () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
-  )
+  // Tab favicon: sync state as the status dot, scene content as the minimap
+  // (style user-selectable on the routed /settings page; same remount-
+  // re-reads reasoning as webMcpEnabled above).
+  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.slug ?? '')
   useFavicon({
     style: faviconStyle,
@@ -478,7 +473,7 @@ export function DaemonCanvasPage({
               // user can trigger by hand. Without this the save flow skips
               // the upload entirely and latest-thumbnail stays 204 forever.
               getThumbnailBlob={getThumbnailBlob}
-              onOpenSettings={handleOpenSettings}
+              onOpenSettings={() => navigate(settingsPath())}
               workspaces={
                 capabilities.workspaces
                   ? controller.workspaces.map((w) => w.workspaceId)
@@ -664,15 +659,6 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
           />
         )}
-        <SettingsPanel
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          theme={theme}
-          onThemeChange={setTheme}
-          webMcpEnabled={webMcpEnabled}
-          onWebMcpChange={setWebMcpEnabled}
-          onFaviconStyleChange={setFaviconStyle}
-        />
       </main>
     </DaemonApiContext.Provider>
   )
