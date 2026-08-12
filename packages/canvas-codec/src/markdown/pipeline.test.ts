@@ -1,7 +1,42 @@
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { describe, expect, it } from 'vitest'
+import { normalizeMdast } from './normalize.js'
 import { parseMarkdownBody, stringifyMarkdownBody } from './pipeline.js'
 
 describe('markdown pipeline pinned examples', () => {
+  // fast-check counterexample (seed 1010669059, shrunk 17x) from the
+  // round-trip property: a link with `$` in its url adjacent to `]` in its
+  // text. mdast-util-math registers a toMarkdown `unsafe` pattern for `$`
+  // with an `after: undefined` key; mdast-util-to-markdown's `safe()` reads
+  // that as `'after' in pattern`, so it thinks an "after" constraint is
+  // present, matches it against undefined, and skips escaping the `$` that
+  // sits right before the link text's own escaped `]`. The unescaped `$]`
+  // then re-parses as a shorter link, changing the tree shape.
+  it('round-trips a link whose text ends in "$]" next to a "$"-terminated url', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'heading',
+          depth: 1,
+          children: [
+            {
+              type: 'link',
+              url: 'http://a.aa/$',
+              title: null,
+              children: [{ type: 'text', value: '$]' }],
+            },
+          ],
+        },
+        { type: 'thematicBreak' },
+      ],
+    }
+    const text = stringifyMarkdownBody(root)
+    expect(text).toContain('[\\$\\]]')
+    const reparsed = parseMarkdownBody(text)
+    expect(normalizeMdast(reparsed)).toEqual(normalizeMdast(root))
+  })
+
   it('keeps a ```mermaid fence a code node with lang "mermaid"', () => {
     const root = parseMarkdownBody('```mermaid\ngraph TD;\nA-->B;\n```\n')
     expect(root.children[0]).toMatchObject({ type: 'code', lang: 'mermaid' })
