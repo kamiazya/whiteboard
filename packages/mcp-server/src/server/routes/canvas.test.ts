@@ -21,11 +21,14 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock doc-cache so the cache is isolated in tests.
+// Mock doc-cache so the cache is isolated in tests. getDoc is wrapped in
+// vi.fn (defaulting to the real implementation) so individual tests can
+// install a one-shot mockImplementationOnce to control interleaving against
+// a concurrent request.
 vi.mock('../store/doc-cache.js', async () => {
   const actual =
     await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')
-  return actual
+  return { ...actual, getDoc: vi.fn(actual.getDoc) }
 })
 
 const { clearCache, peekDoc, getDoc } = await import('../store/doc-cache.js')
@@ -446,6 +449,68 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     const listRes = await app.request('/api/workspaces/session1/canvases')
     const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
     expect(listJson.canvases.map((c) => c.slug).sort()).toEqual(['a', 'b'])
+  })
+
+  it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old slug', async () => {
+    const app = createCanvasRouter()
+    const baseDoc = new LoroDoc()
+    baseDoc.getText('content').insert(0, 'original')
+    baseDoc.commit()
+    await saveCanvas('session1', 'a', baseDoc)
+
+    // A client update built against the pre-rename base.
+    const clientDoc = LoroDoc.fromSnapshot(baseDoc.export({ mode: 'snapshot' }))
+    const fromVV = clientDoc.version()
+    clientDoc.getText('content').insert('original'.length, ' + edit')
+    clientDoc.commit()
+    const update = clientDoc.export({ mode: 'update', from: fromVV })
+
+    // Stall the /update route's getDoc() call so a rename can be fired
+    // while the request is paused mid-flight, matching the real race: the
+    // read resolves before the rename runs, the write happens after.
+    let releaseGetDoc: () => void = () => undefined
+    const getDocGate = new Promise<void>((resolve) => {
+      releaseGetDoc = resolve
+    })
+    let signalGetDocCalled: () => void = () => undefined
+    const getDocCalled = new Promise<void>((resolve) => {
+      signalGetDocCalled = resolve
+    })
+    const actual =
+      await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')
+    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, slug) => {
+      signalGetDocCalled()
+      await getDocGate
+      return actual.getDoc(workspaceId, slug)
+    })
+
+    const updatePromise = app.request('/api/canvas/session1/a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: update,
+    })
+
+    await getDocCalled
+
+    // Fire the rename while the update is stalled mid-flight.
+    const renamePromise = app.request('/api/workspaces/session1/canvases/a/slug', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'b' }),
+    })
+    // Give the rename a chance to run before letting the stalled read continue.
+    await new Promise((r) => setTimeout(r, 20))
+    releaseGetDoc()
+
+    const [updateRes, renameRes] = await Promise.all([updatePromise, renamePromise])
+    expect(renameRes.status).toBe(200)
+    expect(updateRes.status).toBe(200)
+
+    // Exactly one canvas must survive -- the update must not have silently
+    // inserted a phantom duplicate back at the old slug.
+    const listRes = await app.request('/api/workspaces/session1/canvases')
+    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
+    expect(listJson.canvases.map((c) => c.slug)).toEqual(['b'])
   })
 
   it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
