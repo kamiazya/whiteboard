@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as favicon from '../lib/favicon.js'
-import { STATIC_FAVICON_HREF } from '../lib/favicon.js'
 import { useFavicon } from './useFavicon.js'
 
 // The dynamic favicon exists only while a canvas page is mounted. Every
@@ -22,7 +21,7 @@ describe('useFavicon lifecycle', () => {
     unmount()
     const links = document.head.querySelectorAll('link[rel="icon"]')
     expect(links).toHaveLength(1)
-    expect(links[0]?.getAttribute('href')).toBe(STATIC_FAVICON_HREF)
+    expect(links[0]?.getAttribute('href')).toBe(favicon.STATIC_FAVICON_HREF)
   })
 
   it('does not install a broken icon where canvas 2D is unavailable (jsdom)', () => {
