@@ -84,7 +84,13 @@ export function CanvasListView({
             blank board, not an error — the mark stays quiet (BRAND.md). */}
         <EmptyMark className="text-muted-foreground/30" />
         <p className="text-sm font-medium">No canvases yet</p>
-        <p className="text-sm text-muted-foreground">Create a canvas and it opens ready to draw.</p>
+        {/* Arrivals from a shared link have no other page to learn from, so
+            the empty board is where the product introduces itself: what a
+            canvas holds, and where the work lives. */}
+        <p className="max-w-sm text-sm text-muted-foreground">
+          A canvas is a space for notes you place and connect. Everything stays in this browser — no
+          account, no upload.
+        </p>
         <button
           type="button"
           disabled={createDisabled}
