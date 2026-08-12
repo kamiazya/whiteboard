@@ -1,3 +1,4 @@
+import { cleanup } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
 import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 
@@ -20,7 +21,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 // file's environment teardown) runs.
 //
 // Exposed under a globalThis key (not a module-level array) so
-// src/test-utils/vitest-setup.infra.test.ts — a different module, loaded by
+// src/test-utils/vitest-setup.infra.test.tsx — a different module, loaded by
 // a different Vitest transform pass — observes the same log this file
 // writes to, and to prove the ordering claim below empirically rather than
 // assume it holds across Vitest versions.
@@ -54,6 +55,13 @@ export function clearHookOrderLog(): void {
  * offending test by name and fails loudly instead of papering over it.
  */
 export async function runSharedTestTeardown(currentTestName: string | undefined): Promise<void> {
+  // vitest globals:false means @testing-library/react cannot self-register
+  // its usual auto-cleanup afterEach, so a test file that omits its own
+  // cleanup() leaves a mounted tree (and any timers its effects scheduled)
+  // running past the test's own teardown. Unmount first, before the
+  // fake-timer guard below, so a file that also leaks fake timers still
+  // gets its trees torn down.
+  cleanup()
   if (vi.isFakeTimers()) {
     vi.useRealTimers()
     throw new Error(
