@@ -132,8 +132,10 @@ type EdgeJump = { readonly segment: number; readonly x: number; readonly y: numb
 
 /**
  * Path commands for one straight run from `from` to `to`, hopping over each
- * jump point with a half-circle arc (sweep 0 — the hop bulges to the left
- * of travel, drawio-style "over"). Jumps arrive ordered along the run.
+ * jump point with a half-circle arc. Sweep 1 bulges to the LEFT of travel
+ * in SVG's y-down coordinates (up, for a rightward run) — drawio-style
+ * "over", and the side `flattenDrawnEdgePath` samples for hit-testing and
+ * the selection highlight. Jumps arrive ordered along the run.
  */
 function lineWithJumps(
   from: EdgePoint,
@@ -146,7 +148,7 @@ function lineWithJumps(
     if (hop === undefined) continue
     parts.push(`L ${formatCoord(hop.entry.x)} ${formatCoord(hop.entry.y)}`)
     parts.push(
-      `A ${EDGE_JUMP_RADIUS_PX} ${EDGE_JUMP_RADIUS_PX} 0 0 0 ${formatCoord(hop.exit.x)} ${formatCoord(hop.exit.y)}`,
+      `A ${EDGE_JUMP_RADIUS_PX} ${EDGE_JUMP_RADIUS_PX} 0 0 1 ${formatCoord(hop.exit.x)} ${formatCoord(hop.exit.y)}`,
     )
   }
   parts.push(`L ${formatCoord(to.x)} ${formatCoord(to.y)}`)

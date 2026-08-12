@@ -17,8 +17,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   assignEdgeAnchors,
-  edgeArrowPolygons,
   type EdgeSides,
+  edgeArrowPolygons,
   flattenDrawnEdgePath,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
