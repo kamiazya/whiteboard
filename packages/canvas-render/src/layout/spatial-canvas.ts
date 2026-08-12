@@ -43,8 +43,8 @@ import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
   assignEdgeAnchors,
+  type EdgeAnchorOverride,
   type EdgeAnchorPair,
-  type EdgeSides,
   routeEdge,
 } from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
@@ -89,7 +89,7 @@ export interface SpatialLayoutOptions {
    * pointer frames skip the improvement loop). Absent means sides settle
    * through the full pipeline.
    */
-  readonly edgeSideOverrides?: ReadonlyMap<string, EdgeSides>
+  readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * Human-readable label for a file node's reference. A composition root
