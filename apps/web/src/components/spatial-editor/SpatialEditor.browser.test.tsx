@@ -933,9 +933,11 @@ describe('SpatialEditor (browser)', () => {
       }),
     )
     // Hovering node "b", the preview snaps to the edge the drop will
-    // create: it ends at b's derived left anchor, not at the pointer.
+    // create: it ends at b's derived left anchor, not at the pointer —
+    // slid to the facing pair's shared lane, so it aligns with the
+    // source anchor rather than sitting at b's side midpoint.
     await waitFor(() => {
-      expect(lastPreviewPoint()).toBe('250,40')
+      expect(lastPreviewPoint()).toBe('250,45')
     })
 
     // Node "b" chrome rect sits at canvas (250,20)-(330,60); drop inside it.
