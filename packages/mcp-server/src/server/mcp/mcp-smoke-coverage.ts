@@ -26,21 +26,21 @@
 
 // Authoritative list — keep in sync with registerOpenCanvasTools calls.
 export const ALL_REGISTERED_TOOLS = [
-  'wb_wb_body_patch',
+  'wb_body_patch',
   'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
   'wb_document_set',
   'wb_scene_render',
-  'wb_wb_edge_lock',
-  'wb_wb_edge_patch',
-  'wb_wb_facet_set',
-  'wb_wb_node_lock',
-  'wb_wb_node_patch',
+  'wb_edge_lock',
+  'wb_edge_patch',
+  'wb_facet_set',
+  'wb_node_lock',
+  'wb_node_patch',
   'wb_canvas_tidy',
-  'wb_wb_version_list',
-  'wb_wb_version_restore',
-  'wb_wb_version_save',
+  'wb_version_list',
+  'wb_version_restore',
+  'wb_version_save',
   'wb_document_create',
   'wb_document_delete',
   'wb_document_resolve',
@@ -49,29 +49,29 @@ export const ALL_REGISTERED_TOOLS = [
 
 export const COVERED_TOOLS = [
   'wb_document_set',
-  'wb_wb_node_lock',
+  'wb_node_lock',
   'wb_canvas_tidy',
-  'wb_wb_facet_set',
-  'wb_wb_version_save',
-  'wb_wb_version_restore',
-  'wb_wb_version_list',
+  'wb_facet_set',
+  'wb_version_save',
+  'wb_version_restore',
+  'wb_version_list',
   'wb_document_create',
 ] as const
 
-export const ERROR_PATH_ONLY_TOOLS = ['wb_wb_edge_lock'] as const
+export const ERROR_PATH_ONLY_TOOLS = ['wb_edge_lock'] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).
 export const UI_LINKED_TOOLS = [] as const
 
 export const UNIT_ONLY_TOOLS = [
-  'wb_wb_body_patch',
+  'wb_body_patch',
   'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
   'wb_scene_render',
-  'wb_wb_edge_patch',
-  'wb_wb_node_patch',
+  'wb_edge_patch',
+  'wb_node_patch',
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',

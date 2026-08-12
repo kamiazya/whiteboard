@@ -18,22 +18,22 @@ export const MUTATING = { openWorldHint: false } as const
 export type AnnotationProfile = Readonly<Record<string, boolean>>
 export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string }> = {
   // OpenCanvas tools (server-core)
-  wb_wb_facet_set: {
+  wb_facet_set: {
     profile: MUTATING_IDEMPOTENT,
     title: 'Set the OKF frontmatter facets of a document',
   },
-  wb_wb_node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch a node on the spatial canvas' },
-  wb_wb_edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch an edge on the spatial canvas' },
-  wb_wb_node_lock: {
+  wb_node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch a node on the spatial canvas' },
+  wb_edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch an edge on the spatial canvas' },
+  wb_node_lock: {
     profile: MUTATING_IDEMPOTENT,
     title: 'Lock or unlock a node on the spatial canvas',
   },
-  wb_wb_edge_lock: {
+  wb_edge_lock: {
     profile: MUTATING_IDEMPOTENT,
     title: 'Lock or unlock an edge on the spatial canvas',
   },
   wb_canvas_tidy: { profile: MUTATING_IDEMPOTENT, title: 'Tidy the spatial canvas layout' },
-  wb_wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
+  wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_scene_digest: { profile: READ_ONLY, title: 'Summarise the laid-out scene' },
   wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
@@ -43,7 +43,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
   wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },
   wb_document_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete a document' },
-  wb_wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
-  wb_wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
-  wb_wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },
+  wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
+  wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
+  wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },
 }

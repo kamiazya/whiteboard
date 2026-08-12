@@ -120,21 +120,21 @@ const WORKSPACE_ID = 'e2e'
 
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
 const EXPECTED_TOOLS = [
-  'wb_wb_body_patch',
+  'wb_body_patch',
   'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
   'wb_document_set',
   'wb_scene_render',
-  'wb_wb_edge_lock',
-  'wb_wb_edge_patch',
-  'wb_wb_facet_set',
-  'wb_wb_node_lock',
-  'wb_wb_node_patch',
+  'wb_edge_lock',
+  'wb_edge_patch',
+  'wb_facet_set',
+  'wb_node_lock',
+  'wb_node_patch',
   'wb_canvas_tidy',
-  'wb_wb_version_list',
-  'wb_wb_version_restore',
-  'wb_wb_version_save',
+  'wb_version_list',
+  'wb_version_restore',
+  'wb_version_save',
   'wb_document_create',
   'wb_document_delete',
   'wb_document_resolve',
@@ -189,7 +189,7 @@ async function main() {
   console.log(`[e2e] wb_document_create → ${canvasId}`)
 
   // wb_facet_set: seed extension-facet state so wb_version_save has content.
-  const facets = await callTool('wb_wb_facet_set', {
+  const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     facets: { 'e2e/1': { note: 'before-save' } },
@@ -208,7 +208,7 @@ async function main() {
     markdown: '---\ntype: canvas\ntitle: e2e-lock\n---\n\nlockable body\n',
   })
 
-  const nodeLocked = await callTool('wb_wb_node_lock', {
+  const nodeLocked = await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     nodeId: 'okf-body',
@@ -225,7 +225,7 @@ async function main() {
 
   // The lock binds agents, not just the pointer.
   await expectToolError(
-    'wb_wb_node_patch',
+    'wb_node_patch',
     { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'okf-body', patch: { x: 999 } },
     'on a locked node',
   )
@@ -245,7 +245,7 @@ async function main() {
   }
   console.log('[e2e] canvas_export_json_canvas → no lock leaked into the export')
 
-  await callTool('wb_wb_node_lock', {
+  await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     nodeId: 'okf-body',
@@ -270,13 +270,13 @@ async function main() {
   // (edges come from the editor), so this is the whole of its reachable
   // surface here. Its success path is covered by edge-lock.test.ts.
   await expectToolError(
-    'wb_wb_edge_lock',
+    'wb_edge_lock',
     { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },
     'with an id the canvas does not have',
   )
 
   // wb_version_save
-  const saved = await callTool('wb_wb_version_save', {
+  const saved = await callTool('wb_version_save', {
     canvasId,
     label: 'e2e',
   })
@@ -292,7 +292,7 @@ async function main() {
   console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
   // wb_version_list
-  const listed = await callTool('wb_wb_version_list', { canvasId })
+  const listed = await callTool('wb_version_list', { canvasId })
   if (
     listed.canvasId !== canvasId ||
     !Array.isArray(listed.versions) ||
@@ -303,7 +303,7 @@ async function main() {
   console.log(`[e2e] wb_version_list → ${listed.versions.length} version(s)`)
 
   // wb_version_restore
-  const restored = await callTool('wb_wb_version_restore', {
+  const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     versionId: saved.versionId,

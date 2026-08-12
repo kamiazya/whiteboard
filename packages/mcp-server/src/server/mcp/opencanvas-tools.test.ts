@@ -27,9 +27,9 @@ describe('registerOpenCanvasTools', () => {
 
     const registerToolMock = vi.mocked(server.registerTool)
     const names = registerToolMock.mock.calls.map((call) => call[0])
-    expect(names).toContain('wb_wb_version_save')
-    expect(names).toContain('wb_wb_version_list')
-    expect(names).toContain('wb_wb_version_restore')
+    expect(names).toContain('wb_version_save')
+    expect(names).toContain('wb_version_list')
+    expect(names).toContain('wb_version_restore')
   })
 
   it("forwards a server-core log record to this composition root's logger", () => {

@@ -16,7 +16,7 @@ describe('createServer', () => {
       canvasDocStore: {} as never,
       blobStore: {} as never,
     })
-    expect(tools.facetSet.name).toBe('wb_wb_facet_set')
+    expect(tools.facetSet.name).toBe('wb_facet_set')
     expect(tools.facetSet.execute).toBeTypeOf('function')
   })
 

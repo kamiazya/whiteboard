@@ -213,9 +213,9 @@ export async function runE2eCheckpointSmoke({
     const toolsResult = (await rpc('tools/list', {})) as { tools: Array<{ name: string }> }
     const names = toolsResult.tools.map((t) => t.name)
     if (
-      !names.includes('wb_wb_version_save') ||
-      !names.includes('wb_wb_version_restore') ||
-      !names.includes('wb_wb_version_list')
+      !names.includes('wb_version_save') ||
+      !names.includes('wb_version_restore') ||
+      !names.includes('wb_version_list')
     ) {
       throw new Error(`version tools missing from tools/list: ${names.join(', ')}`)
     }
@@ -256,7 +256,7 @@ export async function runE2eCheckpointSmoke({
 
     // wb_facet_set seeds extension-facet state on the created canvas so the version
     // saved below has content to round-trip through restore.
-    const facets = await callTool('wb_wb_facet_set', {
+    const facets = await callTool('wb_facet_set', {
       workspaceId: WORKSPACE_ID,
       canvasId,
       facets: { 'e2e/1': { note: 'before-save' } },
@@ -266,7 +266,7 @@ export async function runE2eCheckpointSmoke({
     }
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
-    const saved = await callTool('wb_wb_version_save', {
+    const saved = await callTool('wb_version_save', {
       canvasId,
       label: 'e2e-version-1',
     })
@@ -281,7 +281,7 @@ export async function runE2eCheckpointSmoke({
     }
     console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
-    const versions = await callTool('wb_wb_version_list', { canvasId })
+    const versions = await callTool('wb_version_list', { canvasId })
     if (versions.canvasId !== canvasId || !Array.isArray(versions.versions)) {
       throw new Error(`wb_version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
@@ -291,7 +291,7 @@ export async function runE2eCheckpointSmoke({
     }
     console.log(`[e2e] wb_version_list → ${versionEntries.length} version(s)`)
 
-    const restored = await callTool('wb_wb_version_restore', {
+    const restored = await callTool('wb_version_restore', {
       workspaceId: WORKSPACE_ID,
       canvasId,
       versionId: saved.versionId,

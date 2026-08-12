@@ -37,7 +37,7 @@ export type NodeLockOutput = z.infer<typeof nodeLockOutputSchema>
 
 export function createNodeLockTool(deps: ServerDeps) {
   return {
-    name: 'wb_wb_node_lock' as const,
+    name: 'wb_node_lock' as const,
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {

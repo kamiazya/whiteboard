@@ -55,7 +55,7 @@ export type NodePatchOutput = z.infer<typeof nodePatchOutputSchema>
 
 export function createNodePatchTool(deps: ServerDeps) {
   return {
-    name: 'wb_wb_node_patch' as const,
+    name: 'wb_node_patch' as const,
     inputSchema: nodePatchInputSchema,
     outputSchema: nodePatchOutputSchema,
     execute: async (input: NodePatchInput): Promise<NodePatchOutput> => {

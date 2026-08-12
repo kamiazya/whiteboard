@@ -22,7 +22,7 @@ export class NodeNotFoundError extends Error {
 /**
  * Thrown when a mutation targets a node the user has locked. The lock
  * binds agents too, not just the pointer (user decision 2026-08-09) —
- * `wb_wb_node_lock` is the one tool that still accepts a locked node, so an
+ * `wb_node_lock` is the one tool that still accepts a locked node, so an
  * agent can lift its own mistake without a human at the keyboard.
  */
 export class NodeLockedError extends Error {
@@ -35,7 +35,7 @@ export class NodeLockedError extends Error {
   }
 }
 
-/** Edge counterpart to `NodeLockedError` — see `wb_wb_edge_lock`. */
+/** Edge counterpart to `NodeLockedError` — see `wb_edge_lock`. */
 export class EdgeLockedError extends Error {
   constructor(
     public readonly canvasId: string,
@@ -71,7 +71,7 @@ export class PatchValidationError extends Error {
 }
 
 /**
- * Thrown when `wb_wb_body_patch` targets a node whose `type` is not `'text'`
+ * Thrown when `wb_body_patch` targets a node whose `type` is not `'text'`
  * — a distinct failure mode from `PatchValidationError` (wrong node kind
  * chosen by the caller, not a schema violation produced by a valid patch).
  */
