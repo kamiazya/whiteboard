@@ -147,8 +147,20 @@ function rankedSidePairs(
   const opposingH = { fromSide: h, toSide: oppositeSide(h) }
   const opposingV = { fromSide: v, toSide: oppositeSide(v) }
   const zero: { fromSide: Side; toSide: Side }[] = []
-  const zeroH = facingSpansOverlap(fromRect, toRect, 'h')
-  const zeroV = facingSpansOverlap(fromRect, toRect, 'v')
+  // Zero-bend also needs the two sides to genuinely face each other: boxes
+  // that interpenetrate along the facing axis (from's leading edge past
+  // to's trailing edge) would route the "straight" segment backwards into
+  // the overlap.
+  const facingGapOk = (axis: 'h' | 'v'): boolean =>
+    axis === 'h'
+      ? h === 'right'
+        ? fromRect.x + fromRect.w <= toRect.x
+        : toRect.x + toRect.w <= fromRect.x
+      : v === 'bottom'
+        ? fromRect.y + fromRect.h <= toRect.y
+        : toRect.y + toRect.h <= fromRect.y
+  const zeroH = facingGapOk('h') && facingSpansOverlap(fromRect, toRect, 'h')
+  const zeroV = facingGapOk('v') && facingSpansOverlap(fromRect, toRect, 'v')
   if (Math.abs(dx) >= Math.abs(dy)) {
     if (zeroH) zero.push(opposingH)
     if (zeroV) zero.push(opposingV)
@@ -628,6 +640,11 @@ function optimizeSideChoices(
   edges: readonly CanvasEdge[],
   style: EdgeRoutingStyle,
   initial: ReadonlyMap<string, SidePair>,
+  // Edges whose sides are held fixed: candidates are only tried for the
+  // rest. The live-drag overlay locks resting edges (stability) while the
+  // carried ones still get the same optimization the committed render
+  // applies, so mid-drag and post-drop agree.
+  locked?: ReadonlySet<string>,
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
@@ -762,6 +779,7 @@ function optimizeSideChoices(
   for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
     let improved = false
     for (const edge of edges) {
+      if (locked?.has(edge.id)) continue
       const chosen = current.get(edge.id)
       if (chosen === undefined) continue
       for (const candidate of candidatesFor(edge)) {
@@ -801,6 +819,7 @@ export function assignEdgeAnchors(
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
   if (sideOverrides !== undefined) {
     const merged = new Map(sides)
+    const locked = new Set<string>()
     for (const [id, pair] of sideOverrides) {
       const edge = edges.find((e) => e.id === id)
       if (edge === undefined || merged.get(id) === undefined) continue
@@ -808,8 +827,17 @@ export function assignEdgeAnchors(
         fromSide: edge.fromSide ?? pair.fromSide,
         toSide: edge.toSide ?? pair.toSide,
       })
+      locked.add(id)
     }
-    return computeAnchorsFor(nodes, edges, merged)
+    // Edges OUTSIDE the override map (the carried ones) still go through
+    // the optimizer, against the locked rest — initial ranking alone can
+    // disagree with what the committed render will pick, and the drop
+    // then visibly re-sides an edge the preview never showed that way.
+    let liveSides: ReadonlyMap<string, SidePair> = merged
+    if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
+      liveSides = optimizeSideChoices(nodes, edges, style, merged, locked)
+    }
+    return computeAnchorsFor(nodes, edges, liveSides)
   }
   if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
     sides = optimizeSideChoices(nodes, edges, style, sides)
