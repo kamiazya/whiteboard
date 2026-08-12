@@ -86,6 +86,12 @@ describe('canvas CRUD routes', () => {
     expect(body.canvases).toHaveLength(1)
   })
 
+  it('GET list into an unknown workspace returns 404', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/typo-probe-ws/canvases')
+    expect(res.status).toBe(404)
+  })
+
   it('GET by id returns 200 after create and 404 for unknown', async () => {
     const app = makeApp()
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {

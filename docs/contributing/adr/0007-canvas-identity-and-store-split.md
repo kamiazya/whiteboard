@@ -78,12 +78,16 @@ story to build on.
   point 1 and 3.
 - The gallery's grid and its tree view render **different populations**
   today: the workspace picker lists workspace/slug-store workspaces, and
-  feeding one into the tree view silently renders an empty tree when that
-  workspace exists only in the legacy store (the tree loader falls back
-  to an empty tree instead of failing). A v1-only workspace never appears
-  in the picker at all. This is the split made visible, and it is the
-  first UX debt the convergence direction (point 4) is expected to pay
-  down.
+  feeding one into the tree view honestly reports "no OpenCanvas tree
+  yet" when that workspace exists only in the legacy store (`wb_canvas_list`
+  and the `GET /api/v1/.../canvases` route now agree with
+  `wb_canvas_create` and 404 a never-persisted workspace, instead of the
+  tree loader silently falling back to an empty tree). A v1-only
+  workspace still never appears in the picker at all — re-sourcing the
+  picker from the v1 world is not done, since no v1
+  workspace-enumeration endpoint exists. This is the split made visible,
+  and it is the first UX debt the convergence direction (point 4) is
+  expected to pay down.
 - The `workspaceIndex*` tables are write-only in production (their query
   surface has no caller); they must not be described or relied upon as a
   lookup path until something consumes them.

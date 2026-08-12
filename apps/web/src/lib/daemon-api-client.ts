@@ -26,6 +26,19 @@ import { createDaemonFetch } from './daemon-auth-fetch.js'
 
 export { createDaemonFetch }
 
+/** Thrown by `fetchAndParse` on a non-ok response, carrying the HTTP status
+ *  so callers can branch on it (e.g. 404 vs. a real failure) instead of
+ *  parsing the message string. Additive: message text and Error-ness are
+ *  unchanged for every existing `instanceof Error` caller. */
+export class DaemonApiError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'DaemonApiError'
+    this.status = status
+  }
+}
+
 async function parseProblemDetails(res: Response): Promise<string> {
   try {
     const json = await res.json()
@@ -45,7 +58,7 @@ async function fetchAndParse<T>(
 ): Promise<T> {
   const res = await fetchFn(url, init)
   if (!res.ok) {
-    throw new Error(await parseProblemDetails(res))
+    throw new DaemonApiError(await parseProblemDetails(res), res.status)
   }
   const json = await res.json()
   try {

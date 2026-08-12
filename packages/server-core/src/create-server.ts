@@ -57,8 +57,12 @@ export function createServer(deps: ServerDeps) {
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
-    const result = await wbCanvasList(deps, parsed.data)
-    return c.json(result, 200)
+    try {
+      const result = await wbCanvasList(deps, parsed.data)
+      return c.json(result, 200)
+    } catch (err) {
+      return mapCanvasError(c, err)
+    }
   })
 
   app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId', async (c) => {
