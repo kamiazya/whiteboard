@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
+  addCost,
   COST_QUANTUM,
   dominantAxisOrder,
   hasRepairableProblem,
+  lessCost,
   PENALTY_RULES,
+  type PenaltyRule,
   type PreferenceRule,
   pairPenalty,
   type Rect,
@@ -351,5 +354,46 @@ describe('hasRepairableProblem', () => {
 
   it('is false for the zero cost', () => {
     expect(hasRepairableProblem(zeroPenalty())).toBe(false)
+  })
+})
+
+describe('addCost', () => {
+  it('sums two cost arrays tier-by-tier with sign=1', () => {
+    expect(addCost([1, 2, 3, 4], [10, 20, 30, 40], 1)).toEqual([11, 22, 33, 44])
+  })
+
+  it('subtracts b from a tier-by-tier with sign=-1', () => {
+    expect(addCost([10, 20, 30, 40], [1, 2, 3, 4], -1)).toEqual([9, 18, 27, 36])
+  })
+
+  it('defaults a missing index in either operand to 0', () => {
+    const tier1Rule: PenaltyRule = {
+      name: 'tier1',
+      tier: 1,
+      pairTerm: () => 0,
+      selfTerm: () => 0,
+    }
+    // a has no index 1 at all; b does. a[rule.tier] ?? 0 must supply the 0.
+    expect(addCost([100], [0, 5], 1, [tier1Rule])).toEqual([0, 5])
+  })
+
+  it('composes over a non-default rules array', () => {
+    const rule0: PenaltyRule = { name: 'r0', tier: 0, pairTerm: () => 0, selfTerm: () => 0 }
+    expect(addCost([7], [3], 1, [rule0])).toEqual([10])
+  })
+})
+
+describe('lessCost', () => {
+  it('compares in tier order even when the rules array is passed out of order', () => {
+    const tier0Rule: PenaltyRule = { name: 'r0', tier: 0, pairTerm: () => 0, selfTerm: () => 0 }
+    const tier1Rule: PenaltyRule = { name: 'r1', tier: 1, pairTerm: () => 0, selfTerm: () => 0 }
+    // Declared out of tier order: tier1 first, tier0 second.
+    const outOfOrderRules = [tier1Rule, tier0Rule]
+    // tier0: a(5) > b(3) already decides "not less"; tier1 (a=1 < b=100)
+    // must never be consulted first, or this would wrongly read true.
+    const a = [5, 1]
+    const b = [3, 100]
+    expect(lessCost(a, b, outOfOrderRules)).toBe(false)
+    expect(lessCost(b, a, outOfOrderRules)).toBe(true)
   })
 })
