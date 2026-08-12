@@ -1,13 +1,15 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { deleteSpatialNode } from '@kamiazya/whiteboard-canvas-workspace'
 import {
   Client,
   LATEST_PROTOCOL_VERSION,
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeSpatialDoc } from '../shared/test-utils/spatial-doc.js'
 import { withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')
@@ -935,6 +937,151 @@ describe('createApp daemon mutation auth', () => {
     expect(
       (mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId,
     ).toMatch(/\S+/)
+  })
+
+  it('merge dry run returns nonzero element counts for a nodes-model doc', async () => {
+    const { saveCanvas } = await import('./store/canvas-store.js')
+    const app = createApp(createRuntimeOptions())
+
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'A', type: 'text', text: 'hi', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+
+    const res = await app.request(
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ into: 'main', dryRun: true }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      preview?: { elementCount: number }
+      target?: { elementCount: number }
+      source?: { elementCount: number }
+    }
+    expect(json.preview).toEqual({ elementCount: 1 })
+    expect(json.target).toEqual({ elementCount: 1 })
+    expect(json.source).toEqual({ elementCount: 1 })
+  })
+
+  it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {
+    const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
+    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const app = createApp(createRuntimeOptions())
+
+    const doc = makeSpatialDoc({
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'B', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
+    })
+    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+
+    // Pin feature's tip to the pre-deletion state so it stops tracking the
+    // live doc (an empty tipFrontiers always resolves to the live doc).
+    const pinnedTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const feature = state.branches.find((branch) => branch.name === 'feature')!
+    feature.tipFrontiers = pinnedTip
+    await saveCanvasBranches('session1', 'canvas-a', state)
+
+    // Main (the live doc, still HEAD) deletes A.
+    const mainDoc = await loadCanvas('session1', 'canvas-a')
+    deleteSpatialNode(mainDoc, 'A')
+    await saveCanvas('session1', 'canvas-a', mainDoc, { overwrite: true })
+
+    const res = await app.request(
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ into: 'main', dryRun: true }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { badges: Array<Record<string, unknown>> }
+    expect(json.badges).toContainEqual({ type: 'resurrected', elementId: 'A' })
+  })
+
+  it('committed merge returns newElementIds/changedElementIds derived from the nodes model', async () => {
+    const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
+    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
+
+    const app = createApp(createRuntimeOptions())
+
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+
+    // Pin main to the A-only state so it stops tracking the live doc.
+    const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const main = state.branches.find((branch) => branch.name === 'main')!
+    main.tipFrontiers = mainOnlyTip
+    await saveCanvasBranches('session1', 'canvas-a', state)
+
+    // Reload (a fresh doc instance importing the same history) and add C on
+    // top — this is what feature's tip below points at, and what becomes
+    // the live doc's new content.
+    const withC = await loadCanvas('session1', 'canvas-a')
+    writeSpatialNode(withC, {
+      id: 'C',
+      type: 'text',
+      text: 'c',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    })
+    await saveCanvas('session1', 'canvas-a', withC, { overwrite: true })
+
+    const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
+    const afterAddC = await loadCanvasBranches('session1', 'canvas-a')
+    const feature = afterAddC.branches.find((branch) => branch.name === 'feature')!
+    feature.tipFrontiers = featureTip
+    await saveCanvasBranches('session1', 'canvas-a', afterAddC)
+
+    const res = await app.request(
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ into: 'main' }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { newElementIds?: string[]; changedElementIds?: string[] }
+    expect(json.newElementIds).toEqual(['C'])
+    expect(json.changedElementIds ?? []).toEqual([])
   })
 
   it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {

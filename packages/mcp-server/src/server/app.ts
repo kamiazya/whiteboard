@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { createServer as createOpenCanvasServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
@@ -10,9 +11,10 @@ import {
 } from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { encodeFrontiers, LoroDoc } from 'loro-crdt'
+import type { PeerID } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
-import { detectMergeBadges } from '../shared/merge-engine.js'
+import { detectMergeBadges, toElementMap } from '../shared/merge-engine.js'
 import {
   checkoutCloneOrThrow,
   decodeBranchTipOrThrow,
@@ -76,6 +78,7 @@ import {
 } from './store/branches-store.js'
 import { canvasExists, saveCanvas } from './store/canvas-store.js'
 import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
+import { countAliveNodes } from './store/count-alive-nodes.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
 import { FileVersionStore } from './store/version-store.js'
 import { withWorkspaceWriteLock } from './store/workspace-lock.js'
@@ -564,46 +567,50 @@ export function createApp(options: AppOptions) {
             // result for the current "source wins" flow, and detectMergeBadges only needs a
             // stable target/source/preview triple to surface LWW differences.
             const previewDoc = sourceDoc
+
+            // The merge base is the common ancestor: the per-peer minimum
+            // ("meet") of target's and source's version vectors, checked out
+            // against the live doc's full history. A peer counted on only one
+            // side contributes nothing to the ancestor and is omitted from the
+            // meet (its count would be 0); an all-omitted (empty) meet checks
+            // out to genesis, which correctly classifies every source element
+            // as new rather than resurrected.
+            const meetVersion = (a: VersionVector, b: VersionVector): VersionVector => {
+              const bCounts = b.toJSON()
+              const meet = new Map<PeerID, number>()
+              for (const [peer, aCount] of a.toJSON()) {
+                const bCount = bCounts.get(peer)
+                if (bCount === undefined) continue
+                const count = Math.min(aCount, bCount)
+                if (count > 0) meet.set(peer, count)
+              }
+              return new VersionVector(meet)
+            }
+            const baseFrontiers = liveDoc.vvToFrontiers(
+              meetVersion(targetDoc.version(), sourceDoc.version()),
+            )
+            const baseDoc = checkoutCloneOrThrow(
+              liveDoc,
+              baseFrontiers,
+              `${sid}/branches/${slug}.json#merge-base`,
+              'merge base could not be checked out against the live document',
+            )
+
             const badges = detectMergeBadges({
+              base: baseDoc,
               target: targetDoc,
               source: sourceDoc,
               preview: previewDoc,
             })
 
-            const countAlive = (doc: LoroDoc): number => {
-              try {
-                const list = doc.getMovableList('elements').toJSON() as Array<{
-                  isDeleted?: boolean
-                }>
-                return list.filter((e) => !e.isDeleted).length
-              } catch {
-                return 0
-              }
-            }
-            const previewElementCount = countAlive(previewDoc)
-            const targetElementCount = countAlive(targetDoc)
-            const sourceElementCount = countAlive(sourceDoc)
+            const previewElementCount = countAliveNodes(previewDoc)
+            const targetElementCount = countAliveNodes(targetDoc)
+            const sourceElementCount = countAliveNodes(sourceDoc)
 
-            // Diff alive elements between target and preview so the UI can highlight
+            // Diff elements between target and preview so the UI can highlight
             // new / changed / conflict elements after commit.
-            const aliveMap = (doc: LoroDoc): Map<string, Record<string, unknown>> => {
-              try {
-                const list = doc.getMovableList('elements').toJSON() as Array<
-                  Record<string, unknown> & { id?: unknown; isDeleted?: unknown }
-                >
-                const out = new Map<string, Record<string, unknown>>()
-                for (const el of list) {
-                  if (el.isDeleted) continue
-                  if (typeof el.id !== 'string') continue
-                  out.set(el.id, el)
-                }
-                return out
-              } catch {
-                return new Map()
-              }
-            }
-            const tMap = aliveMap(targetDoc)
-            const pMap = aliveMap(previewDoc)
+            const tMap = toElementMap(targetDoc)
+            const pMap = toElementMap(previewDoc)
             const newElementIds: string[] = []
             const changedElementIds: string[] = []
             for (const [id, pEl] of pMap) {
@@ -623,18 +630,13 @@ export function createApp(options: AppOptions) {
             )
 
             if (dryRun) {
-              // For dry runs, return only alive elements so MergeDialog can render a
-              // read-only Excalidraw preview without duplicating tombstoned elements.
-              const previewElements = (() => {
-                try {
-                  const list = previewDoc.getMovableList('elements').toJSON() as Array<{
-                    isDeleted?: boolean
-                  }>
-                  return list.filter((e) => !e.isDeleted)
-                } catch {
-                  return []
-                }
-              })()
+              // For dry runs, return every current node + edge so MergeDialog can
+              // render a read-only preview. Payload shape is deliberately the
+              // nodes-model equivalent of the retired Excalidraw-style elements
+              // list; the field stays untyped (z.array(z.unknown())) and no
+              // consumer reads it today.
+              const { nodes, edges } = readSpatialCanvas(previewDoc)
+              const previewElements = [...nodes, ...edges]
               return {
                 previewElementCount,
                 targetElementCount,
