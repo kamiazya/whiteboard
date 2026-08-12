@@ -53,11 +53,20 @@ it('the selection highlight arcs over jump hops instead of cutting through them'
   )
   expect(drawn).toBeDefined()
   const d = drawn?.getAttribute('d') ?? ''
-  // "L x1 y1 A 5 5 0 0 0 x2 y2": the hop spans x1..x2 / y1..y2.
-  const m = d.match(/L ([\d.-]+) ([\d.-]+) A 5 5 0 0 0 ([\d.-]+) ([\d.-]+)/)
+  // "L x1 y1 A 5 5 0 0 1 x2 y2": the hop spans x1..x2 / y1..y2.
+  const m = d.match(/L ([\d.-]+) ([\d.-]+) A 5 5 0 0 1 ([\d.-]+) ([\d.-]+)/)
   expect(m).not.toBeNull()
   if (!m) return
-  const hop = { x: (Number(m[1]) + Number(m[3])) / 2, y: (Number(m[2]) + Number(m[4])) / 2 }
+  const entry = { x: Number(m[1]), y: Number(m[2]) }
+  const exit = { x: Number(m[3]), y: Number(m[4]) }
+  const hop = { x: (entry.x + exit.x) / 2, y: (entry.y + exit.y) / 2 }
+  // The drawn arc's apex: one radius to the LEFT of travel from the hop
+  // center (sweep 1 in y-down coordinates), matching the ink exactly.
+  const len = Math.hypot(exit.x - entry.x, exit.y - entry.y)
+  const apex = {
+    x: hop.x + ((exit.y - entry.y) / len) * 5,
+    y: hop.y - ((exit.x - entry.x) / len) * 5,
+  }
 
   // Select the jumped edge by clicking a point on it away from the hop.
   press(root, 'pointerdown', 360, 380)
@@ -68,16 +77,13 @@ it('the selection highlight arcs over jump hops instead of cutting through them'
     return el as SVGPolylineElement
   })
 
-  // The highlight must deviate at the hop: some vertex sits near the arc
-  // apex (5px left of travel from the hop center), and no straight segment
-  // passes through the hop center itself.
+  // The highlight must deviate at the hop ON THE DRAWN SIDE: a vertex sits
+  // at the arc apex itself, not merely at hop-radius distance (which a
+  // wrong-side sample would also satisfy).
   const pts = (highlight.getAttribute('points') ?? '')
     .split(' ')
     .map((pair) => pair.split(',').map(Number))
     .map(([x, y]) => ({ x: x!, y: y! }))
-  const nearApex = pts.some(
-    (p) =>
-      Math.hypot(p.x - hop.x, p.y - hop.y) <= 5.5 && Math.hypot(p.x - hop.x, p.y - hop.y) >= 4.5,
-  )
+  const nearApex = pts.some((p) => Math.hypot(p.x - apex.x, p.y - apex.y) <= 0.75)
   expect(nearApex).toBe(true)
 })
