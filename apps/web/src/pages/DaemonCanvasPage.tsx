@@ -21,6 +21,7 @@ import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
+import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { settingsPath } from '../lib/app-routes.js'
@@ -146,6 +147,11 @@ export function DaemonCanvasPage({
       : null
 
   const [authError, setAuthError] = useState(false)
+  // An auth error means the daemon connection needs the user's action
+  // (re-pair lives under Settings -> Connections), so it counts as
+  // disconnected for the gear's attention dot. Transient reconnects don't:
+  // they need no user action and would only make the dot flicker.
+  const settingsNudge = useSettingsNudge(!authError)
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
@@ -457,6 +463,7 @@ export function DaemonCanvasPage({
           {canvas && (
             <WorkspaceTopBar
               onNavigateHome={() => navigate('/')}
+              settingsNudge={settingsNudge}
               statusSlot={connectionStatus}
               workspaceId={canvas.workspaceId}
               slug={canvas.slug}
