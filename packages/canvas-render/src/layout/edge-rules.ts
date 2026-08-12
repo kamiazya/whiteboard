@@ -6,13 +6,12 @@
  * New routing feedback lands as one named rule + its own test here, not a
  * new branch in spatial-edges.ts.
  *
- * This file covers the PREFERENCE half of the taxonomy — candidate
- * generation for `rankedSidePairs` (spatial-edges.ts, a thin wrapper over
- * `composeSidePairs` below) plus the solver's adoption predicate
- * (`shouldAdoptCandidate`, the "incumbent-wins-ties" rule). Penalty-rule
- * extraction (pairScore/selfScore's cost terms in spatial-edges.ts) is a
- * separate, not-yet-landed slice — see the "penalty-rules-extraction"
- * follow-up.
+ * This file covers both halves of the taxonomy: candidate generation for
+ * `rankedSidePairs` (spatial-edges.ts, a thin wrapper over `composeSidePairs`
+ * below) plus the solver's adoption predicate (`shouldAdoptCandidate`, the
+ * "incumbent-wins-ties" rule) are the PREFERENCE half; `PENALTY_RULES` below
+ * is the PENALTY half — `pairScore`/`selfScore` (spatial-edges.ts) compose
+ * over it to build the cost tuple `optimizeSideChoices` compares.
  */
 
 export type Side = 'top' | 'right' | 'bottom' | 'left'
@@ -293,4 +292,230 @@ export function shouldAdoptCandidate<T>(
   lessCost: (a: T, b: T) => boolean,
 ): boolean {
   return lessCost(candidateCost, incumbentCost)
+}
+
+/** Quarter-pixel quantization: every PENALTY_RULES term is integral, so
+ * candidate comparison is exact integer arithmetic — no float tie can
+ * differ between platforms (see edge-crossing-sweep.ts's matching
+ * COST_QUANTUM, which the narrow phase quantizes with independently). */
+export const COST_QUANTUM = 4
+
+/** Direction changes along a polyline, ignoring repeated/collinear points. */
+export function bendCount(path: readonly Point[]): number {
+  let bends = 0
+  let lastDir: string | undefined
+  for (let i = 1; i < path.length; i++) {
+    const dx = Math.sign((path[i] as Point).x - (path[i - 1] as Point).x)
+    const dy = Math.sign((path[i] as Point).y - (path[i - 1] as Point).y)
+    if (dx === 0 && dy === 0) continue
+    const dir = `${dx},${dy}`
+    if (lastDir !== undefined && dir !== lastDir) bends++
+    lastDir = dir
+  }
+  return bends
+}
+
+/**
+ * A named PENALTY rule (decision #10): a cost-tuple term with a declared
+ * lexicographic tier. `pairTerm` reads this rule's contribution out of the
+ * narrow-phase [overlap, illegible, crossings] triple that
+ * `scoreSegmentPair`/`buildPairwiseScores` (edge-crossing-sweep.ts, the
+ * SINGLE producer of pair geometry) already computed — a rule with no pair
+ * contribution returns 0 without touching the triple. `selfTerm` computes
+ * this rule's contribution from one routed path's own geometry plus the
+ * bystander rects it might tunnel through; a rule with no self contribution
+ * returns 0 without walking the path. Every rule's `tier` is also its slot
+ * index into the composed cost array — enforced by the `PENALTY_RULES`
+ * tier-order pin in edge-rules.test.ts, not by this type.
+ */
+export type PenaltyRule = {
+  readonly name: string
+  readonly tier: number
+  readonly pairTerm: (triple: readonly [number, number, number]) => number
+  readonly selfTerm: (path: readonly Point[], foreignBodies: readonly Rect[]) => number
+}
+
+/**
+ * overlap-and-intrusion: collinear axis-aligned overlap (a parallel overlap
+ * has no crossing point, so a line jump cannot express it) plus, from a
+ * single path's own geometry, retracing its own ink (the doubled-line
+ * arrival a facing-away side produces when the connector overshoots the
+ * entry stub through the node body) and tunnelling through a bystander
+ * node's raw body (a line through a node reads as though it connects that
+ * node, which no line jump can express). Heaviest tier: it outranks even an
+ * edge crossing.
+ */
+const overlapAndIntrusion: PenaltyRule = {
+  name: 'overlap-and-intrusion',
+  tier: 0,
+  pairTerm: (triple) => triple[0],
+  selfTerm: (path, foreignBodies) => {
+    const q = (n: number) => Math.round(n * COST_QUANTUM)
+    let overlap = 0
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as Point
+      const b = path[i] as Point
+      for (const r of foreignBodies) {
+        // Axis-aligned intrusion length, boundary grazing excluded: an
+        // anchor ON a neighbour's border or a segment riding the margin
+        // band is bestCandidate's business, not a tunnel.
+        const minX = Math.max(Math.min(a.x, b.x), r.x)
+        const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
+        const minY = Math.max(Math.min(a.y, b.y), r.y)
+        const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
+        if (maxX <= minX && maxY <= minY) continue
+        if (a.y === b.y && a.y > r.y && a.y < r.y + r.h && maxX > minX) {
+          overlap += q(maxX - minX)
+        } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w && maxY > minY) {
+          overlap += q(maxY - minY)
+        }
+      }
+    }
+    for (let i = 1; i < path.length; i++) {
+      for (let j = i + 1; j < path.length; j++) {
+        const a1 = path[i - 1] as Point
+        const a2 = path[i] as Point
+        const b1 = path[j - 1] as Point
+        const b2 = path[j] as Point
+        if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
+          const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
+          const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+          if (hi > lo) overlap += hi - lo
+        } else if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
+          const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
+          const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+          if (hi > lo) overlap += hi - lo
+        }
+      }
+    }
+    return overlap
+  },
+}
+
+/** illegibility: a transversal crossing too close to a segment end to
+ * render a legible jump arc. Pair-only — no path retraces "close to its own
+ * end" in a way this tier is meant to capture. */
+const illegibility: PenaltyRule = {
+  name: 'illegibility',
+  tier: 1,
+  pairTerm: (triple) => triple[1],
+  selfTerm: () => 0,
+}
+
+/** crossings: total transversal crossings between two routed paths.
+ * Pair-only, and already short-circuited by `scoreSegmentPair` for a
+ * collinear overlapping pair (see edge-crossing-sweep.ts). */
+const crossings: PenaltyRule = {
+  name: 'crossings',
+  tier: 2,
+  pairTerm: (triple) => triple[2],
+  selfTerm: () => 0,
+}
+
+/** realized-bends: direction changes along ONE routed path. Self-only, and
+ * deliberately the last tier — the optimizer's short-circuit
+ * (`hasRepairableProblem`) and worst-offender filter both ignore it, since
+ * a configuration with no overlap/illegibility/crossings is already healthy
+ * and reshuffling it purely to shave bends is churn, not repair. */
+const realizedBends: PenaltyRule = {
+  name: 'realized-bends',
+  tier: 3,
+  pairTerm: () => 0,
+  selfTerm: (path) => bendCount(path),
+}
+
+/**
+ * The declared, tier-ordered PENALTY-rule catalog (decision #10). Index
+ * MUST equal `tier` for every entry — pinned in edge-rules.test.ts — since
+ * every composition helper below writes a rule's contribution at
+ * `cost[rule.tier]`, never at its array position.
+ */
+export const PENALTY_RULES: readonly PenaltyRule[] = [
+  overlapAndIntrusion,
+  illegibility,
+  crossings,
+  realizedBends,
+]
+
+/** The all-zero cost, sized to `rules` — the composition path's only
+ * length-4 literal is this `.map`, derived from the declared list rather
+ * than hardcoded. */
+export function zeroPenalty(rules: readonly PenaltyRule[] = PENALTY_RULES): number[] {
+  return rules.map(() => 0)
+}
+
+/**
+ * `pairScore`'s composition step (spatial-edges.ts): map the narrow
+ * phase's summed [overlap, illegible, crossings] triple into a full cost
+ * array, one rule per declared tier.
+ */
+export function pairPenalty(
+  triple: readonly [number, number, number],
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): number[] {
+  const cost = zeroPenalty(rules)
+  for (const rule of rules) cost[rule.tier] = rule.pairTerm(triple)
+  return cost
+}
+
+/**
+ * `selfScore`'s composition step (spatial-edges.ts): map one routed path's
+ * self-geometry into a full cost array, one rule per declared tier.
+ */
+export function selfPenalty(
+  path: readonly Point[],
+  foreignBodies: readonly Rect[],
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): number[] {
+  const cost = zeroPenalty(rules)
+  for (const rule of rules) cost[rule.tier] = rule.selfTerm(path, foreignBodies)
+  return cost
+}
+
+export function addCost(
+  a: readonly number[],
+  b: readonly number[],
+  sign: 1 | -1,
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): number[] {
+  const out = zeroPenalty(rules)
+  for (const rule of rules) out[rule.tier] = (a[rule.tier] ?? 0) + sign * (b[rule.tier] ?? 0)
+  return out
+}
+
+/**
+ * Lexicographic integer compare over the declared tiers, in TIER order
+ * (sorted by `rule.tier`, so a caller passing an accidentally-reordered
+ * `rules` array still compares correctly — only the canonical
+ * `PENALTY_RULES` array itself is pinned to already be in tier order).
+ */
+export function lessCost(
+  a: readonly number[],
+  b: readonly number[],
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): boolean {
+  const ordered = [...rules].sort((x, y) => x.tier - y.tier)
+  for (const rule of ordered) {
+    const av = a[rule.tier] ?? 0
+    const bv = b[rule.tier] ?? 0
+    if (av !== bv) return av < bv
+  }
+  return false
+}
+
+/**
+ * Whether a configuration has a REPAIRABLE problem: any declared tier
+ * BELOW the last one is nonzero. Generalizes the old "first three slots
+ * zero" short-circuit — the last tier is realized-bends (pinned in
+ * edge-rules.test.ts), and bends-only churn is deliberately excluded from
+ * both `optimizeSideChoices`'s whole-config short-circuit and its
+ * worst-offender contribution filter (spatial-edges.ts).
+ */
+export function hasRepairableProblem(
+  cost: readonly number[],
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): boolean {
+  if (rules.length === 0) return false
+  const lastTier = Math.max(...rules.map((r) => r.tier))
+  return rules.some((r) => r.tier < lastTier && (cost[r.tier] ?? 0) !== 0)
 }

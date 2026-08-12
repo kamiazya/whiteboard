@@ -10,10 +10,15 @@ import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   composeSidePairs,
+  hasRepairableProblem,
+  PENALTY_RULES,
+  type Point,
   type PreferenceRuleContext,
+  pairPenalty,
   type Rect,
   SIDE_PREFERENCE_RULES,
   type SidePair,
+  selfPenalty,
 } from './edge-rules.js'
 
 const rectArb: fc.Arbitrary<Rect> = fc.record({
@@ -99,6 +104,104 @@ describe('composeSidePairs: preference-rule removal', () => {
         )
         for (const key of without) expect(full.has(key)).toBe(true)
       }
+    },
+  )
+})
+
+// PENALTY-rule framework invariants (edge-rules.ts's PENALTY_RULES): the
+// slot a rule writes into is derived from its declared `tier`, never a
+// hardcoded array position, so the domain below leans on zero-size rects
+// and degenerate paths per the canvas-model contract (zero is a legal
+// JSON Canvas node size) rather than well-formed routed geometry.
+const pointArb: fc.Arbitrary<Point> = fc.record({
+  x: fc.integer({ min: -200, max: 200 }),
+  y: fc.integer({ min: -200, max: 200 }),
+})
+
+const pathArb: fc.Arbitrary<readonly Point[]> = fc.array(pointArb, { minLength: 0, maxLength: 6 })
+
+const foreignRectArb: fc.Arbitrary<Rect> = fc.record({
+  x: fc.integer({ min: -200, max: 200 }),
+  y: fc.integer({ min: -200, max: 200 }),
+  // Zero-size rects are legal (canvas-model): a degenerate foreign body
+  // must never make a scorer throw or return a non-finite total.
+  w: fc.integer({ min: 0, max: 200 }),
+  h: fc.integer({ min: 0, max: 200 }),
+})
+
+const foreignBodiesArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb, {
+  minLength: 0,
+  maxLength: 4,
+})
+
+const tripleArb: fc.Arbitrary<readonly [number, number, number]> = fc.tuple(
+  fc.integer({ min: 0, max: 1000 }),
+  fc.integer({ min: 0, max: 1000 }),
+  fc.integer({ min: 0, max: 1000 }),
+)
+
+describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
+  fcTest.prop([tripleArb], withDefaults())(
+    'pairPenalty places every rule contribution at rule.tier, for any narrow-phase triple',
+    (triple) => {
+      const cost = pairPenalty(triple)
+      for (const rule of PENALTY_RULES) expect(cost[rule.tier]).toBe(rule.pairTerm(triple))
+    },
+  )
+
+  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
+    'selfPenalty places every rule contribution at rule.tier, for any path/foreign-body pair',
+    (path, foreignBodies) => {
+      const cost = selfPenalty(path, foreignBodies)
+      for (const rule of PENALTY_RULES) {
+        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies))
+      }
+    },
+  )
+})
+
+describe('PENALTY_RULES: scorers are deterministic', () => {
+  fcTest.prop([tripleArb], withDefaults())('pairPenalty is pure', (triple) => {
+    expect(pairPenalty(triple)).toEqual(pairPenalty(triple))
+  })
+
+  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
+    'selfPenalty is pure',
+    (path, foreignBodies) => {
+      expect(selfPenalty(path, foreignBodies)).toEqual(selfPenalty(path, foreignBodies))
+    },
+  )
+})
+
+describe('PENALTY_RULES: totals are finite non-negative integers', () => {
+  fcTest.prop([tripleArb], withDefaults())(
+    'pairPenalty totality, incl. degenerate triples',
+    (triple) => {
+      for (const n of pairPenalty(triple)) {
+        expect(Number.isInteger(n)).toBe(true)
+        expect(n).toBeGreaterThanOrEqual(0)
+      }
+    },
+  )
+
+  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
+    'selfPenalty totality, incl. zero-size rects, empty/single-point/zero-length paths',
+    (path, foreignBodies) => {
+      for (const n of selfPenalty(path, foreignBodies)) {
+        expect(Number.isInteger(n)).toBe(true)
+        expect(n).toBeGreaterThanOrEqual(0)
+      }
+    },
+  )
+})
+
+describe('hasRepairableProblem: derived from every tier below the last declared one', () => {
+  fcTest.prop([tripleArb], withDefaults())(
+    'agrees with a direct check of the non-final tiers, for any pairPenalty output',
+    (triple) => {
+      const cost = pairPenalty(triple)
+      const expected = cost.slice(0, -1).some((n) => n !== 0)
+      expect(hasRepairableProblem(cost)).toBe(expected)
     },
   )
 })
