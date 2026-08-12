@@ -9,8 +9,11 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { MemoryStore } from '../lib/browser-local-store.js'
+import { BrowserLocalCanvasPage } from '../pages/BrowserLocalCanvasPage.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
 
@@ -76,14 +79,14 @@ describe('top bar scopes', () => {
 
 describe('fullscreen ground', () => {
   it('paints the fullscreen target itself, not just the body behind it', async () => {
-    const { BrowserLocalCanvasPage } = await import('../pages/BrowserLocalCanvasPage.js')
-    const { IndexedDBStore } = await import('../lib/browser-local-store.js')
-    const { MemoryRouter } = await import('react-router-dom')
-
+    // MemoryStore, not IndexedDBStore: every browser test file shares one
+    // origin, so a sibling file's `indexedDB.deleteDatabase('whiteboard')`
+    // lands mid-load here and the page never leaves its loading state. The
+    // assertion is about a CSS ground, so the storage backend is incidental.
     render(
       <div style={{ height: '400px' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalCanvasPage store={new IndexedDBStore()} />
+          <BrowserLocalCanvasPage store={new MemoryStore()} />
         </MemoryRouter>
       </div>,
     )
