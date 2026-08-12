@@ -44,6 +44,13 @@ export interface Appearance {
   readonly strokeWidth?: number
   readonly fontFamily?: string
   readonly fontSize?: number
+  /**
+   * Label underlay color (the canvas surface), so a label sitting ON an
+   * edge line stays readable: the backend emits a stroke-only copy of the
+   * text behind the fill text. Consumed for text runs only; absent keeps
+   * the single-element output byte-identical.
+   */
+  readonly halo?: string
 }
 
 /** A single styled run of inline text, positioned within its parent block. */

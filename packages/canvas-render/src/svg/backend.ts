@@ -90,9 +90,24 @@ function textBaselineY(run: TextRunNode): number {
     : run.bbox.y
 }
 
+/** Breathing room the halo pill adds around the text box, in px. Paint-only
+ * decoration in the arrowhead class: bounds keep reading the bbox, and the
+ * 2px overhang never exceeds the hit tolerance. */
+const TEXT_HALO_PAD_PX = 2
+
 function renderTextRun(run: TextRunNode): string {
   const appearance = withLeadingSpace(appearanceAttrs(run.appearance))
-  const text = `<text x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"${appearance}>${escapeXmlText(run.text)}</text>`
+  const position = `x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"`
+  const body = escapeXmlText(run.text)
+  const halo = run.appearance?.halo
+  // A surface-colored pill under the whole text box (a glyph-outline halo
+  // leaves the crossed line peeking through word spaces), so a label
+  // sitting ON an edge stays readable end to end.
+  const underlay =
+    halo !== undefined && halo.length > 0
+      ? `<rect x="${formatCoord(run.bbox.x - TEXT_HALO_PAD_PX)}" y="${formatCoord(run.bbox.y - TEXT_HALO_PAD_PX)}" width="${formatCoord(run.bbox.w + 2 * TEXT_HALO_PAD_PX)}" height="${formatCoord(run.bbox.h + 2 * TEXT_HALO_PAD_PX)}" rx="${formatCoord(TEXT_HALO_PAD_PX)}" fill="${escapeXmlAttr(halo)}"/>`
+      : ''
+  const text = `${underlay}<text ${position}${appearance}>${body}</text>`
   if (!run.link) return text
   const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
   return `<a href="${escapeXmlAttr(href)}">${text}</a>`

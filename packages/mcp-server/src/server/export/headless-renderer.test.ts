@@ -78,7 +78,7 @@ describe('headless-renderer', () => {
     const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
     const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
     expect(lightSvg.svg).toContain('fill="#ffffff"')
-    expect(darkSvg.svg).toContain('fill="#121212"')
+    expect(darkSvg.svg).toContain('fill="#0a0a0a"')
   })
 
   it('produces PNG dimensions proportional to scale', async () => {

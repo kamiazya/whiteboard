@@ -30,6 +30,13 @@ export interface SpatialPalette {
   readonly edgeStroke: string
   /** Fill applied to every label run (node labels and edge labels). */
   readonly labelFill: string
+  /**
+   * The canvas surface color this mode paints under everything — the label
+   * halo color, and the export default background. Hex, not oklch: resvg
+   * (PNG export) parses no oklch(); dark is the hex equivalent of the
+   * app's `oklch(0.145 0 0)` surface.
+   */
+  readonly surface: string
   /** Uniform corner radius (px) applied to every node's chrome shape. */
   readonly cornerRadiusPx: number
   /**
@@ -61,6 +68,7 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
   },
   edgeStroke: '#737373',
   labelFill: '#404040',
+  surface: '#ffffff',
   cornerRadiusPx: 6,
   // Tailwind 600 strokes (3.2-5.4:1 on white) over 100 tints (body text
   // 8.5-9.3:1) — the same ramp as the app's approved state colors.
@@ -90,6 +98,7 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
   },
   edgeStroke: '#9BA3AF',
   labelFill: '#E6E8EB',
+  surface: '#0a0a0a',
   cornerRadiusPx: 4,
   // Tailwind 400 strokes (7.2-11.9:1 on the near-black canvas) over 950
   // tints (near-white body text 10.9-13.2:1).
