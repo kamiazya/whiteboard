@@ -301,27 +301,39 @@ paths:
       existing function. `layout/edge-rules.ts` implements the PREFERENCE
       half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
-      gap-valid-opposing-before-invalid, and incumbent-wins-ties;
-      `composeSidePairs` is the composition `rankedSidePairs`
-      (`layout/spatial-edges.ts`) wraps, and `shouldAdoptCandidate` is the
-      incumbent-wins-ties predicate `optimizeSideChoices` consults. The
-      PENALTY half is `PENALTY_RULES`: overlap-and-intrusion (tier 0,
-      collinear overlap plus self-retrace/body-intrusion), illegibility
-      (tier 1), crossings (tier 2), border-tracing (tier 3, self-only — a
-      routed segment collinear with AND overlapping a node's own border,
-      `nodeBorders` including the path's own endpoint rects unlike
-      `foreignBodies`), and realized-bends (tier 4, self-only and
-      deliberately last). border-tracing sits BELOW crossings rather than
-      adjacent to overlap-and-intrusion: it is evaluated against the
-      optimizer's unaligned TRIAL paths (`computeAnchorsFor`'s pre-
-      `slideAlongSide` representation, used only for candidate ranking),
-      whose unaligned anchor placement can coincidentally trace a
-      bystander's extended border for a real stretch — a false signal a
-      genuine crossing never produces (verified against
-      `edge-lane-rank.test.ts`'s sweep-rank pin: tier 1 placement adopted a
-      route with a real crossing over a crossing-free one). `pairScore`/
-      `selfPenalty` (`spatial-edges.ts`) compose over the list, and every
-      cost-tuple helper (`ConfigCost` shape, `addCost`, `lessCost`,
+      gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
+      incumbent-wins-ties; `composeSidePairs` is the composition
+      `rankedSidePairs` (`layout/spatial-edges.ts`) wraps, and
+      `shouldAdoptCandidate` is the incumbent-wins-ties predicate
+      `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
+      same-side U-hook candidate whose DEPARTURE side border runs through
+      the target's strict interior (group frames excluded via
+      `fullyContains`) behind one that does not — this is what makes the
+      optimizer's ALREADY-CORRECT scoring of a clean same-side route
+      reachable in one improving hop instead of several: the defect was in
+      candidate ORDER, not the search budget, so `CROSSING_OPT_MAX_PASSES`
+      stays 2. The PENALTY half is `PENALTY_RULES`: overlap-and-intrusion
+      (tier 0, collinear overlap plus self-retrace/body-intrusion),
+      illegibility (tier 1), crossings (tier 2), border-tracing (tier 3,
+      self-only — a routed segment collinear with AND overlapping a node's
+      own border, `nodeBorders` including the path's own endpoint rects
+      unlike `foreignBodies`), endpoint-body-ink (tier 4, self-only — a
+      routed segment STRICTLY BETWEEN a rect's two borders, the interior
+      complement of border-tracing, priced against the edge's OWN endpoint
+      rects since `foreignBodies` deliberately excludes them for the tunnel
+      check), and realized-bends (tier 5, self-only and deliberately last).
+      border-tracing sits BELOW crossings rather than adjacent to
+      overlap-and-intrusion: it is evaluated against the optimizer's
+      unaligned TRIAL paths (`computeAnchorsFor`'s pre-`slideAlongSide`
+      representation, used only for candidate ranking), whose unaligned
+      anchor placement can coincidentally trace a bystander's extended
+      border for a real stretch — a false signal a genuine crossing never
+      produces (verified against `edge-lane-rank.test.ts`'s sweep-rank pin:
+      tier 1 placement adopted a route with a real crossing over a
+      crossing-free one). endpoint-body-ink sits below border-tracing for
+      the same trial-path-artifact reason. `pairScore`/`selfPenalty`
+      (`spatial-edges.ts`) compose over the list, and every cost-tuple
+      helper (`ConfigCost` shape, `addCost`, `lessCost`,
       `hasRepairableProblem`) derives from the declared tiers, so a new
       penalty rule is one list entry, never a new slot threaded by hand.
     - **Facet-driven rendering rides the injected-resolver pattern**

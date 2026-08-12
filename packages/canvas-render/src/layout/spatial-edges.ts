@@ -548,17 +548,7 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
  * raising further.
  */
 const CROSSING_OPT_MAX_EDGES = 200
-/**
- * Each pass gives every edge at most one improving re-side; a chain of N
- * DISTINCT improving candidates for the same edge needs N passes to fully
- * settle (greedy first-strict-improvement adoption, no backtracking).
- * 3 is the bound clearing border-tracing AND endpoint-body-ink together on
- * an overlapping-nodes canvas (right-facing -> an L-pair -> the zero-border
- * U-hook -> the route clear of both); at 2 it settles every time on the
- * border-clean-but-interior-dirty U-hook, pinned by
- * edge-endpoint-body-ink.test.ts.
- */
-const CROSSING_OPT_MAX_PASSES = 3
+const CROSSING_OPT_MAX_PASSES = 2
 /** At or under this many edges, every edge tries candidates (the exact
  * pre-sweep behavior); above it, only the worst offenders do. */
 const FULL_OPT_MAX_EDGES = 40
@@ -706,6 +696,11 @@ function optimizeSideChoices(
     const toRect = rectOf(toNode)
     const fromCenter = centerOf(fromRect)
     const toCenter = centerOf(toRect)
+    // rankedSidePairs already ends with the same-side U-hook candidates
+    // (u-hook-span-exposed-first, edge-rules.ts) — the fallback that hooks
+    // OVER everything when every ranked-vocabulary pair crosses, overlaps,
+    // or retraces. One producer for that list, so it is not re-generated
+    // here in a separate fixed compass order.
     const pairs = rankedSidePairs(
       toCenter.x - fromCenter.x,
       toCenter.y - fromCenter.y,
@@ -713,18 +708,8 @@ function optimizeSideChoices(
       toRect,
       () => 0,
     )
-    // U-pairs (both ends on the SAME compass side) are outside the ranked
-    // vocabulary — the initial heuristic never wants them — but they are
-    // exactly what hooks OVER everything when every ranked pair crosses,
-    // overlaps, or retraces, and what a pair of overlapping nodes needs to
-    // arrive without doubling back. Offered last: the optimizer only
-    // adopts one on a strict cost decrease.
-    const uPairs = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
-      fromSide: side as Side,
-      toSide: side as Side,
-    }))
     const seen = new Set<string>()
-    return [...pairs, ...uPairs]
+    return pairs
       .map((pair) => ({
         fromSide: edge.fromSide ?? pair.fromSide,
         toSide: edge.toSide ?? pair.toSide,

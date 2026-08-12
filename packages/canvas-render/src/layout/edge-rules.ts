@@ -238,6 +238,100 @@ const gapValidOpposingBeforeInvalid = {
 const dominantAxisFirst = { kind: 'tiebreak' as const, name: 'dominant-axis-first' }
 const incumbentWinsTies = { kind: 'tiebreak' as const, name: 'incumbent-wins-ties' }
 
+/** The four points bounding rect's border on `side`, as a 2-point segment
+ * `inkAlongRects` (declared below, a hoisted function declaration) can walk. */
+function sideSegment(rect: Rect, side: Side): readonly [Point, Point] {
+  switch (side) {
+    case 'top':
+      return [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.w, y: rect.y },
+      ]
+    case 'bottom':
+      return [
+        { x: rect.x, y: rect.y + rect.h },
+        { x: rect.x + rect.w, y: rect.y + rect.h },
+      ]
+    case 'left':
+      return [
+        { x: rect.x, y: rect.y },
+        { x: rect.x, y: rect.y + rect.h },
+      ]
+    case 'right':
+      return [
+        { x: rect.x + rect.w, y: rect.y },
+        { x: rect.x + rect.w, y: rect.y + rect.h },
+      ]
+  }
+}
+
+/**
+ * Whether `rect`'s WHOLE `side` border passes through `other`'s STRICT
+ * interior for some positive-length stretch — the SPAN version of "this
+ * anchor sits inside the other endpoint", needed because a same-side U-hook
+ * anchor is placed by `computeAnchorsFor`'s fan-out (not the side midpoint),
+ * so only the full span, not one point, reliably sees the occlusion. Reuses
+ * `inkAlongRects`'s ink-length loop (the same "strictly between the two
+ * borders" predicate `endpoint-body-ink` prices) against one synthetic
+ * segment tracing the side, rather than a second span-overlap
+ * implementation — one producer for "is this stretch inside that rect".
+ */
+function sideSpanEntersRect(rect: Rect, side: Side, other: Rect): boolean {
+  return (
+    inkAlongRects(
+      sideSegment(rect, side),
+      [other],
+      (fixed, near, far) => near < fixed && fixed < far,
+    ) > 0
+  )
+}
+
+/**
+ * u-hook-span-exposed-first: among the four same-side U-hook candidates (a
+ * departure and arrival on the SAME compass side of each rect — the
+ * fallback that hooks OVER everything when the ranked vocabulary above
+ * offers nothing usable, or loses on cost to some other candidate), demote
+ * one whose DEPARTURE side border runs through the target's strict
+ * interior behind one that does not. This is departure-only, not symmetric
+ * with the arrival end: the actual routed geometry approaches an arrival
+ * anchor from OUTSIDE the target (an arc around it, never along its own
+ * border through a bystander), so an arrival side's border passing through
+ * the source's interior is not evidence of real interior ink — verified
+ * against the reported canvas, where the CLEAN route's arrival-side border
+ * (`toRect`'s bottom) geometrically overlaps the source's body exactly as
+ * much as the dirty route's does, yet only the dirty route draws through
+ * it. A DEPARTURE stub, by contrast, draws in a straight line off that
+ * exact border, so a departure side whose span runs through the target's
+ * body is real evidence the stub cuts through it (this is the exact defect
+ * endpoint-body-ink prices: "the departure/arrival stub cutting through
+ * the near or far endpoint's interior").
+ *
+ * MANDATORY EXCLUSION, same predicate as endpoint-body-ink and
+ * deriveDefaultSides's occlusion filter: a rect that `fullyContains` the
+ * other endpoint (a group frame around its member) never taints a side —
+ * every hook out of the contained node runs through the container equally,
+ * which says nothing about which side to prefer.
+ *
+ * Always total (returns all four, only reordered) and placed LAST among
+ * the 'candidates' rules: `gap-valid-opposing-before-invalid` above it
+ * already guarantees a non-empty ranking, so this rule can never become
+ * `pairs[0]` — it only refines the tail `candidatesFor` (spatial-edges.ts)
+ * tries once every ranked-vocabulary pair has been exhausted.
+ */
+const uHookSpanExposedFirst = {
+  kind: 'candidates' as const,
+  name: 'u-hook-span-exposed-first',
+  generate: (ctx: PreferenceRuleContext): readonly SidePair[] => {
+    const taints = (side: Side): boolean =>
+      !fullyContains(ctx.toRect, ctx.fromRect) && sideSpanEntersRect(ctx.fromRect, side, ctx.toRect)
+    const hooks = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
+      fromSide: side as Side,
+      toSide: side as Side,
+    }))
+    return [...hooks.filter((p) => !taints(p.fromSide)), ...hooks.filter((p) => taints(p.fromSide))]
+  },
+}
+
 /**
  * The declared, ordered PREFERENCE-rule catalog (decision #10). Candidate
  * generation (`composeSidePairs`) composes only the 'candidates'-kind
@@ -251,6 +345,7 @@ export const SIDE_PREFERENCE_RULES: readonly PreferenceRule[] = [
   lPairCrowdingTieBreak,
   uHookWhenDegenerate,
   gapValidOpposingBeforeInvalid,
+  uHookSpanExposedFirst,
   incumbentWinsTies,
 ]
 

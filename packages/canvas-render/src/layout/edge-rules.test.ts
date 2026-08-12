@@ -177,14 +177,66 @@ describe('incumbent-wins-ties', () => {
 })
 
 describe('SIDE_PREFERENCE_RULES', () => {
-  it('declares exactly the six named rules from decision #10, in order', () => {
+  it('declares exactly the seven named rules from decision #10, in order', () => {
     expect(SIDE_PREFERENCE_RULES.map((r) => r.name)).toEqual([
       'zero-bend-facing-first',
       'dominant-axis-first',
       'l-pair-crowding-tie-break',
       'u-hook-when-degenerate',
       'gap-valid-opposing-before-invalid',
+      'u-hook-span-exposed-first',
       'incumbent-wins-ties',
+    ])
+  })
+})
+
+describe('u-hook-span-exposed-first', () => {
+  const rule = candidateRule('u-hook-span-exposed-first')
+
+  it('is total: always offers all four same-side hooks, only reordered', () => {
+    const fromRect = rectAt(0, 0)
+    const toRect = rectAt(200, 200)
+    const pairs = rule.generate({ dx: 200, dy: 200, fromRect, toRect, crowd: () => 0 })
+    expect(pairs).toHaveLength(4)
+    expect(new Set(pairs.map((p) => p.fromSide))).toEqual(
+      new Set(['top', 'right', 'bottom', 'left']),
+    )
+  })
+
+  it('demotes a departure side whose border runs through the target body, on the reported canvas', () => {
+    // A(100,570,200,100) -> B(220,520,200,100): A's top border (y=570,
+    // x[100,300]) runs strictly through B's interior for x in (220,300);
+    // A's bottom border (y=670) misses B's y-range [520,620] entirely.
+    const fromRect: Rect = { x: 100, y: 570, w: 200, h: 100 }
+    const toRect: Rect = { x: 220, y: 520, w: 200, h: 100 }
+    const pairs = rule.generate({ dx: 120, dy: -50, fromRect, toRect, crowd: () => 0 })
+    const bottomIndex = pairs.findIndex((p) => p.fromSide === 'bottom')
+    const topIndex = pairs.findIndex((p) => p.fromSide === 'top')
+    expect(bottomIndex).toBeLessThan(topIndex)
+  })
+
+  it('never demotes any side when the other endpoint fully contains this one (group-frame exclusion)', () => {
+    const fromRect: Rect = { x: 10, y: 10, w: 20, h: 20 }
+    const toRect: Rect = { x: 0, y: 0, w: 200, h: 200 }
+    const pairs = rule.generate({ dx: 0, dy: 0, fromRect, toRect, crowd: () => 0 })
+    expect(pairs).toEqual([
+      { fromSide: 'top', toSide: 'top' },
+      { fromSide: 'right', toSide: 'right' },
+      { fromSide: 'bottom', toSide: 'bottom' },
+      { fromSide: 'left', toSide: 'left' },
+    ])
+  })
+
+  it('keeps compass order stable among sides that share the same taint status', () => {
+    // Neither endpoint's border runs through the other: nothing is
+    // demoted, so the fixed compass order survives unchanged.
+    const fromRect = rectAt(0, 0)
+    const toRect = rectAt(400, 400)
+    expect(rule.generate({ dx: 400, dy: 400, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'top', toSide: 'top' },
+      { fromSide: 'right', toSide: 'right' },
+      { fromSide: 'bottom', toSide: 'bottom' },
+      { fromSide: 'left', toSide: 'left' },
     ])
   })
 })
