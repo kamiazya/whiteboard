@@ -11,8 +11,8 @@ import {
   validateVersionId,
   validateWorkspaceId,
 } from '../validators.js'
-import { countAliveNodes } from './count-alive-nodes.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
