@@ -1,9 +1,11 @@
 import {
   type CanvasCoreMeta,
   type CanvasEdge,
+  type CanvasKind,
   canvasCoreMetaSchema,
   canvasEdgeSchema,
   canvasExtensionSchema,
+  canvasKindSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   type SpatialCanvas,
@@ -45,6 +47,13 @@ function dropLockInto(doc: LoroDoc, mapKey: string, id: string): void {
   if (locksMap.keys().includes(id)) locksMap.delete(id)
 }
 const CORE_KEY = 'core'
+
+/**
+ * Document-level envelope: what the document IS, above any one format's
+ * structure. Kept out of `core` because that map is OKF frontmatter, which
+ * a JSON Canvas document has no business carrying (ADR-0009 decision 3).
+ */
+const DOCUMENT_KEY = 'document'
 
 type Fields = Record<string, unknown>
 
@@ -459,4 +468,26 @@ export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
 
   const result = canvasCoreMetaSchema.safeParse(candidate)
   return result.success ? result.data : undefined
+}
+
+/**
+ * The kind a document was created as. `wb_document_get` serialises through
+ * it — a spatial document as JSON Canvas, a markdown one as OKF — so this
+ * is what makes a format follow from the document rather than from a
+ * caller-supplied parameter (ADR-0009 decision 4).
+ */
+export function writeDocumentKind(doc: LoroDoc, kind: CanvasKind): void {
+  doc.getMap(DOCUMENT_KEY).set('kind', kind)
+  doc.commit()
+}
+
+/**
+ * `undefined` for a document written before kinds existed, and for a kind
+ * this build does not recognise — a peer on a newer version can write one
+ * into the same CRDT map. Both cases are for the caller to report; failing
+ * here would replace its message with a parse error from three layers down.
+ */
+export function readDocumentKind(doc: LoroDoc): CanvasKind | undefined {
+  const parsed = canvasKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
+  return parsed.success ? parsed.data : undefined
 }
