@@ -1,68 +1,75 @@
-import type { LoroDoc } from 'loro-crdt'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import type { LoroDoc, PeerID } from 'loro-crdt'
+import { VersionVector } from 'loro-crdt'
 
 // CRDT merge is automatic, but the UI still needs signals for surprising LWW
-// outcomes. Given target / source / preview docs, this detects non-obvious merge
-// results such as tombstone resurrection, orphan refs, and mixed field winners.
+// outcomes. Given base / target / source / preview docs, this detects
+// non-obvious merge results such as tombstone resurrection, orphan refs, and
+// mixed field winners.
 //
 // Design choices:
 // - routes only handle Loro checkout/export mechanics; badge detection stays pure
-// - preview is expected to come from route-level merge preparation
+// - preview is expected to come from route-level merge preparation (today:
+//   the source tip, under the shipped "source wins" tip-adoption merge)
+// - base is the merge base: the common ancestor of target and source, so a
+//   node/edge missing from `base` never counts as resurrected or conflicted —
+//   it is simply new on one side
 
 export type MergeBadge =
   | { type: 'resurrected'; elementId: string }
   | { type: 'orphan_ref'; elementId: string; missingRef: string }
   | { type: 'field_merge'; elementId: string; fields: string[] }
 
-type ElementSnap = Record<string, unknown> & { id?: unknown }
+type ElementSnap = Record<string, unknown> & { id: string }
 
-function toElementMap(doc: LoroDoc): Map<string, ElementSnap> {
-  try {
-    const list = doc.getMovableList('elements')
-    const entries = list.toJSON() as ElementSnap[]
-    const out = new Map<string, ElementSnap>()
-    for (const el of entries) {
-      if (typeof el?.id === 'string') out.set(el.id, el)
-    }
-    return out
-  } catch {
-    return new Map()
-  }
+// Build a map of every node AND edge, keyed by id. Unlike the retired
+// legacy 'elements' movable-list (which tombstoned entries with
+// `isDeleted: true`), the current nodes/edges model has no tombstone
+// concept: a deleted node or edge is removed from its LoroMap outright, so
+// presence in readSpatialCanvas's output already means "alive".
+export function toElementMap(doc: LoroDoc): Map<string, ElementSnap> {
+  const { nodes, edges } = readSpatialCanvas(doc)
+  const out = new Map<string, ElementSnap>()
+  for (const node of nodes) out.set(node.id, node as ElementSnap)
+  for (const edge of edges) out.set(edge.id, edge as ElementSnap)
+  return out
 }
 
-// Alive means not tombstoned. isDeleted is expected to be a boolean.
-function isAlive(el: ElementSnap | undefined): boolean {
-  if (!el) return false
-  return el.isDeleted !== true
-}
-
-// Collect reference IDs that arrows / annotations / text can point at.
-// This covers the main preview-time cases: startBinding.elementId,
-// endBinding.elementId, containerId, and frameId.
+// Edges are the only element kind carrying a reference to another element in
+// the current model (fromNode/toNode); nodes carry none, so this returns []
+// for a node entry.
 function refTargetIdsOf(el: ElementSnap): string[] {
   const ids: string[] = []
-  const sb = el.startBinding as { elementId?: unknown } | undefined
-  if (sb && typeof sb.elementId === 'string') ids.push(sb.elementId)
-  const eb = el.endBinding as { elementId?: unknown } | undefined
-  if (eb && typeof eb.elementId === 'string') ids.push(eb.elementId)
-  if (typeof el.containerId === 'string') ids.push(el.containerId)
-  if (typeof el.frameId === 'string') ids.push(el.frameId)
+  if (typeof el.fromNode === 'string') ids.push(el.fromNode)
+  if (typeof el.toNode === 'string') ids.push(el.toNode)
   return ids
 }
 
-// A live preview element is orphaned if its referenced target is tombstoned or missing.
-function isOrphanRefTarget(previewById: Map<string, ElementSnap>, refId: string): boolean {
-  const refEl = previewById.get(refId)
-  if (!refEl) return true
-  return !isAlive(refEl)
+// The merge base is the common ancestor: the per-peer minimum ("meet") of
+// two version vectors. A peer counted on only one side contributes nothing
+// to the ancestor and is omitted from the meet (its count would be 0); an
+// all-omitted (empty) meet checks out to genesis.
+export function meetVersion(a: VersionVector, b: VersionVector): VersionVector {
+  const bCounts = b.toJSON()
+  const meet = new Map<PeerID, number>()
+  for (const [peer, aCount] of a.toJSON()) {
+    const bCount = bCounts.get(peer)
+    if (bCount === undefined) continue
+    const count = Math.min(aCount, bCount)
+    if (count > 0) meet.set(peer, count)
+  }
+  return new VersionVector(meet)
 }
 
-export interface DetectArgs {
+interface DetectArgs {
+  base: LoroDoc
   target: LoroDoc
   source: LoroDoc
   preview: LoroDoc
 }
 
-export function detectMergeBadges({ target, source, preview }: DetectArgs): MergeBadge[] {
+export function detectMergeBadges({ base, target, source, preview }: DetectArgs): MergeBadge[] {
+  const byBase = toElementMap(base)
   const byTarget = toElementMap(target)
   const bySource = toElementMap(source)
   const byPreview = toElementMap(preview)
@@ -70,67 +77,50 @@ export function detectMergeBadges({ target, source, preview }: DetectArgs): Merg
   const badges: MergeBadge[] = []
 
   for (const [id, prev] of byPreview) {
-    const tgt = byTarget.get(id)
-    const src = bySource.get(id)
-    // Skip post-merge hallucinations that exist in neither target nor source.
-    if (!tgt && !src) continue
+    const baseEl = byBase.get(id)
+    const targetEl = byTarget.get(id)
+    const sourceEl = bySource.get(id)
 
-    // Case A: the element existed in target, was tombstoned there, and is alive
-    // in preview. Exclude brand-new elements that only came from source.
-    const tgtExisted = tgt !== undefined
-    const tgtAlive = isAlive(tgt)
-    const prevAlive = isAlive(prev)
-    const isResurrected = tgtExisted && !tgtAlive && prevAlive
-    if (isResurrected) {
+    // resurrected: alive at base, alive in preview (guaranteed — prev is a
+    // byPreview entry), and absent at target tip. Committing revives
+    // something the target branch deleted. The "edited on the other side"
+    // condition an earlier design considered is deliberately dropped: under
+    // tip-adoption the element is revived regardless, making that a subset
+    // of this rule rather than an additional requirement.
+    if (baseEl && !targetEl) {
       badges.push({ type: 'resurrected', elementId: id })
     }
 
-    // Case B: a live preview element references something that is not live.
-    if (prevAlive) {
-      for (const refId of refTargetIdsOf(prev)) {
-        if (isOrphanRefTarget(byPreview, refId)) {
-          badges.push({ type: 'orphan_ref', elementId: id, missingRef: refId })
-        }
+    // orphan_ref: a live preview edge references a node with no alive entry
+    // in preview. The bridge's edge-cascade invariant (deleteSpatialNode
+    // removes every edge touching the deleted node in the same commit)
+    // means this cannot happen for a doc built through normal writes — kept
+    // as a defensive net for a corrupt or foreign-shaped doc.
+    for (const refId of refTargetIdsOf(prev)) {
+      if (!byPreview.has(refId)) {
+        badges.push({ type: 'orphan_ref', elementId: id, missingRef: refId })
       }
     }
 
-    // Case C: field-level LWW mixing, excluding resurrected cases. If target and
-    // source differ and preview picks a mix of winners, surface that as a badge.
-    if (!isResurrected && tgt && src) {
-      const targetKeys = new Set(Object.keys(tgt))
-      const sourceKeys = new Set(Object.keys(src))
-      const relevantKeys = new Set([...targetKeys, ...sourceKeys])
-      // id / type / isDeleted are already covered by cases A/B.
-      relevantKeys.delete('id')
-      relevantKeys.delete('type')
-      relevantKeys.delete('isDeleted')
-      const mixed: string[] = []
-      let allTargetWins = true
-      let allSourceWins = true
-      for (const k of relevantKeys) {
-        const tVal = tgt[k]
-        const sVal = src[k]
-        const pVal = prev[k]
-        if (tVal === sVal) continue // Ignore fields with no diff.
-        // If preview matches neither side, that is a more complex merge shape and
-        // is outside the current scope.
-        const pEqTarget = JSON.stringify(pVal) === JSON.stringify(tVal)
-        const pEqSource = JSON.stringify(pVal) === JSON.stringify(sVal)
-        if (!pEqTarget) allTargetWins = false
-        if (!pEqSource) allSourceWins = false
-        if (pEqSource && !pEqTarget) {
-          // Source won for this field.
-          mixed.push(k)
-        }
+    // field_merge: present at base, target tip, AND source tip (an id newly
+    // created on both sides — same-id double-create — is skipped: there is
+    // no shared base value to diff against), listing fields both branches
+    // changed away from base to different values.
+    if (baseEl && targetEl && sourceEl) {
+      const fields: string[] = []
+      const keys = new Set([...Object.keys(targetEl), ...Object.keys(sourceEl)])
+      keys.delete('id')
+      for (const key of keys) {
+        const baseVal = JSON.stringify(baseEl[key])
+        const targetVal = JSON.stringify(targetEl[key])
+        const sourceVal = JSON.stringify(sourceEl[key])
+        if (targetVal === sourceVal) continue // No conflict: both sides agree.
+        if (targetVal === baseVal) continue // Target didn't change this field.
+        if (sourceVal === baseVal) continue // Source didn't change this field.
+        fields.push(key)
       }
-      // If one side won every field, it is not mixed. Otherwise, mixed contains
-      // the fields where preview differs by winner.
-      if (mixed.length > 0 && !allTargetWins && !allSourceWins) {
-        badges.push({ type: 'field_merge', elementId: id, fields: mixed.sort() })
-      } else if (mixed.length > 0 && allSourceWins) {
-        // If source won all fields, it is still useful to surface the full diff
-        // relative to target.
-        badges.push({ type: 'field_merge', elementId: id, fields: mixed.sort() })
+      if (fields.length > 0) {
+        badges.push({ type: 'field_merge', elementId: id, fields: fields.sort() })
       }
     }
   }

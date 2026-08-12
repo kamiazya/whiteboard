@@ -12,7 +12,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
-import { detectMergeBadges } from '../shared/merge-engine.js'
+import { detectMergeBadges, meetVersion, toElementMap } from '../shared/merge-engine.js'
 import {
   checkoutCloneOrThrow,
   decodeBranchTipOrThrow,
@@ -564,46 +564,33 @@ export function createApp(options: AppOptions) {
             // result for the current "source wins" flow, and detectMergeBadges only needs a
             // stable target/source/preview triple to surface LWW differences.
             const previewDoc = sourceDoc
+
+            // The merge base is the common ancestor: the per-peer minimum
+            // ("meet") of target's and source's version vectors, checked out
+            // against the live doc's full history. An all-omitted (empty) meet
+            // checks out to genesis, which correctly classifies every source
+            // element as new rather than resurrected.
+            const baseFrontiers = liveDoc.vvToFrontiers(
+              meetVersion(targetDoc.version(), sourceDoc.version()),
+            )
+            const baseDoc = checkoutCloneOrThrow(
+              liveDoc,
+              baseFrontiers,
+              `${sid}/branches/${slug}.json#merge-base`,
+              'merge base could not be checked out against the live document',
+            )
+
             const badges = detectMergeBadges({
+              base: baseDoc,
               target: targetDoc,
               source: sourceDoc,
               preview: previewDoc,
             })
 
-            const countAlive = (doc: LoroDoc): number => {
-              try {
-                const list = doc.getMovableList('elements').toJSON() as Array<{
-                  isDeleted?: boolean
-                }>
-                return list.filter((e) => !e.isDeleted).length
-              } catch {
-                return 0
-              }
-            }
-            const previewElementCount = countAlive(previewDoc)
-            const targetElementCount = countAlive(targetDoc)
-            const sourceElementCount = countAlive(sourceDoc)
-
-            // Diff alive elements between target and preview so the UI can highlight
+            // Diff elements between target and preview so the UI can highlight
             // new / changed / conflict elements after commit.
-            const aliveMap = (doc: LoroDoc): Map<string, Record<string, unknown>> => {
-              try {
-                const list = doc.getMovableList('elements').toJSON() as Array<
-                  Record<string, unknown> & { id?: unknown; isDeleted?: unknown }
-                >
-                const out = new Map<string, Record<string, unknown>>()
-                for (const el of list) {
-                  if (el.isDeleted) continue
-                  if (typeof el.id !== 'string') continue
-                  out.set(el.id, el)
-                }
-                return out
-              } catch {
-                return new Map()
-              }
-            }
-            const tMap = aliveMap(targetDoc)
-            const pMap = aliveMap(previewDoc)
+            const tMap = toElementMap(targetDoc)
+            const pMap = toElementMap(previewDoc)
             const newElementIds: string[] = []
             const changedElementIds: string[] = []
             for (const [id, pEl] of pMap) {
@@ -614,27 +601,27 @@ export function createApp(options: AppOptions) {
                 changedElementIds.push(id)
               }
             }
-            const conflictElementIds = Array.from(
-              new Set(
-                (badges as Array<Record<string, unknown>>)
-                  .map((b) => (typeof b.elementId === 'string' ? b.elementId : ''))
-                  .filter((v) => v.length > 0),
-              ),
-            )
+            const conflictElementIds = Array.from(new Set(badges.map((b) => b.elementId)))
+
+            // Counts come from the same nodes+edges map toElementMap builds for
+            // previewElements/newElementIds/changedElementIds above, so
+            // previewElementCount stays equal to previewElements.length (and the
+            // other counts stay consistent) for a canvas containing edges.
+            // countAliveNodes is deliberately not used here: it is a nodes-only
+            // reader written for an unrelated advisory-count consumer.
+            const previewElementCount = pMap.size
+            const targetElementCount = tMap.size
+            // previewDoc is sourceDoc (see above), so this mirrors previewElementCount exactly.
+            const sourceElementCount = pMap.size
 
             if (dryRun) {
-              // For dry runs, return only alive elements so MergeDialog can render a
-              // read-only Excalidraw preview without duplicating tombstoned elements.
-              const previewElements = (() => {
-                try {
-                  const list = previewDoc.getMovableList('elements').toJSON() as Array<{
-                    isDeleted?: boolean
-                  }>
-                  return list.filter((e) => !e.isDeleted)
-                } catch {
-                  return []
-                }
-              })()
+              // For dry runs, return every current node + edge so MergeDialog can
+              // render a read-only preview. Payload shape is deliberately the
+              // nodes-model equivalent of the retired Excalidraw-style elements
+              // list; the field stays untyped (z.array(z.unknown())) because no
+              // consumer reads element field contents today — MergeDialog only
+              // reads .length, kept available for a future static renderer.
+              const previewElements = [...pMap.values()]
               return {
                 previewElementCount,
                 targetElementCount,
