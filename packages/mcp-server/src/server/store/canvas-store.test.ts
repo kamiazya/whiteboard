@@ -24,6 +24,8 @@ const {
   listWorkspaces,
   compactCanvas,
   deleteCanvas,
+  renameCanvasSlug,
+  ConflictError,
   scheduleAutoCompact,
   setAutoCompactTrigger,
   disposeAutoCompact,
@@ -836,6 +838,159 @@ describe('deleteCanvas', () => {
       .where('id', '=', row.id)
       .executeTakeFirst()
     expect(after).toBeUndefined()
+  })
+})
+
+describe('renameCanvasSlug', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-rename-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('moves only the slug: branches/versions rows and the .loro blob stay byte-identical and keyed to the same canvasId', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { createBranch, loadCanvasBranches } = await import('./branches-store.js')
+    const { readFile } = await import('node:fs/promises')
+
+    const doc = new LoroDoc()
+    await saveCanvas('session1', 'a', doc)
+    await createBranch('session1', 'a', { name: 'feature' })
+    const store = new FileVersionStore()
+    const version = await store.save('session1', 'a', doc, { auto: true })
+
+    const db = await getDb(tempDir)
+    const before = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'a')
+      .executeTakeFirstOrThrow()
+    const canvasId = before.id
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${canvasId}.loro`)
+    const blobBefore = await readFile(blobPath)
+
+    await expect(renameCanvasSlug('session1', 'a', 'b')).resolves.toEqual({ canvasId })
+
+    const list = await listCanvases('session1')
+    expect(list.map((c) => c.slug)).toEqual(['b'])
+
+    const after = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'b')
+      .executeTakeFirstOrThrow()
+    expect(after.id).toBe(canvasId)
+
+    const branchesAfter = await db
+      .selectFrom('branches')
+      .selectAll()
+      .where('canvasId', '=', canvasId)
+      .execute()
+    expect(branchesAfter.map((b) => b.name).sort()).toEqual(['feature', 'main'])
+
+    const versionsAfter = await db
+      .selectFrom('versions')
+      .selectAll()
+      .where('canvasId', '=', canvasId)
+      .execute()
+    expect(versionsAfter.map((v) => v.id)).toEqual([version.id])
+
+    const blobAfter = await readFile(blobPath)
+    expect(blobAfter).toEqual(blobBefore)
+
+    // loadCanvasBranches also resolves under the new slug.
+    const branches = await loadCanvasBranches('session1', 'b')
+    expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
+  })
+
+  it('returns null (never throws) for a missing source canvas', async () => {
+    await expect(renameCanvasSlug('session1', 'ghost', 'somewhere')).resolves.toBeNull()
+  })
+
+  it('throws ConflictError for an already-taken target slug and mutates neither canvas', async () => {
+    await saveCanvas('session1', 'a', new LoroDoc())
+    await saveCanvas('session1', 'b', new LoroDoc())
+
+    await expect(renameCanvasSlug('session1', 'a', 'b')).rejects.toThrow(ConflictError)
+
+    const list = await listCanvases('session1')
+    expect(list.map((c) => c.slug).sort()).toEqual(['a', 'b'])
+  })
+
+  it('throws the slug validator error for an invalid target slug', async () => {
+    await saveCanvas('session1', 'a', new LoroDoc())
+    await expect(renameCanvasSlug('session1', 'a', '../evil')).rejects.toThrow()
+  })
+
+  it('rename to the SAME slug is a no-op success, returning the existing canvasId', async () => {
+    await saveCanvas('session1', 'a', new LoroDoc())
+    const { getDb } = await import('./db/index.js')
+    const db = await getDb(tempDir)
+    const before = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'a')
+      .executeTakeFirstOrThrow()
+
+    await expect(renameCanvasSlug('session1', 'a', 'a')).resolves.toEqual({
+      canvasId: before.id,
+    })
+
+    const list = await listCanvases('session1')
+    expect(list.map((c) => c.slug)).toEqual(['a'])
+  })
+
+  it('evicts the old cache key so a subsequent getDoc under the old slug misses the cache', async () => {
+    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    clearCache()
+    try {
+      await saveCanvas('session1', 'a', new LoroDoc())
+      await getDoc('session1', 'a')
+      expect(peekDoc('session1', 'a')).toBeDefined()
+
+      await renameCanvasSlug('session1', 'a', 'b')
+      expect(peekDoc('session1', 'a')).toBeUndefined()
+    } finally {
+      clearCache()
+    }
+  })
+
+  it('evicts a phantom doc-cache entry already sitting at the destination slug, so the renamed content is not overwritten', async () => {
+    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    clearCache()
+    try {
+      // Write real content under 'a'.
+      const doc = new LoroDoc()
+      doc.getText('content').insert(0, 'real content')
+      doc.commit()
+      await saveCanvas('session1', 'a', doc)
+
+      // Simulate a WS connect (or update route) against a not-yet-created
+      // slug 'b': getDoc() lazily caches an empty in-memory doc for it
+      // even though there is no DB row yet.
+      await getDoc('session1', 'b')
+      expect(peekDoc('session1', 'b')).toBeDefined()
+
+      await renameCanvasSlug('session1', 'a', 'b')
+
+      // The stale phantom doc must not still shadow the just-renamed
+      // canvas's real content at the destination slug.
+      expect(peekDoc('session1', 'b')).toBeUndefined()
+
+      const reloaded = await getDoc('session1', 'b')
+      expect(reloaded.getText('content').toString()).toBe('real content')
+    } finally {
+      clearCache()
+    }
   })
 })
 

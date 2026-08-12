@@ -538,6 +538,49 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
   return rows.map((r) => ({ workspaceId: r.id }))
 }
 
+// ── rename a canvas's slug ──
+// Updates only canvases.slug. branches/versions FK on canvasId and the blob
+// path also uses canvasId, so none of that moves. Returns null (never
+// throws) for a missing source canvas, matching deleteCanvas's boolean-
+// shaped "already gone" handling; a rename onto an already-taken slug
+// throws ConflictError instead of a raw unique-constraint error.
+export async function renameCanvasSlug(
+  workspaceId: string,
+  oldSlug: string,
+  newSlug: string,
+): Promise<{ canvasId: string } | null> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(oldSlug)
+  validateSlug(newSlug)
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const db = await dbReady()
+    const canvasId = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+    if (!canvasId) return null
+    if (oldSlug === newSlug) return { canvasId }
+    const taken = await getCanvasIdBySlug(db, workspaceId, newSlug)
+    if (taken) {
+      throw new ConflictError(`Canvas "${workspaceId}/${newSlug}" already exists`)
+    }
+    await db
+      .updateTable('canvases')
+      .set({ slug: newSlug, updatedAt: Date.now() })
+      .where('id', '=', canvasId)
+      .execute()
+    // Force the next getDoc() to reload under both slug keys. oldSlug: a
+    // caller still reading through it should lazily create a fresh canvas
+    // rather than resurrect the renamed doc's cached instance. newSlug: a
+    // WS connect or update-route call against the destination slug before
+    // this rename can lazily cache an empty phantom doc there (getDoc()
+    // creates one for any slug with no DB row yet) — leaving that phantom
+    // cached would shadow the just-renamed canvas's real content and the
+    // next write through newSlug would persist the phantom over it.
+    const { evictDoc } = await import('./doc-cache.js')
+    evictDoc(workspaceId, oldSlug)
+    evictDoc(workspaceId, newSlug)
+    return { canvasId }
+  })
+}
+
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,

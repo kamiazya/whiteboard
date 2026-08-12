@@ -9,6 +9,7 @@ import { getLogger } from '../../log.js'
 import { canvasExists, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionEntry } from '../../store/version-store.js'
+import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { getBroadcastFn } from './_shared.js'
 
@@ -94,17 +95,29 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       const { workspaceId, slug } = params
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
-      const doc = await getDoc(workspaceId, slug)
-      doc.import(bytes)
-      try {
-        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
-      } catch (err) {
-        // doc.import() above already mutated the cached doc, so a failed save
-        // would otherwise leave the cache ahead of durable state. Evict it so
-        // the next read reloads the last successfully persisted snapshot.
-        evictDoc(workspaceId, slug)
-        throw err
-      }
+      // Resolve the doc AND persist it inside one lock hold. getDoc() alone is
+      // unlocked, so a rename that runs its whole lock-protected section
+      // between an unlocked read here and saveCanvas()'s own later lock
+      // acquisition would find no row left at the old slug (renameCanvasSlug
+      // moved it) and silently insert a brand-new phantom canvas back at
+      // that slug instead of erroring or landing on the renamed one. Sharing
+      // the workspace write lock across the read and the write closes that
+      // window: the two operations settle into one definite order instead of
+      // interleaving through a stale read.
+      const doc = await withWorkspaceWriteLock(workspaceId, async () => {
+        const resolved = await getDoc(workspaceId, slug)
+        resolved.import(bytes)
+        try {
+          await saveCanvas(workspaceId, slug, resolved, { overwrite: true })
+        } catch (err) {
+          // doc.import() above already mutated the cached doc, so a failed save
+          // would otherwise leave the cache ahead of durable state. Evict it so
+          // the next read reloads the last successfully persisted snapshot.
+          evictDoc(workspaceId, slug)
+          throw err
+        }
+        return resolved
+      })
 
       // Broadcast to all WS clients because the originating WS context is unknown on HTTP requests.
       getBroadcastFn()(workspaceId, slug, bytes)
