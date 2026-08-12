@@ -5,22 +5,6 @@ import vitestBrowserConfig from './vitest.browser.config.js'
 import vitestConfig from './vitest.config.js'
 import vitestDocsSnapshotsConfig from './vitest.docs-snapshots.config.js'
 
-// vite/vitest's `defineConfig` overloads also accept a factory function or a
-// promise (`(env) => UserConfig`, `Promise<UserConfig>`); none of the four
-// configs below use that form today, but resolving generically keeps the
-// guard from silently no-op'ing if one switches to it later.
-async function resolveAlias(config: unknown): Promise<Record<string, unknown>> {
-  const resolved =
-    typeof config === 'function'
-      ? (config as (env: { mode: string; command: string }) => unknown)({
-          mode: 'test',
-          command: 'serve',
-        })
-      : config
-  const awaited = (await resolved) as { resolve?: { alias?: Record<string, unknown> } }
-  return awaited.resolve?.alias ?? {}
-}
-
 // Each config below independently resolves `@kamiazya/whiteboard-mcp/*`
 // subpaths to source (see mcp-source-alias.ts). A subpath added to
 // mcp-source-alias.ts that a config forgets to spread resolves through the
@@ -33,8 +17,10 @@ describe('mcpSourceAlias coverage across apps/web configs', () => {
     ['vitest.config.ts', vitestConfig],
     ['vitest.browser.config.ts', vitestBrowserConfig],
     ['vitest.docs-snapshots.config.ts', vitestDocsSnapshotsConfig],
-  ] as const)('%s aliases every mcpSourceAlias key to its source path', async (_name, config) => {
-    const alias = await resolveAlias(config)
+  ] as const)('%s aliases every mcpSourceAlias key to its source path', (_name, config) => {
+    // All four configs export a plain object; a switch to defineConfig's
+    // factory/promise form leaves `alias` empty here, which fails red.
+    const alias = (config.resolve?.alias ?? {}) as Record<string, unknown>
     for (const [key, value] of Object.entries(mcpSourceAlias)) {
       expect(alias[key]).toBe(value)
     }
