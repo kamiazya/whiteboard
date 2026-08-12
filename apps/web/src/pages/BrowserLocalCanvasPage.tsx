@@ -71,7 +71,12 @@ const DaemonDetectedBanner = lazy(() =>
 // weight is needed for the entry chunk of a page whose local mode never
 // exercises those affordances (see App.tsx's equivalent rationale for
 // lazy-loading DaemonCanvasPage).
-const WorkspaceTopBar = lazy(() => import('../components/WorkspaceTopBar.js'))
+// Kick the fetch at page-module evaluation (this module is itself a lazy
+// route chunk, so this is a parallel prefetch, not an entry-chunk cost):
+// the merged row now carries the title field and canvas operations, which
+// used to render eagerly and must not wait for a render-time chunk fetch.
+const workspaceTopBarImport = import('../components/WorkspaceTopBar.js')
+const WorkspaceTopBar = lazy(() => workspaceTopBarImport)
 
 // Fixed height so the lazy WorkspaceTopBar chunk resolving after first paint
 // causes no layout shift.
