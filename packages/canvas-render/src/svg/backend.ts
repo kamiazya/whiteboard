@@ -170,7 +170,6 @@ function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]):
   return parts.join(' ')
 }
 
-
 /**
  * The same polyline with its corners rounded off, per the shared
  * `roundedEdgeCorners` decomposition (see layout/edge-rounding.ts — the

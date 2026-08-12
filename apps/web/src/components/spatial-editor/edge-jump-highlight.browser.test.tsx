@@ -75,6 +75,9 @@ it('the selection highlight arcs over jump hops instead of cutting through them'
     .split(' ')
     .map((pair) => pair.split(',').map(Number))
     .map(([x, y]) => ({ x: x!, y: y! }))
-  const nearApex = pts.some((p) => Math.hypot(p.x - hop.x, p.y - hop.y) <= 5.5 && Math.hypot(p.x - hop.x, p.y - hop.y) >= 4.5)
+  const nearApex = pts.some(
+    (p) =>
+      Math.hypot(p.x - hop.x, p.y - hop.y) <= 5.5 && Math.hypot(p.x - hop.x, p.y - hop.y) >= 4.5,
+  )
   expect(nearApex).toBe(true)
 })
