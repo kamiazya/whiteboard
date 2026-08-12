@@ -88,6 +88,11 @@ Rules the grammar enforces:
   paint a seam dot at the dash boundary (stray specks on Android Chrome).
 - **`prefers-reduced-motion` collapses every brand animation to the static
   drawn logo** — never a blank board, never a mid-story frame.
+- **The inline loader** (`src/brand/loader-mark.svg` + `SquiggleLoader`) is
+  a dash travelling along the signature over a faint full-path track — the
+  ring-spinner grammar on the brand's own shape. Use it at 20px+ only;
+  below that the travel collapses into flicker, so tiny affordances keep a
+  plain ring.
 - Skeletons in the app (DESIGN.md's domain) stay invisible for a 300ms beat
   and fade in only when the wait is real — a placeholder that pops for one
   frame reads as a glitch, not progress.
