@@ -163,6 +163,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
     const title = await screen.findByRole('textbox', { name: /title/i })
+    // The markdown arm of the merged row: the title lives INSIDE the
+    // workspace header (one chrome row), not a detached strip below it.
+    expect(title.closest('header')).toBeTruthy()
     await userEvent.click(title)
     await userEvent.keyboard('リリース計画')
     await waitFor(() => {

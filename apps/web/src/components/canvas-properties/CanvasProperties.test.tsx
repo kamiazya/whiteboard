@@ -171,3 +171,21 @@ describe('CanvasProperties as the canvas row', () => {
     expect(screen.getByTestId('row-actions')).toBeTruthy()
   })
 })
+
+describe('CanvasProperties inline variant (merged header row)', () => {
+  it('renders as a row segment without its own chrome, and the disclosure overlays', () => {
+    const { container } = render(
+      <CanvasProperties inline meta={{ type: 'canvas' }} onChange={() => {}} />,
+    )
+    const wrapper = container.firstElementChild as HTMLElement
+    // No own border/背景 chrome — the merged header row provides it.
+    expect(wrapper.className).not.toContain('border-b')
+    expect(wrapper.className).toContain('flex-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Properties' }))
+    const disclosure = container.querySelector('[id$="-disclosure"]') as HTMLElement
+    expect(disclosure).toBeTruthy()
+    // Overlay below the header instead of growing the row.
+    expect(disclosure.className).toContain('absolute')
+  })
+})

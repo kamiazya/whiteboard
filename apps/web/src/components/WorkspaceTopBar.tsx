@@ -75,6 +75,12 @@ interface Props {
   // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
   statusSlot?: ReactNode
+  /**
+   * The merged canvas row's flexible middle (title + properties triggers),
+   * provided by the page — the header is one row, so pages inject their
+   * canvas identity here instead of stacking a second chrome strip.
+   */
+  titleSlot?: ReactNode
   // Pass-through to CanvasDropdown's optional Workspaces section — both
   // omitted (every pre-existing caller) keeps this byte-identical.
   workspaces?: string[]
@@ -106,6 +112,7 @@ export default function WorkspaceTopBar({
   branchRefreshSignal,
   onExport,
   statusSlot,
+  titleSlot,
   workspaces,
   onSwitchWorkspace,
 }: Props) {
@@ -312,6 +319,8 @@ export default function WorkspaceTopBar({
             {exportError}
           </span>
         )}
+
+        {titleSlot}
 
         {/* Branch chip with switch, create, rename, delete, and merge actions.
             This is the top bar's only destructive control (branch delete,
