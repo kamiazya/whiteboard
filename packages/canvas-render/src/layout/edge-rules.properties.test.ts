@@ -9,6 +9,7 @@
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
+  COST_QUANTUM,
   composeSidePairs,
   hasRepairableProblem,
   PENALTY_RULES,
@@ -134,6 +135,10 @@ const foreignBodiesArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb,
   maxLength: 4,
 })
 
+// Node-border domain for the border-tracing rule: same shape as the
+// foreign-body domain (mutually overlapping and zero-size rects included).
+const nodeBordersArb = foreignBodiesArb
+
 const tripleArb: fc.Arbitrary<readonly [number, number, number]> = fc.tuple(
   fc.integer({ min: 0, max: 1000 }),
   fc.integer({ min: 0, max: 1000 }),
@@ -149,12 +154,12 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
     },
   )
 
-  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
-    'selfPenalty places every rule contribution at rule.tier, for any path/foreign-body pair',
-    (path, foreignBodies) => {
-      const cost = selfPenalty(path, foreignBodies)
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
+    'selfPenalty places every rule contribution at rule.tier, for any path/foreign-body/node-border triple',
+    (path, foreignBodies, nodeBorders) => {
+      const cost = selfPenalty(path, foreignBodies, nodeBorders)
       for (const rule of PENALTY_RULES) {
-        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies))
+        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies, nodeBorders))
       }
     },
   )
@@ -165,10 +170,12 @@ describe('PENALTY_RULES: scorers are deterministic', () => {
     expect(pairPenalty(triple)).toEqual(pairPenalty(triple))
   })
 
-  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
     'selfPenalty is pure',
-    (path, foreignBodies) => {
-      expect(selfPenalty(path, foreignBodies)).toEqual(selfPenalty(path, foreignBodies))
+    (path, foreignBodies, nodeBorders) => {
+      expect(selfPenalty(path, foreignBodies, nodeBorders)).toEqual(
+        selfPenalty(path, foreignBodies, nodeBorders),
+      )
     },
   )
 })
@@ -184,13 +191,115 @@ describe('PENALTY_RULES: totals are finite non-negative integers', () => {
     },
   )
 
-  fcTest.prop([pathArb, foreignBodiesArb], withDefaults())(
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
     'selfPenalty totality, incl. zero-size rects, empty/single-point/zero-length paths',
-    (path, foreignBodies) => {
-      for (const n of selfPenalty(path, foreignBodies)) {
+    (path, foreignBodies, nodeBorders) => {
+      for (const n of selfPenalty(path, foreignBodies, nodeBorders)) {
         expect(Number.isInteger(n)).toBe(true)
         expect(n).toBeGreaterThanOrEqual(0)
       }
+    },
+  )
+})
+
+// border-tracing-specific properties: pathArb/nodeBordersArb sampled
+// independently would rarely land a segment exactly on a border (passing
+// vacuously — see AGENTS.md's PBT discipline), so this domain builds a path
+// FROM the border rects by snapping coordinates onto a rect's sides,
+// mixed with the generic pathArb via fc.oneof for coverage of the
+// non-tracing branches too.
+const tracingPointArb = (rect: Rect): fc.Arbitrary<Point> =>
+  fc.oneof(
+    // On the top/bottom border, x anywhere within a generous span (may
+    // overhang the rect — exercises the clipping branch).
+    fc.record({
+      x: fc.integer({ min: rect.x - 50, max: rect.x + rect.w + 50 }),
+      y: fc.constantFrom(rect.y, rect.y + rect.h),
+    }),
+    // On the left/right border.
+    fc.record({
+      x: fc.constantFrom(rect.x, rect.x + rect.w),
+      y: fc.integer({ min: rect.y - 50, max: rect.y + rect.h + 50 }),
+    }),
+    pointArb,
+  )
+
+const borderRectArb: fc.Arbitrary<Rect> = fc.record({
+  x: fc.integer({ min: -100, max: 100 }),
+  y: fc.integer({ min: -100, max: 100 }),
+  w: fc.integer({ min: 0, max: 150 }),
+  h: fc.integer({ min: 0, max: 150 }),
+})
+
+// The rect a tracing path was BUILT from is folded into nodeBorders
+// (alongside independently generated extras) so the equality property
+// below always has a real chance of finding a positive-overlap segment —
+// generating path and nodeBorders fully independently would only rarely
+// line a segment up with a border by chance.
+const tracingScenarioArb: fc.Arbitrary<{
+  path: readonly Point[]
+  nodeBorders: readonly Rect[]
+}> = fc.tuple(borderRectArb, nodeBordersArb).chain(([rect, extras]) =>
+  fc.array(tracingPointArb(rect), { minLength: 0, maxLength: 6 }).map((path) => ({
+    path,
+    nodeBorders: [rect, ...extras],
+  })),
+)
+
+/** Independent oracle (never calls production code): the same collinear-
+ * overlap-length definition, computed directly against the reference
+ * rects. All generator coordinates are integers, so multiplying by
+ * COST_QUANTUM at the end is exact — no quantization drift from the
+ * production rule's per-coordinate `q()` rounding. */
+function referenceBorderTrace(path: readonly Point[], rects: readonly Rect[]): number {
+  let total = 0
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    for (const r of rects) {
+      if (a.y === b.y && (a.y === r.y || a.y === r.y + r.h)) {
+        const lo = Math.max(Math.min(a.x, b.x), r.x)
+        const hi = Math.min(Math.max(a.x, b.x), r.x + r.w)
+        if (hi > lo) total += hi - lo
+      } else if (a.x === b.x && (a.x === r.x || a.x === r.x + r.w)) {
+        const lo = Math.max(Math.min(a.y, b.y), r.y)
+        const hi = Math.min(Math.max(a.y, b.y), r.y + r.h)
+        if (hi > lo) total += hi - lo
+      }
+    }
+  }
+  return total * COST_QUANTUM
+}
+
+describe('border-tracing: dense-on-borders property (mutation-checked)', () => {
+  fcTest.prop([tracingScenarioArb], withDefaults())(
+    'the border-tracing term is a finite, non-negative, integral, deterministic total',
+    ({ path, nodeBorders }) => {
+      const cost1 = selfPenalty(path, [], nodeBorders)
+      const cost2 = selfPenalty(path, [], nodeBorders)
+      expect(cost1[3]).toBe(cost2[3])
+      expect(Number.isInteger(cost1[3])).toBe(true)
+      expect(cost1[3]).toBeGreaterThanOrEqual(0)
+    },
+  )
+
+  fcTest.prop([tracingScenarioArb], withDefaults())(
+    'is invariant under permutation of the node-border array (a sum must not depend on order)',
+    ({ path, nodeBorders }) => {
+      const shuffled = [...nodeBorders].reverse()
+      expect(selfPenalty(path, [], nodeBorders)[3]).toBe(selfPenalty(path, [], shuffled)[3])
+    },
+  )
+
+  // The property that actually catches a "returns 0" or otherwise-wrong
+  // mutation: totality/purity/order-invariance above all hold trivially for
+  // a stub that always returns 0, so this is the one that must go red under
+  // mutation (verified: reverting borderTracing.selfTerm to `() => 0` fails
+  // this test, confirming the dense generator reaches real overlap).
+  fcTest.prop([tracingScenarioArb], withDefaults())(
+    'agrees with an independently-computed collinear overlap length',
+    ({ path, nodeBorders }) => {
+      expect(selfPenalty(path, [], nodeBorders)[3]).toBe(referenceBorderTrace(path, nodeBorders))
     },
   )
 })

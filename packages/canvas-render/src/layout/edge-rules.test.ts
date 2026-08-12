@@ -190,11 +190,12 @@ describe('SIDE_PREFERENCE_RULES', () => {
 })
 
 describe('PENALTY_RULES', () => {
-  it('declares the four named tiers in tier order, realized-bends last', () => {
+  it('declares the five named tiers in tier order, realized-bends last', () => {
     expect(PENALTY_RULES.map((r) => r.name)).toEqual([
       'overlap-and-intrusion',
       'illegibility',
       'crossings',
+      'border-tracing',
       'realized-bends',
     ])
     PENALTY_RULES.forEach((rule, i) => {
@@ -212,7 +213,7 @@ describe('overlap-and-intrusion', () => {
       { x: 10, y: 0 },
       { x: 30, y: 0 },
     )
-    expect(pairPenalty(triple)).toEqual([10 * COST_QUANTUM, 0, 0, 0])
+    expect(pairPenalty(triple)).toEqual([10 * COST_QUANTUM, 0, 0, 0, 0])
   })
 
   it('self term: a path retracing its own ink contributes the quantized retrace length to tier 0', () => {
@@ -223,7 +224,7 @@ describe('overlap-and-intrusion', () => {
       { x: 20, y: 0 },
       { x: 5, y: 0 },
     ]
-    expect(selfPenalty(path, [])).toEqual([15 * COST_QUANTUM, 0, 0, 1])
+    expect(selfPenalty(path, [])).toEqual([15 * COST_QUANTUM, 0, 0, 0, 1])
   })
 
   it('self term: a segment through a foreign rect interior contributes the quantized chord length to tier 0', () => {
@@ -232,7 +233,7 @@ describe('overlap-and-intrusion', () => {
       { x: 110, y: 50 },
     ]
     const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
-    expect(selfPenalty(path, [rect])).toEqual([100 * COST_QUANTUM, 0, 0, 0])
+    expect(selfPenalty(path, [rect])).toEqual([100 * COST_QUANTUM, 0, 0, 0, 0])
   })
 
   it('self term: a segment riding exactly on the rect boundary contributes 0 (grazing exclusion)', () => {
@@ -254,7 +255,7 @@ describe('illegibility', () => {
       { x: 1, y: 9 },
       { x: 9, y: 1 },
     )
-    expect(pairPenalty(triple)).toEqual([0, 1, 1, 0])
+    expect(pairPenalty(triple)).toEqual([0, 1, 1, 0, 0])
   })
 
   it('pair term: a transversal crossing far from every end contributes 0 to tier 1', () => {
@@ -264,7 +265,7 @@ describe('illegibility', () => {
       { x: 0, y: 100 },
       { x: 100, y: 0 },
     )
-    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0])
+    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0, 0])
   })
 })
 
@@ -276,7 +277,7 @@ describe('crossings', () => {
       { x: 0, y: 100 },
       { x: 100, y: 0 },
     )
-    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0])
+    expect(pairPenalty(triple)).toEqual([0, 0, 1, 0, 0])
   })
 
   it('collinear overlap short-circuits the crossing count for that segment pair', () => {
@@ -288,6 +289,86 @@ describe('crossings', () => {
     )
     expect(triple[0]).toBeGreaterThan(0)
     expect(pairPenalty(triple)[2]).toBe(0)
+  })
+})
+
+describe('border-tracing', () => {
+  const rect: Rect = { x: 0, y: 0, w: 100, h: 40 }
+
+  it('self term: a horizontal segment lying along the rect top contributes the quantized clipped overlap length to tier 3', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]
+    expect(selfPenalty(path, [], [rect])).toEqual([0, 0, 0, 100 * COST_QUANTUM, 0])
+  })
+
+  it('self term: a vertical segment lying along the rect right side contributes the quantized overlap length to tier 3', () => {
+    const path = [
+      { x: 100, y: 0 },
+      { x: 100, y: 40 },
+    ]
+    expect(selfPenalty(path, [], [rect])).toEqual([0, 0, 0, 40 * COST_QUANTUM, 0])
+  })
+
+  it('self term: a perpendicular segment touching the border at a single point contributes 0', () => {
+    const path = [
+      { x: 50, y: -20 },
+      { x: 50, y: 0 },
+    ]
+    expect(selfPenalty(path, [], [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: a segment parallel to a side but offset by 1px contributes 0', () => {
+    const path = [
+      { x: 0, y: 1 },
+      { x: 100, y: 1 },
+    ]
+    expect(selfPenalty(path, [], [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: a segment collinear with a side but disjoint along the axis contributes 0', () => {
+    const path = [
+      { x: 150, y: 0 },
+      { x: 200, y: 0 },
+    ]
+    expect(selfPenalty(path, [], [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: overlap is clipped to the side length when the segment overhangs both corners', () => {
+    const path = [
+      { x: -50, y: 0 },
+      { x: 200, y: 0 },
+    ]
+    expect(selfPenalty(path, [], [rect])[3]).toBe(100 * COST_QUANTUM)
+  })
+
+  it('self term: a zero-height rect is charged once, not twice, for a segment lying on it', () => {
+    const flat: Rect = { x: 0, y: 0, w: 100, h: 0 }
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]
+    expect(selfPenalty(path, [], [flat])[3]).toBe(100 * COST_QUANTUM)
+  })
+
+  it('self term: fires against the path’s OWN endpoint node, unlike foreignBodies which excludes it', () => {
+    // foreignBodies deliberately excludes an edge's own endpoints (tunnel
+    // check); nodeBorders deliberately does NOT — the whole point is
+    // pricing a segment riding the SOURCE node's own border.
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]
+    expect(selfPenalty(path, [rect], [rect])).toEqual([0, 0, 0, 100 * COST_QUANTUM, 0])
+  })
+
+  it('defaults nodeBorders to [] when omitted, contributing 0 (no border ink declared)', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]
+    expect(selfPenalty(path, [])).toEqual(zeroPenalty())
   })
 })
 
@@ -331,29 +412,34 @@ describe('realized-bends', () => {
       ],
       0,
     ],
-  ] as const)('%s path contributes %i to tier 3', (_label, path, expected) => {
+  ] as const)('%s path contributes %i to tier 4', (_label, path, expected) => {
     const cost = selfPenalty(path, [])
-    expect(cost[3]).toBe(expected)
+    expect(cost[4]).toBe(expected)
     expect(cost.every((n) => Number.isFinite(n) && n >= 0)).toBe(true)
   })
 })
 
 describe('hasRepairableProblem', () => {
   it('is false when the only nonzero tier is the last (realized-bends) tier', () => {
-    expect(hasRepairableProblem([0, 0, 0, 5])).toBe(false)
+    expect(hasRepairableProblem([0, 0, 0, 0, 5])).toBe(false)
   })
 
   it.each([
-    [[1, 0, 0, 0]],
-    [[0, 1, 0, 0]],
-    [[0, 0, 1, 0]],
-    [[1, 1, 1, 5]],
+    [[1, 0, 0, 0, 0]],
+    [[0, 1, 0, 0, 0]],
+    [[0, 0, 1, 0, 0]],
+    [[0, 0, 0, 1, 0]],
+    [[1, 1, 1, 1, 5]],
   ] as const)('is true when a non-final tier is nonzero: %j', (cost) => {
     expect(hasRepairableProblem(cost)).toBe(true)
   })
 
   it('is false for the zero cost', () => {
     expect(hasRepairableProblem(zeroPenalty())).toBe(false)
+  })
+
+  it('is true when the only nonzero tier is border-tracing (repairable, unlike realized-bends)', () => {
+    expect(hasRepairableProblem([0, 0, 0, 7, 0])).toBe(true)
   })
 
   it('is false when rules is empty (guards Math.max(...[]) === -Infinity)', () => {
@@ -363,11 +449,11 @@ describe('hasRepairableProblem', () => {
 
 describe('addCost', () => {
   it('sums two cost arrays tier-by-tier with sign=1', () => {
-    expect(addCost([1, 2, 3, 4], [10, 20, 30, 40], 1)).toEqual([11, 22, 33, 44])
+    expect(addCost([1, 2, 3, 4, 5], [10, 20, 30, 40, 50], 1)).toEqual([11, 22, 33, 44, 55])
   })
 
   it('subtracts b from a tier-by-tier with sign=-1', () => {
-    expect(addCost([10, 20, 30, 40], [1, 2, 3, 4], -1)).toEqual([9, 18, 27, 36])
+    expect(addCost([10, 20, 30, 40, 50], [1, 2, 3, 4, 5], -1)).toEqual([9, 18, 27, 36, 45])
   })
 
   it('defaults a missing index in either operand to 0', () => {

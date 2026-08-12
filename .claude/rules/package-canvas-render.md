@@ -307,12 +307,23 @@ paths:
       incumbent-wins-ties predicate `optimizeSideChoices` consults. The
       PENALTY half is `PENALTY_RULES`: overlap-and-intrusion (tier 0,
       collinear overlap plus self-retrace/body-intrusion), illegibility
-      (tier 1), crossings (tier 2), and realized-bends (tier 3, self-only
-      and deliberately last). `pairScore`/`selfScore` (`spatial-edges.ts`)
-      compose over the list, and every cost-tuple helper (`ConfigCost`
-      shape, `addCost`, `lessCost`, `hasRepairableProblem`) derives from
-      the declared tiers, so a new penalty rule is one list entry, never
-      a new slot threaded by hand.
+      (tier 1), crossings (tier 2), border-tracing (tier 3, self-only — a
+      routed segment collinear with AND overlapping a node's own border,
+      `nodeBorders` including the path's own endpoint rects unlike
+      `foreignBodies`), and realized-bends (tier 4, self-only and
+      deliberately last). border-tracing sits BELOW crossings rather than
+      adjacent to overlap-and-intrusion: it is evaluated against the
+      optimizer's unaligned TRIAL paths (`computeAnchorsFor`'s pre-
+      `slideAlongSide` representation, used only for candidate ranking),
+      whose unaligned anchor placement can coincidentally trace a
+      bystander's extended border for a real stretch — a false signal a
+      genuine crossing never produces (verified against
+      `edge-lane-rank.test.ts`'s sweep-rank pin: tier 1 placement adopted a
+      route with a real crossing over a crossing-free one). `pairScore`/
+      `selfPenalty` (`spatial-edges.ts`) compose over the list, and every
+      cost-tuple helper (`ConfigCost` shape, `addCost`, `lessCost`,
+      `hasRepairableProblem`) derives from the declared tiers, so a new
+      penalty rule is one list entry, never a new slot threaded by hand.
     - **Facet-driven rendering rides the injected-resolver pattern**
       (a future `resolveFileFacets`, same seam class as
       `resolveFileCanvas`/`resolveFileImage`), and export stays a pure

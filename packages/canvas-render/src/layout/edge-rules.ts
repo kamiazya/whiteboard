@@ -10,8 +10,8 @@
  * `rankedSidePairs` (spatial-edges.ts, a thin wrapper over `composeSidePairs`
  * below) plus the solver's adoption predicate (`shouldAdoptCandidate`, the
  * "incumbent-wins-ties" rule) are the PREFERENCE half; `PENALTY_RULES` below
- * is the PENALTY half — `pairScore`/`selfScore` (spatial-edges.ts) compose
- * over it to build the cost tuple `optimizeSideChoices` compares.
+ * is the PENALTY half — `pairScore` (spatial-edges.ts) and `selfPenalty`
+ * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
 
 export type Side = 'top' | 'right' | 'bottom' | 'left'
@@ -326,13 +326,20 @@ export function bendCount(path: readonly Point[]): number {
  * bystander rects it might tunnel through; a rule with no self contribution
  * returns 0 without walking the path. Every rule's `tier` is also its slot
  * index into the composed cost array — enforced by the `PENALTY_RULES`
- * tier-order pin in edge-rules.test.ts, not by this type.
+ * tier-order pin in edge-rules.test.ts, not by this type. `selfTerm`'s third
+ * parameter is every node's border rect (INCLUDING the path's own endpoints
+ * — unlike `foreignBodies`, which deliberately excludes them), for rules
+ * that price ink drawn on a node's OUTLINE rather than through its interior.
  */
 export type PenaltyRule = {
   readonly name: string
   readonly tier: number
   readonly pairTerm: (triple: readonly [number, number, number]) => number
-  readonly selfTerm: (path: readonly Point[], foreignBodies: readonly Rect[]) => number
+  readonly selfTerm: (
+    path: readonly Point[],
+    foreignBodies: readonly Rect[],
+    nodeBorders: readonly Rect[],
+  ) => number
 }
 
 /**
@@ -412,6 +419,58 @@ const crossings: PenaltyRule = {
   selfTerm: () => 0,
 }
 
+/**
+ * border-tracing: a routed segment running collinear with AND overlapping a
+ * node's border — ink drawn on top of an outline reads as though the edge
+ * merges into that box. Self-only; `nodeBorders` includes the path's own
+ * endpoint rects (unlike `foreignBodies`, which excludes them for the
+ * tunnel check) — the defect this rule exists to price is a segment riding
+ * the SOURCE node's own border. A perpendicular departure/arrival only
+ * touches its border at a point (zero-length overlap, costs 0); only
+ * positive overlap length is priced, in COST_QUANTUM-quantized integer
+ * space so the term is integral by construction. The single per-axis OR
+ * condition (segment y equals the rect's top OR bottom, not two
+ * independent checks) is what stops a zero-height rect (top === bottom)
+ * from being charged twice for the same segment.
+ *
+ * Tier 3, BELOW crossings, because this rule is evaluated against the
+ * optimizer's unaligned TRIAL paths (the pre-`slideAlongSide`
+ * representation used only for ranking candidates — see
+ * `computeAnchorsFor`'s `align` parameter), whose anchor placement can
+ * coincidentally run a detour segment along a bystander's border for a
+ * real stretch: a false signal a genuine CROSSING never produces. At tier 1
+ * that artifact out-ranked a real crossing and the optimizer adopted a
+ * strictly worse rendered route (pinned by edge-lane-rank.test.ts's
+ * sweep-rank scenario). Below crossings it still repairs the border-riding
+ * defect, whose lower tiers are all-zero for every side-pair option, so the
+ * lexicographic comparison falls through to this tier as the decisive one.
+ */
+const borderTracing: PenaltyRule = {
+  name: 'border-tracing',
+  tier: 3,
+  pairTerm: () => 0,
+  selfTerm: (path, _foreignBodies, nodeBorders) => {
+    const q = (n: number) => Math.round(n * COST_QUANTUM)
+    let overlap = 0
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as Point
+      const b = path[i] as Point
+      for (const r of nodeBorders) {
+        if (a.y === b.y && (q(a.y) === q(r.y) || q(a.y) === q(r.y + r.h))) {
+          const lo = Math.max(q(Math.min(a.x, b.x)), q(r.x))
+          const hi = Math.min(q(Math.max(a.x, b.x)), q(r.x + r.w))
+          if (hi > lo) overlap += hi - lo
+        } else if (a.x === b.x && (q(a.x) === q(r.x) || q(a.x) === q(r.x + r.w))) {
+          const lo = Math.max(q(Math.min(a.y, b.y)), q(r.y))
+          const hi = Math.min(q(Math.max(a.y, b.y)), q(r.y + r.h))
+          if (hi > lo) overlap += hi - lo
+        }
+      }
+    }
+    return overlap
+  },
+}
+
 /** realized-bends: direction changes along ONE routed path. Self-only, and
  * deliberately the last tier — the optimizer's short-circuit
  * (`hasRepairableProblem`) and worst-offender filter both ignore it, since
@@ -419,7 +478,7 @@ const crossings: PenaltyRule = {
  * and reshuffling it purely to shave bends is churn, not repair. */
 const realizedBends: PenaltyRule = {
   name: 'realized-bends',
-  tier: 3,
+  tier: 4,
   pairTerm: () => 0,
   selfTerm: (path) => bendCount(path),
 }
@@ -434,12 +493,12 @@ export const PENALTY_RULES: readonly PenaltyRule[] = [
   overlapAndIntrusion,
   illegibility,
   crossings,
+  borderTracing,
   realizedBends,
 ]
 
-/** The all-zero cost, sized to `rules` — the composition path's only
- * length-4 literal is this `.map`, derived from the declared list rather
- * than hardcoded. */
+/** The all-zero cost, sized to `rules` — derived from the declared list
+ * (`rules.map`), never a hardcoded array length. */
 export function zeroPenalty(rules: readonly PenaltyRule[] = PENALTY_RULES): number[] {
   return rules.map(() => 0)
 }
@@ -459,16 +518,21 @@ export function pairPenalty(
 }
 
 /**
- * `selfScore`'s composition step (spatial-edges.ts): map one routed path's
- * self-geometry into a full cost array, one rule per declared tier.
+ * The self half of the composition (`optimizeSideChoices`, spatial-edges.ts):
+ * map one routed path's self-geometry into a full cost array, one rule per
+ * declared tier. `nodeBorders` defaults to `[]` ("no border ink declared")
+ * rather than falling back to `foreignBodies` — a caller that passes no
+ * border rects gets 0 from `border-tracing`, exactly as if the rule did not
+ * exist.
  */
 export function selfPenalty(
   path: readonly Point[],
   foreignBodies: readonly Rect[],
+  nodeBorders: readonly Rect[] = [],
   rules: readonly PenaltyRule[] = PENALTY_RULES,
 ): number[] {
   const cost = zeroPenalty(rules)
-  for (const rule of rules) cost[rule.tier] = rule.selfTerm(path, foreignBodies)
+  for (const rule of rules) cost[rule.tier] = rule.selfTerm(path, foreignBodies, nodeBorders)
   return cost
 }
 
