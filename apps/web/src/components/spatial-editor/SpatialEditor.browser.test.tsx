@@ -1959,7 +1959,7 @@ describe('node placement and affordances', () => {
     })
   })
 
-  it('pressing Escape still discards typed text (the one documented discard path)', async () => {
+  it('pressing Escape discards the typed text AND the note it was creating', async () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
@@ -1978,9 +1978,10 @@ describe('node placement and affordances', () => {
       .element()
       .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
 
+    // The note existed only to hold this edit, so cancelling takes it too —
+    // an empty box the user has to clean up is debris, not a discarded edit.
     const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
-    const node = canvas.nodes.find((n) => n.id === 'note-2')
-    expect(node?.type === 'text' ? node.text : undefined).toBe('')
+    expect(canvas.nodes.find((n) => n.id === 'note-2')).toBeUndefined()
   })
 
   it('the Add note button has real, visible button affordance (icon + accessible name)', async () => {
