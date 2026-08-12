@@ -22,10 +22,39 @@ const ONE_MIB = 1024 * 1024
 export const pwaOptions: Partial<VitePWAOptions> = {
   registerType: 'prompt',
   manifest: {
+    // Stable identity independent of whichever URL the app was installed
+    // from — required for the browser to recognize updates as the same app.
+    id: '/',
     name: 'Whiteboard',
     short_name: 'Whiteboard',
+    description:
+      'A collaborative whiteboard for you and your AI agent — draw together on a shared real-time canvas.',
+    categories: ['productivity', 'graphics'],
     display: 'standalone',
     start_url: '/',
+    // Launching from the OS focuses the already-open app instead of piling
+    // up windows; canvases are live documents, not one-shot pages.
+    launch_handler: { client_mode: 'focus-existing' },
+    // Richer install dialog on Chromium. The image is the docs gallery
+    // screenshot; pwa-icons.test.ts pins the declared size to the file.
+    screenshots: [
+      {
+        src: '/screenshot-wide.png',
+        sizes: '1152x684',
+        type: 'image/png',
+        form_factor: 'wide',
+      },
+    ],
+    // Long-press / right-click the installed icon. `?new=canvas` is handled
+    // by the browser-local page (BrowserLocalCanvasPage); in daemon mode it
+    // degrades to the gallery, one click from the same action.
+    shortcuts: [
+      {
+        name: 'New canvas',
+        url: '/?new=canvas',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      },
+    ],
     theme_color: THEME_COLOR,
     background_color: BACKGROUND_COLOR,
     icons: [

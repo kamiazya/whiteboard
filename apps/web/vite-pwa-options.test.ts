@@ -95,3 +95,28 @@ describe('manifest brand alignment', () => {
     expect(pwaOptions.manifest?.theme_color).toBe('#ffffff')
   })
 })
+
+describe('manifest install-surface enrichment', () => {
+  it('declares a stable id and focus-existing launch handling', () => {
+    expect(pwaOptions.manifest?.id).toBe('/')
+    expect(
+      (pwaOptions.manifest as { launch_handler?: { client_mode?: string } }).launch_handler
+        ?.client_mode,
+    ).toBe('focus-existing')
+  })
+
+  it('describes itself for the install dialog', () => {
+    expect(pwaOptions.manifest?.description?.length ?? 0).toBeGreaterThan(20)
+    expect(pwaOptions.manifest?.categories).toContain('productivity')
+    expect(pwaOptions.manifest?.screenshots?.[0]).toMatchObject({
+      src: '/screenshot-wide.png',
+      sizes: '1152x684',
+      form_factor: 'wide',
+    })
+  })
+
+  it('offers a New-canvas shortcut', () => {
+    const shortcut = pwaOptions.manifest?.shortcuts?.find((s) => s.name === 'New canvas')
+    expect(shortcut?.url).toBe('/?new=canvas')
+  })
+})
