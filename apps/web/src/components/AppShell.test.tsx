@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
+import { resetShellStatusForTests, setShellDaemonAuthError } from '@/lib/shell-status-store'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { AppShell } from './AppShell.js'
 
@@ -9,6 +10,7 @@ beforeEach(() => {
   localStorage.clear()
   resetSwStatusForTests()
   resetInstallPromptForTests()
+  resetShellStatusForTests()
 })
 
 afterEach(() => {
@@ -18,7 +20,7 @@ afterEach(() => {
 
 function renderShell(daemonConnected: boolean, at = '/local/c1') {
   const router = createMemoryRouter(
-    [{ path: '*', element: <AppShell daemonConnected={daemonConnected} /> }],
+    [{ path: '*', element: <AppShell daemon={daemonConnected} /> }],
     {
       initialEntries: [at],
     },
@@ -52,6 +54,16 @@ describe('AppShell', () => {
   it('carries the nudge dot while a setup todo remains (no daemon)', () => {
     renderShell(false)
     expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+  })
+
+  it('lights the nudge when the daemon page reports a live auth error', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: { persisted: () => Promise.resolve(true) },
+      configurable: true,
+    })
+    setShellDaemonAuthError(true)
+    renderShell(true)
+    expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
   })
 
   it('shows no nudge when everything reachable is complete', async () => {

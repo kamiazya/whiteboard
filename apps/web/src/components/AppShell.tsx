@@ -1,8 +1,10 @@
 import { Settings } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
 import { settingsPath } from '@/lib/app-routes'
+import { getShellDaemonAuthError, subscribeShellStatus } from '@/lib/shell-status-store'
 import HomeMark from '../brand/home-mark.svg?react'
 
 /**
@@ -13,10 +15,14 @@ import HomeMark from '../brand/home-mark.svg?react'
  * mount this shared component instead of owning any brand/settings chrome
  * themselves.
  */
-export function AppShell({ daemonConnected }: { daemonConnected: boolean }) {
+export function AppShell({ daemon }: { daemon: boolean }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const nudge = useSettingsNudge(daemonConnected)
+  // A live auth error (reported by DaemonCanvasPage through the shell-status
+  // store) means the daemon needs the user's action, so it counts as
+  // disconnected for the attention dot.
+  const authError = useSyncExternalStore(subscribeShellStatus, getShellDaemonAuthError)
+  const nudge = useSettingsNudge(daemon && !authError)
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">

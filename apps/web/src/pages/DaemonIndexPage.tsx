@@ -3,7 +3,6 @@ import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
-import { AppShell } from '../components/AppShell.js'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
@@ -309,171 +308,168 @@ export function DaemonIndexPage({
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      <div className="flex h-full flex-col overflow-y-auto">
-        <AppShell daemonConnected={true} />
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-          <h1 className="sr-only">Canvases</h1>
-          <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
-            {workspaces.length > 1 && (
-              <select
-                aria-label="Workspace"
-                value={selectedWorkspace ?? ''}
-                onChange={(event) => setSelectedWorkspace(event.target.value)}
-                className="rounded-md border bg-background px-2 py-1 text-sm"
-              >
-                {workspaces.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
-                  </option>
-                ))}
-              </select>
-            )}
-            <div className="ml-auto flex items-center gap-1">
-              {/* One canvas surface, two projections: the toggle switches how
+      <div className="flex h-full flex-col overflow-y-auto p-4">
+        <h1 className="sr-only">Canvases</h1>
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
+          {workspaces.length > 1 && (
+            <select
+              aria-label="Workspace"
+              value={selectedWorkspace ?? ''}
+              onChange={(event) => setSelectedWorkspace(event.target.value)}
+              className="rounded-md border bg-background px-2 py-1 text-sm"
+            >
+              {workspaces.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="ml-auto flex items-center gap-1">
+            {/* One canvas surface, two projections: the toggle switches how
                 the SAME list renders (thumbnail grid / alias tree+preview)
                 instead of the former Canvases-vs-Files tab split. */}
-              <div className="flex items-center gap-0.5 rounded-md border p-0.5">
-                <button
-                  type="button"
-                  aria-label="Grid view"
-                  aria-pressed={view === 'grid'}
-                  onClick={() => setView('grid')}
-                  className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-                >
-                  <LayoutGrid className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Tree view"
-                  aria-pressed={view === 'tree'}
-                  onClick={() => setView('tree')}
-                  className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-                >
-                  <ListTree className="size-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {createError && (
-            <div role="alert" className="mb-2 text-sm text-destructive">
-              {createError}
-            </div>
-          )}
-          {duplicateError && (
-            <div role="alert" className="mb-2 text-sm text-destructive">
-              {duplicateError}
-            </div>
-          )}
-
-          {view === 'tree' ? (
-            selectedWorkspace ? (
-              // The wrapper remounts on every grid/tree toggle, so the fade
-              // re-runs and the view switch reads as one continuous surface
-              // changing shape rather than an instant swap.
-              <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
-                <WorkspaceFilesPanel
-                  daemonFetch={daemonFetch}
-                  daemonBaseUrl={daemonBaseUrl}
-                  workspaceId={selectedWorkspace}
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No workspace selected.</p>
-            )
-          ) : loadError ? (
-            // A failed list load must not dead-end the page: the POST needs no
-            // rows and success navigates away, so creating remains a recovery
-            // path around the broken list. The transient loading state below
-            // deliberately has no create control — deriving a slug from rows
-            // that are still in flight invites a collision the loaded states
-            // cannot produce.
-            <div className="flex flex-col items-start gap-3">
-              <div role="alert" className="text-sm text-destructive">
-                {loadError}
-              </div>
+            <div className="flex items-center gap-0.5 rounded-md border p-0.5">
               <button
                 type="button"
-                disabled={creating}
-                onClick={() => void handleCreate('spatial')}
-                className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+                aria-label="Grid view"
+                aria-pressed={view === 'grid'}
+                onClick={() => setView('grid')}
+                className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
               >
-                Create a canvas
+                <LayoutGrid className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Tree view"
+                aria-pressed={view === 'tree'}
+                onClick={() => setView('tree')}
+                className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+              >
+                <ListTree className="size-4" />
               </button>
             </div>
-          ) : !loaded ? (
-            <div
-              role="status"
-              aria-label="Loading canvases"
-              className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-            >
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse rounded-lg border p-2">
-                  <div className="aspect-[4/3] rounded-md bg-muted" />
-                  <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Mounts when the skeleton unmounts: the fade carries the
-            // skeleton-to-content handoff instead of an instant swap.
+          </div>
+        </div>
+
+        {createError && (
+          <div role="alert" className="mb-2 text-sm text-destructive">
+            {createError}
+          </div>
+        )}
+        {duplicateError && (
+          <div role="alert" className="mb-2 text-sm text-destructive">
+            {duplicateError}
+          </div>
+        )}
+
+        {view === 'tree' ? (
+          selectedWorkspace ? (
+            // The wrapper remounts on every grid/tree toggle, so the fade
+            // re-runs and the view switch reads as one continuous surface
+            // changing shape rather than an instant swap.
             <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
-              <CanvasListView
-                rows={rows.map((row) => ({
-                  slug: row.slug,
-                  displayName: row.displayName,
-                  // The slug is worth a second line only when a display name
-                  // covers the first; unnamed canvases already show it once.
-                  secondary: row.displayName !== row.slug ? row.slug : undefined,
-                  updatedAt: row.updatedAt,
-                  kind: row.kind,
-                }))}
-                onOpen={(slug) => selectedWorkspace && onOpenCanvas(selectedWorkspace, slug)}
-                onCreate={(kind) => void handleCreate(kind)}
-                createDisabled={creating}
-                renderThumb={(row) => (
-                  <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
-                )}
-                renderActions={(row) => (
-                  <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                    <button
-                      type="button"
-                      aria-label={`Duplicate ${row.displayName}`}
-                      disabled={duplicatingSlug === row.slug}
-                      onClick={(event) => {
-                        // Prevents the click from bubbling to the wrapping open-button.
-                        event.stopPropagation()
-                        void handleDuplicate(row.slug)
-                      }}
-                      className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-100"
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${row.displayName}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setPendingDelete({ slug: row.slug, displayName: row.displayName })
-                      }}
-                      className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
+              <WorkspaceFilesPanel
+                daemonFetch={daemonFetch}
+                daemonBaseUrl={daemonBaseUrl}
+                workspaceId={selectedWorkspace}
               />
             </div>
-          )}
-          <DeleteCanvasDialog
-            pending={pendingDelete}
-            busy={deleting}
-            error={deleteError}
-            description="This permanently removes the canvas, including its versions and branches. There is no undo."
-            onCancel={closeDeleteDialog}
-            onConfirm={() => void handleConfirmDelete()}
-          />
-        </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No workspace selected.</p>
+          )
+        ) : loadError ? (
+          // A failed list load must not dead-end the page: the POST needs no
+          // rows and success navigates away, so creating remains a recovery
+          // path around the broken list. The transient loading state below
+          // deliberately has no create control — deriving a slug from rows
+          // that are still in flight invites a collision the loaded states
+          // cannot produce.
+          <div className="flex flex-col items-start gap-3">
+            <div role="alert" className="text-sm text-destructive">
+              {loadError}
+            </div>
+            <button
+              type="button"
+              disabled={creating}
+              onClick={() => void handleCreate('spatial')}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Create a canvas
+            </button>
+          </div>
+        ) : !loaded ? (
+          <div
+            role="status"
+            aria-label="Loading canvases"
+            className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse rounded-lg border p-2">
+                <div className="aspect-[4/3] rounded-md bg-muted" />
+                <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Mounts when the skeleton unmounts: the fade carries the
+          // skeleton-to-content handoff instead of an instant swap.
+          <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
+            <CanvasListView
+              rows={rows.map((row) => ({
+                slug: row.slug,
+                displayName: row.displayName,
+                // The slug is worth a second line only when a display name
+                // covers the first; unnamed canvases already show it once.
+                secondary: row.displayName !== row.slug ? row.slug : undefined,
+                updatedAt: row.updatedAt,
+                kind: row.kind,
+              }))}
+              onOpen={(slug) => selectedWorkspace && onOpenCanvas(selectedWorkspace, slug)}
+              onCreate={(kind) => void handleCreate(kind)}
+              createDisabled={creating}
+              renderThumb={(row) => (
+                <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
+              )}
+              renderActions={(row) => (
+                <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={`Duplicate ${row.displayName}`}
+                    disabled={duplicatingSlug === row.slug}
+                    onClick={(event) => {
+                      // Prevents the click from bubbling to the wrapping open-button.
+                      event.stopPropagation()
+                      void handleDuplicate(row.slug)
+                    }}
+                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-100"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${row.displayName}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setPendingDelete({ slug: row.slug, displayName: row.displayName })
+                    }}
+                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            />
+          </div>
+        )}
+        <DeleteCanvasDialog
+          pending={pendingDelete}
+          busy={deleting}
+          error={deleteError}
+          description="This permanently removes the canvas, including its versions and branches. There is no undo."
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void handleConfirmDelete()}
+        />
       </div>
     </DaemonApiContext.Provider>
   )

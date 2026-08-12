@@ -1058,44 +1058,10 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Storage' })).toBeNull()
 
-    // The operational surfaces (storage, pairing) now live on their own
-    // route rather than an inline dialog — the gear button navigates.
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(router.state.location.pathname).toBe('/settings')
-    // Entry point for the settings Back button.
-    expect((router.state.location.state as { from?: string }).from).toBe('/')
-  })
-
-  it('lights the settings nudge dot when persistence is grantable but not granted', async () => {
-    Object.defineProperty(navigator, 'storage', {
-      value: {
-        persisted: () => Promise.resolve(false),
-        persist: () => Promise.resolve(true),
-      },
-      configurable: true,
-    })
-    try {
-      installFetchMock({
-        workspaces: [{ workspaceId: 'ws-a' }],
-        canvasesByWorkspace: {
-          'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
-        },
-      })
-      const router = createMemoryRouter(
-        [
-          {
-            path: '*',
-            element: <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />,
-          },
-        ],
-        { initialEntries: ['/'] },
-      )
-      rtlRender(<RouterProvider router={router} />)
-      await screen.findByText('alpha')
-      expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
-    } finally {
-      Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
-    }
+    // The operational surfaces (storage, pairing) live on their own route,
+    // reached through the App-mounted shell's gear — the page itself owns no
+    // settings affordance at all (AppShell ownership rule in DESIGN.md).
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
   })
 
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {
