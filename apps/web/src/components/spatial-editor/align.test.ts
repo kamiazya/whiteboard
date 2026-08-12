@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type AlignableBox, alignBoxes, distributeBoxes } from './align.js'
+import { type AlignableBox, alignableBoxesOf, alignBoxes, distributeBoxes } from './align.js'
 
 const box = (id: string, x: number, y: number, width = 100, height = 50): AlignableBox => ({
   id,
@@ -127,5 +127,30 @@ describe('distributeBoxes', () => {
     const crowded = [box('a', 0, 0, 100, 50), box('b', 0, 0, 100, 50), box('c', 0, 0, 100, 50)]
     const moves = distributeBoxes(crowded, 'horizontal')
     for (const move of moves) expect(Number.isFinite(move.x)).toBe(true)
+  })
+})
+
+describe('alignableBoxesOf', () => {
+  const nodes = [
+    { id: 'a', x: 0, y: 0, width: 100, height: 50, extra: 'dropped' },
+    { id: 'b', x: 40, y: 0, width: 60, height: 50 },
+    { id: 'c', x: 300, y: 0, width: 20, height: 50 },
+  ]
+
+  it('returns only the member boxes, in canvas (nodes) order', () => {
+    expect(alignableBoxesOf(nodes, ['c', 'a'])).toEqual([
+      { id: 'a', x: 0, y: 0, width: 100, height: 50 },
+      { id: 'c', x: 300, y: 0, width: 20, height: 50 },
+    ])
+  })
+
+  it('projects to the id+x+y+width+height shape, dropping other node fields', () => {
+    expect(alignableBoxesOf(nodes, ['a'])).toEqual([
+      { id: 'a', x: 0, y: 0, width: 100, height: 50 },
+    ])
+  })
+
+  it('returns an empty list for no member ids', () => {
+    expect(alignableBoxesOf(nodes, [])).toEqual([])
   })
 })

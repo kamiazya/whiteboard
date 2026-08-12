@@ -1,7 +1,7 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import { applyCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {
@@ -721,5 +721,102 @@ describe('set-line-jumps', () => {
     })
     const off = applyCommand(both, { kind: 'set-line-jumps', lineJumps: 'none' })
     expect(off['x-whiteboard']?.edgeRouting).toEqual({ style: 'curved' })
+  })
+})
+
+describe('buildFragmentInsertCommand', () => {
+  // Shared core of pasteFragment (with/without an anchor) and
+  // duplicateSelection (always cascades, never anchors).
+  const fragment = (): Pick<ClipboardFragment, 'nodes' | 'edges'> => ({
+    nodes: [
+      { id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
+      { id: 'src-b', type: 'text', x: 150, y: 20, width: 60, height: 40, text: 'b' },
+    ],
+    edges: [{ id: 'src-e', fromNode: 'src-a', toNode: 'src-b', label: 'link' }],
+  })
+  const sequentialIds = () => {
+    let n = 0
+    return () => `new-${n++}`
+  }
+
+  it('returns undefined for an empty-node fragment', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    expect(buildFragmentInsertCommand(canvas, { nodes: [], edges: [] }, sequentialIds())).toBe(
+      undefined,
+    )
+  })
+
+  it('without an anchor, offsets every node +16/+16 (the duplicate cascade)', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds())
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    const nodeCommands = command.commands.filter((c) => c.kind === 'create-node')
+    expect(nodeCommands.map((c) => ({ x: c.node.x, y: c.node.y }))).toEqual([
+      { x: 16, y: 16 },
+      { x: 166, y: 36 },
+    ])
+  })
+
+  it('with an anchor, the reminted bbox center lands on the anchor (rounded)', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds(), {
+      x: 500,
+      y: 500,
+    })
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    const nodeCommands = command.commands.filter((c) => c.kind === 'create-node')
+    const xs = nodeCommands.map((c) => c.node.x)
+    const ys = nodeCommands.map((c) => c.node.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs.map((x, i) => x + nodeCommands[i].node.width))
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys.map((y, i) => y + nodeCommands[i].node.height))
+    expect(Math.round((minX + maxX) / 2)).toBe(500)
+    expect(Math.round((minY + maxY) / 2)).toBe(500)
+  })
+
+  it('preserves edge properties and remaps endpoints to the reminted ids', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds())
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    const nodeIds = command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
+    const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
+    expect(edgeCommands).toHaveLength(1)
+    expect(edgeCommands[0].edge.label).toBe('link')
+    expect(nodeIds).toContain(edgeCommands[0].edge.fromNode)
+    expect(nodeIds).toContain(edgeCommands[0].edge.toNode)
+  })
+
+  it('reminted ids are disjoint from existing canvas node+edge ids', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'new-0', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+      edges: [],
+    }
+    const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds())
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    const nodeIds = command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
+    expect(nodeIds).not.toContain('new-0')
+  })
+
+  it('applying the built command to the source canvas adds exactly fragment.nodes.length nodes', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds())
+    if (command === undefined) throw new Error('expected a command')
+    const next = applyCommand(canvas, command)
+    expect(next.nodes).toHaveLength(2)
+  })
+
+  it('duplicateSelection parity: an edge with one endpoint outside the fragment is dropped', () => {
+    // Mirrors extractClipboardFragment's own contract — the fragment never
+    // arrives with a dangling edge, so the builder need not special-case it,
+    // but this pins that the whole pipeline still drops it end to end.
+    const canvas: SpatialCanvas = { nodes: [], edges: [] }
+    const partial: Pick<ClipboardFragment, 'nodes' | 'edges'> = {
+      nodes: [{ id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' }],
+      edges: [{ id: 'src-e', fromNode: 'src-a', toNode: 'not-included' }],
+    }
+    const command = buildFragmentInsertCommand(canvas, partial, sequentialIds())
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    expect(command.commands.filter((c) => c.kind === 'create-edge')).toHaveLength(0)
   })
 })
