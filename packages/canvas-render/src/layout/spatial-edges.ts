@@ -508,7 +508,7 @@ function computeAnchorsFor(
  * slot per PENALTY_RULES tier (edge-rules.ts): total collinear axis-aligned
  * overlap length (a parallel overlap has no crossing point, so a line jump
  * cannot express it — heaviest; an edge RETRACING its own ink counts here
- * too, via `selfScore`), crossings too close to a segment end to render
+ * too, via `selfPenalty`), crossings too close to a segment end to render
  * their jump arc, total crossings, then total REALIZED bends. Bends sit
  * last and the optimizer's short-circuit ignores them (`hasRepairableProblem`):
  * they only break ties between configurations that already tie on every
@@ -541,22 +541,6 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
     }
   }
   return pairPenalty([overlap, illegible, crossings])
-}
-
-/**
- * `selfScore`'s composition over PENALTY_RULES: per-edge quality of ONE
- * routed path — collinear overlap with itself, tunnelling through a
- * bystander node's raw body, tracing a node's own border (including the
- * path's own endpoint nodes — the whole point of the border-tracing rule
- * is pricing ink drawn on the SOURCE node's own outline), and realized
- * bend count, each contributed by its own named rule.
- */
-function selfScore(
-  path: readonly Point[],
-  foreignBodies: readonly Rect[],
-  nodeBorders: readonly Rect[],
-): ConfigCost {
-  return selfPenalty(path, foreignBodies, nodeBorders)
 }
 
 /**
@@ -631,7 +615,7 @@ function optimizeSideChoices(
   // check which must exclude the edge's endpoints.
   const nodeBorders = nodes.map(rectOf)
   const selfCosts: ConfigCost[] = paths.map((path, i) =>
-    selfScore(path, foreignBodiesFor[i]!, nodeBorders),
+    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders),
   )
   let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
@@ -674,7 +658,7 @@ function optimizeSideChoices(
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!, nodeBorders)
+      const next = selfPenalty(trialPaths[i]!, foreignBodiesFor[i]!, nodeBorders)
       cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)

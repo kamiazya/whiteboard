@@ -135,13 +135,9 @@ const foreignBodiesArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb,
   maxLength: 4,
 })
 
-// Node-border domain for the border-tracing rule: mutually overlapping and
-// zero-size rects included (canvas-model keeps zero sizes legal), same
-// bound as foreignBodiesArb.
-const nodeBordersArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb, {
-  minLength: 0,
-  maxLength: 4,
-})
+// Node-border domain for the border-tracing rule: same shape as the
+// foreign-body domain (mutually overlapping and zero-size rects included).
+const nodeBordersArb = foreignBodiesArb
 
 const tripleArb: fc.Arbitrary<readonly [number, number, number]> = fc.tuple(
   fc.integer({ min: 0, max: 1000 }),

@@ -10,8 +10,8 @@
  * `rankedSidePairs` (spatial-edges.ts, a thin wrapper over `composeSidePairs`
  * below) plus the solver's adoption predicate (`shouldAdoptCandidate`, the
  * "incumbent-wins-ties" rule) are the PREFERENCE half; `PENALTY_RULES` below
- * is the PENALTY half — `pairScore`/`selfScore` (spatial-edges.ts) compose
- * over it to build the cost tuple `optimizeSideChoices` compares.
+ * is the PENALTY half — `pairScore` (spatial-edges.ts) and `selfPenalty`
+ * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
 
 export type Side = 'top' | 'right' | 'bottom' | 'left'
@@ -329,9 +329,7 @@ export function bendCount(path: readonly Point[]): number {
  * tier-order pin in edge-rules.test.ts, not by this type. `selfTerm`'s third
  * parameter is every node's border rect (INCLUDING the path's own endpoints
  * — unlike `foreignBodies`, which deliberately excludes them), for rules
- * that price ink drawn on a node's OUTLINE rather than through its interior;
- * a rule with no such contribution ignores the parameter (fewer params is
- * legal in TS).
+ * that price ink drawn on a node's OUTLINE rather than through its interior.
  */
 export type PenaltyRule = {
   readonly name: string
@@ -424,42 +422,28 @@ const crossings: PenaltyRule = {
 /**
  * border-tracing: a routed segment running collinear with AND overlapping a
  * node's border — ink drawn on top of an outline reads as though the edge
- * merges into that box. Tier 3, BELOW crossings rather than adjacent to
- * overlap-and-intrusion: this rule is evaluated against the optimizer's
- * unaligned TRIAL paths (the pre-`slideAlongSide` representation used only
- * for ranking candidates — see `computeAnchorsFor`'s `align` parameter),
- * whose unaligned anchor placement can coincidentally run a detour segment
- * exactly along a bystander node's extended border for a real stretch, a
- * false signal an actual jump-arc-defeating CROSSING never produces. Tier 1
- * was tried first and reverted: on a real canvas (edge-lane-rank.test.ts's
- * sweep-rank pin — red{0,100,300,120}/yellow{450,290,260,130}/
- * cyan{630,610,280,160}, e-orange fromNode yellow toNode red toSide
- * 'right', e-red fromNode red toNode cyan fromSide 'right') it out-ranked a
- * real crossing: the initial, genuinely crossing-free pick (e-red toSide
- * 'left', final path (300,180)(320,180)(320,690)(610,690)(630,690)) scored
- * a spurious 480 on its UNALIGNED trial path (which detours through
- * (300,444)-(630,444), tracing 40px of red's own right border then 80px of
- * cyan's left border) against toSide 'top''s trial cost of 0 — so the
- * optimizer adopted 'top', whose actual final path,
- * (300,180)(320,180)(770,180)(770,590)(770,610), crosses e-orange's path at
- * (332,180). That is a strictly worse rendered result for a rule that fired
- * on geometry the renderer never draws. Below crossings, a genuine crossing
- * always outranks a trial-path border artifact while the rule still
- * repairs the reported defect: A/B/T's overlap-and-intrusion/illegibility/
- * crossings tiers are already all-zero for every side-pair option (the
- * report's own 16-way enumeration), so lexicographic comparison still
- * falls through to this tier as the decisive one. Self-only; `nodeBorders`
- * includes the path's own endpoint rects (unlike `foreignBodies`, which
- * excludes them for the tunnel check) — the defect this rule exists to
- * price is a segment riding the SOURCE node's own border. A perpendicular
- * departure/arrival still only touches its border at a point (zero-length
- * overlap, costs 0); only positive overlap length is priced. All
- * arithmetic runs in COST_QUANTUM-quantized integer space (matching
- * overlap-and-intrusion's self-retrace half) so the term is integral by
- * construction. The single per-axis OR condition (segment y equals the
- * rect's top OR bottom, not two independent checks) is what stops a
- * zero-height rect (top === bottom) from being charged twice for the same
- * segment.
+ * merges into that box. Self-only; `nodeBorders` includes the path's own
+ * endpoint rects (unlike `foreignBodies`, which excludes them for the
+ * tunnel check) — the defect this rule exists to price is a segment riding
+ * the SOURCE node's own border. A perpendicular departure/arrival only
+ * touches its border at a point (zero-length overlap, costs 0); only
+ * positive overlap length is priced, in COST_QUANTUM-quantized integer
+ * space so the term is integral by construction. The single per-axis OR
+ * condition (segment y equals the rect's top OR bottom, not two
+ * independent checks) is what stops a zero-height rect (top === bottom)
+ * from being charged twice for the same segment.
+ *
+ * Tier 3, BELOW crossings, because this rule is evaluated against the
+ * optimizer's unaligned TRIAL paths (the pre-`slideAlongSide`
+ * representation used only for ranking candidates — see
+ * `computeAnchorsFor`'s `align` parameter), whose anchor placement can
+ * coincidentally run a detour segment along a bystander's border for a
+ * real stretch: a false signal a genuine CROSSING never produces. At tier 1
+ * that artifact out-ranked a real crossing and the optimizer adopted a
+ * strictly worse rendered route (pinned by edge-lane-rank.test.ts's
+ * sweep-rank scenario). Below crossings it still repairs the border-riding
+ * defect, whose lower tiers are all-zero for every side-pair option, so the
+ * lexicographic comparison falls through to this tier as the decisive one.
  */
 const borderTracing: PenaltyRule = {
   name: 'border-tracing',
@@ -471,7 +455,7 @@ const borderTracing: PenaltyRule = {
     for (let i = 1; i < path.length; i++) {
       const a = path[i - 1] as Point
       const b = path[i] as Point
-      for (const r of nodeBorders ?? []) {
+      for (const r of nodeBorders) {
         if (a.y === b.y && (q(a.y) === q(r.y) || q(a.y) === q(r.y + r.h))) {
           const lo = Math.max(q(Math.min(a.x, b.x)), q(r.x))
           const hi = Math.min(q(Math.max(a.x, b.x)), q(r.x + r.w))
@@ -535,13 +519,12 @@ export function pairPenalty(
 }
 
 /**
- * `selfScore`'s composition step (spatial-edges.ts): map one routed path's
- * self-geometry into a full cost array, one rule per declared tier.
- * `nodeBorders` defaults to `[]` ("no border ink declared") rather than
- * falling back to `foreignBodies` — that default is what keeps every
- * existing 2-arg call site (and the pre-existing grazing-exclusion pin)
- * behaviorally unchanged: a caller that never passes border rects gets 0
- * from `border-tracing`, exactly as if the rule did not exist.
+ * The self half of the composition (`optimizeSideChoices`, spatial-edges.ts):
+ * map one routed path's self-geometry into a full cost array, one rule per
+ * declared tier. `nodeBorders` defaults to `[]` ("no border ink declared")
+ * rather than falling back to `foreignBodies` — a caller that passes no
+ * border rects gets 0 from `border-tracing`, exactly as if the rule did not
+ * exist.
  */
 export function selfPenalty(
   path: readonly Point[],
