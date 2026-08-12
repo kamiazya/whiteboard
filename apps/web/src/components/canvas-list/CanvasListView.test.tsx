@@ -180,3 +180,13 @@ describe('CanvasListView', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 })
+
+describe('CanvasListView — branded empty state', () => {
+  it('shows the faint signature watermark above the empty-state copy', () => {
+    render(
+      <CanvasListView rows={[]} onCreate={() => {}} onOpen={() => {}} renderThumb={() => null} />,
+    )
+    expect(document.querySelector('[data-mark="empty-squiggle"]')).toBeTruthy()
+    expect(screen.getByText('No canvases yet')).toBeTruthy()
+  })
+})
