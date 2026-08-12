@@ -1,10 +1,16 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
-
-type Side = 'top' | 'right' | 'bottom' | 'left'
-type Point = { readonly x: number; readonly y: number }
-type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+import {
+  composeSidePairs,
+  facingLaneWindow,
+  oppositeSide,
+  type Point,
+  type Rect,
+  type Side,
+  SLIDE_CORNER_INSET_PX,
+  shouldAdoptCandidate,
+} from './edge-rules.js'
 
 function rectOf(node: SpatialNode): Rect {
   return { x: node.x, y: node.y, w: node.width, h: node.height }
@@ -54,19 +60,6 @@ function fullyContains(outer: Rect, inner: Rect): boolean {
   )
 }
 
-function oppositeSide(side: Side): Side {
-  switch (side) {
-    case 'top':
-      return 'bottom'
-    case 'bottom':
-      return 'top'
-    case 'left':
-      return 'right'
-    case 'right':
-      return 'left'
-  }
-}
-
 /**
  * Side preference for the FROM end, best first: the side facing the other
  * node on the dominant axis (the pre-existing default, so an unoccluded
@@ -98,56 +91,16 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
  * derivation falls back to the preferred side, so fully-boxed-in nodes
  * keep the old behaviour.
  */
-/** Minimum shared-lane width for a facing pair to count as zero-bend. A
- * narrower window forces the aligned anchor into both nodes' corner zones —
- * the "straight" segment runs down the seam between two corners, or (since
- * anchors are placed by side fraction, not dragged into the window) is not
- * realized at all and degrades to a shallow diagonal. Such pairs read far
- * better through the one-bend perpendicular L. */
-const ZERO_LANE_MIN_OVERLAP_PX = 20
-
 /**
- * The tangent interval where BOTH facing sides can host an anchor (corner
- * insets applied), or undefined when it is narrower than the zero-bend
- * minimum. One producer for the ranking (is a zero-bend lane available?)
- * and the anchor alignment that realizes it.
- */
-function facingLaneWindow(
-  fromRect: Rect,
-  toRect: Rect,
-  axis: 'h' | 'v',
-): readonly [number, number] | undefined {
-  const span = (r: Rect): readonly [number, number] =>
-    axis === 'h'
-      ? [
-          r.y + Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
-          r.y + r.h - Math.min(SLIDE_CORNER_INSET_PX, r.h / 2),
-        ]
-      : [
-          r.x + Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
-          r.x + r.w - Math.min(SLIDE_CORNER_INSET_PX, r.w / 2),
-        ]
-  const [aLo, aHi] = span(fromRect)
-  const [bLo, bHi] = span(toRect)
-  const lo = Math.max(aLo, bLo)
-  const hi = Math.min(aHi, bHi)
-  return hi - lo >= ZERO_LANE_MIN_OVERLAP_PX ? [lo, hi] : undefined
-}
-
-function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
-  return facingLaneWindow(fromRect, toRect, axis) !== undefined
-}
-
-/**
- * Side-pair candidates ranked by ESTIMATED bends, best first:
- * a facing opposing pair whose spans overlap routes as one straight
- * segment (0 bends, dominant axis first); a perpendicular L-pair reaches a
- * genuinely diagonal target with one bend; an opposing pair without a
- * shared lane needs a two-bend Z. Ties between the two L-pairs break
- * toward the less crowded sides (`crowd`), so a departure prefers a side
- * other edges have not already claimed — fewer shared sides means fewer
- * fanned anchors and lane jogs. The old dominant-axis rule survives as
- * the ranking's tie-breaks, so aligned pairs keep their exact old sides.
+ * Side-pair candidates ranked by ESTIMATED bends, best first — a thin
+ * composer over the named PREFERENCE rules declared in edge-rules.ts
+ * (decision #10 in package-canvas-render.md): a facing opposing pair whose
+ * spans overlap routes as one straight segment (0 bends, dominant axis
+ * first); a perpendicular L-pair reaches a genuinely diagonal target with
+ * one bend; an opposing pair without a shared lane needs a two-bend Z; a
+ * same-axis interpenetrating pair with no valid alternative falls back to
+ * a U-hook. New routing feedback is one named rule + its own test in
+ * edge-rules.ts, not a new branch here.
  */
 function rankedSidePairs(
   dx: number,
@@ -156,64 +109,7 @@ function rankedSidePairs(
   toRect: Rect,
   crowd: (end: 'from' | 'to', side: Side) => number,
 ): readonly { fromSide: Side; toSide: Side }[] {
-  const h: Side = dx >= 0 ? 'right' : 'left'
-  const v: Side = dy >= 0 ? 'bottom' : 'top'
-  const opposingH = { fromSide: h, toSide: oppositeSide(h) }
-  const opposingV = { fromSide: v, toSide: oppositeSide(v) }
-  const zero: { fromSide: Side; toSide: Side }[] = []
-  // Zero-bend also needs the two sides to genuinely face each other: boxes
-  // that interpenetrate along the facing axis (from's leading edge past
-  // to's trailing edge) would route the "straight" segment backwards into
-  // the overlap.
-  const facingGapOk = (axis: 'h' | 'v'): boolean =>
-    axis === 'h'
-      ? h === 'right'
-        ? fromRect.x + fromRect.w <= toRect.x
-        : toRect.x + toRect.w <= fromRect.x
-      : v === 'bottom'
-        ? fromRect.y + fromRect.h <= toRect.y
-        : toRect.y + toRect.h <= fromRect.y
-  const zeroH = facingGapOk('h') && facingSpansOverlap(fromRect, toRect, 'h')
-  const zeroV = facingGapOk('v') && facingSpansOverlap(fromRect, toRect, 'v')
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    if (zeroH) zero.push(opposingH)
-    if (zeroV) zero.push(opposingV)
-  } else {
-    if (zeroV) zero.push(opposingV)
-    if (zeroH) zero.push(opposingH)
-  }
-  const ls: { fromSide: Side; toSide: Side }[] = []
-  if (dx !== 0 && dy !== 0) {
-    const l1 = { fromSide: h, toSide: oppositeSide(v) }
-    const l2 = { fromSide: v, toSide: oppositeSide(h) }
-    const crowding = (p: { fromSide: Side; toSide: Side }) =>
-      crowd('from', p.fromSide) + crowd('to', p.toSide)
-    const dominantFirst = Math.abs(dx) >= Math.abs(dy) ? [l1, l2] : [l2, l1]
-    ls.push(...dominantFirst.sort((a, b) => crowding(a) - crowding(b)))
-  }
-  // The opposing fallbacks keep the list total, but a pair that failed the
-  // facing-gap check routes backwards through the overlap — offer it only
-  // after every alternative. When collinear overlap leaves no L-pair AND no
-  // valid opposing pair (same-axis boxes interpenetrating), a U-hook over a
-  // shared side is the sane default, so it goes ahead of the invalid pairs.
-  const ordered = Math.abs(dx) >= Math.abs(dy) ? [opposingH, opposingV] : [opposingV, opposingH]
-  const gapOk = (p: { fromSide: Side }) => facingGapOk(p.fromSide === h ? 'h' : 'v')
-  const fallback = [...ordered.filter(gapOk), ...ordered.filter((p) => !gapOk(p))]
-  const uHooks: { fromSide: Side; toSide: Side }[] = []
-  if (zero.length === 0 && ls.length === 0 && !ordered.some(gapOk)) {
-    const across: Side = Math.abs(dx) >= Math.abs(dy) ? (dy > 0 ? 'bottom' : 'top') : h
-    uHooks.push(
-      { fromSide: across, toSide: across },
-      { fromSide: oppositeSide(across), toSide: oppositeSide(across) },
-    )
-  }
-  const seen = new Set<string>()
-  return [...zero, ...ls, ...uHooks, ...fallback].filter((p) => {
-    const key = `${p.fromSide} ${p.toSide}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+  return composeSidePairs({ dx, dy, fromRect, toRect, crowd })
 }
 
 function deriveDefaultSides(
@@ -913,7 +809,9 @@ function optimizeSideChoices(
         const trial = new Map(current)
         trial.set(edge.id, candidate)
         const evaluated = evaluateTrial(trial)
-        if (lessCost(evaluated.cost, currentCost)) {
+        // incumbent-wins-ties: adopt only on a strict decrease (edge-rules.ts),
+        // so a tie never triggers churn and the lexicographic loop cannot oscillate.
+        if (shouldAdoptCandidate(evaluated.cost, currentCost, lessCost)) {
           current = trial
           currentCost = evaluated.cost
           anchors = evaluated.anchors
@@ -1154,9 +1052,6 @@ function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
   const tangential = Math.abs(normal.x * vy - normal.y * vx)
   return outward <= tangential * SIDEWAYS_RATIO
 }
-
-/** How close to a side's corner a slid anchor may sit, in px. */
-const SLIDE_CORNER_INSET_PX = 10
 
 /**
  * The anchor slid along its side so the run to `target` is axis-aligned,

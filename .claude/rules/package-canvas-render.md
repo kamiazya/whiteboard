@@ -298,9 +298,15 @@ paths:
       only and are never traded against penalties; penalty rules are
       cost-tuple terms with a declared lexicographic tier. New routing
       feedback = one named rule + its own test, not a new branch in an
-      existing function. (The strangler extraction that turns today's
-      implicit rules into data is its own slice; until it lands this
-      paragraph is the naming convention new code follows.)
+      existing function. `layout/edge-rules.ts` implements the PREFERENCE
+      half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
+      dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
+      gap-valid-opposing-before-invalid, and incumbent-wins-ties;
+      `composeSidePairs` is the composition `rankedSidePairs`
+      (`layout/spatial-edges.ts`) wraps, and `shouldAdoptCandidate` is the
+      incumbent-wins-ties predicate `optimizeSideChoices` consults. The
+      PENALTY half (`pairScore`/`selfScore`'s cost-tuple terms, still inline
+      in `spatial-edges.ts`) is a named follow-up, "penalty-rules-extraction".
     - **Facet-driven rendering rides the injected-resolver pattern**
       (a future `resolveFileFacets`, same seam class as
       `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
