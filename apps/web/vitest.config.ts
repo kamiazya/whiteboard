@@ -15,14 +15,6 @@ export default defineConfig({
     alias: {
       ...mcpSourceAlias,
       '@': resolve(__dirname, 'src'),
-      // Declared test/internal-only subpath (not in mcp-server's published
-      // npm exports) used by daemon-probe.schema-drift.test.ts to import the
-      // server's runtime schema through a contract surface instead of a
-      // relative deep import into another package's src/.
-      '@kamiazya/whiteboard-mcp/api-contracts-internal': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-contracts/runtime.ts',
-      ),
       // Also test-only: the SseStreamSource behavioural contract, declared once
       // in the package that owns the port and run here against the
       // SharedWorker-backed implementation this app ships.

@@ -5,9 +5,10 @@
 // rest of runtime.ts stay off the published npm surface — widening this
 // barrel widens semver liability for a public package, so any addition
 // here must be an intentional decision, not incidental scope creep.
-// daemonPingResponseSchema is promoted here so apps/web can consume the
-// ping contract from its single definition instead of maintaining a
-// hand-written mirror.
+// daemonPingResponseSchema, runtimeVerifyResponseSchema, and
+// listGrantsResponseSchema are promoted so apps/web consumes each contract
+// from its single definition instead of a hand-written mirror that can
+// silently drift from the server's shape.
 
 // The OpenCanvas /api/v1 list contract, re-exported from server-core so
 // apps/web keeps consuming every daemon HTTP contract through this one
@@ -19,14 +20,15 @@ export {
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
 export * from './canvas.js'
-export type { PairingTokenResponse } from './pairing.js'
+export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
+  listGrantsResponseSchema,
   pairingTokenNonceSchema,
   pairingTokenRequestSchema,
   pairingTokenResponseSchema,
 } from './pairing.js'
-export type { DaemonPingResponse } from './runtime.js'
-export { daemonPingResponseSchema } from './runtime.js'
+export type { DaemonPingResponse, RuntimeVerifyResponse } from './runtime.js'
+export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime.js'
 
 import type {
   canvasExportOkfOutputSchema as _canvasOkfV1ResponseSchema,

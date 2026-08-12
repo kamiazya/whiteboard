@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { daemonPingResponseSchema, runtimeStatusResponseSchema } from './runtime.js'
+import { roundtrip } from './roundtrip.test-helper.js'
+import {
+  daemonPingResponseSchema,
+  type RuntimeVerifyResponse,
+  runtimeStatusResponseSchema,
+  runtimeVerifyResponseSchema,
+} from './runtime.js'
 
 function baseStatus(app: { served: boolean; buildPresent: boolean; ui: string }) {
   return {
@@ -36,6 +42,54 @@ describe('daemonPingResponseSchema', () => {
 
   it('rejects a legacy pid-shaped payload with no instanceId', () => {
     expect(() => daemonPingResponseSchema.parse({ ok: true, pid: 123 })).toThrow()
+  })
+})
+
+describe('runtimeVerifyResponseSchema', () => {
+  const valid: RuntimeVerifyResponse = {
+    alg: 'Ed25519',
+    publicKey: 'pk-abc',
+    signature: 'sig-xyz',
+  }
+
+  it('parses a well-formed value', () => {
+    expect(runtimeVerifyResponseSchema.parse(valid)).toEqual(valid)
+  })
+
+  it('roundtrips through the wire format', () => {
+    expect(roundtrip(runtimeVerifyResponseSchema, valid)).toEqual(valid)
+  })
+
+  it('rejects an extra field (strict schema catches server drift)', () => {
+    expect(runtimeVerifyResponseSchema.safeParse({ ...valid, extra: 'unexpected' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects a missing signature', () => {
+    const { signature: _omit, ...missing } = valid
+    expect(runtimeVerifyResponseSchema.safeParse(missing).success).toBe(false)
+  })
+
+  it('rejects an alg other than Ed25519 (an algorithm change must not pass silently)', () => {
+    expect(runtimeVerifyResponseSchema.safeParse({ ...valid, alg: 'ES256' }).success).toBe(false)
+  })
+})
+
+// The barrel is a published npm subpath (0.0.x semver liability), so widening
+// it is a deliberate decision — see index.ts's own comment. This guard makes
+// the other deliberate decision executable too: runtimeVerifyRequestSchema's
+// refine touches Buffer (Node-only) and must never reach a browser bundle
+// through the barrel, only through its module path (routes/runtime.ts's
+// import). The positive-control assertion (…DOES contain
+// runtimeVerifyResponseSchema) keeps the negative assertion from passing
+// vacuously if the barrel export is ever renamed away.
+describe('api-contracts barrel excludes the Buffer-refining request schema', () => {
+  it('exports runtimeVerifyResponseSchema but not runtimeVerifyRequestSchema', async () => {
+    const barrel = await import('./index.js')
+    const keys = Object.keys(barrel)
+    expect(keys).toContain('runtimeVerifyResponseSchema')
+    expect(keys).not.toContain('runtimeVerifyRequestSchema')
   })
 })
 

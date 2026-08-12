@@ -52,3 +52,17 @@ export const pairingTokenResponseSchema = z
   .strict()
 
 export type PairingTokenResponse = z.infer<typeof pairingTokenResponseSchema>
+
+// GET /api/pairing/grants response — shared so the daemon route and the
+// PairedOriginsCard settings UI can never drift apart: a server field
+// addition previously had to land in two independent `.strict()` copies at
+// once, and a mismatch silently fell the UI to its error state.
+export const listGrantsResponseSchema = z
+  .object({
+    grants: z.array(
+      z.object({ grantId: z.string(), origin: z.string(), createdAt: z.string() }).strict(),
+    ),
+  })
+  .strict()
+
+export type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>

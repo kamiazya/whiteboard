@@ -166,6 +166,45 @@ describe('challengeDaemonIdentity', () => {
     ).resolves.toBe('verified')
   })
 
+  it('fails when the verify response drifts from the schema (alg change or extra field)', async () => {
+    const pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair
+    const jwk = await crypto.subtle.exportKey('jwk', pair.publicKey)
+    const publicKey = jwk.x as string
+    const storage = pinsWith(publicKey)
+
+    async function respondingWith(overrides: Record<string, unknown>) {
+      const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+        const { nonce } = JSON.parse(String(init?.body)) as { nonce: string }
+        const payload = new TextEncoder().encode(
+          JSON.stringify(['wb-verify-v1', nonce, 'https://app.example']),
+        )
+        const sig = new Uint8Array(
+          await crypto.subtle.sign({ name: 'Ed25519' }, pair.privateKey, payload),
+        )
+        const signature = btoa(String.fromCharCode(...sig))
+          .replaceAll('+', '-')
+          .replaceAll('/', '_')
+          .replaceAll('=', '')
+        return Response.json({ alg: 'Ed25519', publicKey, signature, ...overrides })
+      })
+      return challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: fetchFn as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage,
+      })
+    }
+
+    // A genuinely-signed response is still rejected once the alg field
+    // drifts: a real signature under a changed algorithm must not read as
+    // 'verified' just because the key and signature bytes check out.
+    await expect(respondingWith({ alg: 'ES256' })).resolves.toBe('failed')
+    await expect(respondingWith({ extra: 'unexpected' })).resolves.toBe('failed')
+  })
+
   it('fails a pinned responder answering with another key, an error, or nothing', async () => {
     const squatter = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
       'sign',

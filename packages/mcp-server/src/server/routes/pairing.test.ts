@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { pairingTokenResponseSchema } from '../../shared/api-contracts/pairing.js'
+import {
+  listGrantsResponseSchema,
+  pairingTokenResponseSchema,
+} from '../../shared/api-contracts/pairing.js'
 import { buildSignedPayload, createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import {
@@ -124,7 +127,11 @@ describe('pairing routes', () => {
 
     const listRes = await app.request('/api/pairing/grants')
     expect(listRes.status).toBe(200)
-    const listed = (await listRes.json()) as { grants: { grantId: string; origin: string }[] }
+    // Executable mutation-check guard: parses the REAL HTTP body against the
+    // shared schema, so a server-side field drift turns this red instead of
+    // shipping silently to the client's separate copy (there is no longer
+    // one — PairedOriginsCard imports this same schema).
+    const listed = listGrantsResponseSchema.parse(await listRes.json())
     expect(listed.grants).toEqual([
       expect.objectContaining({ grantId: grant.grantId, origin: HOSTED }),
     ])
