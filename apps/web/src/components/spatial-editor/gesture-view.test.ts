@@ -5,7 +5,14 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
-import { carriedByGesture, frozenSidesOf, liveNodesFor } from './gesture-view.js'
+import {
+  CARRIED_RESIDE_STEP_PX,
+  canReuseCarriedSides,
+  carriedByGesture,
+  carriedSideCacheKey,
+  frozenSidesOf,
+  liveNodesFor,
+} from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 
 const canvas: SpatialCanvas = {
@@ -111,5 +118,29 @@ describe('frozenSidesOf', () => {
       ],
     }
     expect(frozenSidesOf(scene)).toEqual(new Map([['e1', { fromSide: 'bottom', toSide: 'left' }]]))
+  })
+})
+
+describe('carried side cache', () => {
+  const sides = new Map([['e1', { fromSide: 'top', toSide: 'top' } as const]])
+
+  it('reuses within the re-side step for the same carried set', () => {
+    const cache = { key: 'e1', anchorX: 100, anchorY: 100, sides }
+    expect(canReuseCarriedSides(cache, 'e1', 108, 100)).toBe(true)
+  })
+
+  it('recomputes once the carried node has travelled a full step', () => {
+    const cache = { key: 'e1', anchorX: 100, anchorY: 100, sides }
+    expect(canReuseCarriedSides(cache, 'e1', 100 + CARRIED_RESIDE_STEP_PX, 100)).toBe(false)
+  })
+
+  it('never reuses across a different carried-edge set or an empty cache', () => {
+    const cache = { key: 'e1', anchorX: 100, anchorY: 100, sides }
+    expect(canReuseCarriedSides(cache, 'e1 e2', 100, 100)).toBe(false)
+    expect(canReuseCarriedSides(null, 'e1', 100, 100)).toBe(false)
+  })
+
+  it('keys are order-independent over the carried edge ids', () => {
+    expect(carriedSideCacheKey(new Set(['b', 'a']))).toBe(carriedSideCacheKey(new Set(['a', 'b'])))
   })
 })

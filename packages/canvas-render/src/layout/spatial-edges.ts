@@ -635,8 +635,10 @@ function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
  * (only changed-anchor edges re-route; the pairwise matrix is patched),
  * but the initial matrix build is O(E^2) segment pairs and a committed
  * render pays the loop on every edit, so the bound keeps worst-case work
- * small (~24ms at the gate on a dev machine; per-frame surfaces opt out
- * entirely via edgeSideOverrides). ponytail: a sweepline pair scan is the
+ * small (~24ms at the gate on a dev machine; the live-drag overlay pays
+ * it only once per travel step — see the editor's carried-side cache —
+ * and skips it on cached frames via a full override map). ponytail: a
+ * sweepline pair scan is the
  * next rung if this gate ever needs raising.
  */
 const CROSSING_OPT_MAX_EDGES = 40
@@ -824,11 +826,12 @@ export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   style: EdgeRoutingStyle = 'straight',
-  // FROZEN side choices for the listed edges: the caller opts out of the
-  // optimization pass wholesale (a per-frame surface like the live drag
-  // overlay wants route STABILITY over optimality mid-gesture, and cannot
-  // afford the improvement loop each frame). Sides settle again on the
-  // next committed render.
+  // FROZEN side choices for the listed edges: route STABILITY over
+  // optimality mid-gesture. Edges ABSENT from a provided map still run the
+  // optimizer against the locked rest, so a live overlay's carried edges
+  // side exactly as the committed render will; a map covering every edge
+  // skips optimization wholesale (the live overlay's cached frames).
+  // Sides settle again on the next committed render.
   sideOverrides?: ReadonlyMap<string, EdgeSides>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
