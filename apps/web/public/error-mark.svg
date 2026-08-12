@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="132" height="84" viewBox="0 0 88 56" fill="none" role="img" aria-label="">
+  <!--
+    Error mark (BRAND.md): the signature scribbled out - the whiteboard
+    gesture for "that's wrong". Draws itself into the knot ONCE on load;
+    the base state is the finished scribble so reduced-motion lands on it.
+    Self-contained (animation inside the file) because it renders inside
+    an <img> and can inherit nothing from the page.
+  -->
+  <style>
+    path {
+      stroke-dasharray: 210;
+      stroke-dashoffset: 0;
+      animation: wb-scribble 1.1s ease-in;
+    }
+    @keyframes wb-scribble {
+      from {
+        stroke-dashoffset: 210;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      path {
+        animation: none;
+      }
+    }
+  </style>
+  <path d="M20 44 C 27 22, 37 22, 44 33 C 48 40, 56 46, 59 36 C 62 26, 46 24, 49 34 C 52 44, 65 44, 63 32 C 61 22, 50 20, 54 30 C 58 40, 70 38, 68 26" stroke="#909090" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
