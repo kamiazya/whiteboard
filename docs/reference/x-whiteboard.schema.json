@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/kamiazya/whiteboard/main/docs/reference/x-whiteboard.schema.json",
+  "title": "x-whiteboard JSON Canvas extension",
+  "description": "Definitions for the single extension key (\"x-whiteboard\") that extended JSON Canvas documents produced by whiteboard may carry, at two sites: the document root (rendering preferences; #/$defs/canvasExtension) and a node (canvas embed; #/$defs/nodeExtension). Documents contain no non-standard fields beyond these two sites. Consumers that drop the key still read a valid JSON Canvas 1.0 document.",
+  "$defs": {
+    "canvasExtension": {
+      "type": "object",
+      "properties": {
+        "edgeRouting": {
+          "type": "object",
+          "properties": {
+            "style": {
+              "type": "string",
+              "enum": [
+                "straight",
+                "orthogonal",
+                "curved"
+              ]
+            },
+            "lineJumps": {
+              "type": "string",
+              "enum": [
+                "none",
+                "arc"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "nodeExtension": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "embed"
+        },
+        "canvasId": {
+          "type": "string",
+          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+        },
+        "versionRef": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "canvasId"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -12,6 +12,28 @@ the canvas's persisted document — none of them require a connected browser cli
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+## The `x-whiteboard` extension contract
+
+Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**
+extension key, `x-whiteboard`, allowed at two sites:
+
+- **Document root** — rendering preferences for things JSON Canvas already
+  models (currently `edgeRouting.style` and `edgeRouting.lineJumps`). A
+  consumer that drops it still renders every edge, just with its own routing.
+- **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
+  reference), the one piece of content JSON Canvas 1.0 cannot express.
+
+No other non-standard field is ever emitted, at any level. Foreign keys on an
+imported document (another tool's vendor fields) are stripped on parse and
+never re-emitted. Strict-mode output (`canvas_export_json_canvas` with
+`options.strict: true`) drops the `x-whiteboard` key entirely and is plain
+JSON Canvas 1.0.
+
+What may appear inside `x-whiteboard` is machine-readable:
+[`x-whiteboard.schema.json`](x-whiteboard.schema.json) (JSON Schema,
+draft 2020-12) is generated from the same Zod schemas the code validates
+with, so it cannot drift from the implementation.
+
 ## Web app exports
 
 The web editor's canvas row (More actions → Export) saves the current canvas as

@@ -21,7 +21,8 @@
       "!packages/mcp-server/coverage/**",
       "!packages/mcp-server/tmp/**",
       "!**/pnpm-lock.yaml",
-      "!.mcp.json"
+      "!.mcp.json",
+      "!docs/reference/x-whiteboard.schema.json"
     ]
   },
   "formatter": {

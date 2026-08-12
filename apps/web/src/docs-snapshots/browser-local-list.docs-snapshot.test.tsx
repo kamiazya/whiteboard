@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('docs snapshot: browser-local canvas list', () => {
-  it('captures the list with a markdown note and derived display slugs', async () => {
+  it('captures the list with a markdown note and a spatial pair', async () => {
     const store = new MemoryStore()
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
     await store.save({
