@@ -1,21 +1,14 @@
 // The committed schema under docs/reference/ is the published artifact of the
-// extension contract; this test holds it byte-equal to what the Zod schemas
-// generate. Regenerate deliberately with:
-//   UPDATE_JSON_SCHEMA=1 pnpm vitest run --project canvas-model-node json-schema
-import { readFileSync, writeFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+// extension contract; this file-snapshot test holds it byte-equal to what the
+// Zod schemas generate (CI fails on drift). Regenerate deliberately with:
+//   pnpm vitest run --project canvas-model-node json-schema -u
 import { describe, expect, it } from 'vitest'
 import { xWhiteboardJsonSchema } from './json-schema.js'
 
-const committedPath = fileURLToPath(
-  new URL('../../../docs/reference/x-whiteboard.schema.json', import.meta.url),
-)
-
 describe('x-whiteboard JSON Schema artifact', () => {
-  it('docs/reference/x-whiteboard.schema.json matches the model schemas', () => {
+  it('docs/reference/x-whiteboard.schema.json matches the model schemas', async () => {
     const generated = `${JSON.stringify(xWhiteboardJsonSchema(), null, 2)}\n`
-    if (process.env.UPDATE_JSON_SCHEMA === '1') writeFileSync(committedPath, generated)
-    expect(readFileSync(committedPath, 'utf8')).toBe(generated)
+    await expect(generated).toMatchFileSnapshot('../../../docs/reference/x-whiteboard.schema.json')
   })
 
   it('describes both extension sites as draft 2020-12 definitions', () => {

@@ -79,6 +79,23 @@ jobs:
         if: matrix.shard == 1
         run: pnpm exec vitest run --project=canvas-viewer-jsdom
 
+      # The shared-layer package suites and arch-lint, all small and fast —
+      # run once (shard 2, balancing canvas-viewer on shard 1). This is also
+      # what fails CI when a generated artifact (e.g.
+      # docs/reference/x-whiteboard.schema.json) drifts from its source
+      # schema: file-snapshot tests only reject in CI-mode runs like this one.
+      - name: Test shared-layer packages + arch-lint
+        if: matrix.shard == 2
+        run: >-
+          pnpm exec vitest run
+          --project=canvas-model-node
+          --project=canvas-ports-node
+          --project=canvas-codec-node
+          --project=canvas-workspace-node
+          --project=server-core-node
+          --project=canvas-render-node
+          --project=arch-lint-node
+
   test-jsdom:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -12,11 +12,18 @@
           "properties": {
             "style": {
               "type": "string",
-              "enum": ["straight", "orthogonal", "curved"]
+              "enum": [
+                "straight",
+                "orthogonal",
+                "curved"
+              ]
             },
             "lineJumps": {
               "type": "string",
-              "enum": ["none", "arc"]
+              "enum": [
+                "none",
+                "arc"
+              ]
             }
           },
           "additionalProperties": false
@@ -40,7 +47,10 @@
           "minLength": 1
         }
       },
-      "required": ["kind", "canvasId"],
+      "required": [
+        "kind",
+        "canvasId"
+      ],
       "additionalProperties": false
     }
   }
