@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import NotFoundMark from '../../brand/not-found-mark.svg?react'
 import { StatusPageButton, StatusPageLayout } from './StatusPageLayout.js'
 
 /**
@@ -9,7 +10,7 @@ import { StatusPageButton, StatusPageLayout } from './StatusPageLayout.js'
 export function NotFoundPage({ onBack }: { onBack: () => void }): JSX.Element {
   return (
     <StatusPageLayout
-      mark={<img data-mark="not-found" src="/not-found-mark.svg" alt="" width="150" height="99" />}
+      mark={<NotFoundMark className="text-muted-foreground" />}
       title="There's nothing here"
       description="The link may be wrong, or what it pointed at has moved."
       actions={<StatusPageButton label="Back to canvases" onClick={onBack} primary />}
