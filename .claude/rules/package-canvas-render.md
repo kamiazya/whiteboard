@@ -261,6 +261,53 @@ paths:
    meaningful thumbnail); any failure keeps the card. Image nodes are
    bbox-only leaves for sceneBounds/translate/scale.
 
+10. **The render-style seam** (rendering-foundation initiative, human
+    decisions 2026-08-12). Recorded BEFORE any style ships so the sketchy/
+    hand-drawn style and facet-driven cards land on settled ground instead
+    of re-litigating decisions #6-#8.
+    - **Style is a DOCUMENT property, not a personal preference.** It rides
+      the canvas (the `x-whiteboard`/`view`-facet lineage), so every
+      collaborator and every output sees the same look. It threads as an
+      explicit per-render-call argument (`SpatialLayoutOptions` → backend),
+      never ambient — the same editor-ambient-but-export-explicit shape as
+      theme mode (#8). Export, the MCP render tool, and the viewer widget
+      default to the clean style; a styled render is opt-in per call: the
+      MCP/widget consumer is often an AI agent, for whom jittered
+      multi-stroke geometry is parsing noise it must never pay unasked.
+    - **Geometry variance lives behind ONE shared pure decomposition
+      function per primitive** (rect → stroke set, edge path → stroke set)
+      in `layout/`, consumed by BOTH the SVG backend and every hit/
+      highlight/preview consumer — the `edge-rounding.ts` drawn-vs-hit
+      precedent, generalized. This is NOT the scene→scene transform #8
+      rejected: #8's case (dark mode) was paint-only and a pass would have
+      duplicated per-type knowledge; a style is geometry-bearing, and the
+      answer is shared decomposition at the consumption points, keeping one
+      producer per geometry.
+    - **Ink is decoration; semantics stay authoritative.** `sceneBounds`,
+      hit-testing, `sceneDigest`, translate/scale keep reading the SEMANTIC
+      geometry (bbox / routed path). A style's painted deviation from it
+      must be bounded by a declared constant (the jump-arc/arrowhead
+      class), and that bound is part of the style's contract.
+    - **Style randomness is seeded, id-keyed, and pure** (the `layout/seed`
+      primitive): derived from stable node identity, never ambient RNG;
+      invariant under translate/scale composition; unaffected by edits to
+      unrelated nodes. A canvas renders byte-identically twice, styled or
+      not.
+    - **Layout-quality feedback lands as NAMED RULES of exactly two
+      kinds.** Preference rules affect candidate ordering and tie-breaks
+      only and are never traded against penalties; penalty rules are
+      cost-tuple terms with a declared lexicographic tier. New routing
+      feedback = one named rule + its own test, not a new branch in an
+      existing function. (The strangler extraction that turns today's
+      implicit rules into data is its own slice; until it lands this
+      paragraph is the naming convention new code follows.)
+    - **Facet-driven rendering rides the injected-resolver pattern**
+      (a future `resolveFileFacets`, same seam class as
+      `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
+      function of the canvas snapshot by default — resolving another
+      document's live facet state into exported bytes is opt-in, exactly
+      parallel to the style opt-in above.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
