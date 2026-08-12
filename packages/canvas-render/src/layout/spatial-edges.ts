@@ -696,11 +696,9 @@ function optimizeSideChoices(
     const toRect = rectOf(toNode)
     const fromCenter = centerOf(fromRect)
     const toCenter = centerOf(toRect)
-    // rankedSidePairs already ends with the same-side U-hook candidates
-    // (u-hook-span-exposed-first, edge-rules.ts) — the fallback that hooks
-    // OVER everything when every ranked-vocabulary pair crosses, overlaps,
-    // or retraces. One producer for that list, so it is not re-generated
-    // here in a separate fixed compass order.
+    // The same-side U-hook fallback (for when every ranked-vocabulary pair
+    // crosses, overlaps, or retraces) comes from rankedSidePairs' last rule,
+    // `u-hook-span-exposed-first` — one producer, not a second list here.
     const pairs = rankedSidePairs(
       toCenter.x - fromCenter.x,
       toCenter.y - fromCenter.y,

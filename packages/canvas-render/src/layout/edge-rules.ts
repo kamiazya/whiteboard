@@ -238,8 +238,7 @@ const gapValidOpposingBeforeInvalid = {
 const dominantAxisFirst = { kind: 'tiebreak' as const, name: 'dominant-axis-first' }
 const incumbentWinsTies = { kind: 'tiebreak' as const, name: 'incumbent-wins-ties' }
 
-/** The four points bounding rect's border on `side`, as a 2-point segment
- * `inkAlongRects` (declared below, a hoisted function declaration) can walk. */
+/** `rect`'s border on `side`, as a 2-point segment `inkAlongRects` can walk. */
 function sideSegment(rect: Rect, side: Side): readonly [Point, Point] {
   switch (side) {
     case 'top':
@@ -267,14 +266,12 @@ function sideSegment(rect: Rect, side: Side): readonly [Point, Point] {
 
 /**
  * Whether `rect`'s WHOLE `side` border passes through `other`'s STRICT
- * interior for some positive-length stretch — the SPAN version of "this
- * anchor sits inside the other endpoint", needed because a same-side U-hook
- * anchor is placed by `computeAnchorsFor`'s fan-out (not the side midpoint),
- * so only the full span, not one point, reliably sees the occlusion. Reuses
+ * interior for some positive-length stretch. The SPAN, not the side
+ * midpoint: a same-side U-hook anchor is placed by `computeAnchorsFor`'s
+ * fan-out, so a single point can miss an occlusion the span sees. Runs
  * `inkAlongRects`'s ink-length loop (the same "strictly between the two
- * borders" predicate `endpoint-body-ink` prices) against one synthetic
- * segment tracing the side, rather than a second span-overlap
- * implementation — one producer for "is this stretch inside that rect".
+ * borders" predicate `endpoint-body-ink` prices) over one synthetic segment
+ * rather than adding a second span-overlap implementation.
  */
 function sideSpanEntersRect(rect: Rect, side: Side, other: Rect): boolean {
   return (
@@ -291,20 +288,16 @@ function sideSpanEntersRect(rect: Rect, side: Side, other: Rect): boolean {
  * departure and arrival on the SAME compass side of each rect — the
  * fallback that hooks OVER everything when the ranked vocabulary above
  * offers nothing usable, or loses on cost to some other candidate), demote
- * one whose DEPARTURE side border runs through the target's strict
- * interior behind one that does not. This is departure-only, not symmetric
- * with the arrival end: the actual routed geometry approaches an arrival
- * anchor from OUTSIDE the target (an arc around it, never along its own
- * border through a bystander), so an arrival side's border passing through
- * the source's interior is not evidence of real interior ink — verified
- * against the reported canvas, where the CLEAN route's arrival-side border
- * (`toRect`'s bottom) geometrically overlaps the source's body exactly as
- * much as the dirty route's does, yet only the dirty route draws through
- * it. A DEPARTURE stub, by contrast, draws in a straight line off that
- * exact border, so a departure side whose span runs through the target's
- * body is real evidence the stub cuts through it (this is the exact defect
- * endpoint-body-ink prices: "the departure/arrival stub cutting through
- * the near or far endpoint's interior").
+ * one whose DEPARTURE side border runs through the target's strict interior
+ * behind one that does not.
+ *
+ * Departure-only, NOT symmetric with the arrival end: a departure stub
+ * draws in a straight line off its own border, so a departure span through
+ * the target's body is real evidence of the ink `endpoint-body-ink` prices;
+ * the routed geometry reaches an arrival anchor from OUTSIDE the target,
+ * so an arrival side's border overlapping the source proves nothing. A
+ * symmetric version also flips edge-side-occlusion.test.ts's "far endpoint
+ * overlapping the anchor is not an occluder" pin.
  *
  * MANDATORY EXCLUSION, same predicate as endpoint-body-ink and
  * deriveDefaultSides's occlusion filter: a rect that `fullyContains` the
@@ -322,13 +315,12 @@ const uHookSpanExposedFirst = {
   kind: 'candidates' as const,
   name: 'u-hook-span-exposed-first',
   generate: (ctx: PreferenceRuleContext): readonly SidePair[] => {
-    const taints = (side: Side): boolean =>
-      !fullyContains(ctx.toRect, ctx.fromRect) && sideSpanEntersRect(ctx.fromRect, side, ctx.toRect)
-    const hooks = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
-      fromSide: side as Side,
-      toSide: side as Side,
-    }))
-    return [...hooks.filter((p) => !taints(p.fromSide)), ...hooks.filter((p) => taints(p.fromSide))]
+    const hooks: readonly SidePair[] = (['top', 'right', 'bottom', 'left'] as const).map(
+      (side) => ({ fromSide: side, toSide: side }),
+    )
+    if (fullyContains(ctx.toRect, ctx.fromRect)) return hooks
+    const taints = (p: SidePair) => sideSpanEntersRect(ctx.fromRect, p.fromSide, ctx.toRect)
+    return [...hooks.filter((p) => !taints(p)), ...hooks.filter(taints)]
   },
 }
 
@@ -632,9 +624,9 @@ const borderTracing: PenaltyRule = {
  * border-tracing itself was demoted off tier 1 (see its own comment). Ranked
  * ABOVE border-tracing instead, the optimizer buys a few px of border ink
  * back with ~120px of interior ink — trading one visible-ink defect for the
- * other rather than clearing both. At tier 4 clearing both takes one more
- * optimizer PASS than border-tracing alone needed: see
- * CROSSING_OPT_MAX_PASSES in spatial-edges.ts.
+ * other rather than clearing both. Clearing both inside the optimizer's
+ * pass budget is a matter of candidate ORDER, not more passes: see
+ * `u-hook-span-exposed-first` above.
  */
 const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
