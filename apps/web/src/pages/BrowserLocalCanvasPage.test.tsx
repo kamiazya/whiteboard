@@ -82,7 +82,8 @@ const snap: CanvasSnapshot = {
 // Radix DropdownMenuTrigger opens on pointerDown (not click); the menu
 // mounts asynchronously, and items select on pointerUp.
 async function openCanvasOpsMenu() {
-  const trigger = screen.getByRole('button', { name: 'More actions' })
+  // The kebab now lives in the (lazy) WorkspaceTopBar's merged row.
+  const trigger = await screen.findByRole('button', { name: 'More actions' })
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
   return screen.findByRole('menu')
 }
@@ -198,11 +199,10 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
-    // After act, load is complete and the canvas row is rendered — the
-    // rare operations live behind the kebab.
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    // The kebab lives in the LAZY WorkspaceTopBar: findByRole inside act()
+    // deadlocks (act holds commits while waitFor polls), so the helper runs
+    // outside act and lets RTL's own act-wrapping handle updates.
+    await openDeleteConfirm()
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
     await act(async () => {
@@ -395,11 +395,16 @@ describe('BrowserLocalCanvasPage', () => {
     // the dot LEFT of the title, the rare operations behind one kebab at
     // the right edge — not in a second header strip of its own.
     const title = screen.getByRole('textbox', { name: /title/i })
-    const row = title.closest('div.border-b') as HTMLElement
+    // The merged row IS the workspace header: identity, state and operations
+    // all live in the one <header> next to the workspace switcher — there is
+    // no second chrome strip.
+    const row = title.closest('header') as HTMLElement
+    expect(row).toBeTruthy()
+    expect(row.contains(screen.getByRole('button', { name: /^Workspace:/i }))).toBe(true)
     const chip = screen.getByTestId('save-status-chip')
     expect(row.contains(chip)).toBe(true)
     expect(chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const kebab = screen.getByRole('button', { name: 'More actions' })
+    const kebab = await screen.findByRole('button', { name: 'More actions' })
     expect(row.contains(kebab)).toBe(true)
     // Duplicate/Delete are menu items, not always-visible buttons.
     expect(screen.queryByRole('button', { name: /^duplicate$/i })).toBeNull()

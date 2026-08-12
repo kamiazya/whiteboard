@@ -298,9 +298,15 @@ paths:
       only and are never traded against penalties; penalty rules are
       cost-tuple terms with a declared lexicographic tier. New routing
       feedback = one named rule + its own test, not a new branch in an
-      existing function. (The strangler extraction that turns today's
-      implicit rules into data is its own slice; until it lands this
-      paragraph is the naming convention new code follows.)
+      existing function. `layout/edge-rules.ts` implements the PREFERENCE
+      half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
+      dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
+      gap-valid-opposing-before-invalid, and incumbent-wins-ties;
+      `composeSidePairs` is the composition `rankedSidePairs`
+      (`layout/spatial-edges.ts`) wraps, and `shouldAdoptCandidate` is the
+      incumbent-wins-ties predicate `optimizeSideChoices` consults. The
+      PENALTY half (`pairScore`/`selfScore`'s cost-tuple terms, still inline
+      in `spatial-edges.ts`) is a named follow-up, "penalty-rules-extraction".
     - **Facet-driven rendering rides the injected-resolver pattern**
       (a future `resolveFileFacets`, same seam class as
       `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
@@ -351,6 +357,12 @@ paths:
 - `layout/translate-scene.test.ts`: identity/additivity, the wrapper-relative
   x rule, and the tripwire asserting exactly `listItem`/`tableCell` emit an
   SVG transform.
+- `svg/pixel-golden.browser.test.ts` pixel-level regression harness
+  (`toMatchScreenshot`, baselines under `svg/__screenshots__/`) for the
+  shape classes a byte-level SVG-string golden cannot protect (sweep-flag/
+  coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
+  rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
+  regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
 
 ## Common mistakes (append as review finds them)
 

@@ -5,6 +5,13 @@ import { useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface CanvasPropertiesProps {
+  /**
+   * Renders as a segment of the merged header row instead of a standalone
+   * chrome strip: no own border/background, and the Type/Tags disclosure
+   * overlays below the header rather than growing the row (which would
+   * push the canvas down mid-edit).
+   */
+  inline?: boolean
   readonly meta: CanvasCoreMeta
   readonly onChange: (next: CanvasCoreMeta) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
@@ -51,6 +58,7 @@ const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'
  * choose between.
  */
 export function CanvasProperties({
+  inline = false,
   meta,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
@@ -94,8 +102,14 @@ export function CanvasProperties({
   }
 
   return (
-    <div className="border-border bg-background flex flex-col gap-2 border-b px-3 py-2">
-      <div className="flex items-center gap-2">
+    <div
+      className={
+        inline
+          ? 'flex min-w-0 flex-1 items-center gap-2'
+          : 'border-border bg-background flex flex-col gap-2 border-b px-3 py-2'
+      }
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {status}
         <label className="sr-only" htmlFor={`${suggestionsId}-title`}>
           Title
@@ -109,7 +123,9 @@ export function CanvasProperties({
             if (tidied.title !== meta.title) onChange(tidied)
           }}
           placeholder="Untitled"
-          className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-base font-medium outline-none"
+          className={`text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent font-medium outline-none ${
+            inline ? 'text-sm' : 'text-base'
+          }`}
         />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -133,8 +149,15 @@ export function CanvasProperties({
       </div>
 
       {open && (
-        <div id={`${suggestionsId}-disclosure`} className="flex flex-col gap-2 pb-1">
-          <div className="flex items-center gap-2">
+        <div
+          id={`${suggestionsId}-disclosure`}
+          className={
+            inline
+              ? 'border-border bg-background absolute left-0 right-0 top-full z-20 flex flex-col gap-2 border-b px-3 py-2 shadow-md'
+              : 'flex flex-col gap-2 pb-1'
+          }
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <label
               className="text-muted-foreground w-12 shrink-0 text-xs"
               htmlFor={`${suggestionsId}-type`}
@@ -161,7 +184,7 @@ export function CanvasProperties({
             </datalist>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <label
               className="text-muted-foreground w-12 shrink-0 text-xs"
               htmlFor={`${suggestionsId}-tag`}
