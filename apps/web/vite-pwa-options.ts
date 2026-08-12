@@ -1,6 +1,8 @@
 import type { VitePWAOptions } from 'vite-plugin-pwa'
 
-const THEME_COLOR = '#0f172a'
+// The app's light ground (index.css --background); the installed titlebar
+// should read as the app, not the pre-design-refactor navy.
+const THEME_COLOR = '#ffffff'
 const BACKGROUND_COLOR = '#ffffff'
 const ONE_MIB = 1024 * 1024
 

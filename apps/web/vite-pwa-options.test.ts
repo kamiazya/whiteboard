@@ -89,3 +89,9 @@ describe('pwaOptions', () => {
     }
   })
 })
+
+describe('manifest brand alignment', () => {
+  it('theme_color matches the app light ground, not the pre-design navy', () => {
+    expect(pwaOptions.manifest?.theme_color).toBe('#ffffff')
+  })
+})
