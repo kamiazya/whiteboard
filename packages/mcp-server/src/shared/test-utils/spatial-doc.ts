@@ -24,11 +24,11 @@ export function makeSpatialDoc(canvas: SpatialCanvas): LoroDoc {
 }
 
 /** Builds the single-node spatial canvas shape `makeSpatialDocWithImage`/`setSpatialDocImage` share. */
-function imageOnlyCanvas(fileId: string, nodeId: string): SpatialCanvas {
+function imageOnlyCanvas(fileId: string): SpatialCanvas {
   return {
     nodes: [
       {
-        id: nodeId,
+        id: `node-${fileId}`,
         type: 'file',
         file: newImageRef(fileId),
         x: 0,
@@ -42,8 +42,8 @@ function imageOnlyCanvas(fileId: string, nodeId: string): SpatialCanvas {
 }
 
 /** A doc holding a single 'file' node whose `file` value references the given upload id. */
-export function makeSpatialDocWithImage(fileId: string, nodeId = `node-${fileId}`): LoroDoc {
-  return makeSpatialDoc(imageOnlyCanvas(fileId, nodeId))
+export function makeSpatialDocWithImage(fileId: string): LoroDoc {
+  return makeSpatialDoc(imageOnlyCanvas(fileId))
 }
 
 /**
@@ -54,8 +54,8 @@ export function makeSpatialDocWithImage(fileId: string, nodeId = `node-${fileId}
  * concurrent-save race, a branch history point) rather than build a fresh
  * one.
  */
-export function setSpatialDocImage(doc: LoroDoc, fileId: string, nodeId = `node-${fileId}`): void {
-  writeSpatialCanvas(doc, imageOnlyCanvas(fileId, nodeId))
+export function setSpatialDocImage(doc: LoroDoc, fileId: string): void {
+  writeSpatialCanvas(doc, imageOnlyCanvas(fileId))
 }
 
 /** Clears all nodes/edges from an existing doc — the nodes-model equivalent of emptying the legacy 'elements' list. */
