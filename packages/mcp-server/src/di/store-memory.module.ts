@@ -1,13 +1,9 @@
 import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
 import { ContainerModule } from 'inversify'
-import {
-  InMemoryBlobStore,
-  InMemoryCanvasDocStore,
-  InMemoryWorkspaceIndex,
-} from '../server/store/inmemory/index.js'
+import { InMemoryBlobStore, InMemoryCanvasDocStore } from '../server/store/inmemory/index.js'
 
 /**
- * Binds the three storage ports to their in-memory test doubles. Test-level
+ * Binds the storage ports to their in-memory test doubles. Test-level
  * composition only — see `no-production-wiring.test.ts` for the guard that
  * keeps this out of the live server until a real store impl replaces it.
  */
@@ -17,8 +13,5 @@ export const storeMemoryModule = new ContainerModule(({ bind }) => {
     .inSingletonScope()
   bind(TOKENS.BlobStore)
     .toDynamicValue(() => new InMemoryBlobStore())
-    .inSingletonScope()
-  bind(TOKENS.WorkspaceIndex)
-    .toDynamicValue(() => new InMemoryWorkspaceIndex())
     .inSingletonScope()
 })

@@ -2,12 +2,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
@@ -32,7 +31,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never }
 }
 
 describe('body_patch tool', () => {
@@ -122,34 +121,6 @@ describe('body_patch tool', () => {
         range: { startLine: 0, endLine: 5, replacement: 'x' },
       }),
     ).rejects.toThrow(PatchValidationError)
-  })
-
-  test('reindexes the workspace so the patched node is reflected via WorkspaceIndex', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
-      nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'line1' }],
-      edges: [],
-    })
-    const deps = makeDeps(canvasDocStore)
-    const applyRowsSpy = vi.spyOn(deps.workspaceIndex, 'applyRows')
-    const tool = createBodyPatchTool(deps)
-
-    await tool.execute({
-      mode: 'full',
-      workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
-      nodeId: 't1',
-      body: 'replaced',
-    })
-
-    // Would still pass (falsely) if `reindexWorkspace` were dropped from
-    // the tool, if this only re-asserted content `listCanvases`/`queryFacet`
-    // already reflected before the patch — body patches carry no facet or
-    // canvas-list-visible change of their own. Spying on `applyRows`
-    // directly is what actually pins the reindex-after-mutation wiring.
-    expect(applyRowsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: WORKSPACE_ID }),
-    )
   })
 
   test('throws NodeNotFoundError for an unknown nodeId', async () => {

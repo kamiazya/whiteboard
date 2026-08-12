@@ -76,7 +76,7 @@ const okfDocumentArbitrary = fc
 async function setupTools() {
   const store = new FakeCanvasDocStore()
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-  const deps = { canvasDocStore: store, workspaceIndex: {} as never, blobStore: {} as never }
+  const deps = { canvasDocStore: store, blobStore: {} as never }
   return {
     importOkf: createCanvasImportOkfTool(deps),
     exportOkf: createCanvasExportOkfTool(deps),

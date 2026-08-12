@@ -2,12 +2,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
 import { CanvasDocNotFoundError, NodeLockedError, NodeNotFoundError } from './errors.js'
@@ -34,7 +33,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never }
 }
 
 describe('node_patch tool', () => {
@@ -104,31 +103,6 @@ describe('node_patch tool', () => {
     })
 
     expect(result.node).not.toHaveProperty('label')
-  })
-
-  test('reindexes the workspace after patching a node', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
-      edges: [],
-    })
-    const deps = makeDeps(canvasDocStore)
-    const applyRowsSpy = vi.spyOn(deps.workspaceIndex, 'applyRows')
-    const tool = createNodePatchTool(deps)
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
-      nodeId: 'n1',
-      patch: { x: 42 },
-    })
-
-    // Spying on `applyRows` (rather than re-checking `listCanvases`/
-    // `queryFacet`, which a node patch never changes) is what actually
-    // pins the reindex-after-mutation wiring in this tool.
-    expect(applyRowsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: WORKSPACE_ID }),
-    )
   })
 
   test('throws NodeNotFoundError for an unknown nodeId', async () => {

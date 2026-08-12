@@ -455,9 +455,6 @@ importers:
       '@kamiazya/whiteboard-canvas-model':
         specifier: workspace:*
         version: link:../canvas-model
-      '@kamiazya/whiteboard-canvas-ports':
-        specifier: workspace:*
-        version: link:../canvas-ports
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6

@@ -27,7 +27,6 @@ import { CanvasDocNotFoundError } from './tools/errors.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodeLockTool } from './tools/node-lock.js'
 import { createNodePatchTool } from './tools/node-patch.js'
-import { createReindexTool } from './tools/reindex-tool.js'
 import { createTidyCanvasTool } from './tools/tidy-canvas.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
@@ -137,7 +136,6 @@ export function createServer(deps: ServerDeps) {
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
-    reindex: createReindexTool(deps),
   }
   return { app, tools }
 }

@@ -186,7 +186,9 @@ read time. We already have Drive's projection layer.
   tables as a lookup path. At 0.0.x nothing depends on the stored rows, so
   the storage layer (`libsql-workspace-index`, its tables via a drop
   migration, `reindexAllWorkspaces`) and the derivation functions whose only
-  caller that was are deleted; git history is the resurrection path when
+  caller that was are deleted (performed in the same change that updated
+  this wording, so this consequence reads as-built); git history is the
+  resurrection path when
   convergence needs an index, and rebuilding from the tree was always the
   design (the rows are derived, never authoritative).
 - The daemon gallery's secondary line will show `untitled-N` under a

@@ -1,9 +1,9 @@
+import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
 import { InMemoryCanvasDocStore } from '../store/inmemory/in-memory-canvas-doc-store.js'
-import { InMemoryWorkspaceIndex } from '../store/inmemory/in-memory-workspace-index.js'
 // Side-effect import: registering these tools also installs the server-core
 // log-sink wiring at module scope (see opencanvas-tools.ts).
 import { registerOpenCanvasTools } from './opencanvas-tools.js'
@@ -16,7 +16,6 @@ function fakeServer() {
 function fakeDeps() {
   return {
     canvasDocStore: new InMemoryCanvasDocStore(),
-    workspaceIndex: new InMemoryWorkspaceIndex(),
     blobStore: new InMemoryBlobStore(),
   }
 }
@@ -33,50 +32,30 @@ describe('registerOpenCanvasTools', () => {
     expect(names).toContain('version_restore')
   })
 
-  it("surfaces a server-core fail-open reindex error through this composition root's logger", async () => {
-    // reindexWorkspace's applyRows failure is server-core's canonical
-    // "never throws, but logs" path (see reindex.ts). Without the module-
-    // scope setServerCoreLogSink wiring in opencanvas-tools.ts, this record
-    // would be silently dropped instead of reaching an operator.
+  it("forwards a server-core log record to this composition root's logger", () => {
+    // Registering the tools (via the side-effect import above) installs
+    // the module-scope setServerCoreLogSink wiring in opencanvas-tools.ts.
+    // Without it, any record a server-core call site logs (via its own
+    // injectable getLogger) would be silently dropped instead of reaching
+    // an operator — see server-core/src/log.ts's doc comment on why this
+    // shared layer cannot reach for mcp-server's pino logger directly.
     const server = fakeServer()
-    const deps = fakeDeps()
-    registerOpenCanvasTools(server, deps)
-
-    const registerToolMock = vi.mocked(server.registerTool)
-    const findHandler = (name: string) => {
-      const call = registerToolMock.mock.calls.find((c) => c[0] === name)
-      if (!call) throw new Error(`${name} was not registered`)
-      return call[2] as (
-        args: unknown,
-        extra: unknown,
-      ) => Promise<{ structuredContent: Record<string, unknown> }>
-    }
-
-    const created = await findHandler('wb_canvas_create')(
-      { workspaceId: 'ws-1', segment: 'canvas-a', createWorkspace: true },
-      { requestId: 'req-0' },
-    )
-    const canvasId = created.structuredContent.canvasId as string
-
-    vi.spyOn(deps.workspaceIndex, 'applyRows').mockRejectedValueOnce(
-      new Error('index store unavailable'),
-    )
+    registerOpenCanvasTools(server, fakeDeps())
 
     const capture = captureLogsForTests('debug')
     try {
-      await findHandler('facet_set')(
-        { workspaceId: 'ws-1', canvasId, facets: {} },
-        { requestId: 'req-1' },
-      )
+      getServerCoreLogger('some-server-core-scope').error('something failed', {
+        workspaceId: 'ws-1',
+      })
     } finally {
       capture.restore()
     }
 
     expect(capture.records).toContainEqual(
       expect.objectContaining({
-        scope: 'reindex',
+        scope: 'some-server-core-scope',
         level: 'error',
-        msg: 'failed to apply workspace index rows',
+        msg: 'something failed',
         data: expect.objectContaining({ workspaceId: 'ws-1' }),
       }),
     )

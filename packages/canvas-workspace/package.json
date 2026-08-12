@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Workspace domain logic: Loro Tree ops, alias derivation, link extraction, WorkspaceIndex derivation, and LoroDoc-to-model bridge.",
+  "description": "Workspace domain logic: Loro Tree ops, alias derivation, and LoroDoc-to-model bridge.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -21,7 +21,6 @@
   "dependencies": {
     "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-codec": "workspace:*",
-    "@kamiazya/whiteboard-canvas-ports": "workspace:*",
     "loro-crdt": "catalog:",
     "zod": "catalog:"
   },

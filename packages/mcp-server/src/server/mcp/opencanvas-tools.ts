@@ -23,10 +23,9 @@ import { registerToolWithAnnotations, structuredJsonResult } from './tool-suppor
 
 // server-core is a shared layer and cannot depend on this composition
 // root's pino-backed logger, so it exposes an injectable sink instead
-// (see server-core/src/log.ts). Without this call, every fail-open log
-// site in server-core (e.g. reindexWorkspace's derivation/applyRows error
-// handling) silently drops its record — the failure becomes invisible to
-// operators even though the code path itself never throws.
+// (see server-core/src/log.ts). Without this call, any fail-open log site
+// in server-core silently drops its record — the failure becomes invisible
+// to operators even though the code path itself never throws.
 // Levels are named identically (RFC 5424) on both sides, so this is a
 // straight pass-through rather than a mapping. mcp-server's pino-backed
 // logger takes the structured payload before the message (pino's own

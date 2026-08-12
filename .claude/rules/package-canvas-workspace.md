@@ -3,7 +3,7 @@ paths:
   - "packages/canvas-workspace/**"
 ---
 
-# canvas-workspace — tree ops, alias derivation, index derivation, LoroDoc bridge
+# canvas-workspace — tree ops, alias derivation, LoroDoc bridge
 
 ## What belongs here
 
@@ -13,11 +13,6 @@ paths:
   path (`/w/{ws}/c/{aliasPath}`).
 - Same-name segment resolution within a parent (sibling uniqueness
   invariant enforced at mutation time).
-- Link extraction from Markdown bodies via canvas-codec's
-  `resolveReferences` — produces backlink rows for WorkspaceIndex.
-- WorkspaceIndex row derivation: facet index, canvas list, alias
-  resolution, backlink, alias history — pure functions that turn tree +
-  canvas docs into index rows matching the port DTOs.
 - LoroDoc⇔model bridge: the CRDT merge–aware conversion deferred from
   canvas-codec.
 
@@ -72,8 +67,6 @@ paths:
   sibling conflict detection, and CRDT merge behavior.
 - `createAliasResolver` integration tests: confirms the bridge works
   end-to-end with `resolveReferences` from canvas-codec (wikiLink + embed).
-- `extractBacklinks` tests: walks all mdast node types (paragraph, heading,
-  blockquote, list, table, nested phrasing) with dedup assertion.
 - `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types
   (text/file/link/group), edges, x-whiteboard extensions, overwrite/delete
   semantics, and CRDT merge of independent node additions.

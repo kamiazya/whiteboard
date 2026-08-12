@@ -8,7 +8,6 @@ import { readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
-import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
@@ -40,7 +39,7 @@ export function createFacetSetTool(deps: ServerDeps) {
     name: 'facet_set' as const,
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
-    execute: withReindex(deps, async (input: FacetSetInput): Promise<FacetSetOutput> => {
+    execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
@@ -50,6 +49,6 @@ export function createFacetSetTool(deps: ServerDeps) {
       await saveDocSnapshot(deps, input.canvasId, doc)
 
       return { canvasId: input.canvasId, facets: mergedFacets }
-    }),
+    },
   }
 }

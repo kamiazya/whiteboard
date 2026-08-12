@@ -22,7 +22,7 @@ const NODE_WITH_EXTENSION = {
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never }
 }
 
 describe('canvas_export_json_canvas tool', () => {

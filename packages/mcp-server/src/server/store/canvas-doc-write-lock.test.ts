@@ -78,15 +78,6 @@ async function makeDeps() {
   })
   return {
     canvasDocStore,
-    workspaceIndex: {
-      // Only the reindex hook touches this, and it is a no-op for this test.
-      applyRows: async () => {},
-      listCanvases: async () => ({ canvases: [] }),
-      resolveAlias: async () => null,
-      listBacklinks: async () => ({ backlinks: [] }),
-      listFacetIndex: async () => ({ rows: [] }),
-      listAliasHistory: async () => ({ rows: [] }),
-    } as never,
     blobStore: {} as never,
   }
 }
@@ -237,9 +228,8 @@ describe('registered MCP handlers', () => {
       ),
     ])
 
-    // The exact event count is an implementation detail (reindex adds its
-    // own traffic); the property is that the second call never reads a base
-    // the first had not yet written.
+    // The exact event count is an implementation detail; the property is
+    // that the second call never reads a base the first had not yet written.
     const firstSave = events.indexOf('save')
     const secondLoad = events.indexOf('load', events.indexOf('load') + 1)
     expect(firstSave, `store traffic was ${events.join(',')}`).toBeGreaterThan(-1)

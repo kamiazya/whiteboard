@@ -10,7 +10,6 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { PatchValidationError } from './errors.js'
-import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const tidyCanvasInputSchema = z
@@ -39,7 +38,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
     name: 'tidy_canvas' as const,
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
-    execute: withReindex(deps, async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
+    execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
@@ -66,6 +65,6 @@ export function createTidyCanvasTool(deps: ServerDeps) {
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
 
       return { canvasId: input.canvasId, moved: [...moved] }
-    }),
+    },
   }
 }

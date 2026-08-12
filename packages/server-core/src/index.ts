@@ -1,6 +1,6 @@
 export { createServer } from './create-server.js'
-export type { LogSink } from './log.js'
-export { setLogSink } from './log.js'
+export type { Logger, LogSink } from './log.js'
+export { getLogger, setLogSink } from './log.js'
 export type { ServerDeps } from './server-deps.js'
 export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
 export {
@@ -94,13 +94,6 @@ export {
   nodePatchInputSchema,
   nodePatchOutputSchema,
 } from './tools/node-patch.js'
-export { reindexWorkspace } from './tools/reindex.js'
-export type { ReindexInput, ReindexOutput } from './tools/reindex-tool.js'
-export {
-  createReindexTool,
-  reindexInputSchema,
-  reindexOutputSchema,
-} from './tools/reindex-tool.js'
 export type { TidyCanvasInput, TidyCanvasOutput } from './tools/tidy-canvas.js'
 export {
   createTidyCanvasTool,

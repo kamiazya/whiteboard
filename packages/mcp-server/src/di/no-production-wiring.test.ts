@@ -62,10 +62,6 @@ const FORBIDDEN_MANUAL_STORE_IMPORTS_IN_BOOT_PATH: readonly { name: string; patt
     name: 'direct import of LibsqlCanvasDocStore',
     pattern: /from\s+['"].*libsql-canvas-doc-store/,
   },
-  {
-    name: 'direct import of LibsqlWorkspaceIndex',
-    pattern: /from\s+['"].*libsql-workspace-index/,
-  },
   { name: 'direct import of FsBlobStore', pattern: /from\s+['"].*fs-blob-store/ },
 ]
 
