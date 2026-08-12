@@ -208,7 +208,7 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
   return doc
 }
 
-export function migrateLegacyListToMovable(doc: LoroDoc): boolean {
+function migrateLegacyListToMovable(doc: LoroDoc): boolean {
   const list = doc.getList('elements')
   const movable = doc.getMovableList('elements')
   if (list.length === 0) return false

@@ -1,5 +1,7 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { imageRefId, isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { purgeResultSchema } from '../../shared/api-contracts/canvas.js'
@@ -38,9 +40,22 @@ function workspaceFilesDir(workspaceId: string): string {
   return assertPathWithinDir(dir, getDataDir(), 'files dir')
 }
 
-// Walk a single doc state and collect fileIds for image elements whose
-// `isDeleted` flag is falsy.
+// Walk a single doc state and collect fileIds referenced by it. Two passes,
+// both additive into the same sink:
+//
+// 1. The CURRENT model — every production doc stores spatial content in the
+//    nodes/edges maps (see readSpatialCanvas), so a 'file' node whose `file`
+//    value carries the 'asset:' upload-reference prefix is a live reference.
+// 2. The legacy 'elements' movable list — retired, but a pre-migration doc
+//    that was never resaved through the current model still stores its
+//    images there, so this pass stays as a fallback rather than a rewrite.
 function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
+  const { nodes } = readSpatialCanvas(doc)
+  for (const node of nodes) {
+    if (node.type !== 'file') continue
+    if (isImageRef(node.file)) sink.add(imageRefId(node.file))
+  }
+
   const list = doc.getMovableList('elements')
   for (let i = 0; i < list.length; i++) {
     const el = list.get(i)
