@@ -486,6 +486,27 @@ describe('endpoint-body-ink', () => {
     expect(selfPenalty(path, [], [], [a, b])[4]).toBe(60 * COST_QUANTUM)
   })
 
+  it('self term: two DISTINCT but numerically-equal endpoint rects (e.g. a self-loop, or two fully-overlapping same-size nodes) are NOT mutually excluded — this is the exact worst-case overlap the rule prices', () => {
+    // Two separate rect objects with identical values — not the same
+    // reference — so the `other !== r` identity check does not itself
+    // prevent the pair from being compared, exactly as `endpointRectsFor`
+    // (spatial-edges.ts) builds two independent rect objects for a
+    // self-loop edge (edge.fromNode === edge.toNode) or two same-size
+    // fully-overlapping nodes.
+    const rectA: Rect = { x: 0, y: 0, w: 50, h: 50 }
+    const rectB: Rect = { x: 0, y: 0, w: 50, h: 50 }
+    const path = [
+      { x: -10, y: 25 },
+      { x: 60, y: 25 },
+    ]
+    // fullyContains(rectA, rectB) is true in both directions under its
+    // inclusive comparisons, so a naive symmetric exclusion filter would
+    // drop BOTH rects and price 0. Neither PROPERLY contains the other, so
+    // both stay in the ink-priced set (chord clipped to [0,50], summed once
+    // per rect since inkAlongRects iterates the rect list).
+    expect(selfPenalty(path, [], [], [rectA, rectB])[4]).toBe(2 * 50 * COST_QUANTUM)
+  })
+
   it('self term: zero-width and zero-height endpoint rects contribute 0 (unsatisfiable strict-interior test)', () => {
     const flatH: Rect = { x: 0, y: 0, w: 100, h: 0 }
     const flatW: Rect = { x: 0, y: 0, w: 0, h: 100 }

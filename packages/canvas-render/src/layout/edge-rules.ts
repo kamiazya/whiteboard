@@ -618,7 +618,14 @@ const borderTracing: PenaltyRule = {
  * group frame around its member) is skipped — every route out of the
  * contained node crosses the container, so pricing it would make the edge
  * permanently 'repairable' with no better option, and the optimizer would
- * churn on it every layout.
+ * churn on it every layout. The exclusion test is deliberately ASYMMETRIC
+ * (`fullyContains(r, other) && !fullyContains(other, r)`), not a bare
+ * `fullyContains(r, other)`: two numerically-equal rects (a self-loop, or
+ * two same-size fully-overlapping nodes — the exact worst-case overlap this
+ * rule exists to price) satisfy `fullyContains` in BOTH directions under its
+ * inclusive `<=`/`>=` comparisons, so the symmetric test excluded BOTH rects
+ * and silently zeroed the penalty for that case. Same asymmetric idiom as
+ * `tidy.ts`'s `isRoot` group-containment tie-break.
  *
  * Tier 4, BELOW border-tracing, for the same trial-path-artifact reason
  * border-tracing itself was demoted off tier 1 (see its own comment). Ranked
@@ -636,7 +643,10 @@ const endpointBodyInk: PenaltyRule = {
     inkAlongRects(
       path,
       endpointRects.filter(
-        (r) => !endpointRects.some((other) => other !== r && fullyContains(r, other)),
+        (r) =>
+          !endpointRects.some(
+            (other) => other !== r && fullyContains(r, other) && !fullyContains(other, r),
+          ),
       ),
       (fixed, near, far) => near < fixed && fixed < far,
     ),
