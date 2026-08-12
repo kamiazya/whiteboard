@@ -6,6 +6,7 @@
  * verification and is refused (fail closed; the pin is kept so the
  * key-changed warning has its evidence, per the approved design).
  */
+import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { z } from 'zod'
 
 const PINS_KEY = 'whiteboard:daemon-identity-pins'
@@ -181,10 +182,15 @@ export async function challengeDaemonIdentity({
       body: JSON.stringify({ nonce }),
     })
     if (!response.ok) return 'failed'
-    const body = (await response.json()) as { publicKey?: unknown; signature?: unknown }
+    // safeParse against the shared wire contract, not a hand-cast: an
+    // algorithm change (alg !== 'Ed25519') or any other drift from the
+    // daemon's actual response shape must fail closed rather than silently
+    // dropping the unrecognized field and verifying anyway.
+    const parsed = runtimeVerifyResponseSchema.safeParse(await response.json())
+    if (!parsed.success) return 'failed'
+    const body = parsed.data
     const verified =
       body.publicKey === pinned.publicKey &&
-      typeof body.signature === 'string' &&
       (await verifyIdentitySignature({
         publicKey: pinned.publicKey,
         parts: ['wb-verify-v1', nonce, hostedOrigin],

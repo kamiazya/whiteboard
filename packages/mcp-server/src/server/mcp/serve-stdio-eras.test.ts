@@ -38,7 +38,7 @@ it('serveStdio serves a legacy (2025) client from the createMcpServer factory', 
   try {
     await client.connect(clientSide)
     const tools = await client.listTools()
-    expect(tools.tools.some((tool) => tool.name === 'wb_canvas_create')).toBe(true)
+    expect(tools.tools.some((tool) => tool.name === 'wb_document_create')).toBe(true)
   } finally {
     await client.close().catch(() => {})
     await handle.close().catch(() => {})
@@ -56,7 +56,7 @@ it('serveStdio serves a modern-pinned (2026-07-28) client from the same factory'
     await client.connect(clientSide)
     expect(client.getProtocolEra()).toBe('modern')
     const tools = await client.listTools()
-    expect(tools.tools.some((tool) => tool.name === 'wb_canvas_create')).toBe(true)
+    expect(tools.tools.some((tool) => tool.name === 'wb_document_create')).toBe(true)
   } finally {
     await client.close().catch(() => {})
     await handle.close().catch(() => {})

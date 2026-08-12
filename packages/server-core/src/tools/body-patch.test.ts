@@ -34,7 +34,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('body_patch tool', () => {
+describe('wb_body_patch tool', () => {
   test('mode "full" replaces the entire text body', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore, {

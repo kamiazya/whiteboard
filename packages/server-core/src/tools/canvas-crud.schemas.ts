@@ -78,3 +78,17 @@ export const deleteCanvasOutputSchema = z
     deleted: z.literal(true),
   })
   .strict()
+
+/**
+ * Tool descriptions live beside the schemas they describe so metadata and
+ * validation cannot drift. These four register with literal names rather
+ * than through a tool object, so they have nowhere else to live.
+ */
+export const WB_DOCUMENT_CREATE_DESCRIPTION =
+  'Create an empty document in a workspace and place it in the workspace tree.'
+export const WB_DOCUMENT_LIST_DESCRIPTION =
+  'List the documents in a workspace with their placement. An unknown workspace is an error rather than an empty list, so a mistyped workspaceId cannot be mistaken for a genuinely empty workspace.'
+export const WB_DOCUMENT_RESOLVE_DESCRIPTION =
+  'Resolve a document id to its placement — its segment and derived alias. Returns placement only, never content.'
+export const WB_DOCUMENT_DELETE_DESCRIPTION =
+  'Delete a document and remove it from the workspace tree.'

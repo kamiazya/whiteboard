@@ -25,6 +25,10 @@ export {
   getCanvasOutputSchema,
   listCanvasesInputSchema,
   listCanvasesOutputSchema,
+  WB_DOCUMENT_CREATE_DESCRIPTION,
+  WB_DOCUMENT_DELETE_DESCRIPTION,
+  WB_DOCUMENT_LIST_DESCRIPTION,
+  WB_DOCUMENT_RESOLVE_DESCRIPTION,
 } from './tools/canvas-crud.schemas.js'
 export type { CanvasDigestInput } from './tools/canvas-digest.js'
 export { canvasDigestInputSchema, createCanvasDigestTool } from './tools/canvas-digest.js'

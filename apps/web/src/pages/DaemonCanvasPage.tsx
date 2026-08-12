@@ -4,7 +4,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { AppShell } from '../components/AppShell.js'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
@@ -21,10 +21,8 @@ import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
-import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { settingsPath } from '../lib/app-routes.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
@@ -89,7 +87,6 @@ export function DaemonCanvasPage({
   browserLocalStore,
   onNavigateBack,
 }: DaemonCanvasPageProps) {
-  const navigate = useNavigate()
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
@@ -147,11 +144,6 @@ export function DaemonCanvasPage({
       : null
 
   const [authError, setAuthError] = useState(false)
-  // An auth error means the daemon connection needs the user's action
-  // (re-pair lives under Settings -> Connections), so it counts as
-  // disconnected for the gear's attention dot. Transient reconnects don't:
-  // they need no user action and would only make the dot flicker.
-  const settingsNudge = useSettingsNudge(!authError)
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
@@ -326,7 +318,7 @@ export function DaemonCanvasPage({
       // and other peers' saves), so this button must dispatch the same
       // identity-scoped event useCanvasSync fires on a broadcast — otherwise
       // HeaderSaveDot never learns this save happened and stays dirty.
-      dispatchIdentityEvent('excalidraw:version_saved', canvas ?? undefined)
+      dispatchIdentityEvent('excalidraw:wb_version_saved', canvas ?? undefined)
     } catch {
       setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
     } finally {
@@ -443,6 +435,11 @@ export function DaemonCanvasPage({
       <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
         <div className="min-w-0">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
+          {/* An auth error means the daemon needs the user's action (re-pair
+              lives under Settings -> Connections), so it counts as
+              disconnected for the shell's attention dot; transient
+              reconnects don't. */}
+          <AppShell daemonConnected={!authError} />
           {controller.switchError && (
             <div
               role="alert"
@@ -462,8 +459,6 @@ export function DaemonCanvasPage({
           )}
           {canvas && (
             <WorkspaceTopBar
-              onNavigateHome={() => navigate('/')}
-              settingsNudge={settingsNudge}
               statusSlot={connectionStatus}
               workspaceId={canvas.workspaceId}
               slug={canvas.slug}
@@ -481,11 +476,6 @@ export function DaemonCanvasPage({
               // user can trigger by hand. Without this the save flow skips
               // the upload entirely and latest-thumbnail stays 204 forever.
               getThumbnailBlob={getThumbnailBlob}
-              onOpenSettings={() =>
-                navigate(settingsPath(), {
-                  state: { from: `${window.location.pathname}${window.location.search}` },
-                })
-              }
               workspaces={
                 capabilities.workspaces
                   ? controller.workspaces.map((w) => w.workspaceId)

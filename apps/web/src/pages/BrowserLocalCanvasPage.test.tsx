@@ -595,11 +595,12 @@ describe('BrowserLocalCanvasPage', () => {
     })
     await screen.findByRole('button', { name: /^Workspace:/i })
 
-    fireEvent.click(screen.getByTestId('settings-trigger'))
+    const before = router.state.location.pathname
+    fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
     // The entry point rides along so the settings Back button can return
     // here deterministically instead of popping history.
-    expect((router.state.location.state as { from?: string }).from).toBe('/')
+    expect((router.state.location.state as { from?: string }).from).toBe(before)
   })
 
   it('always lights the settings nudge dot — a browser-local page has no daemon', async () => {
@@ -629,7 +630,7 @@ describe('BrowserLocalCanvasPage', () => {
     })
     await screen.findByRole('button', { name: /^Workspace:/i })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }))
     expect(router.state.location.pathname).toBe('/')
   })
 

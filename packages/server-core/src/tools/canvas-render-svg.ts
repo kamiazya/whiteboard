@@ -24,7 +24,9 @@ export type CanvasRenderSvgOutput = z.infer<typeof canvasRenderSvgOutputSchema>
 
 export function createCanvasRenderSvgTool(deps: ServerDeps) {
   return {
-    name: 'canvas_render_svg' as const,
+    name: 'wb_scene_render' as const,
+    description:
+      'Render the laid-out scene as SVG. A one-way projection — the SVG cannot be parsed back into a document.',
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {

@@ -4,7 +4,7 @@
 //
 // Purpose:
 // Ensure the Codex subprocess can discover the repo-local Excalidraw MCP and
-// complete canvas_create -> annotate -> version_save. The final response is
+// complete wb_document_create -> wb_node_patch -> wb_version_save. The final response is
 // constrained by JSON Schema, and the resulting files under WHITEBOARD_DATA_DIR
 // are also verified.
 //
@@ -68,7 +68,7 @@ writeFileSync(schemaPath, JSON.stringify(schema))
 
 const prompt = [
   'Use the whiteboard MCP server.',
-  'Create a canvas with slug "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call version_save with label "codex-strict-smoke" for that canvas.',
+  'Create a canvas with slug "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call wb_version_save with label "codex-strict-smoke" for that canvas.',
   'Return a JSON object with slug, canvasId, and versionId only.',
 ].join(' ')
 

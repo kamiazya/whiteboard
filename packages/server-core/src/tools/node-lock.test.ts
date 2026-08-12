@@ -48,7 +48,7 @@ async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySe
   return readNodeLocks(doc)
 }
 
-describe('node_lock tool', () => {
+describe('wb_node_lock tool', () => {
   test('locks a node and persists it, then unlocks it again', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore)

@@ -554,9 +554,9 @@ describe('useCanvasSync', () => {
       expect(docChanged.calls[docChanged.calls.length - 1].detail).toEqual(identity)
     })
 
-    it('dispatches version_saved with identity detail when a version_created broadcast arrives', () => {
+    it('dispatches wb_version_saved with identity detail when a version_created broadcast arrives', () => {
       const backend = makeFakeBackend()
-      const versionSaved = listenFor('excalidraw:version_saved')
+      const versionSaved = listenFor('excalidraw:wb_version_saved')
       renderHook(() => useCanvasSync(backend, { identity }))
 
       act(() => {
@@ -570,7 +570,7 @@ describe('useCanvasSync', () => {
     it('does not dispatch any identity events when identity is absent', async () => {
       const backend = makeFakeBackend()
       const docChanged = listenFor('excalidraw:doc_changed')
-      const versionSaved = listenFor('excalidraw:version_saved')
+      const versionSaved = listenFor('excalidraw:wb_version_saved')
       renderHook(() => useCanvasSync(backend))
 
       await hydrate(backend)

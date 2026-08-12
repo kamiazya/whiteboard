@@ -55,7 +55,8 @@ export type NodePatchOutput = z.infer<typeof nodePatchOutputSchema>
 
 export function createNodePatchTool(deps: ServerDeps) {
   return {
-    name: 'node_patch' as const,
+    name: 'wb_node_patch' as const,
+    description: 'Create or update a node on the spatial canvas.',
     inputSchema: nodePatchInputSchema,
     outputSchema: nodePatchOutputSchema,
     execute: async (input: NodePatchInput): Promise<NodePatchOutput> => {

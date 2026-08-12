@@ -22,7 +22,7 @@ export class NodeNotFoundError extends Error {
 /**
  * Thrown when a mutation targets a node the user has locked. The lock
  * binds agents too, not just the pointer (user decision 2026-08-09) —
- * `node_lock` is the one tool that still accepts a locked node, so an
+ * `wb_node_lock` is the one tool that still accepts a locked node, so an
  * agent can lift its own mistake without a human at the keyboard.
  */
 export class NodeLockedError extends Error {
@@ -30,18 +30,18 @@ export class NodeLockedError extends Error {
     public readonly canvasId: string,
     public readonly nodeId: string,
   ) {
-    super(`node is locked: ${nodeId} in canvas ${canvasId} (unlock it with node_lock)`)
+    super(`node is locked: ${nodeId} in canvas ${canvasId} (unlock it with wb_node_lock)`)
     this.name = 'NodeLockedError'
   }
 }
 
-/** Edge counterpart to `NodeLockedError` — see `edge_lock`. */
+/** Edge counterpart to `NodeLockedError` — see `wb_edge_lock`. */
 export class EdgeLockedError extends Error {
   constructor(
     public readonly canvasId: string,
     public readonly edgeId: string,
   ) {
-    super(`edge is locked: ${edgeId} in canvas ${canvasId} (unlock it with edge_lock)`)
+    super(`edge is locked: ${edgeId} in canvas ${canvasId} (unlock it with wb_edge_lock)`)
     this.name = 'EdgeLockedError'
   }
 }

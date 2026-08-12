@@ -38,8 +38,17 @@ Tailwind palette colors in chrome.
   Use bare `border`; add `border-<color>` only when the border itself
   carries state.
 - **One accent per view** (baseline-ui): destructive red on at most the one
-  destructive control; the connection chip is the only stateful color in a
-  header.
+  destructive control. Stateful color in a header is limited to a closed,
+  named set: the connection chip, the save-state dot (amber grammar), and
+  the AppShell gear's attention dot (brand blue, actionable-todo only).
+  Anything else stateful in chrome needs this list amended first.
+- **The AppShell owns brand and settings.** Every page mounts `AppShell`
+  (brand mark = home, the ALPHA honesty chip, the settings gear + attention
+  dot) and never renders its own brand or settings chrome. Context and
+  tools stay in the page's own surface, always visible — collapsing them
+  into menus is a narrow-viewport last resort, not a desktop pattern.
+  Where BRAND.md (identity, motion) and this file (app chrome) disagree
+  about chrome, this file wins and the exception gets documented here.
 - **Buttons**: use `components/ui/button.tsx` variants
   (`default`/`outline`/`ghost`/`destructive`, sizes `sm`/`icon`) instead of
   hand-rolled `rounded-md border px-*` buttons. Icon-only buttons MUST have

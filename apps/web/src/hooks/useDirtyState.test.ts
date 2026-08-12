@@ -8,7 +8,7 @@ function dispatchDocChanged(workspaceId: string, slug: string): void {
 }
 function dispatchVersionSaved(workspaceId: string, slug: string): void {
   window.dispatchEvent(
-    new CustomEvent('excalidraw:version_saved', { detail: { workspaceId, slug } }),
+    new CustomEvent('excalidraw:wb_version_saved', { detail: { workspaceId, slug } }),
   )
 }
 
@@ -22,7 +22,7 @@ describe('useDirtyState', () => {
     expect(result.current.isDirty).toBe(false)
   })
 
-  it('marks dirty on doc_changed and clean on version_saved', () => {
+  it('marks dirty on doc_changed and clean on wb_version_saved', () => {
     const { result } = renderHook(() => useDirtyState('s1', 'c1'))
     act(() => dispatchDocChanged('s1', 'c1'))
     expect(result.current.isDirty).toBe(true)
@@ -96,7 +96,7 @@ describe('useDirtyState', () => {
     expect(result.current.isDirty).toBe(false)
   })
 
-  it('version_saved ignores events for a different canvas', () => {
+  it('wb_version_saved ignores events for a different canvas', () => {
     const { result } = renderHook(() => useDirtyState('s1', 'c1'))
     act(() => dispatchDocChanged('s1', 'c1'))
     expect(result.current.isDirty).toBe(true)

@@ -7,7 +7,7 @@
 // without relying on prompts or conversation history from the parent client.
 //
 // Expected behavior:
-// Call canvas_create -> annotate -> version_save as one flow and succeed if
+// Call wb_document_create -> wb_node_patch -> wb_version_save as one flow and succeed if
 // the last line prints a versionId.
 //
 // Notes:
@@ -42,7 +42,7 @@ const mcpConfigPath = join(tmpDataDir, 'mcp.json')
 
 const mcpConfig = {
   mcpServers: {
-    excalidraw: {
+    whiteboard: {
       type: 'stdio',
       command: 'npx',
       args: ['tsx', join(root, 'src/server/mcp/index.ts')],
@@ -53,11 +53,11 @@ const mcpConfig = {
 writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig))
 
 const prompt = [
-  'Use the excalidraw MCP server.',
+  'Use the whiteboard MCP server.',
   'Do exactly these three steps in order, no extra work:',
-  '1. call canvas_create with slug="claude-smoke".',
-  '2. call annotate with type=rectangle at {x:10,y:10}, width=40, height=20 on the canvas id returned above.',
-  '3. call version_save for that canvas id with label "claude-smoke".',
+  '1. call wb_document_create with slug="claude-smoke".',
+  '2. call wb_node_patch with type=rectangle at {x:10,y:10}, width=40, height=20 on the document id returned above.',
+  '3. call wb_version_save for that canvas id with label "claude-smoke".',
   'Return only the versionId on the last line, nothing else.',
 ].join('\n')
 
@@ -68,7 +68,7 @@ const args = [
   mcpConfigPath,
   '--strict-mcp-config',
   '--allowedTools',
-  'mcp__excalidraw__canvas_create mcp__excalidraw__annotate mcp__excalidraw__version_save',
+  'mcp__whiteboard__wb_document_create mcp__whiteboard__wb_node_patch mcp__whiteboard__wb_version_save',
   '--max-turns',
   '6',
   '--output-format',

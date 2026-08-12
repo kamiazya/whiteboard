@@ -23,7 +23,7 @@ import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
 import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
-import HomeMark from '../brand/home-mark.svg?react'
+import { AppShell } from '../components/AppShell.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 
@@ -383,19 +383,13 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
 
   return (
     <div className="flex h-dvh flex-col overflow-y-auto">
+      <AppShell daemonConnected={daemon !== undefined} />
       {/* Mobile (<sm): section list at /settings, full-width detail at
           /settings/<section>. */}
       <div className="sm:hidden" data-testid="settings-mobile">
         {routeSection === null ? (
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
-              <Link
-                to="/"
-                aria-label="Home"
-                className="rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
-              >
-                <HomeMark className="h-4 w-6" />
-              </Link>
               <button
                 type="button"
                 onClick={handleBackToApp}
@@ -441,13 +435,6 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
       {/* Desktop (sm and up): sidebar + content pane. */}
       <div className="hidden h-full sm:flex sm:justify-center" data-testid="settings-desktop">
         <nav className="w-56 shrink-0 border-r p-4">
-          <Link
-            to="/"
-            aria-label="Home"
-            className="mb-2 inline-block rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
-          >
-            <HomeMark className="h-[18px] w-7" />
-          </Link>
           <button
             type="button"
             onClick={handleBackToApp}

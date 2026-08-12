@@ -654,6 +654,11 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
+    // The AppShell sits above the canvas gate, so Settings and Home stay
+    // reachable on the empty-workspace view — the recovery path when the
+    // canvas-gated chrome is gone.
+    expect(screen.getByTestId('shell-settings')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
   })
 
   it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
@@ -1876,7 +1881,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      fireEvent.click(screen.getByTestId('settings-trigger'))
+      fireEvent.click(screen.getByTestId('shell-settings'))
       expect(router.state.location.pathname).toBe('/settings')
       // The entry point rides along so the settings Back button can return
       // here deterministically instead of popping history.
@@ -1903,7 +1908,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('link', { name: 'Home' }))
       expect(router.state.location.pathname).toBe('/')
     })
 
@@ -1969,7 +1974,7 @@ describe('DaemonCanvasPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/version_saved events', async () => {
+    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)

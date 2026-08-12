@@ -7,13 +7,13 @@ import { EdgeNotFoundError } from './errors.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
- * Edge counterpart to `node_lock`. An edge is its own object here, so its
+ * Edge counterpart to `wb_node_lock`. An edge is its own object here, so its
  * lock is its own entry rather than something derived from whether its
  * endpoints happen to be locked — locking a hub node must not silently
  * freeze every line touching it.
  *
  * Lock/unlock is the ONE mutation a locked edge still accepts, matching
- * `node_lock`: a lock an agent cannot lift would need a human at the
+ * `wb_node_lock`: a lock an agent cannot lift would need a human at the
  * keyboard to undo an agent's own mistake.
  */
 export const edgeLockInputSchema = z
@@ -39,7 +39,8 @@ export type EdgeLockOutput = z.infer<typeof edgeLockOutputSchema>
 
 export function createEdgeLockTool(deps: ServerDeps) {
   return {
-    name: 'edge_lock' as const,
+    name: 'wb_edge_lock' as const,
+    description: 'Lock or unlock an edge so other clients cannot move or edit it.',
     inputSchema: edgeLockInputSchema,
     outputSchema: edgeLockOutputSchema,
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {

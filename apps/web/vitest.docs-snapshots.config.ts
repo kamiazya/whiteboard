@@ -19,6 +19,7 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
+import { mcpSourceAlias } from './mcp-source-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Absolute path so test files can ship a single string literal to
@@ -41,28 +42,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      ...mcpSourceAlias,
+      // '@' matches vitest.config.ts / tsconfig's app-source root.
       '@': resolve(__dirname, 'src'),
+      // '@docs-assets' is unique to this config: only the snapshot fixtures
+      // that generate docs/assets/ need to read files under docs/assets/.
       '@docs-assets': DOCS_ASSETS_DIR,
-      // Mirror vitest.config.ts's full workspace-subpath alias set: today's
-      // snapshot components only reach api-client/api-contracts, but any
-      // future snapshot pulling the other subpaths would otherwise resolve
-      // to built dist output (stale or absent) instead of source.
-      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/daemon-backend': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/daemon-backend.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-client': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-client.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/api-contracts': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/api-contracts/index.ts',
-      ),
     },
   },
   plugins: [tailwindcss(), react(), svgr(), wasm(), topLevelAwait()],

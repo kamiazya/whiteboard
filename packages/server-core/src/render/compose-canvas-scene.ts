@@ -133,7 +133,7 @@ export function composeCanvasScene(canvas: SpatialCanvas, measure: MeasureText):
 
 /**
  * Union bounding box over every top-level node's own geometry — the `<svg>`
- * root's width/height for `wb_canvas_render_svg`. An empty canvas has no
+ * root's width/height for `wb_scene_render`. An empty canvas has no
  * geometry to union, so it defaults to a zero-sized box rather than an
  * arbitrary sentinel.
  */

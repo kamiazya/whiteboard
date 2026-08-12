@@ -37,7 +37,8 @@ export type NodeLockOutput = z.infer<typeof nodeLockOutputSchema>
 
 export function createNodeLockTool(deps: ServerDeps) {
   return {
-    name: 'node_lock' as const,
+    name: 'wb_node_lock' as const,
+    description: 'Lock or unlock a node so other clients cannot move or edit it.',
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {

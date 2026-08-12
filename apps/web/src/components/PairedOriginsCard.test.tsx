@@ -123,4 +123,41 @@ describe('PairedOriginsCard', () => {
     renderCard(async () => jsonResponse({ error: 'boom' }, 500))
     await screen.findByText(/could not load paired web apps/i)
   })
+
+  it('renders a quiet error state when the grants body drifts from the shared schema', async () => {
+    renderCard(async (url) => {
+      if (String(url).endsWith('/api/runtime/ping')) return jsonResponse({ ok: false })
+      // Missing createdAt: a 200 that still fails listGrantsResponseSchema.
+      return jsonResponse({ grants: [{ grantId: 'g1', origin: 'https://a.example' }] })
+    })
+    await screen.findByText(/could not load paired web apps/i)
+  })
+
+  it('shows the daemon identity fingerprint for a conformant ping response', async () => {
+    renderCard(async (url) => {
+      if (String(url).endsWith('/api/runtime/ping')) {
+        return jsonResponse({
+          ok: true,
+          instanceId: 'inst-1',
+          identity: { alg: 'Ed25519', publicKey: 'a'.repeat(43) },
+        })
+      }
+      return jsonResponse({ grants: [] })
+    })
+    await waitFor(() => expect(screen.getByTestId('daemon-fingerprint')).not.toBeNull())
+  })
+
+  it('never renders a fingerprint from a ping body that fails the shared schema', async () => {
+    renderCard(async (url) => {
+      if (String(url).endsWith('/api/runtime/ping')) {
+        // Missing instanceId: fails daemonPingResponseSchema even though it
+        // carries an identity.publicKey a naive hand-cast would still read.
+        return jsonResponse({ ok: true, identity: { alg: 'Ed25519', publicKey: 'a'.repeat(43) } })
+      }
+      return jsonResponse({ grants: [] })
+    })
+    await screen.findByText(/no web apps are paired/i)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('daemon-fingerprint')).toBeNull()
+  })
 })

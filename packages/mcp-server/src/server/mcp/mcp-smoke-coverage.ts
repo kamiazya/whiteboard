@@ -26,55 +26,55 @@
 
 // Authoritative list — keep in sync with registerOpenCanvasTools calls.
 export const ALL_REGISTERED_TOOLS = [
-  'body_patch',
-  'canvas_digest',
+  'wb_body_patch',
+  'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
-  'canvas_import_okf',
-  'canvas_render_svg',
-  'edge_lock',
-  'edge_patch',
-  'facet_set',
-  'node_lock',
-  'node_patch',
-  'tidy_canvas',
-  'version_list',
-  'version_restore',
-  'version_save',
-  'wb_canvas_create',
-  'wb_canvas_delete',
-  'wb_canvas_get',
-  'wb_canvas_list',
+  'wb_document_set',
+  'wb_scene_render',
+  'wb_edge_lock',
+  'wb_edge_patch',
+  'wb_facet_set',
+  'wb_node_lock',
+  'wb_node_patch',
+  'wb_canvas_tidy',
+  'wb_version_list',
+  'wb_version_restore',
+  'wb_version_save',
+  'wb_document_create',
+  'wb_document_delete',
+  'wb_document_resolve',
+  'wb_document_list',
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
-  'canvas_import_okf',
-  'node_lock',
-  'tidy_canvas',
-  'facet_set',
-  'version_save',
-  'version_restore',
-  'version_list',
-  'wb_canvas_create',
+  'wb_document_set',
+  'wb_node_lock',
+  'wb_canvas_tidy',
+  'wb_facet_set',
+  'wb_version_save',
+  'wb_version_restore',
+  'wb_version_list',
+  'wb_document_create',
 ] as const
 
-export const ERROR_PATH_ONLY_TOOLS = ['edge_lock'] as const
+export const ERROR_PATH_ONLY_TOOLS = ['wb_edge_lock'] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).
 export const UI_LINKED_TOOLS = [] as const
 
 export const UNIT_ONLY_TOOLS = [
-  'body_patch',
-  'canvas_digest',
+  'wb_body_patch',
+  'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
-  'canvas_render_svg',
-  'edge_patch',
-  'node_patch',
-  'wb_canvas_delete',
-  'wb_canvas_get',
-  'wb_canvas_list',
+  'wb_scene_render',
+  'wb_edge_patch',
+  'wb_node_patch',
+  'wb_document_delete',
+  'wb_document_resolve',
+  'wb_document_list',
 ] as const
 
 export type DeferredTool = {

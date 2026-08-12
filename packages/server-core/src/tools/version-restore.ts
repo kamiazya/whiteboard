@@ -11,7 +11,10 @@ export const versionRestoreInputSchema = z
   .object({
     workspaceId: workspaceIdSchema.describe('Workspace ID the target canvas belongs to.'),
     canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
-    versionId: z.string().min(1).describe('Version id returned by version_save or version_list.'),
+    versionId: z
+      .string()
+      .min(1)
+      .describe('Version id returned by wb_version_save or wb_version_list.'),
   })
   .strict()
 export type VersionRestoreInput = z.infer<typeof versionRestoreInputSchema>
@@ -38,7 +41,8 @@ export class VersionNotFoundError extends Error {
 
 export function createVersionRestoreTool(deps: ServerDeps) {
   return {
-    name: 'version_restore' as const,
+    name: 'wb_version_restore' as const,
+    description: 'Restore a document to one of its saved versions.',
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {

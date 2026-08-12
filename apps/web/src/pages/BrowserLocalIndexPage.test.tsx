@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
@@ -17,9 +18,14 @@ function renderPage(store: MemoryStore) {
   const onOpenCanvas = vi.fn()
   // React delegates events to the root; Radix portals render into
   // document.body, so the body must be the React root for portal events.
-  const utils = render(<BrowserLocalIndexPage store={store} onOpenCanvas={onOpenCanvas} />, {
-    container: document.body,
-  })
+  const utils = render(
+    <MemoryRouter initialEntries={['/']}>
+      <BrowserLocalIndexPage store={store} onOpenCanvas={onOpenCanvas} />
+    </MemoryRouter>,
+    {
+      container: document.body,
+    },
+  )
   return { onOpenCanvas, ...utils }
 }
 

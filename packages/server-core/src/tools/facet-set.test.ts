@@ -16,7 +16,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('facet_set tool', () => {
+describe('wb_facet_set tool', () => {
   test('sets a facet on a canvas with no prior snapshot', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)

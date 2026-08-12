@@ -60,24 +60,24 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 
 | Tool | Purpose |
 |---|---|
-| `wb_canvas_create` / `wb_canvas_list` / `wb_canvas_get` / `wb_canvas_delete` | Canvas lifecycle (CRUD). |
-| `node_patch` / `edge_patch` / `body_patch` | Patch a canvas's spatial nodes, edges, or a node's Markdown body. |
-| `tidy_canvas` | Normalize a canvas's spatial layout: snap near-aligned nodes into rows/columns on the grid and separate overlaps, optionally restricted to a `scope` of node ids. Locked nodes never move. Idempotent — a second call reports no moves. |
-| `facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
-| `canvas_render_svg` | Render the current canvas to an SVG string from its persisted document — no browser connection required. |
-| `canvas_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. |
-| `canvas_export_okf` / `canvas_import_okf` | Export/import a canvas as an OKF Markdown document (YAML frontmatter + Markdown body). |
+| `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` | Canvas lifecycle (CRUD). |
+| `wb_node_patch` / `wb_edge_patch` / `wb_body_patch` | Patch a canvas's spatial nodes, edges, or a node's Markdown body. |
+| `wb_canvas_tidy` | Normalize a canvas's spatial layout: snap near-aligned nodes into rows/columns on the grid and separate overlaps, optionally restricted to a `scope` of node ids. Locked nodes never move. Idempotent — a second call reports no moves. |
+| `wb_facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
+| `wb_scene_render` | Render the current canvas to an SVG string from its persisted document — no browser connection required. |
+| `wb_scene_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. |
+| `canvas_export_okf` / `wb_document_set` | Export/import a canvas as an OKF Markdown document (YAML frontmatter + Markdown body). |
 | `canvas_export_json_canvas` | Export a canvas as JSON Canvas 1.0 (with the `x-whiteboard` extension). |
-| `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
+| `wb_version_save` / `wb_version_restore` / `wb_version_list` | Save and restore labeled canvas versions. `wb_version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
 
 Every tool above operates on the persisted document and never requires a
-connected browser tab — canvas rendering and export are headless. `wb_canvas_create`
+connected browser tab — canvas rendering and export are headless. `wb_document_create`
 is the only tool that lazily creates a canvas on first touch; the patch/render/export/
 version tools all fail with an explicit error if `canvasId` does not resolve to an
 existing canvas, instead of silently creating a new, empty one. The same discipline
 applies one level up: an unknown `workspaceId` is an error, never an implicit new
 workspace — bootstrapping a genuinely new workspace requires passing
-`createWorkspace: true` to `wb_canvas_create`.
+`createWorkspace: true` to `wb_document_create`.
 
 ## Why Loro
 

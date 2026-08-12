@@ -1,4 +1,4 @@
-import { EllipsisVertical, Maximize2, Minimize2, Settings } from 'lucide-react'
+import { EllipsisVertical, Maximize2, Minimize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,22 +16,14 @@ interface TopBarSecondaryActionsProps {
    */
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
-  onOpenSettings?: () => void
-  /** Blue attention dot on the settings entry points (outstanding setup todo or waiting update). */
-  settingsNudge?: boolean
 }
 
-// Right side: fullscreen and settings — plus the "View options" kebab that
-// reuses the exact same handlers below 400px so the header never wraps.
-//
-// Theme deliberately absent: Settings owns the full three-way choice
-// (system/light/dark), and a header button that cycles the same setting is a
-// second control for one piece of state.
+// Right side: fullscreen — plus the "View options" kebab that reuses the
+// same handler below 400px so the header never wraps. Settings and the brand
+// mark live in the AppShell, never here.
 export function TopBarSecondaryActions({
   onToggleFullscreen,
   isFullscreen = false,
-  onOpenSettings,
-  settingsNudge,
 }: TopBarSecondaryActionsProps) {
   const fullscreenLabel = isFullscreen ? 'Exit fullscreen' : 'Fullscreen'
   const FullscreenIcon = isFullscreen ? Minimize2 : Maximize2
@@ -58,30 +50,6 @@ export function TopBarSecondaryActions({
             <TooltipContent>{fullscreenLabel} (f)</TooltipContent>
           </Tooltip>
         )}
-        {onOpenSettings && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative size-8 p-0"
-                onClick={onOpenSettings}
-                aria-label="Settings"
-                data-testid="settings-trigger"
-              >
-                {settingsNudge && (
-                  <span
-                    data-testid="settings-nudge"
-                    aria-hidden="true"
-                    className="absolute right-0.5 top-0.5 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-                  />
-                )}
-                <Settings className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
-        )}
       </div>
 
       <DropdownMenu>
@@ -92,13 +60,6 @@ export function TopBarSecondaryActions({
             data-testid="topbar-more-actions-trigger"
             className="relative shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground min-[400px]:hidden"
           >
-            {settingsNudge && onOpenSettings && (
-              <span
-                data-testid="settings-nudge-overflow"
-                aria-hidden="true"
-                className="absolute right-0 top-0 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-              />
-            )}
             <EllipsisVertical className="size-4" />
           </button>
         </DropdownMenuTrigger>
@@ -107,19 +68,6 @@ export function TopBarSecondaryActions({
             <DropdownMenuItem onSelect={onToggleFullscreen} className="gap-2">
               <FullscreenIcon className="size-3.5" />
               {fullscreenLabel}
-            </DropdownMenuItem>
-          )}
-          {onOpenSettings && (
-            <DropdownMenuItem onSelect={onOpenSettings} className="gap-2">
-              <Settings className="size-3.5" />
-              Settings
-              {settingsNudge && (
-                <span
-                  data-testid="settings-nudge-item"
-                  aria-hidden="true"
-                  className="ml-auto size-2 rounded-full bg-[#3b6ecc]"
-                />
-              )}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

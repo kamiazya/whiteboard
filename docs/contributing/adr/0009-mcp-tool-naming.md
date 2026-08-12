@@ -114,6 +114,7 @@ the laid-out projection `canvas-render` already calls a **scene**.
    every new format re-litigate how metadata is represented.
 
 4. **A document's format follows from the document, not from a parameter.**
+   *(Not implementable yet — see the note under Consequences.)*
    Because the structures are separate, "read this document as OKF" is only
    meaningful for an OKF document. `wb_document_get` returns the document in
    its own format; `wb_document_set` replaces it in that format.
@@ -153,11 +154,38 @@ the laid-out projection `canvas-render` already calls a **scene**.
 
 ## Consequences
 
-- **Fifteen of nineteen tools change name.** Only the four existing
-  `wb_canvas_*` survive unchanged in spelling, and three of those change
-  meaning (`wb_canvas_create`/`_delete`/`_get`/`_list` become
-  `wb_document_*`). Backward compatibility is explicitly not a goal: at
-  `0.0.19` this ships as a plain rename with no aliases.
+- **Decisions 3 and 4 describe a target, not the shipped state.** Implementing
+  point 5 surfaced that the OpenCanvas document persists no format at all:
+  `canvas-crud.schemas.ts` has no `kind`/`format` field, so document creation
+  records none, and `loro-bridge.ts` stores none. Both exporters consequently
+  work on *any* document — `canvas-export-okf.ts` says so itself, using a
+  placeholder `type: 'canvas'` for "a spatial-only canvas that never went
+  through" the set path. One Loro document still holds `core`, `facets`,
+  `nodes` and `edges` together.
+
+  The format does exist, in the *other* store: `canvasKindSchema` and the
+  daemon's workspace/slug `kind` column. These tools read the OpenCanvas doc
+  store. This is ADR-0007's two-store split again, the same wall ADR-0008
+  point 4 met with alias history.
+
+  So `canvas_export_okf` and `canvas_export_json_canvas` keep their old names
+  until a format is persisted — the tool surface is seventeen renamed plus
+  those two. Inferring the format from content ("does it have nodes?") is
+  specifically rejected: a markdown document gains a node the moment anyone
+  embeds one, and the inference flips silently.
+
+- **Every one of the nineteen tools changes name.** Even the four already
+  prefixed `wb_canvas_*` move, because point 1 makes the container a
+  Document: `wb_canvas_create`/`_delete`/`_get`/`_list` become
+  `wb_document_*`. There is no tool a caller can keep. Backward
+  compatibility is explicitly not a goal: at `0.0.19` this ships as a plain
+  rename with no aliases.
+- **Two of the nineteen are not renames at all.** `canvas_export_okf` and
+  `canvas_export_json_canvas` collapse into one `wb_document_get` that
+  branches on the document's format, which is new logic rather than a new
+  label — worth landing as its own increment, separate from the fourteen
+  one-to-one renames, so a reviewer is not reading a mechanical sweep and a
+  behaviour change in the same diff.
 - The rename is not confined to the tool surface. `canvasId`, `CanvasDocStore`,
   `canvas-store.ts`, the `/canvas/:ws/:slug` route, UI copy, and the
   `@kamiazya/whiteboard-canvas-*` packages all carry the old container noun.

@@ -23,7 +23,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
   return doc
 }
 
-describe('canvas_import_okf tool', () => {
+describe('wb_document_set tool', () => {
   test('imports markdown with facets and body into a new LoroDoc', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
@@ -33,7 +33,7 @@ describe('canvas_import_okf tool', () => {
       '---',
       'type: issue',
       'facets:',
-      '  issue/1:',
+      '  example/1:',
       '    status: open',
       '    priority: high',
       '---',
@@ -49,7 +49,7 @@ describe('canvas_import_okf tool', () => {
 
     const doc = await loadDoc(store, CANVAS_ID)
     const facets = readFacets(doc)
-    expect(facets).toEqual({ 'issue/1': { status: 'open', priority: 'high' } })
+    expect(facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
 
     const canvas = readSpatialCanvas(doc)
     expect(canvas.nodes).toHaveLength(1)
@@ -80,15 +80,15 @@ describe('canvas_import_okf tool', () => {
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createCanvasImportOkfTool(makeDeps(store))
 
-    const v1 = '---\ntype: issue\nfacets:\n  issue/1:\n    status: open\n---\nFirst body.'
+    const v1 = '---\ntype: issue\nfacets:\n  example/1:\n    status: open\n---\nFirst body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: v1 })
 
-    const v2 = '---\ntype: issue\nfacets:\n  issue/1:\n    status: closed\n---\nUpdated body.'
+    const v2 = '---\ntype: issue\nfacets:\n  example/1:\n    status: closed\n---\nUpdated body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: v2 })
 
     const doc = await loadDoc(store, CANVAS_ID)
     const facets = readFacets(doc)
-    expect(facets['issue/1']).toEqual({ status: 'closed' })
+    expect(facets['example/1']).toEqual({ status: 'closed' })
 
     const canvas = readSpatialCanvas(doc)
     expect(canvas.nodes).toHaveLength(1)

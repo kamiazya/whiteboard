@@ -39,7 +39,7 @@ async function setupTools() {
   }
 }
 
-describe('canvas_import_okf -> canvas_export_okf composed round-trip', () => {
+describe('wb_document_set -> canvas_export_okf composed round-trip', () => {
   test('preserves body text through the LoroDoc persistence layer', async () => {
     const { importOkf, exportOkf } = await setupTools()
 
@@ -88,7 +88,7 @@ describe('canvas_import_okf -> canvas_export_okf composed round-trip', () => {
       '---',
       'type: issue',
       'facets:',
-      '  issue/1:',
+      '  example/1:',
       '    status: open',
       '    priority: high',
       '---',
@@ -98,7 +98,7 @@ describe('canvas_import_okf -> canvas_export_okf composed round-trip', () => {
 
     const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
-    expect(result.frontmatter.facets).toEqual({ 'issue/1': { status: 'open', priority: 'high' } })
+    expect(result.frontmatter.facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
   })
 
   test('an empty (facets-only) body round-trips to an empty body', async () => {
@@ -138,7 +138,7 @@ describe('canvas_import_okf -> canvas_export_okf composed round-trip', () => {
   })
 })
 
-describe('canvas_import_okf -> canvas_export_json_canvas composed round-trip', () => {
+describe('wb_document_set -> canvas_export_json_canvas composed round-trip', () => {
   test('the imported body appears as a text node in the exported (extended) JSON Canvas', async () => {
     const { importOkf, exportJson } = await setupTools()
 

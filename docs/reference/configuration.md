@@ -7,7 +7,7 @@ Runtime environment variables and sandbox quirks.
 | Variable | Purpose | Default |
 |---|---|---|
 | `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
-| `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation and doc-snapshot regeneration. No current MCP tool depends on this binary — `canvas_render_svg` and the OKF/JSON Canvas export tools are all rendered headlessly. | unset (Playwright-managed Chromium) |
+| `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation and doc-snapshot regeneration. No current MCP tool depends on this binary — `wb_scene_render` and the OKF/JSON Canvas export tools are all rendered headlessly. | unset (Playwright-managed Chromium) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
 | `WHITEBOARD_MCP_AUTHORIZATION_SERVER(S)` | Authorization Server URL exposed in MCP Protected Resource Metadata, in preparation for remote OAuth 2.1. | unset |
 | `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
@@ -153,7 +153,7 @@ Inside the Codex sandbox, two issues are common:
 Each workspace lives at `${WHITEBOARD_DATA_DIR}/{workspaceId}/` and contains:
 
 - `*.loro` — Loro CRDT snapshots (one per canvas)
-- `*.svg`, `*.md` (OKF), `*.canvas` (JSON Canvas) — exports (via `canvas_render_svg` / `canvas_export_okf` / `canvas_export_json_canvas`)
+- `*.svg`, `*.md` (OKF), `*.canvas` (JSON Canvas) — exports (via `wb_scene_render` / `canvas_export_okf` / `canvas_export_json_canvas`)
 - `palette.json`, `manifestJson`, library metadata, and other persisted JSON
 
 See [architecture](../explanation/architecture.md) for how each layer reads and writes this tree.
