@@ -28,8 +28,6 @@
 export const ALL_REGISTERED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
-  'canvas_export_json_canvas',
-  'canvas_export_okf',
   'wb_document_set',
   'wb_scene_render',
   'wb_edge_lock',
@@ -42,6 +40,7 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_version_restore',
   'wb_version_save',
   'wb_document_create',
+  'wb_document_get',
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',
@@ -67,9 +66,8 @@ export const UI_LINKED_TOOLS = [] as const
 export const UNIT_ONLY_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
-  'canvas_export_json_canvas',
-  'canvas_export_okf',
   'wb_scene_render',
+  'wb_document_get',
   'wb_edge_patch',
   'wb_node_patch',
   'wb_document_delete',

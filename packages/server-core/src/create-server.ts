@@ -17,10 +17,10 @@ import {
   listCanvasesInputSchema,
 } from './tools/canvas-crud.schemas.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
-import { createCanvasExportJsonCanvasTool } from './tools/canvas-export-json-canvas.js'
 import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
 import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+import { createDocumentGetTool } from './tools/document-get.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
@@ -97,9 +97,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  // Read-only OKF projection of one canvas — the same canvas_export_okf
-  // tool the MCP surface exposes, reachable over HTTP so a browsing UI
-  // (workspace file tree) can open a canvas without an MCP client.
+  // Read-only OKF projection of one document, over HTTP so a browsing UI
+  // (workspace file tree) can open one without an MCP client. Deliberately
+  // still OKF-specific: this is a different surface from the MCP tools, and
+  // the tree wants markdown regardless of what wb_document_get would choose.
   const canvasExportOkfTool = createCanvasExportOkfTool(deps)
   app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId/okf', async (c) => {
     const parsed = canvasExportOkfInputSchema.safeParse({
@@ -134,8 +135,7 @@ export function createServer(deps: ServerDeps) {
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasDigest: createCanvasDigestTool(deps),
-    canvasExportOkf: canvasExportOkfTool,
-    canvasExportJsonCanvas: createCanvasExportJsonCanvasTool(deps),
+    documentGet: createDocumentGetTool(deps),
     canvasImportOkf: createCanvasImportOkfTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),

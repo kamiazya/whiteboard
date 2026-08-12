@@ -185,6 +185,21 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
+    tools.documentGet.name,
+    {
+      description: tools.documentGet.description,
+      inputSchema: tools.documentGet.inputSchema.shape,
+      outputSchema: tools.documentGet.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.documentGet.inputSchema.parse(args)
+      const result = await tools.documentGet.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.canvasDigest.name,
     {
       description: tools.canvasDigest.description,
@@ -194,36 +209,6 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     async (args) => {
       const parsed = tools.canvasDigest.inputSchema.parse(args)
       const result = await tools.canvasDigest.execute(parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.canvasExportOkf.name,
-    {
-      description: tools.canvasExportOkf.description,
-      inputSchema: tools.canvasExportOkf.inputSchema.shape,
-      outputSchema: tools.canvasExportOkf.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.canvasExportOkf.inputSchema.parse(args)
-      const result = await tools.canvasExportOkf.execute(parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.canvasExportJsonCanvas.name,
-    {
-      description: tools.canvasExportJsonCanvas.description,
-      inputSchema: tools.canvasExportJsonCanvas.inputSchema.shape,
-      outputSchema: tools.canvasExportJsonCanvas.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.canvasExportJsonCanvas.inputSchema.parse(args)
-      const result = await tools.canvasExportJsonCanvas.execute(parsed)
       return structuredJsonResult(result)
     },
   )
