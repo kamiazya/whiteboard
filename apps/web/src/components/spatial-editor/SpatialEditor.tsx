@@ -808,7 +808,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       })
       const metricsCache = new Map<string, TextMetrics>()
       const measure: MeasureText = (text, font) => {
-        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx} ${text}`
+        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx}\u0000${text}`
         const hit = metricsCache.get(key)
         if (hit !== undefined) return hit
         const metrics = resolvedMeasure(text, font)
