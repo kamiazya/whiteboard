@@ -12,10 +12,11 @@ import {
   waitFor,
 } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { getShellDaemonAuthError } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
@@ -591,7 +592,7 @@ describe('DaemonCanvasPage', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('lights the settings gear nudge when live sync drops to an auth error', async () => {
+  it('reports a live auth error to the shell-status store (and clears on unmount)', async () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -599,15 +600,16 @@ describe('DaemonCanvasPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Connected, nothing else actionable in jsdom: no dot.
-    expect(screen.queryByTestId('settings-nudge')).toBeNull()
+    expect(getShellDaemonAuthError()).toBe(false)
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    // The daemon connection now needs the user's action (re-pair lives in
-    // Settings -> Connections), so the gear carries the attention dot.
-    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+    // The App-mounted shell reads this to light the gear's attention dot.
+    expect(getShellDaemonAuthError()).toBe(true)
+
+    cleanup()
+    expect(getShellDaemonAuthError()).toBe(false)
   })
 
   it('renders the "Sync off" indicator even when no canvas is selected', async () => {
@@ -654,11 +656,6 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
-    // The AppShell sits above the canvas gate, so Settings and Home stay
-    // reachable on the empty-workspace view — the recovery path when the
-    // canvas-gated chrome is gone.
-    expect(screen.getByTestId('shell-settings')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
   })
 
   it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
@@ -1857,59 +1854,6 @@ describe('DaemonCanvasPage', () => {
       const button = screen.getByRole('button', { name: 'Back to canvas list' })
       fireEvent.click(button)
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
-    })
-
-    it('the header Settings trigger navigates to /settings', async () => {
-      // createMemoryRouter (not this file's declarative `render` helper)
-      // so the resulting navigation is observable via router.state.
-      const router = createMemoryRouter(
-        [
-          {
-            path: '*',
-            element: (
-              <DaemonCanvasPage
-                daemonBaseUrl={DAEMON_BASE_URL}
-                createBackend={makeCreateBackend()}
-              />
-            ),
-          },
-        ],
-        { initialEntries: ['/'] },
-      )
-      await act(async () => {
-        rtlRender(<RouterProvider router={router} />, { container: document.body })
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
-      fireEvent.click(screen.getByTestId('shell-settings'))
-      expect(router.state.location.pathname).toBe('/settings')
-      // The entry point rides along so the settings Back button can return
-      // here deterministically instead of popping history.
-      expect((router.state.location.state as { from?: string }).from).toBe('/')
-    })
-
-    it('the header brand mark navigates home', async () => {
-      const router = createMemoryRouter(
-        [
-          {
-            path: '*',
-            element: (
-              <DaemonCanvasPage
-                daemonBaseUrl={DAEMON_BASE_URL}
-                createBackend={makeCreateBackend()}
-              />
-            ),
-          },
-        ],
-        { initialEntries: ['/canvas/ws-1/doc-a'] },
-      )
-      await act(async () => {
-        rtlRender(<RouterProvider router={router} />, { container: document.body })
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
-      fireEvent.click(screen.getByRole('link', { name: 'Home' }))
-      expect(router.state.location.pathname).toBe('/')
     })
 
     it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {

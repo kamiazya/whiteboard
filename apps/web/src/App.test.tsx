@@ -1,10 +1,11 @@
 import { resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+import { resetShellStatusForTests, setShellDaemonAuthError } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once
 // its dynamic import resolves. The other three pages are vi.mock'd below, so
 // their imports are already trivial; PairConsentPage is the one this file
@@ -149,6 +150,7 @@ const INVALID_CONFIG_STATE: ProviderState = {
 
 describe('silent renewal on a hosted origin', () => {
   beforeEach(() => {
+    resetShellStatusForTests()
     localStorage.clear()
     renewPairingTokenMock.mockClear()
     mockRenewResult = { status: 'none' }
@@ -929,6 +931,74 @@ describe('App URL routing', () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/something/unrelated/entirely')
     expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+  })
+})
+
+describe('App shell (single instance above the routed pages)', () => {
+  it('browser-local branch renders exactly one shell whose gear navigates with the entry point', async () => {
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_LOCAL_STATE} /> }],
+      {
+        initialEntries: ['/'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-local-index-page')
+    expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('shell-settings'))
+    expect(router.state.location.pathname).toBe('/settings')
+    expect((router.state.location.state as { from?: string }).from).toBe('/')
+    // The settings branch keeps exactly one shell too — the page brings none
+    // of its own.
+    expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
+  })
+
+  it('the paired-fragment branch renders the shell too — Settings/Home must survive every entry path', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-canvas-page')
+    expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+  })
+
+  it('daemon branch renders the shell and a reported auth error lights its attention dot', async () => {
+    mockDaemonConnectionResult = { status: 'none' }
+    Object.defineProperty(navigator, 'storage', {
+      value: { persisted: () => Promise.resolve(true) },
+      configurable: true,
+    })
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={LOCAL_DAEMON_STATE} />
+        </MemoryRouter>,
+      )
+      await screen.findByTestId('daemon-index-page')
+      expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
+      await waitFor(() => expect(screen.queryByTestId('settings-nudge')).toBeNull())
+
+      act(() => {
+        setShellDaemonAuthError(true)
+      })
+      expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+    } finally {
+      Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
+    }
   })
 })
 

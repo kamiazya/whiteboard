@@ -23,7 +23,6 @@ import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
 import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
-import { AppShell } from '../components/AppShell.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 
@@ -382,8 +381,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-y-auto">
-      <AppShell daemonConnected={daemon !== undefined} />
+    <div className="flex h-full flex-col overflow-y-auto">
       {/* Mobile (<sm): section list at /settings, full-width detail at
           /settings/<section>. */}
       <div className="sm:hidden" data-testid="settings-mobile">
