@@ -456,6 +456,7 @@ export function DaemonCanvasPage({
           )}
           {canvas && (
             <WorkspaceTopBar
+              onNavigateHome={() => navigate('/')}
               statusSlot={connectionStatus}
               workspaceId={canvas.workspaceId}
               slug={canvas.slug}
@@ -473,7 +474,11 @@ export function DaemonCanvasPage({
               // user can trigger by hand. Without this the save flow skips
               // the upload entirely and latest-thumbnail stays 204 forever.
               getThumbnailBlob={getThumbnailBlob}
-              onOpenSettings={() => navigate(settingsPath())}
+              onOpenSettings={() =>
+                navigate(settingsPath(), {
+                  state: { from: `${window.location.pathname}${window.location.search}` },
+                })
+              }
               workspaces={
                 capabilities.workspaces
                   ? controller.workspaces.map((w) => w.workspaceId)

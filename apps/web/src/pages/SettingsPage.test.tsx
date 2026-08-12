@@ -1,11 +1,23 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { celebrate } from '@/lib/celebrate'
+import { initInstallPromptCapture, resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { STORAGE_KEY } from '@/lib/user-settings-store'
+import {
+  bindApplyUpdate,
+  bindCheckForUpdates,
+  resetSwStatusForTests,
+} from '../pwa/sw-status-store.js'
 import { SettingsPage } from './SettingsPage.js'
+
+vi.mock('@/lib/celebrate', () => ({ celebrate: vi.fn().mockResolvedValue(undefined) }))
 
 beforeEach(() => {
   localStorage.clear()
+  resetSwStatusForTests()
+  resetInstallPromptForTests()
+  vi.mocked(celebrate).mockClear()
 })
 
 afterEach(() => {
@@ -41,13 +53,10 @@ describe('SettingsPage — routing layout', () => {
     renderAt('/settings/data')
     const mobile = screen.getByTestId('settings-mobile')
     expect(within(mobile).getByRole('link', { name: /settings/i })).toBeTruthy()
-    expect(within(mobile).getByText('Persistent storage')).toBeTruthy()
+    expect(within(mobile).getByText('Protect your data')).toBeTruthy()
   })
 
-  it('the desktop sidebar back button returns to the app root when there is no in-app history', () => {
-    // window.history.state in jsdom starts out without an `idx` (unlike a
-    // real react-router-driven session, which stamps one on every push), so
-    // the fallback path (navigate('/')) is what's under test here.
+  it('the back button falls back to the app root when settings was opened directly', () => {
     const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
       initialEntries: ['/settings'],
     })
@@ -57,29 +66,38 @@ describe('SettingsPage — routing layout', () => {
     expect(router.state.location.pathname).toBe('/')
   })
 
-  it('the desktop sidebar back button pops in-app history when window.history.state.idx > 0', () => {
-    // handleBackToApp reads the REAL window.history.state (react-router's
-    // history library stamps an `idx` there on every push in a live
-    // session), which is independent of MemoryRouter's own in-memory stack —
-    // stub it directly rather than relying on MemoryRouter to populate it.
-    // The first entry is deliberately NOT '/': the fallback branch
-    // (navigate('/')) would land on a different pathname than this branch
-    // (navigate(-1), which pops back to '/w/ws1'), so a regression that
-    // dropped the idx>0 check still shows up as a real assertion failure
-    // rather than two branches coincidentally agreeing on '/'.
-    const idxSpy = vi.spyOn(window.history, 'state', 'get').mockReturnValue({ idx: 2 })
-    try {
-      const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
-        initialEntries: ['/w/ws1', '/settings'],
-        initialIndex: 1,
-      })
-      render(<RouterProvider router={router} />)
-      const desktop = screen.getByTestId('settings-desktop')
-      fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
-      expect(router.state.location.pathname).toBe('/w/ws1')
-    } finally {
-      idxSpy.mockRestore()
-    }
+  it('the back button returns to the entry point even after wandering between sections', () => {
+    // The gear passes the page it was clicked on as location.state.from.
+    // Back must NOT be a history pop: list -> detail -> list wandering used
+    // to make "Back" land on the previous settings section instead of
+    // leaving settings.
+    const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
+      initialEntries: ['/local/abc', { pathname: '/settings', state: { from: '/local/abc' } }],
+      initialIndex: 1,
+    })
+    render(<RouterProvider router={router} />)
+    const desktop = screen.getByTestId('settings-desktop')
+    // Wander: General -> Data & app -> Connections and back to General.
+    fireEvent.click(within(desktop).getByRole('link', { name: /data & app/i }))
+    fireEvent.click(within(desktop).getByRole('link', { name: /connections/i }))
+    fireEvent.click(within(desktop).getByRole('link', { name: /general/i }))
+    fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
+    expect(router.state.location.pathname).toBe('/local/abc')
+  })
+
+  it('section links replace the history entry so the browser back button exits settings in one step', async () => {
+    const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
+      initialEntries: ['/local/abc', { pathname: '/settings', state: { from: '/local/abc' } }],
+      initialIndex: 1,
+    })
+    render(<RouterProvider router={router} />)
+    const desktop = screen.getByTestId('settings-desktop')
+    fireEvent.click(within(desktop).getByRole('link', { name: /data & app/i }))
+    fireEvent.click(within(desktop).getByRole('link', { name: /connections/i }))
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(router.state.location.pathname).toBe('/local/abc')
   })
 })
 
@@ -139,25 +157,138 @@ describe('SettingsPage — General', () => {
   })
 })
 
-describe('SettingsPage — Data & app', () => {
+describe('SettingsPage — Data & app setup journey', () => {
   afterEach(() => {
     Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
   })
 
-  it('shows Granted when the browser persisted storage', async () => {
+  function stubStorage(overrides: Partial<{ persisted: boolean; persistResult: boolean }>) {
+    let persisted = overrides.persisted ?? false
     Object.defineProperty(navigator, 'storage', {
-      value: { persisted: () => Promise.resolve(true) },
+      value: {
+        persisted: () => Promise.resolve(persisted),
+        persist: () => {
+          persisted = overrides.persistResult ?? true
+          return Promise.resolve(persisted)
+        },
+      },
       configurable: true,
     })
+  }
+
+  it('shows the protect step granted when the browser persisted storage', async () => {
+    stubStorage({ persisted: true })
     renderAt('/settings/data')
     const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('Granted')).toBeTruthy()
+    expect(await within(mobile).findByText('granted')).toBeTruthy()
   })
 
-  it('says the browser manages it where the API is unavailable', async () => {
+  it('says the browser manages persistence where the API is unavailable', async () => {
     renderAt('/settings/data')
     const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('Managed by the browser')).toBeTruthy()
+    expect(await within(mobile).findByText('managed by the browser')).toBeTruthy()
+  })
+
+  it('Protect asks for persistence and celebrates the live grant exactly once', async () => {
+    stubStorage({ persisted: false, persistResult: true })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    fireEvent.click(await within(mobile).findByRole('button', { name: 'Protect' }))
+    expect(await within(mobile).findByText('granted')).toBeTruthy()
+    expect(celebrate).toHaveBeenCalledTimes(1)
+  })
+
+  it('never celebrates a step that was already complete when the page opened', async () => {
+    stubStorage({ persisted: true })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('granted')
+    expect(celebrate).not.toHaveBeenCalled()
+  })
+
+  it('shows the manual-install hint when no install prompt was captured', async () => {
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(
+      await within(mobile).findByText(/menu may offer install or add to home screen/i),
+    ).toBeTruthy()
+  })
+
+  it('offers Install when a beforeinstallprompt event was captured, and replays it', async () => {
+    initInstallPromptCapture()
+    const prompt = vi.fn().mockResolvedValue(undefined)
+    const event = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: () => Promise<void>
+    }
+    event.prompt = prompt
+    window.dispatchEvent(event)
+
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    fireEvent.click(await within(mobile).findByRole('button', { name: 'Install' }))
+    expect(prompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('celebrates when the app gets installed while the page is open', async () => {
+    stubStorage({ persisted: true })
+    initInstallPromptCapture()
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('granted')
+    expect(celebrate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      window.dispatchEvent(new Event('appinstalled'))
+    })
+    expect(await within(mobile).findByText('installed')).toBeTruthy()
+    expect(celebrate).toHaveBeenCalledTimes(1)
+  })
+
+  it('links the daemon step to the Connections section when not connected', async () => {
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    const link = await within(mobile).findByRole('link', { name: 'How to connect' })
+    expect(link.getAttribute('href')).toBe('/settings/connections')
+  })
+
+  it('marks the daemon step connected when a daemon is provided', async () => {
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(await within(mobile).findByText('connected')).toBeTruthy()
+  })
+})
+
+describe('SettingsPage — App version row', () => {
+  it('degrades to managed-by-the-environment without a service worker registration', () => {
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(within(mobile).getByText('managed by the environment')).toBeTruthy()
+    expect(within(mobile).queryByRole('button', { name: /check for updates/i })).toBeNull()
+  })
+
+  it('offers a manual check when a registration is bound', async () => {
+    const check = vi.fn().mockResolvedValue(undefined)
+    bindCheckForUpdates(check)
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(within(mobile).getByText('up to date')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(within(mobile).getByRole('button', { name: 'Check for updates' }))
+    })
+    expect(check).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Update now when an update is waiting', async () => {
+    bindCheckForUpdates(vi.fn().mockResolvedValue(undefined))
+    const apply = vi.fn().mockResolvedValue(undefined)
+    bindApplyUpdate(apply)
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(within(mobile).getByText('update ready')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(within(mobile).getByRole('button', { name: 'Update now' }))
+    })
+    expect(apply).toHaveBeenCalledTimes(1)
   })
 })
 

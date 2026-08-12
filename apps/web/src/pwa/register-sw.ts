@@ -1,5 +1,6 @@
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types'
 import { getAppLogger } from '../lib/app-logger.js'
+import { bindApplyUpdate, bindCheckForUpdates } from './sw-status-store.js'
 
 const log = getAppLogger('register-sw')
 
@@ -43,6 +44,9 @@ export function setupSwRegistration({
       .then(({ registerSW }) => {
         const updateServiceWorker = registerSW({
           onNeedRefresh: () => {
+            // The settings page's App-version row is the re-entry point for
+            // anyone who dismisses the toast with "Later".
+            bindApplyUpdate(() => updateServiceWorker(true))
             // The toast UI (React component + createRoot) is only needed on
             // the rare "an update is available" path, so it stays out of the
             // entry chunk via a dynamic import too.
@@ -76,6 +80,9 @@ export function setupSwRegistration({
             // out of the entry chunk via this dynamic import, matching the
             // update-toast module above.
             if (!registration) return
+            bindCheckForUpdates(async () => {
+              await registration.update()
+            })
             void import('./sw-update-scheduler.js')
               .then(({ startSwUpdateScheduler }) => {
                 startSwUpdateScheduler({ update: () => registration.update() })
