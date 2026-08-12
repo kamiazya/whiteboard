@@ -546,11 +546,17 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
 /**
  * `selfScore`'s composition over PENALTY_RULES: per-edge quality of ONE
  * routed path — collinear overlap with itself, tunnelling through a
- * bystander node's raw body, and realized bend count, each contributed by
- * its own named rule.
+ * bystander node's raw body, tracing a node's own border (including the
+ * path's own endpoint nodes — the whole point of the border-tracing rule
+ * is pricing ink drawn on the SOURCE node's own outline), and realized
+ * bend count, each contributed by its own named rule.
  */
-function selfScore(path: readonly Point[], foreignBodies: readonly Rect[]): ConfigCost {
-  return selfPenalty(path, foreignBodies)
+function selfScore(
+  path: readonly Point[],
+  foreignBodies: readonly Rect[],
+  nodeBorders: readonly Rect[],
+): ConfigCost {
+  return selfPenalty(path, foreignBodies, nodeBorders)
 }
 
 /**
@@ -620,7 +626,13 @@ function optimizeSideChoices(
   const foreignBodiesFor = edges.map((e) =>
     nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
   )
-  const selfCosts: ConfigCost[] = paths.map((path, i) => selfScore(path, foreignBodiesFor[i]!))
+  // Every node's border, INCLUDING an edge's own endpoints — border-tracing
+  // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
+  // check which must exclude the edge's endpoints.
+  const nodeBorders = nodes.map(rectOf)
+  const selfCosts: ConfigCost[] = paths.map((path, i) =>
+    selfScore(path, foreignBodiesFor[i]!, nodeBorders),
+  )
   let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
   // Sweep-and-prune instead of the O(E^2) double loop: identical scores
@@ -662,7 +674,7 @@ function optimizeSideChoices(
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!)
+      const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!, nodeBorders)
       cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)
