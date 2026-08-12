@@ -14,6 +14,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  type ListGrantsResponse,
+  listGrantsResponseSchema,
   type PairingTokenResponse,
   pairingTokenNonceSchema,
   pairingTokenRequestSchema,
@@ -92,6 +94,54 @@ describe('pairingTokenRequestSchema', () => {
 
   it('rejects an unknown grantType', () => {
     expect(pairingTokenRequestSchema.safeParse({ grantType: 'other' }).success).toBe(false)
+  })
+})
+
+describe('listGrantsResponseSchema', () => {
+  const valid: ListGrantsResponse = {
+    grants: [
+      { grantId: 'g1', origin: 'https://a.example', createdAt: '2026-01-01T00:00:00.000Z' },
+      { grantId: 'g2', origin: 'https://b.example', createdAt: '2026-01-02T00:00:00.000Z' },
+    ],
+  }
+
+  it('parses a well-formed value', () => {
+    expect(listGrantsResponseSchema.parse(valid)).toEqual(valid)
+  })
+
+  it('roundtrip preserves multiple grants', () => {
+    const result: ListGrantsResponse = roundtrip(listGrantsResponseSchema, valid)
+    expect(result).toEqual(valid)
+  })
+
+  it('roundtrip preserves an empty grants list', () => {
+    const empty: ListGrantsResponse = { grants: [] }
+    expect(roundtrip(listGrantsResponseSchema, empty)).toEqual(empty)
+  })
+
+  it('rejects a missing createdAt on a grant', () => {
+    const { createdAt: _omit, ...grantWithoutCreatedAt } = valid.grants[0] as {
+      grantId: string
+      origin: string
+      createdAt: string
+    }
+    expect(listGrantsResponseSchema.safeParse({ grants: [grantWithoutCreatedAt] }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects an extra field on a grant (strict)', () => {
+    expect(
+      listGrantsResponseSchema.safeParse({
+        grants: [{ ...valid.grants[0], extra: 'unexpected' }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an extra top-level field (strict)', () => {
+    expect(listGrantsResponseSchema.safeParse({ ...valid, extra: 'unexpected' }).success).toBe(
+      false,
+    )
   })
 })
 

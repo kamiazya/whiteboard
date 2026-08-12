@@ -1,3 +1,4 @@
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { createPairingGrant } from '../lib/daemon-api-client.js'
@@ -67,9 +68,9 @@ export function PairConsentPage({
       try {
         const res = await fetchFn('/api/runtime/ping')
         if (!res.ok) return
-        const body = (await res.json()) as { identity?: { publicKey?: unknown } }
-        const publicKey = body.identity?.publicKey
-        if (typeof publicKey !== 'string' || publicKey.length === 0) return
+        const parsed = daemonPingResponseSchema.safeParse(await res.json())
+        const publicKey = parsed.success ? parsed.data.identity?.publicKey : undefined
+        if (publicKey === undefined) return
         const fingerprint = await fingerprintPublicKey(publicKey)
         if (!cancelled) setIdentity({ publicKey, fingerprint })
       } catch {

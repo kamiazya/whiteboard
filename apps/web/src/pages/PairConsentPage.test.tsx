@@ -72,6 +72,37 @@ describe('PairConsentPage', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
+  it('shows the identity fingerprint for a conformant ping response', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/api/runtime/ping')) {
+        return Response.json({
+          ok: true,
+          instanceId: 'inst-1',
+          identity: { alg: 'Ed25519', publicKey: 'a'.repeat(43) },
+        })
+      }
+      return new Response('not used', { status: 404 })
+    })
+    renderPage({ fetchFn: fetchFn as never })
+    await waitFor(() => expect(screen.getByTestId('daemon-fingerprint')).not.toBeNull())
+  })
+
+  it('never renders a fingerprint from a ping body that fails the shared schema', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/api/runtime/ping')) {
+        // Missing instanceId: fails daemonPingResponseSchema even though it
+        // carries an identity.publicKey a naive hand-cast would still read.
+        return Response.json({ ok: true, identity: { alg: 'Ed25519', publicKey: 'a'.repeat(43) } })
+      }
+      return new Response('not used', { status: 404 })
+    })
+    renderPage({ fetchFn: fetchFn as never })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.queryByTestId('daemon-fingerprint')).toBeNull()
+    // The page stays functional — Approve is still offered.
+    expect(screen.getByRole('button', { name: /approve/i })).not.toBeNull()
+  })
+
   it('rejects a non-http(s) origin outright — no approve affordance', () => {
     renderPage({
       search: `?origin=${encodeURIComponent('javascript:alert(1)')}&challenge=c&state=s`,

@@ -29,6 +29,8 @@ import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import {
+  type ListGrantsResponse,
+  listGrantsResponseSchema,
   type PairingTokenResponse,
   pairingTokenRequestSchema,
   pairingTokenResponseSchema,
@@ -52,15 +54,6 @@ const createGrantResponseSchema = z
   })
   .strict()
 type CreateGrantResponse = z.infer<typeof createGrantResponseSchema>
-
-const listGrantsResponseSchema = z
-  .object({
-    grants: z.array(
-      z.object({ grantId: z.string(), origin: z.string(), createdAt: z.string() }).strict(),
-    ),
-  })
-  .strict()
-type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
 
 function signTokenResponse(
   identity: DaemonIdentity,
@@ -114,7 +107,9 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
   // latter). Revocation also kills the origin's live session tokens: a
   // revoked origin keeping a working 24h token would make revoke a lie.
   app.get('/api/pairing/grants', (c) => {
-    const response: ListGrantsResponse = { grants: [...grants.list()] }
+    const response: ListGrantsResponse = listGrantsResponseSchema.parse({
+      grants: [...grants.list()],
+    })
     return c.json(response, 200)
   })
 

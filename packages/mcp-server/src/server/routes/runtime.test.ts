@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { runtimeVerifyResponseSchema } from '../../shared/api-contracts/runtime.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
@@ -326,7 +327,10 @@ describe('daemon identity surfaces', () => {
       body: JSON.stringify({ nonce: NONCE }),
     })
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { alg: string; publicKey: string; signature: string }
+    // Executable mutation-check guard: parses the REAL HTTP body against the
+    // shared schema, so a server-side field drift (or an alg change) turns
+    // this red instead of shipping silently to the client's separate copy.
+    const body = runtimeVerifyResponseSchema.parse(await res.json())
     expect(body.publicKey).toBe(testIdentity.publicKey)
     expect(
       verifyIdentitySignature(['wb-verify-v1', NONCE, 'https://caller.example'], body.signature),

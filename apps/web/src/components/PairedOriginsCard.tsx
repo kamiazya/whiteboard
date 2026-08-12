@@ -1,19 +1,13 @@
+import {
+  daemonPingResponseSchema,
+  listGrantsResponseSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { z } from 'zod'
+import type { z } from 'zod'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { fingerprintPublicKey } from '@/lib/daemon-identity-pin'
 import { SquiggleLoader } from './SquiggleLoader.js'
 
-// Mirrors the daemon's GET /api/pairing/grants response (see
-// packages/mcp-server/src/server/routes/pairing.ts) — hydrated through the
-// schema per zod-schema-discipline, never cast.
-const listGrantsResponseSchema = z
-  .object({
-    grants: z.array(
-      z.object({ grantId: z.string(), origin: z.string(), createdAt: z.string() }).strict(),
-    ),
-  })
-  .strict()
 type PairedGrant = z.infer<typeof listGrantsResponseSchema>['grants'][number]
 
 type CardState =
@@ -41,17 +35,23 @@ export function PairedOriginsCard() {
   // shown on the /pair consent page out-of-band. Best-effort: absent on
   // legacy daemons or while unreachable.
   useEffect(() => {
-    const generation = generationRef.current
+    // `cancelled` (scoped to this effect run, flipped by its own cleanup) is
+    // the correct staleness guard here — it fires exactly when fetchApi
+    // changes (a different daemon) or the component unmounts. Comparing
+    // against the grants-load generationRef instead would be wrong: that
+    // counter is bumped by the unrelated load()/revoke() effect on every
+    // mount, so this effect's captured value could never match again once
+    // that ran, and the fingerprint would silently never render.
     let cancelled = false
     void (async () => {
       try {
         const res = await fetchApi('/api/runtime/ping')
         if (!res.ok) return
-        const body = (await res.json()) as { identity?: { publicKey?: unknown } }
-        const publicKey = body.identity?.publicKey
-        if (typeof publicKey !== 'string' || publicKey.length === 0) return
+        const parsed = daemonPingResponseSchema.safeParse(await res.json())
+        const publicKey = parsed.success ? parsed.data.identity?.publicKey : undefined
+        if (publicKey === undefined) return
         const value = await fingerprintPublicKey(publicKey)
-        if (!cancelled && generation === generationRef.current) setFingerprint(value)
+        if (!cancelled) setFingerprint(value)
       } catch {
         // Leave the fingerprint absent.
       }
