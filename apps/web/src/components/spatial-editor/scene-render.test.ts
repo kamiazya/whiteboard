@@ -12,6 +12,20 @@ function canvas(): SpatialCanvas {
     nodes: [
       { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
       { id: 'b', type: 'file', x: 200, y: 0, width: 80, height: 40, file: 'x.png' },
+      // Every node kind participates: the minimap and hit-testing read the
+      // MODEL rects, so a kind whose scene chrome diverged from its model
+      // rect (a padded frame, an outside label) would silently misplace
+      // there — the parity pin below is the tripwire.
+      { id: 'c', type: 'group', x: 0, y: 120, width: 220, height: 90, label: 'g' },
+      {
+        id: 'd',
+        type: 'link',
+        x: 300,
+        y: 120,
+        width: 140,
+        height: 60,
+        url: 'https://example.com/',
+      },
     ],
     edges: [],
   }
