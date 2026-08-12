@@ -80,7 +80,7 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 ## Ticketing (no GitHub Issues — all local-private)
 
-Native **Task list** = live board (in-flight / blocked / done; main session owns status). **Whiteboard canvases** = durable private backlog: issues and notes stored as OKF Markdown canvases in the `default` workspace with `issue/1` facets (status/priority/assignees). Create via `wb_canvas_create` + `canvas_import_okf`, query via `wb_canvas_list` + `canvas_export_okf`, resolve via `wb_canvas_delete`. See the `ticketing` skill.
+Native **Task list** = live board (in-flight / blocked / done; main session owns status). **Whiteboard documents** = durable private backlog: issues and notes stored as OKF Markdown documents in the `default` workspace, carrying `type: issue`, a title and a body. Create via `wb_document_create` + `wb_document_set`, query via `wb_document_list` + `wb_document_get`, resolve by `wb_document_delete` — deletion IS resolution. The `issue/1` facet domain was retired (implemented without an agreed schema); until a replacement is agreed there is no machine-readable status, priority or assignee, and inventing one in passing makes it the convention by accident. See the `ticketing` skill.
 
 ## Skills (load for detail)
 

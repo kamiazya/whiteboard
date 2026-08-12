@@ -88,7 +88,7 @@ describe('wb_document_set -> canvas_export_okf composed round-trip', () => {
       '---',
       'type: issue',
       'facets:',
-      '  issue/1:',
+      '  example/1:',
       '    status: open',
       '    priority: high',
       '---',
@@ -98,7 +98,7 @@ describe('wb_document_set -> canvas_export_okf composed round-trip', () => {
 
     const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
-    expect(result.frontmatter.facets).toEqual({ 'issue/1': { status: 'open', priority: 'high' } })
+    expect(result.frontmatter.facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
   })
 
   test('an empty (facets-only) body round-trips to an empty body', async () => {

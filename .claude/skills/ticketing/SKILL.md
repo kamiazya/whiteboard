@@ -1,6 +1,6 @@
 ---
 name: ticketing
-description: Local-private task/ticket management for the whiteboard repo. Issues and notes live in the whiteboard itself (via MCP tools) as OKF Markdown canvases with issue/1 facets. The native Task list tracks in-flight session work. Use when triaging findings, tracking work across dev-loop/review/dogfood-triage/reconcile/plan-initiative, or recording/resolving a follow-up.
+description: Local-private task/ticket management for the whiteboard repo. Issues and notes live in the whiteboard itself (via MCP tools) as OKF Markdown documents. The native Task list tracks in-flight session work. Use when triaging findings, tracking work across dev-loop/review/dogfood-triage/reconcile/plan-initiative, or recording/resolving a follow-up.
 ---
 
 # Ticketing (local-private)
@@ -22,21 +22,22 @@ Issues and notes are stored as canvases in the whiteboard's `default` workspace.
 
 - **type**: `issue` or `note`
 - **title**: human-readable title
-- **facets**: structured metadata (e.g. `issue/1` with status/priority/assignees)
+- **facets**: extension metadata. There is no agreed schema for issue metadata
+  right now — see "No structured status" below before inventing one
 - **body**: the issue description as markdown
 
 ### Creating an issue
 
 ```
-wb_canvas_create  → { workspaceId: "default", segment: "my-issue-slug" }
-canvas_import_okf → { workspaceId: "default", canvasId: <id>, markdown: "---\ntype: issue\ntitle: My Issue\nfacets:\n  issue/1:\n    status: open\n    priority: high\n---\n\nDescription here." }
+wb_document_create → { workspaceId: "default", segment: "my-issue-slug" }
+wb_document_set   → { workspaceId: "default", canvasId: <id>, markdown: "---\ntype: issue\ntitle: My Issue\n---\n\nDescription here." }
 ```
 
 ### Reading issues
 
 ```
-wb_canvas_list    → { workspaceId: "default" }           # list all canvases
-canvas_export_okf → { workspaceId: "default", canvasId }  # export as OKF markdown
+wb_document_list  → { workspaceId: "default" }           # list all canvases
+wb_document_get   → { workspaceId: "default", canvasId }  # export as OKF markdown
 ```
 
 ### Updating an issue
@@ -44,31 +45,35 @@ canvas_export_okf → { workspaceId: "default", canvasId }  # export as OKF mark
 Re-import with updated OKF markdown (overwrites facets + body):
 
 ```
-canvas_import_okf → { workspaceId: "default", canvasId, markdown: "<updated OKF>" }
+wb_document_set   → { workspaceId: "default", canvasId, markdown: "<updated OKF>" }
 ```
 
 ### Updating facets only
 
 ```
-facet_set → { workspaceId: "default", canvasId, facets: { "issue/1": { status: "in-progress" } } }
+wb_facet_set → { workspaceId: "default", canvasId, facets: { "<domain>/1": { … } } }
 ```
 
 ### Resolving / deleting
 
 ```
-wb_canvas_delete → { workspaceId: "default", canvasId }
+wb_document_delete → { workspaceId: "default", canvasId }
 ```
 
-### issue/1 facet schema
+### No structured status
 
-| Field | Type | Required | Values |
-|---|---|---|---|
-| `status` | string | yes | `open`, `in-progress` |
-| `priority` | string | no | `critical`, `high`, `medium`, `low` |
-| `assignees` | string[] | no | role/agent names |
-| `labels` | string[] | no | free-form tags |
-| `due` | string | no | `YYYY-MM-DD` |
-| `summary` | string | no | one-line summary |
+The `issue/1` facet domain was retired: it was implemented by an earlier pass
+without an agreed schema, and a typed companion nobody called made it look
+more settled than it was. Nothing replaced it yet.
+
+So an issue document carries `type: issue`, a `title`, and a body — and no
+machine-readable status, priority or assignee. **Resolution is deletion**,
+which is what this skill already did; the retired facet only ever offered an
+alternative to that.
+
+Do not invent a replacement domain in passing. Extension facets round-trip
+unvalidated through the generic bucket, so anything you write will persist and
+quietly become the convention. Agree the schema first.
 
 ## tmp/ workspace buckets
 
@@ -86,12 +91,12 @@ Delete artifacts from `tmp/` when they're no longer useful.
 
 - **Session start**: `TaskList` to see live state; for open issues you intend to work this session, `TaskCreate` a task with `metadata.canvasSegment = "<segment>"`.
 - **In flight**: `TaskUpdate` status/owner/blockedBy as work moves.
-- **New finding** (from review / dogfood-triage / reconcile): create a canvas via `wb_canvas_create` + `canvas_import_okf`; `TaskCreate` only if you're acting on it now.
-- **Resolve**: `TaskUpdate status=completed`, then `wb_canvas_delete` the canvas (or update its `issue/1` facet status).
+- **New finding** (from review / dogfood-triage / reconcile): create a canvas via `wb_document_create` + `wb_document_set`; `TaskCreate` only if you're acting on it now.
+- **Resolve**: `TaskUpdate status=completed`, then `wb_document_delete` the document.
 - Workflows can't call the Task tools or AskUserQuestion; they RETURN findings/openQuestions and the main session records them as tickets/tasks and asks the human.
 
 ## When to use which
 
 - Orchestrating several workflow runs / parallel dev-loops right now → **Task list**.
-- "Don't lose this for later" → **whiteboard canvas** (issue type with `issue/1` facet).
+- "Don't lose this for later" → **whiteboard document** (`type: issue`).
 - Both, for anything you're actively working from the backlog (create the task, link the canvas segment).
