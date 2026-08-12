@@ -337,12 +337,16 @@ export function App({ providerState }: AppProps) {
   // Outside the closed route set: say so instead of silently falling
   // through to the default view — a mistyped or stale link should read as
   // "not here", not as a mysteriously empty gallery.
+  // ErrorBoundary OUTSIDE Suspense: Suspense only handles the pending
+  // load — a rejected chunk import would otherwise unmount the root.
   if (!isKnownAppPath(location.pathname)) {
     return (
       <div className="h-dvh">
-        <Suspense fallback={null}>
-          <NotFoundPage onBack={() => navigate('/')} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <NotFoundPage onBack={() => navigate('/')} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     )
   }

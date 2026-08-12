@@ -63,6 +63,15 @@ describe('motion foundation', () => {
     }
   })
 
+  it('ships the wb-scribble one-shot (error mark draws once, never loops)', () => {
+    const css = collectCssText()
+    const ruleIdx = css.indexOf('.wb-scribble')
+    expect(ruleIdx).toBeGreaterThan(-1)
+    const rule = css.slice(ruleIdx, css.indexOf('}', ruleIdx))
+    expect(rule).toMatch(/animation:[^;]*wb-scribble/)
+    expect(rule).not.toMatch(/infinite/)
+  })
+
   it('ships a prefers-reduced-motion guard neutralizing animations and transitions', () => {
     const css = collectCssText()
     const mediaIdx = css.indexOf('prefers-reduced-motion: reduce')

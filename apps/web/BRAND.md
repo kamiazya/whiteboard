@@ -102,12 +102,26 @@ Rules the grammar enforces:
   preview (Settings → Social preview) is a manual upload of the same file —
   the API cannot set it.
 
+### In-app marks: SVGR
+
+Marks rendered inside the React app live as plain `.svg` files under
+`src/brand/` and are imported as components via vite-plugin-svgr
+(`import Mark from '../brand/error-mark.svg?react'`). One file is both the
+artwork's source of truth and a themable component: strokes use
+`currentColor`, so the call site picks the token (`text-muted-foreground`,
+`/30` for watermarks). Animation classes (e.g. `wb-scribble`) stay in
+`index.css` — an inlined `<style>` would collide across instances.
+Standalone assets (splash, favicon, README, OG/PWA generators) are NOT
+SVGR: they render outside the app where no theme exists, so they stay
+self-contained files with fixed mid-grays.
+
 ## Asset inventory and regeneration
 
 All commands run from `apps/web/`.
 
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
+| in-app marks (error / not-found / empty) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |
 | `public/favicon.svg` | hand-authored static fallback | edit directly |

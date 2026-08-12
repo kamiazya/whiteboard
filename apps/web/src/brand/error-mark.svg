@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="132" height="84" viewBox="0 0 88 56" fill="none" data-mark="scribble" aria-hidden="true">
+  <!--
+    Error mark (BRAND.md): the signature scribbled out - the whiteboard
+    gesture for "that's wrong". The wb-scribble class animates the one-shot
+    draw (keyframes in index.css); currentColor follows the theme.
+  -->
+  <path class="wb-scribble" d="M20 44 C 27 22, 37 22, 44 33 C 48 40, 56 46, 59 36 C 62 26, 46 24, 49 34 C 52 44, 65 44, 63 32 C 61 22, 50 20, 54 30 C 58 40, 70 38, 68 26" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

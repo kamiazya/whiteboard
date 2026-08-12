@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import EmptyMark from '../../brand/empty-mark.svg?react'
 import { filterCanvasesBySearch } from '../workspace-top-bar/canvas-list.js'
 
 export interface CanvasListRow {
@@ -81,22 +82,7 @@ export function CanvasListView({
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         {/* The signature as a faint watermark: an empty gallery is the
             blank board, not an error — the mark stays quiet (BRAND.md). */}
-        <svg
-          data-mark="empty-squiggle"
-          width="150"
-          height="76"
-          viewBox="0 0 88 46"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M20 40 C 27 18, 37 18, 44 29 S 58 46, 68 21"
-            stroke="currentColor"
-            className="text-muted-foreground/30"
-            strokeWidth="4"
-            strokeLinecap="round"
-          />
-        </svg>
+        <EmptyMark className="text-muted-foreground/30" />
         <p className="text-sm font-medium">No canvases yet</p>
         <p className="text-sm text-muted-foreground">Create a canvas and it opens ready to draw.</p>
         <button

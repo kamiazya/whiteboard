@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
+import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
@@ -64,7 +65,7 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [tailwindcss(), react(), wasm(), topLevelAwait()],
+  plugins: [tailwindcss(), react(), svgr(), wasm(), topLevelAwait()],
   test: {
     name: 'web-docs-snapshots',
     include: ['src/docs-snapshots/**/*.docs-snapshot.test.tsx'],

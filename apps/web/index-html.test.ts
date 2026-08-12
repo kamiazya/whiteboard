@@ -50,25 +50,6 @@ describe('index.html social & browser-chrome meta', () => {
   })
 })
 
-describe('status-page marks (public/error-mark.svg, public/not-found-mark.svg)', () => {
-  const errorMark = readFileSync(new URL('./public/error-mark.svg', import.meta.url), 'utf8')
-  const notFoundMark = readFileSync(new URL('./public/not-found-mark.svg', import.meta.url), 'utf8')
-
-  it('error mark scribbles ONCE and neutralizes under prefers-reduced-motion', () => {
-    expect(errorMark).toMatch(/animation:[^;]*wb-scribble/)
-    expect(errorMark).not.toMatch(/animation:[^;]*infinite/)
-    const idx = errorMark.indexOf('prefers-reduced-motion: reduce')
-    expect(idx).toBeGreaterThan(-1)
-    expect(errorMark.slice(idx)).toContain('animation: none')
-  })
-
-  it('both marks are self-contained (CSP-safe inside <img>)', () => {
-    for (const svg of [errorMark, notFoundMark]) {
-      expect(svg).not.toMatch(/url\(|href=|@import/)
-    }
-  })
-})
-
 describe('public/boot-splash.svg', () => {
   it('draws the stroke ONCE (no redraw loop)', () => {
     expect(svg).toMatch(/animation:[^;]*wb-draw/)
