@@ -1021,3 +1021,34 @@ describe('?new=canvas launch shortcut', () => {
     window.history.replaceState(null, '', '/')
   })
 })
+
+describe('BrowserLocalCanvasPage — initial tool follows the canvas shape', () => {
+  afterEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('an empty canvas opens in Select — the user came to place, not to pan', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    expect(
+      (await screen.findByRole('button', { name: 'Select' })).getAttribute('aria-pressed'),
+    ).toBe('true')
+  })
+
+  it("this tab's last choice outranks the canvas-shape guess", async () => {
+    sessionStorage.setItem('wb.lastTool', 'hand')
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    expect(
+      (await screen.findByRole('button', { name: 'Hand (pan)' })).getAttribute('aria-pressed'),
+    ).toBe('true')
+  })
+})

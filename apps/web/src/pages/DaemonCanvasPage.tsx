@@ -28,6 +28,7 @@ import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellDaemonAuthError } from '../lib/shell-status-store.js'
@@ -200,6 +201,7 @@ export function DaemonCanvasPage({
 
   const {
     canvas: canvasValue,
+    loaded: canvasLoaded,
     onChange,
     externalVersion,
     clearLocalUndo,
@@ -619,6 +621,17 @@ export function DaemonCanvasPage({
                 previous canvas's viewport. */}
             <SpatialEditor
               key={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
+              // Decided from the canvas's own shape, but only once its
+              // document has loaded — at mount every canvas still looks
+              // empty.
+              initialTool={
+                canvasLoaded
+                  ? resolveInitialTool({
+                      isEmpty: canvasValue.nodes.length === 0,
+                      lastTool: readLastTool(),
+                    })
+                  : undefined
+              }
               ref={spatialEditorRef}
               canvas={canvasValue}
               onChange={onChange}

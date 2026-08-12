@@ -94,6 +94,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
@@ -251,12 +252,22 @@ export interface SpatialEditorProps {
    */
   readonly theme?: ResolvedTheme
   /**
-   * The tool active on mount. Defaults to 'hand' — the product opens in
-   * navigation mode (user decision 2026-08-08): a plain drag pans and no
-   * press can select, move, or edit until the user switches to Select.
-   * Tests exercising editing flows pass 'select' explicitly.
+   * The tool active on mount. Pages resolve it from the canvas's own shape
+   * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
+   * ready to place, one with content opens in navigation mode so a plain
+   * drag pans instead of moving someone's work. Defaults to 'hand' for
+   * callers that express no preference; tests exercising editing flows pass
+   * 'select' explicitly.
    */
   readonly defaultTool?: EditorTool
+  /**
+   * The tool this canvas should open in, resolved by the page only once its
+   * document has loaded (the node count that decides it is not known at
+   * mount). Applied exactly once, and never over a choice the user already
+   * made with the palette — an opening preference must not reach in and
+   * change the mode someone is working in.
+   */
+  readonly initialTool?: EditorTool
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -396,6 +407,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       testId = DEFAULT_TEST_ID,
       theme = 'light',
       defaultTool = 'hand',
+      initialTool,
       lockedNodeIds,
       lockedEdgeIds,
       onToggleEdgeLock,
@@ -450,6 +462,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // arms object-first click-A, click-B edge creation. Creation is
     // deliberately NOT a mode — the palette's Add note works in every mode.
     const [tool, setTool] = useState<EditorTool>(defaultTool)
+    const toolChosenByUserRef = useRef(false)
+    const initialToolAppliedRef = useRef(false)
+    useEffect(() => {
+      if (initialTool === undefined) return
+      if (initialToolAppliedRef.current || toolChosenByUserRef.current) return
+      initialToolAppliedRef.current = true
+      setTool(initialTool)
+    }, [initialTool])
     const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
     /**
      * Additional selected node ids beyond the reducer's single primary
@@ -2662,6 +2682,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           tool={tool}
           onToolChange={(next) => {
             setTool(next)
+            toolChosenByUserRef.current = true
+            // A stated preference outranks the canvas-shape guess on the
+            // next open in this tab.
+            writeLastTool(next)
             // A context menu is an edit affordance of the mode it was
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.
