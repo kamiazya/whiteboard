@@ -361,7 +361,11 @@ export function BrowserLocalCanvasPage({
       '',
       window.location.pathname + (rest ? `?${rest}` : ''),
     )
-    void createCanvas()
+    // Fire-and-forget: the failure path already rolls back inside
+    // createCanvas, so the shortcut degrades to a plain load.
+    createCanvas().catch((err) => {
+      log.error('launcher shortcut create failed', err)
+    })
   }, [createCanvas])
 
   // Tab favicon: persistence state as the status dot (degraded reads as
