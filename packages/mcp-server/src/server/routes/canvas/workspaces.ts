@@ -146,6 +146,10 @@ export function createWorkspacesRouter() {
   // Rename a canvas's slug in place: same canvasId, same branches/versions/blob,
   // just a new slug column. Old URLs carrying the old slug 404 by design — no
   // redirect, no alias history (0.0.x).
+  //
+  // Server-side foundation only: no MCP tool, CLI command, or apps/web
+  // affordance calls this route yet. The apps/web slug-edit UI is a planned
+  // follow-up, not dead code.
   app.put('/api/workspaces/:workspaceId/canvases/:slug/slug', async (c) => {
     const { workspaceId, slug } = c.req.param()
     try {
