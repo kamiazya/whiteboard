@@ -152,3 +152,34 @@ describe('ErrorBoundary', () => {
     })
   })
 })
+
+describe('ErrorBoundary — branded default fallback', () => {
+  const originalError = console.error
+  afterEach(() => {
+    cleanup()
+    console.error = originalError
+  })
+
+  it('renders the scribble mark and a Reload action alongside Try again', () => {
+    console.error = vi.fn()
+    render(
+      <ErrorBoundary>
+        <Bomb trigger />
+      </ErrorBoundary>,
+    )
+    expect(document.querySelector('[data-mark="scribble"]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
+  })
+
+  it('uses token classes, not the old hardcoded light palette', () => {
+    console.error = vi.fn()
+    render(
+      <ErrorBoundary>
+        <Bomb trigger />
+      </ErrorBoundary>,
+    )
+    const alert = screen.getByRole('alert')
+    expect(alert.getAttribute('style') ?? '').not.toContain('#fff')
+  })
+})
