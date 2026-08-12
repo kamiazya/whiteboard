@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="99" viewBox="0 0 100 66" fill="none" data-mark="not-found" aria-hidden="true">
+  <!--
+    Not-found mark (BRAND.md): the signature wandered off its board - the
+    thing you asked for is not where it should be. currentColor follows the
+    theme; the board frame recedes via stroke-opacity.
+  -->
+  <rect x="2" y="2" width="84" height="62" rx="10" stroke="currentColor" stroke-opacity="0.45" stroke-width="3"/>
+  <path d="M52 44 C 59 22, 69 22, 76 33 S 90 50, 100 25" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+</svg>

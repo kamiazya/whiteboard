@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { reportCrash } from '../lib/app-logger.js'
+import { ErrorFallback } from './status/ErrorFallback.js'
 
 // React error boundary for the whiteboard surface.
 // Keep the app recoverable instead of letting an Excalidraw, Loro, or routing error blank the whole root.
@@ -56,65 +57,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return this.props.fallback({ error, reset: this.reset })
     }
     return (
-      <div
-        role="alert"
-        style={{
-          padding: '24px',
-          maxWidth: '720px',
-          margin: '64px auto',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          color: '#1a1a1a',
-          background: '#fff',
-          border: '1px solid #fecaca',
-          borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
-        <h2 style={{ margin: '0 0 12px', fontSize: '18px', color: '#dc2626' }}>
-          Something went wrong
-        </h2>
-        <p style={{ margin: '0 0 16px', fontSize: '14px', color: '#525252' }}>
-          The whiteboard hit an unexpected error. Try recovering, or reload the page.
-        </p>
-        {/*
-          Deliberately no error.message / error.stack here: the default fallback is
-          shown to end users, and raw error text can leak implementation details
-          (file paths, function names, internal identifiers). componentDidCatch
-          already reports the full error + stack through errorBoundaryLog for
-          diagnostics; callers that need the message visible to the user can pass
-          a custom `fallback` prop that renders `error.message` deliberately.
-        */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={this.reset}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              border: '1px solid #d4d4d4',
-              borderRadius: '4px',
-              background: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              border: 'none',
-              borderRadius: '4px',
-              background: '#dc2626',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Reload page
-          </button>
-        </div>
+      <div role="alert" className="h-full min-h-dvh">
+        <ErrorFallback onRetry={this.reset} />
       </div>
     )
   }

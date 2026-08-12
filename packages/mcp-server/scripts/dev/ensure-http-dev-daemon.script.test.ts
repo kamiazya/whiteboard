@@ -30,6 +30,9 @@ const SHIM_ENTRY_PATH = resolve(import.meta.dirname, 'test-utils/fake-pnpm-shim.
 const HOST = '127.0.0.1'
 const LOG_PATH_SUFFIX = 'tmp/logs/mcp-http-dev.log'
 
+/** Attempts allowed when another process wins the port before the hook probes it. */
+const PORT_CONFLICT_ATTEMPTS = 3
+
 async function reserveFreePort(): Promise<number> {
   return new Promise((resolvePort, rejectPort) => {
     const tester = createServer()
@@ -261,29 +264,46 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'THE RED TEST: two concurrent hooks against the same free port produce exactly one spawn, both exit 0',
     async () => {
-      const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      // The hook only makes a spawn decision when it finds the port free, so
+      // the gap between picking a port number and probing it cannot be closed
+      // — and this suite runs beside other tests that bind ephemeral ports.
+      // When one of them is handed this port first, the hook correctly refuses
+      // the foreign listener. That is a precondition we failed to establish,
+      // not a result about the spawn lock, so it earns a fresh port rather
+      // than a red build. The retry is bounded: the last attempt asserts, so
+      // a persistent conflict still fails with the hook's own message.
+      for (let attempt = 1; ; attempt++) {
+        const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
 
-      const runEnv = {
-        ...env,
-        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
-        FAKE_PNPM_BIND_DELAY_MS: '500',
+        const runEnv = {
+          ...env,
+          WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+          FAKE_PNPM_BIND_DELAY_MS: '500',
+        }
+
+        const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
+
+        const portStolen = [first, second].some((result) => /is in use but /.test(result.stderr))
+        if (portStolen && attempt < PORT_CONFLICT_ATTEMPTS) {
+          killAllSpawnedPids(invokedSentinelDir)
+          continue
+        }
+
+        expect(
+          first.exitCode,
+          `hook 1 stderr:\n${first.stderr}\nhook 1 stdout:\n${first.stdout}`,
+        ).toBe(0)
+        expect(
+          second.exitCode,
+          `hook 2 stderr:\n${second.stderr}\nhook 2 stdout:\n${second.stdout}`,
+        ).toBe(0)
+        // The discriminating assertion: exactly one process was ever spawned.
+        // On unpatched main, both hooks observe the port free and both spawn.
+        expect(countSpawns()).toBe(1)
+
+        killAllSpawnedPids(invokedSentinelDir)
+        return
       }
-
-      const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
-
-      expect(
-        first.exitCode,
-        `hook 1 stderr:\n${first.stderr}\nhook 1 stdout:\n${first.stdout}`,
-      ).toBe(0)
-      expect(
-        second.exitCode,
-        `hook 2 stderr:\n${second.stderr}\nhook 2 stdout:\n${second.stdout}`,
-      ).toBe(0)
-      // The discriminating assertion: exactly one process was ever spawned.
-      // On unpatched main, both hooks observe the port free and both spawn.
-      expect(countSpawns()).toBe(1)
-
-      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 

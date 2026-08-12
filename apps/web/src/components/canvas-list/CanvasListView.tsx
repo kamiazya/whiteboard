@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import EmptyMark from '../../brand/empty-mark.svg?react'
 import { filterCanvasesBySearch } from '../workspace-top-bar/canvas-list.js'
 
 export interface CanvasListRow {
@@ -79,6 +80,9 @@ export function CanvasListView({
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
+        {/* The signature as a faint watermark: an empty gallery is the
+            blank board, not an error — the mark stays quiet (BRAND.md). */}
+        <EmptyMark className="text-muted-foreground/30" />
         <p className="text-sm font-medium">No canvases yet</p>
         <p className="text-sm text-muted-foreground">Create a canvas and it opens ready to draw.</p>
         <button

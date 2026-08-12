@@ -16,10 +16,53 @@
         margin: 0;
         overflow: hidden;
       }
+
+      /* Mini splash (BRAND.md): the bare signature drawing itself once,
+         then breathing, centered in the fixed-height root until the viewer
+         mounts and React's first commit replaces it. Fully inline — the
+         widget is a self-contained single file — and mid-gray because the
+         host's theme is unknown here. */
+      .wb-widget-splash {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .wb-widget-splash svg {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: wb-widget-breathe 3.2s ease-in-out 1.4s infinite;
+      }
+      .wb-widget-splash path {
+        stroke-dasharray: 80;
+        stroke-dashoffset: 0;
+        animation: wb-widget-draw 1.2s ease-out;
+      }
+      @keyframes wb-widget-draw {
+        from {
+          stroke-dashoffset: 80;
+        }
+      }
+      @keyframes wb-widget-breathe {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wb-widget-splash svg,
+        .wb-widget-splash path {
+          animation: none;
+        }
+      }
     </style>
   </head>
   <body>
-    <div id="root" style="width: 100%; height: 480px"></div>
+    <div id="root" style="width: 100%; height: 480px"><div class="wb-widget-splash" role="status" aria-label="Loading canvas"><svg width="88" height="56" viewBox="0 0 88 56" fill="none" aria-hidden="true"><path d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="#8a8a8a" stroke-width="3.5" stroke-linecap="round"/></svg></div></div>
     <!--
       Embedded-scene slot (see mountCanvasViewer's readEmbeddedScene). Empty
       by default; a downstream export/widget-bundling step replaces this
