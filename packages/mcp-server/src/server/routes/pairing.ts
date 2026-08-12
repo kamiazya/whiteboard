@@ -31,6 +31,7 @@ import { z } from 'zod'
 import {
   type PairingTokenResponse,
   pairingTokenRequestSchema,
+  pairingTokenResponseSchema,
 } from '../../shared/api-contracts/pairing.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
@@ -147,13 +148,13 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
         return c.json({ error: 'invalid or expired code' }, 403)
       }
       const minted = tokens.mint(redeemed.origin)
-      const response: TokenResponse = {
+      const response: TokenResponse = pairingTokenResponseSchema.parse({
         ...minted,
         origin: redeemed.origin,
         ...(parsed.data.nonce !== undefined
           ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, redeemed.origin) }
           : {}),
-      }
+      })
       return c.json(response, 200)
     }
 
@@ -172,13 +173,13 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
       return c.json({ error: 'origin has no pairing grant' }, 403)
     }
     const minted = tokens.mint(origin)
-    const response: TokenResponse = {
+    const response: TokenResponse = pairingTokenResponseSchema.parse({
       ...minted,
       origin,
       ...(parsed.data.nonce !== undefined
         ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, origin) }
         : {}),
-    }
+    })
     return c.json(response, 200)
   })
 
