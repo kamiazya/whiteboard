@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { updateAppBadge } from '../lib/app-badge.js'
 import {
   applyFavicon,
   type FaviconRect,
@@ -32,5 +33,16 @@ export function useFavicon({
     return () => clearTimeout(id)
   }, [style, status, rects])
 
-  useEffect(() => () => applyFavicon(null), [])
+  // The installed app's icon mirrors the same status (Badging API).
+  useEffect(() => {
+    updateAppBadge(status)
+  }, [status])
+
+  useEffect(
+    () => () => {
+      applyFavicon(null)
+      updateAppBadge('saved')
+    },
+    [],
+  )
 }

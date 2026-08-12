@@ -962,3 +962,32 @@ describe('BrowserLocalCanvasPage', () => {
     })
   })
 })
+
+describe('?new=canvas launch shortcut', () => {
+  it('creates a fresh canvas on load and strips the param from the URL', async () => {
+    // An existing profile: auto-create is skipped, so the count isolates
+    // the shortcut's own create.
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    window.history.replaceState(null, '', '/?new=canvas')
+    rtlRender(
+      <MemoryRouter initialEntries={['/?new=canvas']}>
+        <BrowserLocalCanvasPage store={store} />
+      </MemoryRouter>,
+    )
+    await waitFor(async () => {
+      expect((await store.listCanvases()).length).toBe(2)
+    })
+    expect(window.location.search).not.toContain('new=canvas')
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('does not create extras on a plain load', async () => {
+    const store = new MemoryStore()
+    render(<BrowserLocalCanvasPage store={store} />)
+    await waitFor(async () => {
+      expect((await store.listCanvases()).length).toBe(1)
+    })
+  })
+})

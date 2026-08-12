@@ -1,6 +1,6 @@
 import { Grid2x2, Monitor, Moon, Palette, Sun, Waves } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ThemeMode } from '@/hooks/useThemeMode'
 import type { FaviconStyle } from '@/lib/favicon'
+import { queryPersistentStorage } from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 
 interface SettingsPanelProps {
@@ -55,6 +56,21 @@ export function SettingsPanel({
   const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
     () => settingsStore.load().appearance?.faviconStyle ?? 'minimap',
   )
+  // null = API unavailable (Safari manages persistence itself).
+  const [persisted, setPersisted] = useState<boolean | null>(null)
+  const [persistedKnown, setPersistedKnown] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void queryPersistentStorage().then((state) => {
+      if (cancelled) return
+      setPersisted(state)
+      setPersistedKnown(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open])
   const handleFaviconStyle = useCallback(
     (next: FaviconStyle) => {
       setFaviconStyle(next)
@@ -185,6 +201,28 @@ export function SettingsPanel({
                   }`}
                 />
               </button>
+            </div>
+          </section>
+
+          {/* Storage section */}
+          <section>
+            <h3 className="mb-3 text-sm font-medium">Storage</h3>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">Persistent storage</p>
+                <p className="text-xs text-muted-foreground">
+                  Protects browser-stored canvases from being evicted under storage pressure.
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {!persistedKnown
+                  ? '…'
+                  : persisted === null
+                    ? 'Managed by the browser'
+                    : persisted
+                      ? 'Granted'
+                      : 'Not granted yet'}
+              </span>
             </div>
           </section>
 
