@@ -9,7 +9,24 @@ import { fromRemarkRoot } from './from-remark.js'
 import { toRemarkRoot } from './to-remark.js'
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
-const stringifier = unified().use(remarkStringify).use(remarkGfm).use(remarkMath)
+
+/**
+ * mdast-util-math registers a toMarkdown `unsafe` pattern for `$` with an
+ * `after: undefined` key. mdast-util-to-markdown's `safe()` matches patterns
+ * by `'after' in pattern` rather than checking the value is defined, so it
+ * treats that as a real "look at what follows" constraint, evaluates it
+ * against `undefined`, and the match silently fails — dropping the escape
+ * for a `$` that sits next to another escaped character (e.g. link text
+ * `$]`). Seeding an unconditional `$`-in-phrasing pattern here keeps a bare
+ * `$` always escaped regardless of adjacency (the remark plugins push into
+ * this same array at freeze). Safe to remove once mdast-util-math drops the
+ * stray `after` key upstream.
+ */
+const stringifier = unified()
+  .use(remarkStringify)
+  .use(remarkGfm)
+  .use(remarkMath)
+  .data('toMarkdownExtensions', [{ unsafe: [{ character: '$', inConstruct: 'phrasing' }] }])
 
 /**
  * Closed syntax set: CommonMark + GFM (tables/strikethrough/task lists) +
