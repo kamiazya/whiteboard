@@ -124,15 +124,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test web-browser
-        timeout-minutes: 5
-        run: pnpm exec vitest run --config vitest.browser.config.ts
-        working-directory: apps/web
-
-      - name: Test canvas-viewer-browser
-        timeout-minutes: 5
-        run: pnpm exec vitest run --config vitest.browser.config.ts
-        working-directory: packages/canvas-viewer
+      # Runs the root test:browser script rather than hand-listing per-package
+      # steps, so a new browser-mode project (e.g. canvas-render-browser) is
+      # covered by CI the moment it's added to that script, not only when
+      # someone remembers to add a matching CI step.
+      - name: Test browser projects (web-browser, canvas-viewer-browser, canvas-render-browser)
+        timeout-minutes: 12
+        run: pnpm test:browser
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
