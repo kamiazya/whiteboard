@@ -45,6 +45,7 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
 export function createCanvasExportOkfTool(deps: ServerDeps) {
   return {
     name: 'canvas_export_okf' as const,
+    description: 'Serialise a document as OKF Markdown (YAML frontmatter plus body).',
     inputSchema: canvasExportOkfInputSchema,
     outputSchema: canvasExportOkfOutputSchema,
     async execute(input: CanvasExportOkfInput): Promise<CanvasExportOkfOutput> {

@@ -1,5 +1,9 @@
 import {
   createCanvasInputSchema,
+  WB_DOCUMENT_CREATE_DESCRIPTION,
+  WB_DOCUMENT_DELETE_DESCRIPTION,
+  WB_DOCUMENT_LIST_DESCRIPTION,
+  WB_DOCUMENT_RESOLVE_DESCRIPTION,
   createCanvasOutputSchema,
   createServer,
   deleteCanvasInputSchema,
@@ -65,7 +69,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     tools.facetSet.name,
-    { inputSchema: tools.facetSet.inputSchema.shape, outputSchema: tools.facetSet.outputSchema },
+    {
+      description: tools.facetSet.description,
+      inputSchema: tools.facetSet.inputSchema.shape,
+      outputSchema: tools.facetSet.outputSchema,
+    },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
@@ -78,7 +86,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     tools.nodePatch.name,
-    { inputSchema: tools.nodePatch.inputSchema.shape, outputSchema: tools.nodePatch.outputSchema },
+    {
+      description: tools.nodePatch.description,
+      inputSchema: tools.nodePatch.inputSchema.shape,
+      outputSchema: tools.nodePatch.outputSchema,
+    },
     async (args) => {
       const parsed = tools.nodePatch.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
@@ -91,7 +103,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     tools.nodeLock.name,
-    { inputSchema: tools.nodeLock.inputSchema.shape, outputSchema: tools.nodeLock.outputSchema },
+    {
+      description: tools.nodeLock.description,
+      inputSchema: tools.nodeLock.inputSchema.shape,
+      outputSchema: tools.nodeLock.outputSchema,
+    },
     async (args) => {
       const parsed = tools.nodeLock.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
@@ -104,7 +120,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     tools.edgeLock.name,
-    { inputSchema: tools.edgeLock.inputSchema.shape, outputSchema: tools.edgeLock.outputSchema },
+    {
+      description: tools.edgeLock.description,
+      inputSchema: tools.edgeLock.inputSchema.shape,
+      outputSchema: tools.edgeLock.outputSchema,
+    },
     async (args) => {
       const parsed = tools.edgeLock.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
@@ -117,7 +137,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     tools.edgePatch.name,
-    { inputSchema: tools.edgePatch.inputSchema.shape, outputSchema: tools.edgePatch.outputSchema },
+    {
+      description: tools.edgePatch.description,
+      inputSchema: tools.edgePatch.inputSchema.shape,
+      outputSchema: tools.edgePatch.outputSchema,
+    },
     async (args) => {
       const parsed = tools.edgePatch.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
@@ -131,6 +155,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.tidyCanvas.name,
     {
+      description: tools.tidyCanvas.description,
       inputSchema: tools.tidyCanvas.inputSchema.shape,
       outputSchema: tools.tidyCanvas.outputSchema,
     },
@@ -147,6 +172,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.canvasRenderSvg.name,
     {
+      description: tools.canvasRenderSvg.description,
       inputSchema: tools.canvasRenderSvg.inputSchema.shape,
       outputSchema: tools.canvasRenderSvg.outputSchema,
     },
@@ -161,6 +187,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.canvasDigest.name,
     {
+      description: tools.canvasDigest.description,
       inputSchema: tools.canvasDigest.inputSchema.shape,
       outputSchema: tools.canvasDigest.outputSchema,
     },
@@ -175,6 +202,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.canvasExportOkf.name,
     {
+      description: tools.canvasExportOkf.description,
       inputSchema: tools.canvasExportOkf.inputSchema.shape,
       outputSchema: tools.canvasExportOkf.outputSchema,
     },
@@ -189,6 +217,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.canvasExportJsonCanvas.name,
     {
+      description: tools.canvasExportJsonCanvas.description,
       inputSchema: tools.canvasExportJsonCanvas.inputSchema.shape,
       outputSchema: tools.canvasExportJsonCanvas.outputSchema,
     },
@@ -203,6 +232,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.versionSave.name,
     {
+      description: tools.versionSave.description,
       inputSchema: tools.versionSave.inputSchema.shape,
       outputSchema: tools.versionSave.outputSchema,
     },
@@ -219,6 +249,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.versionList.name,
     {
+      description: tools.versionList.description,
       inputSchema: tools.versionList.inputSchema.shape,
       outputSchema: tools.versionList.outputSchema,
     },
@@ -233,6 +264,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.versionRestore.name,
     {
+      description: tools.versionRestore.description,
       inputSchema: tools.versionRestore.inputSchema.shape,
       outputSchema: tools.versionRestore.outputSchema,
     },
@@ -253,7 +285,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     bp.name,
-    { inputSchema: flatShape, outputSchema: bp.outputSchema },
+    { description: bp.description, inputSchema: flatShape, outputSchema: bp.outputSchema },
     async (args) => {
       const parsed = bp.inputSchema.parse(args)
       const result = await bp.execute(parsed)
@@ -265,6 +297,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     server,
     tools.canvasImportOkf.name,
     {
+      description: tools.canvasImportOkf.description,
       inputSchema: tools.canvasImportOkf.inputSchema.shape,
       outputSchema: tools.canvasImportOkf.outputSchema,
     },
@@ -281,7 +314,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     'wb_document_create',
-    { inputSchema: createCanvasInputSchema.shape, outputSchema: createCanvasOutputSchema },
+    {
+      description: WB_DOCUMENT_CREATE_DESCRIPTION,
+      inputSchema: createCanvasInputSchema.shape,
+      outputSchema: createCanvasOutputSchema,
+    },
     async (args) => {
       const parsed = createCanvasInputSchema.parse(args)
       const result = await wbCanvasCreate(deps, parsed)
@@ -292,7 +329,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     'wb_document_list',
-    { inputSchema: listCanvasesInputSchema.shape, outputSchema: listCanvasesOutputSchema },
+    {
+      description: WB_DOCUMENT_LIST_DESCRIPTION,
+      inputSchema: listCanvasesInputSchema.shape,
+      outputSchema: listCanvasesOutputSchema,
+    },
     async (args) => {
       const parsed = listCanvasesInputSchema.parse(args)
       const result = await wbCanvasList(deps, parsed)
@@ -303,7 +344,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     'wb_document_resolve',
-    { inputSchema: getCanvasInputSchema.shape, outputSchema: getCanvasOutputSchema },
+    {
+      description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
+      inputSchema: getCanvasInputSchema.shape,
+      outputSchema: getCanvasOutputSchema,
+    },
     async (args) => {
       const parsed = getCanvasInputSchema.parse(args)
       const result = await wbCanvasGet(deps, parsed)
@@ -314,7 +359,11 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerToolWithAnnotations(
     server,
     'wb_document_delete',
-    { inputSchema: deleteCanvasInputSchema.shape, outputSchema: deleteCanvasOutputSchema },
+    {
+      description: WB_DOCUMENT_DELETE_DESCRIPTION,
+      inputSchema: deleteCanvasInputSchema.shape,
+      outputSchema: deleteCanvasOutputSchema,
+    },
     async (args) => {
       const parsed = deleteCanvasInputSchema.parse(args)
       const result = await wbCanvasDelete(deps, parsed)

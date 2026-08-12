@@ -40,6 +40,7 @@ export type EdgeLockOutput = z.infer<typeof edgeLockOutputSchema>
 export function createEdgeLockTool(deps: ServerDeps) {
   return {
     name: 'wb_edge_lock' as const,
+    description: 'Lock or unlock an edge so other clients cannot move or edit it.',
     inputSchema: edgeLockInputSchema,
     outputSchema: edgeLockOutputSchema,
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {

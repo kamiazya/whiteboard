@@ -42,6 +42,8 @@ export class OkfParseError extends Error {
 export function createCanvasImportOkfTool(deps: ServerDeps) {
   return {
     name: 'wb_document_set' as const,
+    description:
+      'Replace the entire content of an existing document from an OKF Markdown string. The document must already exist; core facets, extension facets and the body are all overwritten rather than merged.',
     inputSchema: canvasImportOkfInputSchema,
     outputSchema: canvasImportOkfOutputSchema,
     execute: async (input: CanvasImportOkfInput): Promise<CanvasImportOkfOutput> => {

@@ -42,6 +42,7 @@ export class VersionNotFoundError extends Error {
 export function createVersionRestoreTool(deps: ServerDeps) {
   return {
     name: 'wb_version_restore' as const,
+    description: 'Restore a document to one of its saved versions.',
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {

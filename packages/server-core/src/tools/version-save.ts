@@ -28,6 +28,7 @@ export type VersionSaveOutput = z.infer<typeof versionSaveOutputSchema>
 export function createVersionSaveTool(deps: ServerDeps) {
   return {
     name: 'wb_version_save' as const,
+    description: 'Save a labelled version of a document.',
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
     async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {

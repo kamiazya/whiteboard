@@ -27,6 +27,8 @@ export type CanvasExportJsonCanvasOutput = z.infer<typeof canvasExportJsonCanvas
 export function createCanvasExportJsonCanvasTool(deps: ServerDeps) {
   return {
     name: 'canvas_export_json_canvas' as const,
+    description:
+      'Serialise a document as JSON Canvas. Strict mode drops the x-whiteboard extension.',
     inputSchema: canvasExportJsonCanvasInputSchema,
     outputSchema: canvasExportJsonCanvasOutputSchema,
     async execute(input: CanvasExportJsonCanvasInput): Promise<CanvasExportJsonCanvasOutput> {

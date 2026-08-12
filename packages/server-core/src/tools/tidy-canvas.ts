@@ -36,6 +36,8 @@ export type TidyCanvasOutput = z.infer<typeof tidyCanvasOutputSchema>
 export function createTidyCanvasTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_tidy' as const,
+    description:
+      'Re-lay-out the spatial canvas. Spatial documents only — it parses through the spatial schema and rejects anything else.',
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {

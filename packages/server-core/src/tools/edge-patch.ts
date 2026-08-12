@@ -52,6 +52,7 @@ export type EdgePatchOutput = z.infer<typeof edgePatchOutputSchema>
 export function createEdgePatchTool(deps: ServerDeps) {
   return {
     name: 'wb_edge_patch' as const,
+    description: 'Create or update an edge on the spatial canvas.',
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
     execute: async (input: EdgePatchInput): Promise<EdgePatchOutput> => {

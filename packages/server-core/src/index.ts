@@ -18,6 +18,10 @@ export {
 export { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 export {
   createCanvasInputSchema,
+  WB_DOCUMENT_CREATE_DESCRIPTION,
+  WB_DOCUMENT_DELETE_DESCRIPTION,
+  WB_DOCUMENT_LIST_DESCRIPTION,
+  WB_DOCUMENT_RESOLVE_DESCRIPTION,
   createCanvasOutputSchema,
   deleteCanvasInputSchema,
   deleteCanvasOutputSchema,
