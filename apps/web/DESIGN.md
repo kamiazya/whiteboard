@@ -2,6 +2,8 @@
 
 Direction: **quiet tool** (Linear/Figma lineage). The canvas content is the
 only hero; chrome recedes.
+Brand surfaces around the app (mark, splash, favicon, icons, social cards)
+are governed by [BRAND.md](./BRAND.md).
 Hierarchy comes from surfaces and whitespace, not boxes. Accent color carries
 **state meaning only** — never decoration.
 

@@ -57,6 +57,30 @@ describe('scaleScene', () => {
     ])
   })
 
+  it('scales edge line-jump points together with the path', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 10 },
+            { x: 100, y: 10 },
+          ],
+          jumps: [{ segment: 0, x: 40, y: 10 }],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    const half = scaleScene(scene, 0.5)
+    const edge = half.nodes[0]
+    if (edge.kind !== 'edge') throw new Error('edge expected')
+    expect(edge.jumps).toEqual([{ segment: 0, x: 20, y: 5 }])
+  })
+
   it('scales wrapper-relative children by the same factor (uniform scaling commutes with the x-transform boundary)', () => {
     // listItem children store x RELATIVE to the wrapper; uniform scaling
     // about the origin scales wrapper offset and relative offset alike, so

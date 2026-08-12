@@ -18,6 +18,10 @@ The web editor's canvas row (More actions → Export) saves the current canvas a
 SVG or PNG, rendered with the light theme regardless of the UI theme so an
 export's bytes never depend on a display preference.
 
+**Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
+document on the clipboard as plain text — the quickest way to hand the exact
+canvas to another tool or a debugging session from any device.
+
 **PNG exports are editable images**: the file embeds the canvas's JSON Canvas
 document (extended mode, `x-whiteboard` included) in a PNG `iTXt` chunk under
 the `whiteboard` keyword — the same pattern draw.io uses. A shared PNG

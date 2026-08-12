@@ -50,6 +50,9 @@ function scaleNode(node: ScalableNode, f: number): ScalableNode {
       return {
         ...node,
         path: node.path.map((point) => ({ x: point.x * f, y: point.y * f })),
+        ...(node.jumps !== undefined
+          ? { jumps: node.jumps.map((jump) => ({ ...jump, x: jump.x * f, y: jump.y * f })) }
+          : {}),
         appearance: scaleAppearance(node.appearance, f),
       }
     case 'textRun':

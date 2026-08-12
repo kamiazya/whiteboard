@@ -148,10 +148,11 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     expect(Array.isArray(parsed.nodes)).toBe(true)
   })
 
-  // The menu must only offer formats `exportScene` (SceneExportFormat) can
-  // actually produce — an entry outside that union is an affordance whose
-  // every click fails.
-  it('never renders a JSON/Excalidraw export menu item', async () => {
+  // Export DOWNLOADS must only offer formats `exportScene`
+  // (SceneExportFormat) can actually produce — a download entry outside
+  // that union is an affordance whose every click fails. Copy as JSON
+  // Canvas is a clipboard action, not a download, and is exempt.
+  it('never renders a JSON/Excalidraw export download entry', async () => {
     await renderLoaded()
     fireEvent.pointerDown(screen.getByLabelText('More actions'), {
       button: 0,
@@ -159,6 +160,7 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     })
     await waitFor(() => expect(screen.getByText('Export as PNG')).toBeInTheDocument())
 
-    expect(screen.queryByText(/json|excalidraw/i)).toBeNull()
+    expect(screen.queryByText(/excalidraw/i)).toBeNull()
+    expect(screen.queryByText(/export as json/i)).toBeNull()
   })
 })

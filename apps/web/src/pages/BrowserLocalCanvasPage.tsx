@@ -1,5 +1,6 @@
+import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
+import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -195,8 +196,12 @@ export function BrowserLocalCanvasPage({
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
-  // /canvas/:workspaceId/:slug contract). The first sync replaces so a
-  // plain '/' load doesn't leave an extra history entry behind it; every
+  // /canvas/:workspaceId/:slug contract). This page only mounts on
+  // /local/:canvasId (App routes '/' to the list), so on a normal open the
+  // first run is a no-op — the URL already matches. The first-sync REPLACE
+  // exists for the stale-deep-link case: a bookmarked id that no longer
+  // exists falls back to the default canvas, and repairing the URL with a
+  // push would leave the dead link as a history entry behind it. Every
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
   // This never fights the URL->canvas effect below: that effect only calls
@@ -459,6 +464,19 @@ export function BrowserLocalCanvasPage({
           <DropdownMenuItem onSelect={() => void handleExport('svg')}>
             <Download aria-hidden="true" className="size-3.5" />
             Export as SVG
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              // Text on the clipboard survives any chat/paste channel intact,
+              // which a binary download cannot — the phone-friendly way to
+              // hand the exact canvas (coordinates included) to a debugger.
+              void navigator.clipboard
+                ?.writeText(serializeSpatial(canvas, 'extended'))
+                .catch(() => {})
+            }}
+          >
+            <Braces aria-hidden="true" className="size-3.5" />
+            Copy as JSON Canvas
           </DropdownMenuItem>
           <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />

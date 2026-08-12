@@ -3,6 +3,7 @@ import type {
   ListBlockNode,
   ListItemNode,
   ParagraphBlockNode,
+  ResolvedEdgeNode,
   Scene,
   TableBlockNode,
 } from '../scene-graph.js'
@@ -63,6 +64,29 @@ describe('translateScene', () => {
     expect(item.bbox.x).toBe(24 + 10)
     const paragraph = item.children[0]! as ParagraphBlockNode
     expect(paragraph.bbox.x).toBe(0) // unchanged: relative to the item's own transform
+  })
+
+  it('shifts edge line-jump points together with the path', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 10 },
+            { x: 100, y: 10 },
+          ],
+          jumps: [{ segment: 0, x: 40, y: 10 }],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    const shifted = translateScene(scene, 5, 7)
+    const edge = shifted.nodes[0] as ResolvedEdgeNode
+    expect(edge.jumps).toEqual([{ segment: 0, x: 45, y: 17 }])
   })
 
   it('composes additively: translate(translate(s,a,b),c,d) === translate(s,a+c,b+d)', () => {
