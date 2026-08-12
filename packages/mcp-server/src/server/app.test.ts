@@ -980,6 +980,50 @@ describe('createApp daemon mutation auth', () => {
     expect(json.previewElements).toEqual([expect.objectContaining({ id: 'A', type: 'text' })])
   })
 
+  it('merge dry run element counts include edges, matching previewElements.length', async () => {
+    const { saveCanvas } = await import('./store/canvas-store.js')
+    const app = createApp(createRuntimeOptions())
+
+    const doc = makeSpatialDoc({
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'B', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'A', toNode: 'B' }],
+    })
+    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+
+    const res = await app.request(
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ into: 'main', dryRun: true }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      preview?: { elementCount: number }
+      target?: { elementCount: number }
+      source?: { elementCount: number }
+      previewElements?: Array<{ id: string; type: string }>
+    }
+    // 2 nodes + 1 edge = 3 elements. A nodes-only count (countAliveNodes)
+    // would report 2 here, diverging from previewElements.length.
+    expect(json.preview).toEqual({ elementCount: 3 })
+    expect(json.target).toEqual({ elementCount: 3 })
+    expect(json.source).toEqual({ elementCount: 3 })
+    expect(json.previewElements).toHaveLength(3)
+    expect(json.preview?.elementCount).toBe(json.previewElements?.length)
+  })
+
   it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {
     const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
@@ -1087,6 +1131,85 @@ describe('createApp daemon mutation auth', () => {
     const json = (await res.json()) as { newElementIds?: string[]; changedElementIds?: string[] }
     expect(json.newElementIds).toEqual(['C'])
     expect(json.changedElementIds ?? []).toEqual([])
+  })
+
+  it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
+    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
+
+    const app = createApp(createRuntimeOptions())
+
+    // Fork point: a single node A, written by one peer.
+    const forkDoc = makeSpatialDoc({
+      nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    await saveCanvas('session1', 'canvas-a', forkDoc, { overwrite: true })
+    const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
+
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+
+    // Target side: the SAME peer continues past the fork and deletes A.
+    deleteSpatialNode(forkDoc, 'A')
+    const mainTip = Buffer.from(encodeFrontiers(forkDoc.frontiers())).toString('base64')
+
+    // Source side: a FRESH peer, independently continuing from the same
+    // fork point (A still alive), adding F. Neither mainTip's nor
+    // sourceTip's version vector is a subset of the other — the genuine
+    // bilateral case meetVersion (per-peer min of two vectors) exists for,
+    // unlike the one-sided ancestor/descendant cases covered above. Getting
+    // the meet wrong here is directly observable: an incorrectly-advanced
+    // base (e.g. one that already reflects target's delete of A) would
+    // silence the resurrected badge below instead of firing it.
+    const sourceDoc = new LoroDoc()
+    sourceDoc.import(forkSnapshot)
+    sourceDoc.setPeerId('999')
+    writeSpatialNode(sourceDoc, {
+      id: 'F',
+      type: 'text',
+      text: 'f',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    })
+    const sourceTip = Buffer.from(encodeFrontiers(sourceDoc.frontiers())).toString('base64')
+
+    // Merge both peers' ops into the shared live doc so both tips remain
+    // checkoutable against its full history.
+    forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
+    await saveCanvas('session1', 'canvas-a', forkDoc, { overwrite: true })
+
+    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const main = state.branches.find((branch) => branch.name === 'main')!
+    main.tipFrontiers = mainTip
+    const feature = state.branches.find((branch) => branch.name === 'feature')!
+    feature.tipFrontiers = sourceTip
+    await saveCanvasBranches('session1', 'canvas-a', state)
+
+    const res = await app.request(
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ into: 'main' }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      newElementIds?: string[]
+      badges?: Array<Record<string, unknown>>
+    }
+    // The correctly-computed base is A-only (the true fork point, before
+    // target's delete): A is resurrected on commit, and F is new.
+    expect(json.badges).toContainEqual({ type: 'resurrected', elementId: 'A' })
+    expect(json.newElementIds?.sort()).toEqual(['A', 'F'])
   })
 
   it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {

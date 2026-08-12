@@ -1,8 +1,22 @@
 import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
+import type { PeerID } from 'loro-crdt'
+import { VersionVector } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { detectMergeBadges, type MergeBadge } from './merge-engine.js'
-import { fcTest, withDefaults } from './test-utils/fast-check.js'
+import { detectMergeBadges, type MergeBadge, meetVersion } from './merge-engine.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { makeSpatialDoc } from './test-utils/spatial-doc.js'
+
+// Small fixed peer-id pool so generated vectors actually overlap on some
+// peers and diverge on others — the case meetVersion exists for.
+const peerIds = ['1', '2', '3'] as const satisfies readonly PeerID[]
+
+// A peer count of 1..N, never 0: a real LoroDoc version vector from
+// `.version()` never records an explicit zero-count peer (a peer with no ops
+// is simply absent), so a 0 count here would test the arbitrary, not
+// meetVersion.
+const versionVectorArbitrary = fc
+  .dictionary(fc.constantFrom(...peerIds), fc.integer({ min: 1, max: 20 }))
+  .map((counts) => new VersionVector(new Map(Object.entries(counts) as [PeerID, number][])))
 
 describe('detectMergeBadges', () => {
   it('returns no badges when base / target / source / preview all match', () => {
@@ -207,6 +221,48 @@ describe('detectMergeBadges', () => {
       const source = makeSpatialDoc(canvas)
       const preview = makeSpatialDoc(canvas)
       expect(detectMergeBadges({ base, target, source, preview })).toEqual([])
+    },
+  )
+})
+
+describe('meetVersion', () => {
+  it('takes the per-peer minimum, omitting a peer present on only one side', () => {
+    const a = new VersionVector(
+      new Map<PeerID, number>([
+        ['1', 3],
+        ['2', 5],
+      ]),
+    )
+    const b = new VersionVector(
+      new Map<PeerID, number>([
+        ['2', 2],
+        ['3', 7],
+      ]),
+    )
+    expect(meetVersion(a, b).toJSON()).toEqual(new Map<PeerID, number>([['2', 2]]))
+  })
+
+  fcTest.prop([versionVectorArbitrary], withDefaults())('is idempotent: meet(a, a) === a', (a) => {
+    expect(meetVersion(a, a).toJSON()).toEqual(a.toJSON())
+  })
+
+  fcTest.prop([versionVectorArbitrary, versionVectorArbitrary], withDefaults())(
+    'is commutative: meet(a, b) === meet(b, a)',
+    (a, b) => {
+      expect(meetVersion(a, b).toJSON()).toEqual(meetVersion(b, a).toJSON())
+    },
+  )
+
+  fcTest.prop([versionVectorArbitrary, versionVectorArbitrary], withDefaults())(
+    'is a lower bound: every peer count in the meet is <= both inputs',
+    (a, b) => {
+      const meet = meetVersion(a, b).toJSON()
+      const aCounts = a.toJSON()
+      const bCounts = b.toJSON()
+      for (const [peer, count] of meet) {
+        expect(count).toBeLessThanOrEqual(aCounts.get(peer) ?? 0)
+        expect(count).toBeLessThanOrEqual(bCounts.get(peer) ?? 0)
+      }
     },
   )
 })

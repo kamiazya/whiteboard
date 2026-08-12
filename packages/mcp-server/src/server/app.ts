@@ -10,10 +10,9 @@ import {
 } from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { PeerID } from 'loro-crdt'
-import { encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
-import { detectMergeBadges, toElementMap } from '../shared/merge-engine.js'
+import { detectMergeBadges, meetVersion, toElementMap } from '../shared/merge-engine.js'
 import {
   checkoutCloneOrThrow,
   decodeBranchTipOrThrow,
@@ -77,7 +76,6 @@ import {
 } from './store/branches-store.js'
 import { canvasExists, saveCanvas } from './store/canvas-store.js'
 import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
-import { countAliveNodes } from './store/count-alive-nodes.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
 import { FileVersionStore } from './store/version-store.js'
 import { withWorkspaceWriteLock } from './store/workspace-lock.js'
@@ -569,22 +567,9 @@ export function createApp(options: AppOptions) {
 
             // The merge base is the common ancestor: the per-peer minimum
             // ("meet") of target's and source's version vectors, checked out
-            // against the live doc's full history. A peer counted on only one
-            // side contributes nothing to the ancestor and is omitted from the
-            // meet (its count would be 0); an all-omitted (empty) meet checks
-            // out to genesis, which correctly classifies every source element
-            // as new rather than resurrected.
-            const meetVersion = (a: VersionVector, b: VersionVector): VersionVector => {
-              const bCounts = b.toJSON()
-              const meet = new Map<PeerID, number>()
-              for (const [peer, aCount] of a.toJSON()) {
-                const bCount = bCounts.get(peer)
-                if (bCount === undefined) continue
-                const count = Math.min(aCount, bCount)
-                if (count > 0) meet.set(peer, count)
-              }
-              return new VersionVector(meet)
-            }
+            // against the live doc's full history. An all-omitted (empty) meet
+            // checks out to genesis, which correctly classifies every source
+            // element as new rather than resurrected.
             const baseFrontiers = liveDoc.vvToFrontiers(
               meetVersion(targetDoc.version(), sourceDoc.version()),
             )
@@ -602,10 +587,6 @@ export function createApp(options: AppOptions) {
               preview: previewDoc,
             })
 
-            const previewElementCount = countAliveNodes(previewDoc)
-            const targetElementCount = countAliveNodes(targetDoc)
-            const sourceElementCount = countAliveNodes(sourceDoc)
-
             // Diff elements between target and preview so the UI can highlight
             // new / changed / conflict elements after commit.
             const tMap = toElementMap(targetDoc)
@@ -621,6 +602,17 @@ export function createApp(options: AppOptions) {
               }
             }
             const conflictElementIds = Array.from(new Set(badges.map((b) => b.elementId)))
+
+            // Counts come from the same nodes+edges map toElementMap builds for
+            // previewElements/newElementIds/changedElementIds above, so
+            // previewElementCount stays equal to previewElements.length (and the
+            // other counts stay consistent) for a canvas containing edges.
+            // countAliveNodes is deliberately not used here: it is a nodes-only
+            // reader written for an unrelated advisory-count consumer.
+            const previewElementCount = pMap.size
+            const targetElementCount = tMap.size
+            // previewDoc is sourceDoc (see above), so this mirrors previewElementCount exactly.
+            const sourceElementCount = pMap.size
 
             if (dryRun) {
               // For dry runs, return every current node + edge so MergeDialog can

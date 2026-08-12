@@ -1,5 +1,6 @@
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
-import type { LoroDoc } from 'loro-crdt'
+import type { LoroDoc, PeerID } from 'loro-crdt'
+import { VersionVector } from 'loro-crdt'
 
 // CRDT merge is automatic, but the UI still needs signals for surprising LWW
 // outcomes. Given base / target / source / preview docs, this detects
@@ -42,6 +43,22 @@ function refTargetIdsOf(el: ElementSnap): string[] {
   if (typeof el.fromNode === 'string') ids.push(el.fromNode)
   if (typeof el.toNode === 'string') ids.push(el.toNode)
   return ids
+}
+
+// The merge base is the common ancestor: the per-peer minimum ("meet") of
+// two version vectors. A peer counted on only one side contributes nothing
+// to the ancestor and is omitted from the meet (its count would be 0); an
+// all-omitted (empty) meet checks out to genesis.
+export function meetVersion(a: VersionVector, b: VersionVector): VersionVector {
+  const bCounts = b.toJSON()
+  const meet = new Map<PeerID, number>()
+  for (const [peer, aCount] of a.toJSON()) {
+    const bCount = bCounts.get(peer)
+    if (bCount === undefined) continue
+    const count = Math.min(aCount, bCount)
+    if (count > 0) meet.set(peer, count)
+  }
+  return new VersionVector(meet)
 }
 
 interface DetectArgs {
