@@ -1,3 +1,9 @@
+<p align="center">
+  <!-- Absolute URL on purpose: npm renders this README and resolves no
+       relative repo paths. -->
+  <img src="https://raw.githubusercontent.com/kamiazya/whiteboard/main/docs/assets/readme-mark.svg" alt="Whiteboard" width="200" height="169" />
+</p>
+
 # `@kamiazya/whiteboard-mcp`
 
 OpenCanvas-based whiteboard MCP server for Claude Code, Codex, and other MCP hosts.
