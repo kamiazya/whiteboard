@@ -1,11 +1,13 @@
 import type { WorkspaceNames } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { ChevronDown, FilePlus2, Pin, Search } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -30,6 +32,11 @@ interface CanvasDropdownProps {
   onTogglePin: (slug: string, nextPinned: boolean) => void
   onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind canvases (local mode). */
   onCreateMarkdown?: () => void
+  // Both present (and >1 entry) render a "Workspaces" section above the
+  // canvases section. Either omitted keeps every existing caller
+  // (BrowserLocalCanvasPage, docs snapshots) byte-identical.
+  workspaces?: string[]
+  onSwitchWorkspace?: (workspaceId: string) => void
 }
 
 // The canvas switcher dropdown — workspace identity is intentionally hidden
@@ -47,6 +54,8 @@ export function CanvasDropdown({
   onTogglePin,
   onOpenNewCanvas,
   onCreateMarkdown,
+  workspaces,
+  onSwitchWorkspace,
 }: CanvasDropdownProps) {
   const sortedCanvases = useMemo(() => sortCanvasesByRecency(canvases), [canvases])
   const filteredCanvases = useMemo(
@@ -80,6 +89,21 @@ export function CanvasDropdown({
   // what the user sees before anyone has named it.
   const workspaceLabel = isLocalMode ? 'Local' : (effectiveNames.workspace ?? workspaceId)
 
+  // The search box takes autoFocus on open, which wins the mount-focus race
+  // against Radix's own DismissableLayer/FocusScope (it only auto-focuses
+  // the content when nothing inside already has focus) — so a real DOM
+  // item is never focused yet for Radix's roving-focus arrow handling to
+  // act on (that handling only fires for keydowns whose target IS the
+  // roving item itself). ArrowDown from the search box forwards focus onto
+  // the first roving item so keyboard-only users can still reach the list
+  // without a mouse.
+  const contentRef = useRef<HTMLDivElement>(null)
+  const focusFirstItem = () => {
+    contentRef.current
+      ?.querySelector<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')
+      ?.focus()
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -98,6 +122,7 @@ export function CanvasDropdown({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
+        ref={contentRef}
         // Let Radix handle the single scroll container.
         // Search stays sticky at the top and the footer stays sticky at the bottom.
         className="w-[320px] p-0"
@@ -116,12 +141,42 @@ export function CanvasDropdown({
             <Input
               value={canvasSearch}
               onChange={(e) => onCanvasSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  focusFirstItem()
+                }
+              }}
               placeholder="Switch canvas…"
               className="h-8 pl-7 text-xs"
               autoFocus
             />
           </div>
         </div>
+        {workspaces && onSwitchWorkspace && workspaces.length > 1 && canvasSearch === '' && (
+          <div className="border-b p-1">
+            <DropdownMenuLabel className="px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              Workspaces
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={workspaceId}
+              onValueChange={(nextWorkspaceId) => {
+                // Radix's RadioItem fires onSelect (hence this) for the
+                // already-checked item too — the no-op guard lives here,
+                // not in Radix, or re-picking the current workspace would
+                // jump the user to that workspace's first canvas for
+                // nothing.
+                if (nextWorkspaceId !== workspaceId) onSwitchWorkspace(nextWorkspaceId)
+              }}
+            >
+              {workspaces.map((id) => (
+                <DropdownMenuRadioItem key={id} value={id}>
+                  {id}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </div>
+        )}
         <div className="max-h-[300px] overflow-y-auto">
           <div className="flex flex-col p-1">
             {filteredCanvases.length === 0 ? (

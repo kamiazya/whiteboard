@@ -82,6 +82,11 @@ async function selectCanvasFromSwitcher(label: string) {
   fireEvent.pointerUp(item)
 }
 
+async function selectWorkspaceFromSwitcher(workspaceId: string) {
+  const item = await screen.findByRole('menuitemradio', { name: workspaceId })
+  fireEvent.pointerUp(item)
+}
+
 // The bar's History button opens the version popover, which now also
 // carries the page's own "Save version" button/message via versionPanelExtra.
 function toggleHistoryPanel() {
@@ -174,6 +179,9 @@ describe('DaemonCanvasPage', () => {
     // A single-workspace daemon renders no workspace selector at all —
     // one raw id is not a choice, and every header row costs canvas height.
     expect(screen.queryByLabelText('Workspaces')).toBeNull()
+    await openCanvasSwitcher()
+    expect(screen.queryByText('Workspaces')).toBeNull()
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
   })
 
   describe('workspace switcher', () => {
@@ -198,8 +206,14 @@ describe('DaemonCanvasPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
-      expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
+      // The header dropdown is the switcher once a canvas is mounted; the
+      // secondary-row <select> only survives the no-canvas state (see the
+      // negative-direction test below).
+      await openCanvasSwitcher()
+      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+        'w1',
+        'w2',
+      ])
     })
 
     it('selecting another workspace re-resolves the canvas and re-keys the backend', async () => {
@@ -233,10 +247,9 @@ describe('DaemonCanvasPage', () => {
       expect(createdBackends).toHaveLength(1)
       expect(createdBackends[0]?.workspaceId).toBe('w1')
 
-      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await openCanvasSwitcher()
       await act(async () => {
-        workspaceSelect.value = 'w2'
-        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+        await selectWorkspaceFromSwitcher('w2')
       })
 
       await waitFor(() => {
@@ -272,15 +285,26 @@ describe('DaemonCanvasPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      // w1 has canvases, so the dropdown (not the row select, which is
+      // absent while a canvas is mounted) is what starts the switch.
+      await openCanvasSwitcher()
       await act(async () => {
-        workspaceSelect.value = 'w2'
-        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+        await selectWorkspaceFromSwitcher('w2')
       })
 
       await waitFor(() =>
         expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
       )
+      // w2 has zero canvases, so WorkspaceTopBar (and its dropdown) is
+      // unmounted — the row select is the only switcher available here, and
+      // it must still work to get back out of the empty workspace.
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
+      await act(async () => {
+        workspaceSelect.value = 'w1'
+        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     })
 
     it('keeps the editor mounted and shows an inline error when switching workspace fails', async () => {
@@ -308,10 +332,9 @@ describe('DaemonCanvasPage', () => {
 
       mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
 
-      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await openCanvasSwitcher()
       await act(async () => {
-        workspaceSelect.value = 'w2'
-        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+        await selectWorkspaceFromSwitcher('w2')
       })
 
       await waitFor(() =>
@@ -324,6 +347,13 @@ describe('DaemonCanvasPage', () => {
     })
 
     it('shows the static disabled teaser instead of the switcher when capabilities.workspaces is false', async () => {
+      // A daemon with >=2 workspaces still shows no dropdown section or row
+      // select while the capability itself is off — capability gating is a
+      // single rule, not one the new dropdown surface could bypass.
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+
       await act(async () => {
         render(
           <DaemonCanvasPage
@@ -350,6 +380,35 @@ describe('DaemonCanvasPage', () => {
       expect(screen.queryByLabelText('Workspaces')).toBeNull()
       const teaser = screen.getByText('Workspaces')
       expect(teaser.getAttribute('aria-disabled')).toBe('true')
+
+      await openCanvasSwitcher()
+      expect(screen.queryByRole('menuitemradio')).toBeNull()
+    })
+
+    it('with a canvas mounted, capabilities.workspaces=true, and >=2 workspaces, the dropdown is the ONLY switcher: the row select is absent while the dropdown shows the Workspaces section', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+      // Hand (view-only) is the default tool; the host history cluster only
+      // docks in Select mode, so tests exercising it switch first.
+      fireEvent.click(await screen.findByTestId('select-tool-button'))
+
+      expect(screen.queryByLabelText('Workspaces')).toBeNull()
+
+      await openCanvasSwitcher()
+      expect(screen.getByText('Workspaces')).toBeTruthy()
+      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+        'w1',
+        'w2',
+      ])
     })
   })
 
@@ -543,11 +602,11 @@ describe('DaemonCanvasPage', () => {
     // Switch into a workspace with zero canvases: the canvas backend tears
     // down entirely (no WorkspaceTopBar mounts), but there genuinely is no
     // live sync happening either way, so the indicator must not disappear
-    // just because the canvas-gated UI does.
-    const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+    // just because the canvas-gated UI does. w1 has a mounted canvas, so the
+    // row select is absent here — the dropdown drives the switch.
+    await openCanvasSwitcher()
     await act(async () => {
-      workspaceSelect.value = 'w2'
-      workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      await selectWorkspaceFromSwitcher('w2')
     })
 
     await waitFor(() =>
