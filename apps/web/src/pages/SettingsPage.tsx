@@ -216,6 +216,7 @@ function sectionContent(
     onWebMcpToggle: () => void
     persistStep: PersistStepState
     protecting: boolean
+    protectDeclined: boolean
     onProtect: () => void
     installStatus: 'installed' | 'installable' | 'not-captured'
     daemon?: { baseUrl: string; token: string | null }
@@ -239,6 +240,7 @@ function sectionContent(
           <SetupJourney
             persist={props.persistStep}
             protecting={props.protecting}
+            protectDeclined={props.protectDeclined}
             onProtect={props.onProtect}
             install={props.installStatus}
             onInstall={() => void promptInstall()}
@@ -319,11 +321,18 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
   }, [])
 
   const [protecting, setProtecting] = useState(false)
+  const [protectDeclined, setProtectDeclined] = useState(false)
   const handleProtect = useCallback(() => {
     setProtecting(true)
+    setProtectDeclined(false)
     void ensurePersistentStorage()
-      .then(() => queryPersistentStorage())
-      .then((state) => setPersisted(state))
+      .then(async (granted) => {
+        const state = await queryPersistentStorage()
+        setPersisted(state)
+        // A silent refusal is the common Chromium answer on a fresh
+        // profile; without saying so the button looks broken.
+        setProtectDeclined(granted !== true && state !== true)
+      })
       .finally(() => setProtecting(false))
   }, [])
 
@@ -375,6 +384,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
     onWebMcpToggle: handleWebMcpToggle,
     persistStep,
     protecting,
+    protectDeclined,
     onProtect: handleProtect,
     installStatus: installState.status,
     daemon,

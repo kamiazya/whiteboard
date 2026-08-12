@@ -51,6 +51,12 @@ describe('AppShell', () => {
     expect((router.state.location.state as { from?: string }).from).toBe('/local/c1')
   })
 
+  it('names what the dot is about, so it reads as a task and not a warning', () => {
+    renderShell(false)
+    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /settings.*(step|setup)/i })).toBeTruthy()
+  })
+
   it('carries the nudge dot while a setup todo remains (no daemon)', () => {
     renderShell(false)
     expect(screen.getByTestId('settings-nudge')).toBeTruthy()

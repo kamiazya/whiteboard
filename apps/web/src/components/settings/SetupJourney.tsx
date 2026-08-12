@@ -8,6 +8,13 @@ export type PersistStepState = 'unknown' | 'granted' | 'browser-managed' | 'todo
 
 export interface SetupJourneyProps {
   persist: PersistStepState
+  /**
+   * True after a Protect request came back without a grant. Chromium
+   * decides silently on engagement heuristics, so "nothing happened" is a
+   * real outcome the user must be told about — otherwise the button reads
+   * as broken.
+   */
+  protectDeclined?: boolean
   /** A Protect request is in flight. */
   protecting: boolean
   onProtect: () => void
@@ -39,6 +46,7 @@ const ACTION_CLASS =
  */
 export function SetupJourney({
   persist,
+  protectDeclined = false,
   protecting,
   onProtect,
   install,
@@ -65,7 +73,7 @@ export function SetupJourney({
           kind: 'action',
           title: 'Protect your data',
           state: persist === 'unknown' ? '…' : 'not granted yet',
-          desc: 'Ask the browser to protect canvases from storage-pressure eviction.',
+          desc: 'Ask the browser to keep your canvases even when it is running low on space — without this it may delete them to free up room.',
           action:
             persist === 'todo' ? (
               <button
@@ -77,6 +85,9 @@ export function SetupJourney({
                 {protecting ? 'Protecting…' : 'Protect'}
               </button>
             ) : undefined,
+          hint: protectDeclined
+            ? 'Your browser turned this down for now — it usually grants it once you have used the app a few times. Your canvases still work; keep an export of anything you cannot lose.'
+            : undefined,
         },
     install === 'installed'
       ? { key: 'install', kind: 'done', title: 'Install the app', state: 'installed' }
@@ -101,13 +112,13 @@ export function SetupJourney({
             hint: 'Your browser’s menu may offer Install or Add to Home Screen.',
           },
     daemonConnected
-      ? { key: 'daemon', kind: 'done', title: 'Connect a local daemon', state: 'connected' }
+      ? { key: 'daemon', kind: 'done', title: 'Connect the companion app', state: 'connected' }
       : {
           key: 'daemon',
           kind: 'action',
-          title: 'Connect a local daemon',
+          title: 'Connect the companion app',
           state: 'not connected',
-          desc: 'Durable storage and your AI agent live in the local daemon.',
+          desc: 'Run the companion app to keep canvases in real files on your computer, with version history.',
           action: (
             <Link to={settingsPath('connections')} className={ACTION_CLASS}>
               How to connect

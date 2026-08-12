@@ -189,6 +189,35 @@ describe('SettingsPage — Data & app setup journey', () => {
     expect(await within(mobile).findByText('managed by the browser')).toBeTruthy()
   })
 
+  it('a browser that declines Protect says so, instead of leaving the row unchanged', async () => {
+    // Chromium grants silently on engagement; a fresh profile is simply
+    // refused. The refusal is the case that used to look like a dead button.
+    stubStorage({ persisted: false, persistResult: false })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    fireEvent.click(await within(mobile).findByRole('button', { name: 'Protect' }))
+    expect(
+      await within(mobile).findByText(/browser turned this down|not granted it yet/i),
+    ).toBeTruthy()
+  })
+
+  it('explains persistence without storage jargon', async () => {
+    stubStorage({ persisted: false })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByRole('button', { name: 'Protect' })
+    expect(within(mobile).queryByText(/eviction/i)).toBeNull()
+    expect(within(mobile).getByText(/delete.*(free up|space)|running low/i)).toBeTruthy()
+  })
+
+  it('describes the daemon step without developer vocabulary', async () => {
+    stubStorage({ persisted: true })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('granted')
+    expect(within(mobile).queryByText(/daemon|AI agent/i)).toBeNull()
+  })
+
   it('Protect asks for persistence and celebrates the live grant exactly once', async () => {
     stubStorage({ persisted: false, persistResult: true })
     renderAt('/settings/data')
