@@ -42,6 +42,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { browserLocalFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -291,6 +292,7 @@ export function BrowserLocalCanvasPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
+    loaded: canvasLoaded,
     onChange,
     externalVersion,
     exportScene,
@@ -701,6 +703,17 @@ export function BrowserLocalCanvasPage({
                   branch keys for the same reason.) */}
               <SpatialEditor
                 key={canvasId ?? 'no-canvas'}
+                // Decided from the canvas's own shape, but only once its
+                // document has loaded — at mount every canvas still looks
+                // empty.
+                initialTool={
+                  canvasLoaded
+                    ? resolveInitialTool({
+                        isEmpty: canvas.nodes.length === 0,
+                        lastTool: readLastTool(),
+                      })
+                    : undefined
+                }
                 canvas={canvas}
                 onChange={onChange}
                 externalVersion={externalVersion}

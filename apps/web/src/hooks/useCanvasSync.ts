@@ -26,6 +26,13 @@ export type SceneExportFormat = 'png' | 'svg'
 
 export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
+  /**
+   * True once the backend has published this canvas's document at least
+   * once. The document arrives AFTER mount, so anything deriving a decision
+   * from the canvas's shape (its node count, say) must wait for this rather
+   * than reading the empty placeholder the hook starts with.
+   */
+  loaded: boolean
   canvas: SpatialCanvas
   onChange: (next: SpatialCanvas, command: EditorCommand) => void
   // Bumps only on an externally-originated canvas publish (initial hydrate,
@@ -160,6 +167,7 @@ export function useCanvasSync(
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
+  const [loaded, setLoaded] = useState(false)
   const [externalVersion, setExternalVersion] = useState(0)
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
@@ -182,6 +190,7 @@ export function useCanvasSync(
     setRestoreInProgress(false)
     setRestoreLabel(null)
     setCanvas(EMPTY_CANVAS)
+    setLoaded(false)
     // Locks belong to the session being torn down. Left standing they would
     // be reported against whatever canvas comes next — or against nothing at
     // all, when the backend goes to null.
@@ -213,6 +222,7 @@ export function useCanvasSync(
     sessionRef.current = session
     const unsubscribe = session.subscribe((next, origin) => {
       setCanvas(next)
+      setLoaded(true)
       if (origin === 'external') setExternalVersion((v) => v + 1)
     })
     // Undo-stack pushes land on COMMIT, after the canvas publish that drove
@@ -354,6 +364,7 @@ export function useCanvasSync(
 
   return {
     syncStatus,
+    loaded,
     canvas,
     onChange,
     externalVersion,
