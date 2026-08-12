@@ -8,31 +8,13 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readBrowserProjectNames } from '../../shared/test-utils/vitest-browser-projects.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 
 function readCiWorkflow(): string {
   return readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf-8')
-}
-
-// Same derivation docs-contract.test.ts uses for its "documents every
-// real-browser vitest project" assertion: walk the projects root
-// vitest.config.ts wires up and keep the ones with browser.enabled: true.
-// Two independent guards deriving from the same ground truth is what makes
-// ci.yml, package.json, and the docs enumeration unable to disagree silently
-// — a project missing from any one of the three fails its own guard.
-function readBrowserProjectNames(): string[] {
-  const rootVitestConfig = readFileSync(join(ROOT, 'vitest.config.ts'), 'utf8')
-  const projectConfigPaths = [...rootVitestConfig.matchAll(/'((?:packages|apps)\/[^']+)'/g)].map(
-    (match) => match[1],
-  )
-  return projectConfigPaths.flatMap((relativePath) => {
-    const configContent = readFileSync(join(ROOT, relativePath), 'utf8')
-    if (!/browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent)) return []
-    const nameMatch = configContent.match(/name:\s*'([^']+)'/)
-    return nameMatch ? [nameMatch[1]] : []
-  })
 }
 
 function readTestBrowserScript(): string {
@@ -66,7 +48,7 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
   it('the test:browser script covers every browser-enabled vitest project', () => {
     const script = readTestBrowserScript()
     const flaggedProjects = [...script.matchAll(/--project[=\s]([^\s]+)/g)].map((m) => m[1])
-    const browserProjectNames = readBrowserProjectNames()
+    const browserProjectNames = readBrowserProjectNames(ROOT)
     expect(browserProjectNames.length).toBeGreaterThan(0)
     expect(flaggedProjects).toEqual(expect.arrayContaining(browserProjectNames))
   })

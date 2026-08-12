@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readBrowserProjectNames } from '../shared/test-utils/vitest-browser-projects.js'
 
 // The user-facing docs/ tree is the contract surface for anything a real
 // operator needs to discover (env vars, escape hatches). R5 of the MCP-UI
@@ -86,21 +87,7 @@ describe('docs/ contract', () => {
     // Counting filenames would stay green even if a project's own name
     // diverged from what testing.md documents, or if a differently-named
     // config elsewhere in the tree happened to share the same filename.
-    const rootVitestConfig = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf8')
-    const projectConfigPaths = [...rootVitestConfig.matchAll(/'((?:packages|apps)\/[^']+)'/g)].map(
-      (match) => match[1],
-    )
-    expect(projectConfigPaths.length).toBeGreaterThan(0)
-
-    const browserProjectNames = projectConfigPaths.flatMap((relativePath) => {
-      const configContent = readFileSync(join(REPO_ROOT, relativePath), 'utf8')
-      if (!/browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent)) return []
-      const nameMatch = configContent.match(/name:\s*'([^']+)'/)
-      expect(nameMatch, `${relativePath} enables browser mode but declares no test.name`).not.toBe(
-        null,
-      )
-      return nameMatch ? [nameMatch[1]] : []
-    })
+    const browserProjectNames = readBrowserProjectNames(REPO_ROOT)
     // Pin the known set so this test also fails (rather than silently
     // shrinking its coverage) if a browser project is ever removed.
     expect(browserProjectNames.sort()).toEqual([
