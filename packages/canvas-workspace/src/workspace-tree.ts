@@ -117,7 +117,6 @@ export class WorkspaceTree {
 
   findByAlias(alias: string): WorkspaceNode | undefined {
     const parts = alias.split('/')
-    if (parts.length === 0) return undefined
 
     let candidates = this.#tree.getNodes().filter((n) => n.parent() === undefined)
 
@@ -202,26 +201,17 @@ function compareCanvasId(a: WorkspaceNode, b: WorkspaceNode): number {
  * keeps derivation idempotent and identical on every peer.
  */
 function disambiguateSegments(siblings: readonly WorkspaceNode[]): Map<TreeID, string> {
+  const groups = new Map<string, WorkspaceNode[]>()
+  for (const node of siblings) {
+    const group = groups.get(node.segment)
+    if (group) group.push(node)
+    else groups.set(node.segment, [node])
+  }
+
   const result = new Map<TreeID, string>()
-  const rawCounts = new Map<string, number>()
-  for (const node of siblings) {
-    rawCounts.set(node.segment, (rawCounts.get(node.segment) ?? 0) + 1)
-  }
-
-  const taken = new Set(siblings.map((node) => node.segment))
-  const collisionGroups = new Map<string, WorkspaceNode[]>()
-  for (const node of siblings) {
-    if ((rawCounts.get(node.segment) ?? 0) > 1) {
-      const group = collisionGroups.get(node.segment) ?? []
-      group.push(node)
-      collisionGroups.set(node.segment, group)
-    } else {
-      result.set(node.id, node.segment)
-    }
-  }
-
-  for (const [segment, group] of collisionGroups) {
-    const [winner, ...rest] = [...group].sort(compareCanvasId)
+  const taken = new Set(groups.keys())
+  for (const [segment, group] of groups) {
+    const [winner, ...rest] = group.sort(compareCanvasId)
     result.set(winner!.id, segment)
     let suffix = 2
     for (const node of rest) {
