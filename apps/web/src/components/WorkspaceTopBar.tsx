@@ -75,6 +75,10 @@ interface Props {
   // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
   statusSlot?: ReactNode
+  // Pass-through to CanvasDropdown's optional Workspaces section — both
+  // omitted (every pre-existing caller) keeps this byte-identical.
+  workspaces?: string[]
+  onSwitchWorkspace?: (workspaceId: string) => void
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -103,6 +107,8 @@ export default function WorkspaceTopBar({
   onExport,
   onOpenSettings,
   statusSlot,
+  workspaces,
+  onSwitchWorkspace,
 }: Props) {
   const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
@@ -242,6 +248,8 @@ export default function WorkspaceTopBar({
           onCreateMarkdown={
             onCreateMarkdownCanvas === undefined ? undefined : () => void onCreateMarkdownCanvas()
           }
+          workspaces={workspaces}
+          onSwitchWorkspace={onSwitchWorkspace}
         />
 
         {/* Canvas-specific actions such as rename and copy URL. */}

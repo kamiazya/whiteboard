@@ -464,6 +464,68 @@ describe('WorkspaceTopBar browser mode', () => {
     delete navigator.clipboard
   })
 
+  describe('workspace picker (real Radix)', () => {
+    function renderWithWorkspaces(onSwitchWorkspace: (workspaceId: string) => void) {
+      return renderTopBar({ workspaceId: 'w1', workspaces: ['w1', 'w2'], onSwitchWorkspace })
+    }
+
+    it('keyboard: Tab, Enter, ArrowDown traversal (pinned via activeElement), Enter selects and closes', async () => {
+      const onSwitchWorkspace = vi.fn()
+      renderWithWorkspaces(onSwitchWorkspace)
+
+      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
+      for (let i = 0; i < 10 && document.activeElement !== switcher; i++) {
+        await userEvent.tab()
+      }
+      expect(switcher).toHaveFocus()
+
+      await userEvent.keyboard('{Enter}')
+      const w1Item = await screen.findByRole('menuitemradio', { name: 'w1' })
+      const w2Item = screen.getByRole('menuitemradio', { name: 'w2' })
+
+      // The search box's autoFocus wins the open-mount focus race against
+      // Radix, so the first ArrowDown is what forwards focus into the
+      // roving-item list at all — pin the transition itself, not only the
+      // eventual selection.
+      await userEvent.keyboard('{ArrowDown}')
+      await expect.poll(() => document.activeElement).toBe(w1Item)
+
+      await userEvent.keyboard('{ArrowDown}')
+      await expect.poll(() => document.activeElement).toBe(w2Item)
+
+      await userEvent.keyboard('{Enter}')
+      await expect.poll(() => onSwitchWorkspace.mock.calls).toEqual([['w2']])
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    })
+
+    it('real pointer click on a workspace item fires onSwitchWorkspace and closes the menu', async () => {
+      const onSwitchWorkspace = vi.fn()
+      renderWithWorkspaces(onSwitchWorkspace)
+
+      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
+      await userEvent.click(switcher)
+      await screen.findByRole('menuitemradio', { name: 'w1' })
+
+      await page.getByRole('menuitemradio', { name: 'w2' }).click()
+
+      await expect.poll(() => onSwitchWorkspace.mock.calls).toEqual([['w2']])
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    })
+
+    it('Escape closes the menu without firing onSwitchWorkspace', async () => {
+      const onSwitchWorkspace = vi.fn()
+      renderWithWorkspaces(onSwitchWorkspace)
+
+      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
+      await userEvent.click(switcher)
+      await screen.findByRole('menuitemradio', { name: 'w1' })
+
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+      expect(onSwitchWorkspace).not.toHaveBeenCalled()
+    })
+  })
+
   it('does not leave sibling top-bar controls aria-hidden after the Canvas actions menu closes', async () => {
     renderTopBar()
 

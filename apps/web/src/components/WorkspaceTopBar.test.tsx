@@ -27,6 +27,8 @@ function mkNamesOk() {
 function renderBar(overrides?: {
   onNavigateBack?: () => void
   onNavigateToCanvas?: (slug: string) => void
+  workspaces?: string[]
+  onSwitchWorkspace?: (workspaceId: string) => void
 }) {
   // React 18 delegates events to the root container. Radix portals render into document.body,
   // which is a DOM sibling of the default test container. Using document.body as the React root
@@ -39,6 +41,8 @@ function renderBar(overrides?: {
       onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
       onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
+      workspaces={overrides?.workspaces}
+      onSwitchWorkspace={overrides?.onSwitchWorkspace}
     />,
     { container: document.body },
   )
@@ -1286,5 +1290,90 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
     await waitFor(() => {
       expect(screen.queryByLabelText('Canvas title')).toBeNull()
     })
+  })
+})
+
+describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
+  async function openSwitcher() {
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await screen.findByTestId('new-canvas-menu-item')
+  }
+
+  it('renders a Workspaces section above the canvases section, one menuitemradio per workspace, current checked', async () => {
+    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace: () => {} })
+    await openSwitcher()
+
+    const label = screen.getByText('Workspaces')
+    const items = screen.getAllByRole('menuitemradio')
+    expect(items.map((item) => item.textContent)).toEqual(['ws_1', 'w2'])
+    expect(items[0]?.getAttribute('aria-checked')).toBe('true')
+    expect(items[1]?.getAttribute('aria-checked')).toBe('false')
+
+    // "Above the canvases section": the label precedes the canvas entry in document order.
+    const canvasEntry = screen.getByText('canvas-a')
+    expect(
+      label.compareDocumentPosition(canvasEntry) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('marks the current workspace with a visible non-color indicator (ItemIndicator check icon), and no indicator on the others', async () => {
+    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace: () => {} })
+    await openSwitcher()
+
+    const items = screen.getAllByRole('menuitemradio')
+    expect(items[0]?.querySelector('svg')).not.toBeNull()
+    expect(items[1]?.querySelector('svg')).toBeNull()
+  })
+
+  it('clicking another workspace calls onSwitchWorkspace exactly once with its id and closes the menu', async () => {
+    const onSwitchWorkspace = vi.fn()
+    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
+    await openSwitcher()
+
+    const w2Item = screen.getByRole('menuitemradio', { name: 'w2' })
+    fireEvent.pointerUp(w2Item)
+
+    await waitFor(() => expect(onSwitchWorkspace).toHaveBeenCalledTimes(1))
+    expect(onSwitchWorkspace).toHaveBeenCalledWith('w2')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+  })
+
+  it('clicking the current workspace never calls onSwitchWorkspace', async () => {
+    const onSwitchWorkspace = vi.fn()
+    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
+    await openSwitcher()
+
+    const currentItem = screen.getByRole('menuitemradio', { name: 'ws_1' })
+    fireEvent.pointerUp(currentItem)
+
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(onSwitchWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('renders no Workspaces section when workspaces/onSwitchWorkspace are absent — every pre-existing caller stays byte-identical', async () => {
+    renderBar()
+    await openSwitcher()
+
+    expect(screen.queryByText('Workspaces')).toBeNull()
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+  })
+
+  it('renders no Workspaces section with a single workspace, and hides it while a canvas search is active', async () => {
+    const onSwitchWorkspace = vi.fn()
+    renderBar({ workspaces: ['ws_1'], onSwitchWorkspace })
+    await openSwitcher()
+    expect(screen.queryByText('Workspaces')).toBeNull()
+
+    cleanup()
+
+    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
+    await openSwitcher()
+    expect(screen.getByText('Workspaces')).toBeTruthy()
+
+    fireEvent.change(screen.getByPlaceholderText('Switch canvas…'), {
+      target: { value: 'canvas-a' },
+    })
+    expect(screen.queryByText('Workspaces')).toBeNull()
   })
 })

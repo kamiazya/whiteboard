@@ -479,6 +479,12 @@ export function DaemonCanvasPage({
               // the upload entirely and latest-thumbnail stays 204 forever.
               getThumbnailBlob={getThumbnailBlob}
               onOpenSettings={handleOpenSettings}
+              workspaces={
+                capabilities.workspaces
+                  ? controller.workspaces.map((w) => w.workspaceId)
+                  : undefined
+              }
+              onSwitchWorkspace={(id) => void controller.switchWorkspace(id)}
             />
           )}
           {capabilities.branches && canvas && (
@@ -490,13 +496,18 @@ export function DaemonCanvasPage({
             local case — gets no extra header row at all (raw ids are not
             chrome, and every header row costs canvas height on a phone). */}
           {(!capabilities.workspaces ||
-            controller.workspaces.length > 1 ||
+            (controller.workspaces.length > 1 && !canvas) ||
             !capabilities.versions ||
             !capabilities.branches ||
             !capabilities.merge) && (
             <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
               {capabilities.workspaces ? (
-                controller.workspaces.length > 1 && (
+                // WorkspaceTopBar's dropdown is the switcher once a canvas is
+                // mounted; this select survives only for the no-canvas state
+                // (empty workspace), where that dropdown never mounts and it
+                // is the only way to switch back out.
+                controller.workspaces.length > 1 &&
+                !canvas && (
                   <select
                     aria-label="Workspaces"
                     value={controller.workspaceId ?? ''}
