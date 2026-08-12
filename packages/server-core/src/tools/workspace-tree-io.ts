@@ -49,11 +49,10 @@ export async function loadWorkspaceTreeIfExists(
  * not actually own `canvasId` (stale cached id, copy-paste across two open
  * canvases, client bug). Without this check a mismatched pair would still
  * pass every canvas-doc-level validation — `loadCanvasDoc`/
- * `loadOrCreateCanvasDoc` address the doc purely by `canvasId` — and the
- * only symptom would be a silently stale `WorkspaceIndex` for the real
- * workspace, since `reindexWorkspace` fails open and only logs. Call this
- * before any mutation so the caller gets an explicit, typed rejection
- * instead of a hard-to-detect index-staleness bug.
+ * `loadOrCreateCanvasDoc` address the doc purely by `canvasId`, with no
+ * cross-check against the workspace tree. Call this before any mutation
+ * so the caller gets an explicit, typed rejection instead of silently
+ * writing into the wrong workspace's canvas.
  */
 export async function assertCanvasInWorkspace(
   canvasDocStore: CanvasDocStore,

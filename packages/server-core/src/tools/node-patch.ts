@@ -11,7 +11,6 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { NodeLockedError, NodeNotFoundError, PatchValidationError } from './errors.js'
-import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
@@ -59,7 +58,7 @@ export function createNodePatchTool(deps: ServerDeps) {
     name: 'node_patch' as const,
     inputSchema: nodePatchInputSchema,
     outputSchema: nodePatchOutputSchema,
-    execute: withReindex(deps, async (input: NodePatchInput): Promise<NodePatchOutput> => {
+    execute: async (input: NodePatchInput): Promise<NodePatchOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
@@ -90,6 +89,6 @@ export function createNodePatchTool(deps: ServerDeps) {
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
 
       return { canvasId: input.canvasId, node: updatedNode }
-    }),
+    },
   }
 }

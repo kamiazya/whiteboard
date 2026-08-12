@@ -3,7 +3,6 @@ import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { InMemoryCanvasDocStore } from '../server/store/inmemory/in-memory-canvas-doc-store.js'
-import { InMemoryWorkspaceIndex } from '../server/store/inmemory/in-memory-workspace-index.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
 describe('createContainer', () => {
@@ -17,28 +16,21 @@ describe('createContainer', () => {
     expect(container.get(TOKENS.BlobStore)).toBeInstanceOf(InMemoryBlobStore)
   })
 
-  it('resolves TOKENS.WorkspaceIndex to an InMemoryWorkspaceIndex', () => {
-    const container = createContainer()
-    expect(container.get(TOKENS.WorkspaceIndex)).toBeInstanceOf(InMemoryWorkspaceIndex)
-  })
-
   it('resolves each port to the same singleton instance across repeated calls', () => {
     const container = createContainer()
 
     expect(container.get(TOKENS.CanvasDocStore)).toBe(container.get(TOKENS.CanvasDocStore))
     expect(container.get(TOKENS.BlobStore)).toBe(container.get(TOKENS.BlobStore))
-    expect(container.get(TOKENS.WorkspaceIndex)).toBe(container.get(TOKENS.WorkspaceIndex))
   })
 })
 
 describe('resolveServerDeps', () => {
-  it('assembles ServerDeps from container.get(TOKENS.X) for all three ports', () => {
+  it('assembles ServerDeps from container.get(TOKENS.X) for both ports', () => {
     const container = createContainer()
 
     const deps = resolveServerDeps(container)
 
     expect(deps.canvasDocStore).toBeInstanceOf(InMemoryCanvasDocStore)
-    expect(deps.workspaceIndex).toBeInstanceOf(InMemoryWorkspaceIndex)
     expect(deps.blobStore).toBeInstanceOf(InMemoryBlobStore)
     expect(deps.canvasDocStore).toBe(container.get(TOKENS.CanvasDocStore))
   })

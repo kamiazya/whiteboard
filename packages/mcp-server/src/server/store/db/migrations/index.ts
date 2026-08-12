@@ -4,6 +4,7 @@ import { migration as canvasesLastCompactedAt } from './0002-canvases-last-compa
 import { migration as canvasDocStore } from './0003-canvas-doc-store.js'
 import { migration as workspaceIndex } from './0004-workspace-index.js'
 import { migration as canvasesKind } from './0005-canvases-kind.js'
+import { migration as dropWorkspaceIndex } from './0006-drop-workspace-index.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0002-canvases-last-compacted-at is a no-op kept only so databases created by the
@@ -14,4 +15,5 @@ export const migrations: Record<string, Migration> = {
   '0003-canvas-doc-store': canvasDocStore,
   '0004-workspace-index': workspaceIndex,
   '0005-canvases-kind': canvasesKind,
+  '0006-drop-workspace-index': dropWorkspaceIndex,
 }

@@ -1,7 +1,6 @@
 import type { BlobStore } from './blob-store.js'
 import type { CanvasDocStore } from './canvas-doc-store.js'
 import type { PresenceChannel } from './presence.js'
-import type { WorkspaceIndex } from './workspace-index.js'
 
 /**
  * A DI token that carries its bound type only at compile time (`__type` is
@@ -24,7 +23,6 @@ export function defineToken<T>(name: string): Token<T> {
 /** Aggregate token registry; each key is exactly its port interface's name. */
 export const TOKENS = {
   CanvasDocStore: defineToken<CanvasDocStore>('CanvasDocStore'),
-  WorkspaceIndex: defineToken<WorkspaceIndex>('WorkspaceIndex'),
   BlobStore: defineToken<BlobStore>('BlobStore'),
   PresenceChannel: defineToken<PresenceChannel>('PresenceChannel'),
 } as const

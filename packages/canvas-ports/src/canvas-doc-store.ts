@@ -82,9 +82,9 @@ export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 
 /**
  * Persistence for a single Loro-backed document (a canvas or the
- * workspace-tree). `docRef` carries the scope for every method — unlike
- * WorkspaceIndex, there is no separate workspace-scoping field because the
- * document itself is the unit of storage.
+ * workspace-tree). `docRef` carries the scope for every method; there is
+ * no separate workspace-scoping field because the document itself is the
+ * unit of storage.
  */
 export interface CanvasDocStore {
   loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult>

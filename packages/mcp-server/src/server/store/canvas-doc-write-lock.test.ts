@@ -78,15 +78,6 @@ async function makeDeps() {
   })
   return {
     canvasDocStore,
-    workspaceIndex: {
-      // Only the reindex hook touches this, and it is a no-op for this test.
-      applyRows: async () => {},
-      listCanvases: async () => ({ canvases: [] }),
-      resolveAlias: async () => null,
-      listBacklinks: async () => ({ backlinks: [] }),
-      listFacetIndex: async () => ({ rows: [] }),
-      listAliasHistory: async () => ({ rows: [] }),
-    } as never,
     blobStore: {} as never,
   }
 }

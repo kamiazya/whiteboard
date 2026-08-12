@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 /**
  * Content-addressed reference to a blob. BlobStore is global/content-addressed
- * by design (unlike WorkspaceIndex, it is not workspace-scoped) — the same
- * bytes anywhere in the system hash to the same ref, so storage can be
- * deduplicated across workspaces and canvases.
+ * by design, not workspace-scoped — the same bytes anywhere in the system
+ * hash to the same ref, so storage can be deduplicated across workspaces
+ * and canvases.
  */
 export const blobRefSchema = z
   .object({

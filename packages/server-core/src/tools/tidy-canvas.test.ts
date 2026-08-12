@@ -7,7 +7,6 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
 import { createTidyCanvasTool } from './tidy-canvas.js'
 
@@ -33,7 +32,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never }
 }
 
 const box = (id: string, x: number, y: number) => ({

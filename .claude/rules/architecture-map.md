@@ -8,7 +8,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/canvas-codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
 | `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, zod |
 | `packages/canvas-ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
-| `packages/canvas-workspace` | tree ops, alias derivation, index derivation, link extraction | model, codec, ports, loro-crdt |
+| `packages/canvas-workspace` | tree ops, alias derivation, LoroDoc bridge | model, codec, ports, loro-crdt |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | workspace, render, hono, zod, loro-crdt |
 | `packages/canvas-viewer` | Read-only OpenCanvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |

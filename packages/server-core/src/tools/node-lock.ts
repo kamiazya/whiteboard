@@ -40,8 +40,6 @@ export function createNodeLockTool(deps: ServerDeps) {
     name: 'node_lock' as const,
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
-    // No `withReindex`: a lock changes no canvas content, so no index row
-    // derived from nodes/edges/links can have moved.
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)

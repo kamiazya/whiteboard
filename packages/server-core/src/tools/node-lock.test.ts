@@ -7,7 +7,6 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { NodeNotFoundError } from './errors.js'
 import { createNodeLockTool } from './node-lock.js'
 
@@ -36,7 +35,7 @@ async function seedCanvas(canvasDocStore: FakeCanvasDocStore): Promise<void> {
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never }
 }
 
 async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySet<string>> {

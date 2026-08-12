@@ -9,7 +9,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 describe('loadSpatialCanvas', () => {
   test('throws CanvasNotFoundError when no snapshot exists', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
-    const deps = { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+    const deps = { canvasDocStore, blobStore: {} as never }
 
     await expect(loadSpatialCanvas(deps, CANVAS_ID)).rejects.toThrow(CanvasNotFoundError)
   })
@@ -23,7 +23,7 @@ describe('loadSpatialCanvas', () => {
       })
     })
 
-    const deps = { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+    const deps = { canvasDocStore, blobStore: {} as never }
     const { doc, canvas } = await loadSpatialCanvas(deps, CANVAS_ID)
 
     expect(doc).toBeInstanceOf(LoroDoc)

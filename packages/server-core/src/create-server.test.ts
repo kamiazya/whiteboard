@@ -5,7 +5,6 @@ describe('createServer', () => {
   it('returns an app', () => {
     const { app } = createServer({
       canvasDocStore: {} as never,
-      workspaceIndex: {} as never,
       blobStore: {} as never,
     })
     expect(app).toBeDefined()
@@ -15,7 +14,6 @@ describe('createServer', () => {
   it('wires the facet_set tool', () => {
     const { tools } = createServer({
       canvasDocStore: {} as never,
-      workspaceIndex: {} as never,
       blobStore: {} as never,
     })
     expect(tools.facetSet.name).toBe('facet_set')
@@ -25,7 +23,6 @@ describe('createServer', () => {
   it('wires the render/export tools with input and output schemas', () => {
     const { tools } = createServer({
       canvasDocStore: {} as never,
-      workspaceIndex: {} as never,
       blobStore: {} as never,
     })
 

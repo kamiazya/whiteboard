@@ -22,19 +22,6 @@ import type {
   SaveSnapshotInput,
 } from './canvas-doc-store.js'
 import type { PresenceChannel, PresenceState } from './presence.js'
-import type {
-  ApplyRowsInput,
-  ListBacklinksInput,
-  ListBacklinksResult,
-  ListCanvasesInput,
-  ListCanvasesResult,
-  QueryFacetInput,
-  QueryFacetResult,
-  ResolveAliasHistoryInput,
-  ResolveAliasInput,
-  ResolveAliasResult,
-  WorkspaceIndex,
-} from './workspace-index.js'
 
 // Compile-time only: proves each port method's Parameters/Awaited-ReturnType
 // are exactly the named z.infer DTOs, so the interface cannot silently drift
@@ -64,44 +51,6 @@ it('CanvasDocStore: every method param/return is exactly its named DTO', () => {
   expectTypeOf<
     Awaited<ReturnType<CanvasDocStore['readFrontier']>>
   >().toEqualTypeOf<ReadFrontierResult>()
-})
-
-it('WorkspaceIndex: every method param includes workspaceId and returns its named DTO', () => {
-  expectTypeOf<Parameters<WorkspaceIndex['applyRows']>[0]>().toEqualTypeOf<ApplyRowsInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['applyRows']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<Awaited<ReturnType<WorkspaceIndex['applyRows']>>>().toEqualTypeOf<void>()
-
-  expectTypeOf<Parameters<WorkspaceIndex['resolveAlias']>[0]>().toEqualTypeOf<ResolveAliasInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['resolveAlias']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<
-    Awaited<ReturnType<WorkspaceIndex['resolveAlias']>>
-  >().toEqualTypeOf<ResolveAliasResult>()
-
-  expectTypeOf<
-    Parameters<WorkspaceIndex['resolveAliasHistory']>[0]
-  >().toEqualTypeOf<ResolveAliasHistoryInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['resolveAliasHistory']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<
-    Awaited<ReturnType<WorkspaceIndex['resolveAliasHistory']>>
-  >().toEqualTypeOf<ResolveAliasResult>()
-
-  expectTypeOf<Parameters<WorkspaceIndex['listCanvases']>[0]>().toEqualTypeOf<ListCanvasesInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['listCanvases']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<
-    Awaited<ReturnType<WorkspaceIndex['listCanvases']>>
-  >().toEqualTypeOf<ListCanvasesResult>()
-
-  expectTypeOf<Parameters<WorkspaceIndex['queryFacet']>[0]>().toEqualTypeOf<QueryFacetInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['queryFacet']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<
-    Awaited<ReturnType<WorkspaceIndex['queryFacet']>>
-  >().toEqualTypeOf<QueryFacetResult>()
-
-  expectTypeOf<Parameters<WorkspaceIndex['listBacklinks']>[0]>().toEqualTypeOf<ListBacklinksInput>()
-  expectTypeOf<Parameters<WorkspaceIndex['listBacklinks']>[0]>().toHaveProperty('workspaceId')
-  expectTypeOf<
-    Awaited<ReturnType<WorkspaceIndex['listBacklinks']>>
-  >().toEqualTypeOf<ListBacklinksResult>()
 })
 
 it('BlobStore: every method param/return is exactly its named DTO', () => {

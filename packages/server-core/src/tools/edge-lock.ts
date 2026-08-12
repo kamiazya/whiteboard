@@ -42,8 +42,6 @@ export function createEdgeLockTool(deps: ServerDeps) {
     name: 'edge_lock' as const,
     inputSchema: edgeLockInputSchema,
     outputSchema: edgeLockOutputSchema,
-    // No `withReindex`: a lock changes no canvas content, so no index row
-    // derived from nodes/edges/links can have moved.
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)

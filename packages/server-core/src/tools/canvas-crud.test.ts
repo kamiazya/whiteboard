@@ -2,7 +2,6 @@ import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
-import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
@@ -14,7 +13,6 @@ import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './can
 function makeDeps(): ServerDeps {
   return {
     canvasDocStore: createInMemoryCanvasDocStore(),
-    workspaceIndex: createInMemoryWorkspaceIndex(),
     blobStore: {} as never,
   }
 }
@@ -102,17 +100,6 @@ describe('wbCanvasCreate', () => {
     const second = await wbCanvasCreate(deps, { workspaceId: 'ws-1', segment: 'doc-b' })
     expect(second.segment).toBe('doc-b')
   })
-
-  it('reindexes the workspace so the new canvas is visible via WorkspaceIndex', async () => {
-    const deps = makeDeps()
-    const created = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'doc-a',
-      createWorkspace: true,
-    })
-    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
-    expect(listed.rows.map((row) => row.canvasId)).toContain(created.canvasId)
-  })
 })
 
 describe('wbCanvasGet', () => {
@@ -184,18 +171,6 @@ describe('wbCanvasDelete', () => {
     await expect(
       wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).rejects.toThrow(CanvasNotFoundError)
-  })
-
-  it('reindexes the workspace so the deleted canvas no longer appears via WorkspaceIndex', async () => {
-    const deps = makeDeps()
-    const created = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'doc-a',
-      createWorkspace: true,
-    })
-    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
-    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
-    expect(listed.rows.map((row) => row.canvasId)).not.toContain(created.canvasId)
   })
 
   it('deletes a canvas that has children without throwing, and the child no longer resolves', async () => {

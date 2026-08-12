@@ -11,11 +11,9 @@ paths:
   store/sync boundary: `DocRef`, `Frontier`, `ProtocolVersion`,
   `SnapshotChunk`, `SnapshotManifest`, `DeltaBatch`, the five sync messages
   (`hello`/`welcome`/`resume`/`catchUp`/`update`), `PresenceState`,
-  `BlobRef`, and the five WorkspaceIndex rows (facet index, canvas list,
-  alias resolution, backlink, alias history) plus every port method's input
-  and result DTO.
+  `BlobRef`, plus every port method's input and result DTO.
 - Hand-written TS port interfaces wired to those DTOs via `z.infer`:
-  `CanvasDocStore`, `WorkspaceIndex`, `BlobStore`, `PresenceChannel`.
+  `CanvasDocStore`, `BlobStore`, `PresenceChannel`.
 - The Symbol `TOKENS` aggregate (`defineToken`, `Token<T>`) for DI wiring.
 - Three canonical pure helpers, a **deliberate exception** to the
   contracts-only rule because they are model-only and loro-independent:
@@ -32,9 +30,6 @@ paths:
 - Frontier ordering, dominance, or comparison logic — `Frontier` is an
   **opaque** `z.instanceof(Uint8Array)` here; comparing frontiers requires
   the loro-crdt runtime and belongs in `canvas-codec`/`canvas-workspace`.
-- WorkspaceIndex row **derivation** (how a facet index or backlink table is
-  built from canvas content) — that's `canvas-workspace`'s job; this
-  package only declares the row shapes and makes no rebuildability claim.
 - Any implementation-specific constant (e.g. the Cloudflare Durable Objects
   ~2MB message cap) — `chunkSnapshot`'s `maxChunkBytes` is always a
   caller-supplied parameter.
@@ -50,13 +45,9 @@ paths:
 - Every DTO is a `.strict()` Zod object (extra keys reject) unless
   explicitly documented otherwise (`workspaceMetaSchema`-style open records
   do not appear in this package).
-- `WorkspaceIndex` is NOT a per-workspace instance: every method's input
-  DTO carries a required `workspaceId` (canvas-model's
-  `workspaceIdSchema`), and that field is the isolation boundary an
-  implementation MUST enforce per call so one index can safely back many
-  workspaces. `CanvasDocStore` and `BlobStore` do not need this — a
-  document's scope travels inside its `DocRef`, and blobs are deliberately
-  global/content-addressed.
+- `CanvasDocStore` and `BlobStore` are not workspace-scoped per-instance —
+  a document's scope travels inside its `DocRef`, and blobs are
+  deliberately global/content-addressed.
 - `workspaceIdSchema` (added to `canvas-model`) is a path-safe **slug**
   (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. It codifies the
   workspace-ID contract already enforced at runtime by mcp-server's
@@ -95,9 +86,6 @@ paths:
 ## Common mistakes (append as review finds them)
 
 - Adding a hand-written interface next to a schema instead of `z.infer`.
-- Giving `WorkspaceIndex` methods a per-instance workspace instead of a
-  per-call `workspaceId` field — breaks the multi-workspace isolation
-  contract.
 - Hardcoding an implementation's chunk-size cap into `chunkSnapshot`
   instead of taking it as a parameter.
 - Treating an out-of-order chunk set as a `reassembleSnapshot` failure —

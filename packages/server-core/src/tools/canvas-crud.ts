@@ -19,7 +19,6 @@ import type {
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
 import { generateCanvasId } from './generate-canvas-id.js'
-import { withReindex } from './with-reindex.js'
 import {
   loadWorkspaceTree,
   loadWorkspaceTreeIfExists,
@@ -42,33 +41,31 @@ export async function wbCanvasCreate(
   deps: ServerDeps,
   input: z.infer<typeof createCanvasInputSchema>,
 ): Promise<z.infer<typeof createCanvasOutputSchema>> {
-  return withReindex(deps, async (input: z.infer<typeof createCanvasInputSchema>) => {
-    // Workspaces never materialize implicitly: a typo'd or hallucinated
-    // workspaceId must fail loudly rather than silently writing data into a
-    // workspace nobody asked for. `createWorkspace: true` is the explicit
-    // opt-in that bootstraps a genuinely new workspace.
-    const existingTree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
-    if (existingTree === null && input.createWorkspace !== true) {
-      throw new WorkspaceNotFoundError(input.workspaceId)
-    }
-    const tree = existingTree ?? new WorkspaceTree(new LoroDoc())
+  // Workspaces never materialize implicitly: a typo'd or hallucinated
+  // workspaceId must fail loudly rather than silently writing data into a
+  // workspace nobody asked for. `createWorkspace: true` is the explicit
+  // opt-in that bootstraps a genuinely new workspace.
+  const existingTree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
+  if (existingTree === null && input.createWorkspace !== true) {
+    throw new WorkspaceNotFoundError(input.workspaceId)
+  }
+  const tree = existingTree ?? new WorkspaceTree(new LoroDoc())
 
-    const parentId = input.parentId as TreeID | undefined
-    if (parentId !== undefined && tree.getNode(parentId) === undefined) {
-      throw new CanvasParentNotFoundError(input.parentId as string)
-    }
+  const parentId = input.parentId as TreeID | undefined
+  if (parentId !== undefined && tree.getNode(parentId) === undefined) {
+    throw new CanvasParentNotFoundError(input.parentId as string)
+  }
 
-    const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
-    if (conflict) {
-      throw new CanvasSegmentConflictError(input.segment)
-    }
+  const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
+  if (conflict) {
+    throw new CanvasSegmentConflictError(input.segment)
+  }
 
-    const canvasId = generateCanvasId()
-    tree.createNode(canvasId, input.segment, parentId)
-    await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+  const canvasId = generateCanvasId()
+  tree.createNode(canvasId, input.segment, parentId)
+  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
 
-    return { canvasId, segment: input.segment }
-  })(input)
+  return { canvasId, segment: input.segment }
 }
 
 export async function wbCanvasGet(
@@ -99,16 +96,9 @@ export async function wbCanvasDelete(
   deps: ServerDeps,
   input: z.infer<typeof deleteCanvasInputSchema>,
 ): Promise<z.infer<typeof deleteCanvasOutputSchema>> {
-  return withReindex(
-    deps,
-    async (
-      input: z.infer<typeof deleteCanvasInputSchema>,
-    ): Promise<z.infer<typeof deleteCanvasOutputSchema>> => {
-      const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-      const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
-      tree.delete(node.id)
-      await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-      return { deleted: true }
-    },
-  )(input)
+  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
+  tree.delete(node.id)
+  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+  return { deleted: true }
 }
