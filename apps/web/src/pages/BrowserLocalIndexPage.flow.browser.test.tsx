@@ -74,10 +74,10 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       },
       { timeout: 15_000 },
     )
-    // A fresh note is focused for typing immediately (no click) — the wait
-    // checks activeElement IS the CodeMirror contentDOM (.cm-content, same
-    // element as `editable`), not merely contained by .cm-editor, since exact
-    // identity is what real keyboard-event delivery depends on.
+    // A fresh note is focused for typing immediately (no click). Exact
+    // contentDOM identity — not .cm-editor containment — is what real
+    // keyboard-event delivery depends on; containment can pass while focus
+    // still sits on another in-flight descendant and race the first keys.
     await waitFor(() => {
       expect(document.activeElement).toBe(editable)
     })

@@ -212,9 +212,8 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // Click-focus (matching every other CodeMirror typing suite in this
     // repo) rather than relying on autofocus: this test's subject is
     // body/facet independence, not the fresh-note autofocus guarantee that
-    // test 1 above already pins. The wait then checks activeElement IS the
-    // contentDOM (.cm-content, same element as `editable`), not merely
-    // contained by .cm-editor.
+    // test 1 above already pins (see its focus-wait comment for why exact
+    // contentDOM identity is required).
     await userEvent.click(editable)
     await waitFor(() => {
       expect(document.activeElement).toBe(editable)
