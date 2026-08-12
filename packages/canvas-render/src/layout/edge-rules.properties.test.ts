@@ -341,14 +341,23 @@ const endpointRectArb: fc.Arbitrary<Rect> = borderRectArb
 const endpointBodyInkScenarioArb: fc.Arbitrary<{
   path: readonly Point[]
   endpointRects: readonly Rect[]
-}> = fc.tuple(endpointRectArb, foreignBodiesArb, fc.boolean()).chain(([rect, extras, wrapped]) =>
-  fc.array(interiorPointArb(rect), { minLength: 0, maxLength: 6 }).map((path) => ({
-    path,
-    endpointRects: wrapped
-      ? [{ x: rect.x - 10, y: rect.y - 10, w: rect.w + 20, h: rect.h + 20 }, rect, ...extras]
-      : [rect, ...extras],
-  })),
-)
+}> = fc
+  .tuple(endpointRectArb, foreignBodiesArb, fc.boolean(), fc.boolean())
+  .chain(([rect, extras, wrapped, duplicated]) =>
+    fc.array(interiorPointArb(rect), { minLength: 0, maxLength: 6 }).map((path) => ({
+      path,
+      // `duplicated` reaches the equal-rect case deterministically instead of
+      // waiting for the generator to collide: two identical endpoint rects
+      // contain each other, which the PROPER-containment exclusion keeps
+      // priced and a plain-containment one would silently drop.
+      endpointRects: [
+        ...(wrapped ? [{ x: rect.x - 10, y: rect.y - 10, w: rect.w + 20, h: rect.h + 20 }] : []),
+        rect,
+        ...(duplicated ? [{ ...rect }] : []),
+        ...extras,
+      ],
+    })),
+  )
 
 /** Independent oracle (never calls production code): total STRICTLY
  * interior chord length, container rects excluded. All generator
@@ -360,7 +369,11 @@ function referenceEndpointBodyInk(path: readonly Point[], rects: readonly Rect[]
     inner.y >= outer.y &&
     inner.x + inner.w <= outer.x + outer.w &&
     inner.y + inner.h <= outer.y + outer.h
-  const priced = rects.filter((r) => !rects.some((other) => other !== r && containsRect(r, other)))
+  // PROPER containment only: two identical rects each contain the other, and
+  // neither is a group frame around the other, so both stay priced.
+  const priced = rects.filter(
+    (r) => !rects.some((other) => other !== r && containsRect(r, other) && !containsRect(other, r)),
+  )
   let total = 0
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1] as Point
