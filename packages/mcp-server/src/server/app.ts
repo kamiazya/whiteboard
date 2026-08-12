@@ -78,6 +78,7 @@ import { canvasExists, saveCanvas } from './store/canvas-store.js'
 import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
 import { FileVersionStore } from './store/version-store.js'
+import { withWorkspaceWriteLock } from './store/workspace-lock.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
@@ -514,182 +515,170 @@ export function createApp(options: AppOptions) {
         // (3) detect LWW edge cases with detectMergeBadges
         // (4) on commit, update target tipFrontiers to source and, if target is HEAD,
         //     reconcile the live doc to the preview and broadcast the change
-        performMerge: async (sid, slug, { source, into, dryRun }) => {
-          const state = await loadCanvasBranches(sid, slug)
-          const sourceBranch = state.branches.find((b) => b.name === source)
-          const intoBranch = state.branches.find((b) => b.name === into)
-          if (!sourceBranch) {
-            throw new BranchNotFoundError(`Branch "${source}" not found on ${sid}/${slug}`)
-          }
-          if (!intoBranch) {
-            throw new BranchNotFoundError(`Branch "${into}" not found on ${sid}/${slug}`)
-          }
-
-          const sourceTip = sourceBranch.tipFrontiers
-          const intoTip = intoBranch.tipFrontiers
-          const liveDoc = await getDoc(sid, slug)
-
-          const cloneAt = (branchName: string, tipBase64: string): LoroDoc => {
-            if (tipBase64.length === 0) {
-              return LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
+        // The whole read-modify-write (branch lookup, live-doc read, the
+        // pre-merge snapshot, the tip/HEAD writes, and their doc
+        // reconcile+save) runs inside one workspace-lock hold. getDoc(sid,
+        // slug) alone is unlocked, so a concurrent rename/delete that runs
+        // its whole lock-protected section between this unlocked read and
+        // the later saveCanvas() calls below would find no row left at
+        // this slug and silently insert a phantom canvas (or resurrect
+        // deleted content) instead of erroring or landing on the renamed
+        // row. updateBranchTip/setHeadPersist/deleteBranch already acquire
+        // this same per-workspace lock internally (branches-store.ts), so
+        // they re-enter via the AsyncLocalStorage chain rather than
+        // deadlocking — mirrors live-doc.ts's POST /update handler.
+        performMerge: async (sid, slug, { source, into, dryRun }) =>
+          withWorkspaceWriteLock(sid, async () => {
+            const state = await loadCanvasBranches(sid, slug)
+            const sourceBranch = state.branches.find((b) => b.name === source)
+            const intoBranch = state.branches.find((b) => b.name === into)
+            if (!sourceBranch) {
+              throw new BranchNotFoundError(`Branch "${source}" not found on ${sid}/${slug}`)
             }
-            const frontiers = decodeBranchTipOrThrow(sid, slug, branchName, tipBase64)
-            return checkoutCloneOrThrow(
-              liveDoc,
-              frontiers,
-              `${sid}/branches/${slug}.json#${branchName}.tipFrontiers`,
-              `branch "${branchName}" tipFrontiers could not be checked out against the live document`,
-            )
-          }
-
-          const targetDoc = cloneAt(into, intoTip ?? '')
-          const sourceDoc = cloneAt(source, sourceTip ?? '')
-          // Use sourceDoc as the preview representation. Building a fully merged preview
-          // safely would require a snapshot containing the full op-log after combining
-          // target and source frontiers. In practice, sourceDoc closely matches the merge
-          // result for the current "source wins" flow, and detectMergeBadges only needs a
-          // stable target/source/preview triple to surface LWW differences.
-          const previewDoc = sourceDoc
-          const badges = detectMergeBadges({
-            target: targetDoc,
-            source: sourceDoc,
-            preview: previewDoc,
-          })
-
-          const countAlive = (doc: LoroDoc): number => {
-            try {
-              const list = doc.getMovableList('elements').toJSON() as Array<{
-                isDeleted?: boolean
-              }>
-              return list.filter((e) => !e.isDeleted).length
-            } catch {
-              return 0
+            if (!intoBranch) {
+              throw new BranchNotFoundError(`Branch "${into}" not found on ${sid}/${slug}`)
             }
-          }
-          const previewElementCount = countAlive(previewDoc)
-          const targetElementCount = countAlive(targetDoc)
-          const sourceElementCount = countAlive(sourceDoc)
 
-          // Diff alive elements between target and preview so the UI can highlight
-          // new / changed / conflict elements after commit.
-          const aliveMap = (doc: LoroDoc): Map<string, Record<string, unknown>> => {
-            try {
-              const list = doc.getMovableList('elements').toJSON() as Array<
-                Record<string, unknown> & { id?: unknown; isDeleted?: unknown }
-              >
-              const out = new Map<string, Record<string, unknown>>()
-              for (const el of list) {
-                if (el.isDeleted) continue
-                if (typeof el.id !== 'string') continue
-                out.set(el.id, el)
+            const sourceTip = sourceBranch.tipFrontiers
+            const intoTip = intoBranch.tipFrontiers
+            const liveDoc = await getDoc(sid, slug)
+
+            const cloneAt = (branchName: string, tipBase64: string): LoroDoc => {
+              if (tipBase64.length === 0) {
+                return LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
               }
-              return out
-            } catch {
-              return new Map()
+              const frontiers = decodeBranchTipOrThrow(sid, slug, branchName, tipBase64)
+              return checkoutCloneOrThrow(
+                liveDoc,
+                frontiers,
+                `${sid}/branches/${slug}.json#${branchName}.tipFrontiers`,
+                `branch "${branchName}" tipFrontiers could not be checked out against the live document`,
+              )
             }
-          }
-          const tMap = aliveMap(targetDoc)
-          const pMap = aliveMap(previewDoc)
-          const newElementIds: string[] = []
-          const changedElementIds: string[] = []
-          for (const [id, pEl] of pMap) {
-            const tEl = tMap.get(id)
-            if (!tEl) {
-              newElementIds.push(id)
-            } else if (JSON.stringify(pEl) !== JSON.stringify(tEl)) {
-              changedElementIds.push(id)
-            }
-          }
-          const conflictElementIds = Array.from(
-            new Set(
-              (badges as Array<Record<string, unknown>>)
-                .map((b) => (typeof b.elementId === 'string' ? b.elementId : ''))
-                .filter((v) => v.length > 0),
-            ),
-          )
 
-          if (dryRun) {
-            // For dry runs, return only alive elements so MergeDialog can render a
-            // read-only Excalidraw preview without duplicating tombstoned elements.
-            const previewElements = (() => {
+            const targetDoc = cloneAt(into, intoTip ?? '')
+            const sourceDoc = cloneAt(source, sourceTip ?? '')
+            // Use sourceDoc as the preview representation. Building a fully merged preview
+            // safely would require a snapshot containing the full op-log after combining
+            // target and source frontiers. In practice, sourceDoc closely matches the merge
+            // result for the current "source wins" flow, and detectMergeBadges only needs a
+            // stable target/source/preview triple to surface LWW differences.
+            const previewDoc = sourceDoc
+            const badges = detectMergeBadges({
+              target: targetDoc,
+              source: sourceDoc,
+              preview: previewDoc,
+            })
+
+            const countAlive = (doc: LoroDoc): number => {
               try {
-                const list = previewDoc.getMovableList('elements').toJSON() as Array<{
+                const list = doc.getMovableList('elements').toJSON() as Array<{
                   isDeleted?: boolean
                 }>
-                return list.filter((e) => !e.isDeleted)
+                return list.filter((e) => !e.isDeleted).length
               } catch {
-                return []
+                return 0
               }
-            })()
-            return {
-              previewElementCount,
-              targetElementCount,
-              sourceElementCount,
-              badges,
-              committed: false,
-              previewElements,
             }
-          }
+            const previewElementCount = countAlive(previewDoc)
+            const targetElementCount = countAlive(targetDoc)
+            const sourceElementCount = countAlive(sourceDoc)
 
-          // Capture a "before merge" version so the UI can offer undo by restoring it.
-          // This is most useful when HEAD points at the target, but saving it uniformly
-          // keeps the UI behavior consistent.
-          let preMergeVersionId: string | undefined
-          try {
-            const beforeVersion = await versionStore.save(sid, slug, liveDoc, {
-              auto: true,
-              label: `before merge: ${source} → ${into}`,
-              branchName: into,
-              operator: {
-                kind: 'system',
-                peerId: liveDoc.peerIdStr,
-                displayName: 'merge',
-              },
-            })
-            preMergeVersionId = beforeVersion.id
-          } catch (err) {
-            // Snapshot failure should not block the merge itself.
-            getLogger('merge').warning(
-              { workspaceId: sid, slug, err: err as Error },
-              'pre-merge snapshot failed',
+            // Diff alive elements between target and preview so the UI can highlight
+            // new / changed / conflict elements after commit.
+            const aliveMap = (doc: LoroDoc): Map<string, Record<string, unknown>> => {
+              try {
+                const list = doc.getMovableList('elements').toJSON() as Array<
+                  Record<string, unknown> & { id?: unknown; isDeleted?: unknown }
+                >
+                const out = new Map<string, Record<string, unknown>>()
+                for (const el of list) {
+                  if (el.isDeleted) continue
+                  if (typeof el.id !== 'string') continue
+                  out.set(el.id, el)
+                }
+                return out
+              } catch {
+                return new Map()
+              }
+            }
+            const tMap = aliveMap(targetDoc)
+            const pMap = aliveMap(previewDoc)
+            const newElementIds: string[] = []
+            const changedElementIds: string[] = []
+            for (const [id, pEl] of pMap) {
+              const tEl = tMap.get(id)
+              if (!tEl) {
+                newElementIds.push(id)
+              } else if (JSON.stringify(pEl) !== JSON.stringify(tEl)) {
+                changedElementIds.push(id)
+              }
+            }
+            const conflictElementIds = Array.from(
+              new Set(
+                (badges as Array<Record<string, unknown>>)
+                  .map((b) => (typeof b.elementId === 'string' ? b.elementId : ''))
+                  .filter((v) => v.length > 0),
+              ),
             )
-          }
 
-          // Commit by moving the target tipFrontiers to the source tip, unless the source
-          // branch is still uninitialized.
-          if (typeof sourceTip === 'string' && sourceTip.length > 0) {
-            await updateBranchTip(sid, slug, into, sourceTip)
-          }
-
-          // If the target is HEAD, reconcile and broadcast the live doc. Otherwise only
-          // rewrite the stored tip.
-          const latest = await loadCanvasBranches(sid, slug)
-          if (latest.head === into && sourceTip && sourceTip.length > 0) {
-            const prevVV = liveDoc.version()
-            liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
-            liveDoc.commit()
-            await saveCanvas(sid, slug, liveDoc, { overwrite: true })
-            const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
-            if (update.byteLength > 0) {
-              broadcastLoroUpdate(sid, slug, update)
+            if (dryRun) {
+              // For dry runs, return only alive elements so MergeDialog can render a
+              // read-only Excalidraw preview without duplicating tombstoned elements.
+              const previewElements = (() => {
+                try {
+                  const list = previewDoc.getMovableList('elements').toJSON() as Array<{
+                    isDeleted?: boolean
+                  }>
+                  return list.filter((e) => !e.isDeleted)
+                } catch {
+                  return []
+                }
+              })()
+              return {
+                previewElementCount,
+                targetElementCount,
+                sourceElementCount,
+                badges,
+                committed: false,
+                previewElements,
+              }
             }
-            sendHeadChanged(sid, slug, into)
-          }
 
-          // Post-merge cleanup:
-          // 1) if HEAD still points at source, move it to target so the user sees the result
-          // 2) delete the source branch unless it is main or the same as target
-          // Cleanup failures only produce warnings; the merge still succeeds.
-          let switchedHead: { from: string; to: string } | undefined
-          let deletedSource: string | undefined
-          try {
-            const afterCommit = await loadCanvasBranches(sid, slug)
-            if (afterCommit.head === source && source !== into) {
-              await setHeadPersist(sid, slug, into)
-              switchedHead = { from: source, to: into }
-              sendHeadChanged(sid, slug, into)
-              // Reconcile and broadcast the live doc to match the target preview.
-              // This is already done when HEAD===target, but HEAD===source needs it here.
+            // Capture a "before merge" version so the UI can offer undo by restoring it.
+            // This is most useful when HEAD points at the target, but saving it uniformly
+            // keeps the UI behavior consistent.
+            let preMergeVersionId: string | undefined
+            try {
+              const beforeVersion = await versionStore.save(sid, slug, liveDoc, {
+                auto: true,
+                label: `before merge: ${source} → ${into}`,
+                branchName: into,
+                operator: {
+                  kind: 'system',
+                  peerId: liveDoc.peerIdStr,
+                  displayName: 'merge',
+                },
+              })
+              preMergeVersionId = beforeVersion.id
+            } catch (err) {
+              // Snapshot failure should not block the merge itself.
+              getLogger('merge').warning(
+                { workspaceId: sid, slug, err: err as Error },
+                'pre-merge snapshot failed',
+              )
+            }
+
+            // Commit by moving the target tipFrontiers to the source tip, unless the source
+            // branch is still uninitialized.
+            if (typeof sourceTip === 'string' && sourceTip.length > 0) {
+              await updateBranchTip(sid, slug, into, sourceTip)
+            }
+
+            // If the target is HEAD, reconcile and broadcast the live doc. Otherwise only
+            // rewrite the stored tip.
+            const latest = await loadCanvasBranches(sid, slug)
+            if (latest.head === into && sourceTip && sourceTip.length > 0) {
               const prevVV = liveDoc.version()
               liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
               liveDoc.commit()
@@ -698,40 +687,65 @@ export function createApp(options: AppOptions) {
               if (update.byteLength > 0) {
                 broadcastLoroUpdate(sid, slug, update)
               }
+              sendHeadChanged(sid, slug, into)
             }
-          } catch (err) {
-            getLogger('merge').warning(
-              { workspaceId: sid, slug, err: err as Error },
-              'post-merge head switch failed',
-            )
-          }
-          if (source !== 'main' && source !== into) {
+
+            // Post-merge cleanup:
+            // 1) if HEAD still points at source, move it to target so the user sees the result
+            // 2) delete the source branch unless it is main or the same as target
+            // Cleanup failures only produce warnings; the merge still succeeds.
+            let switchedHead: { from: string; to: string } | undefined
+            let deletedSource: string | undefined
             try {
-              await deleteBranch(sid, slug, source)
-              deletedSource = source
+              const afterCommit = await loadCanvasBranches(sid, slug)
+              if (afterCommit.head === source && source !== into) {
+                await setHeadPersist(sid, slug, into)
+                switchedHead = { from: source, to: into }
+                sendHeadChanged(sid, slug, into)
+                // Reconcile and broadcast the live doc to match the target preview.
+                // This is already done when HEAD===target, but HEAD===source needs it here.
+                const prevVV = liveDoc.version()
+                liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
+                liveDoc.commit()
+                await saveCanvas(sid, slug, liveDoc, { overwrite: true })
+                const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+                if (update.byteLength > 0) {
+                  broadcastLoroUpdate(sid, slug, update)
+                }
+              }
             } catch (err) {
-              // For example: still HEAD, already deleted, and similar cleanup races.
               getLogger('merge').warning(
                 { workspaceId: sid, slug, err: err as Error },
-                'post-merge delete source failed',
+                'post-merge head switch failed',
               )
             }
-          }
+            if (source !== 'main' && source !== into) {
+              try {
+                await deleteBranch(sid, slug, source)
+                deletedSource = source
+              } catch (err) {
+                // For example: still HEAD, already deleted, and similar cleanup races.
+                getLogger('merge').warning(
+                  { workspaceId: sid, slug, err: err as Error },
+                  'post-merge delete source failed',
+                )
+              }
+            }
 
-          return {
-            previewElementCount,
-            targetElementCount,
-            sourceElementCount,
-            badges,
-            committed: true,
-            newElementIds,
-            changedElementIds,
-            conflictElementIds,
-            preMergeVersionId,
-            switchedHead,
-            deletedSource,
-          }
-        },
+            return {
+              previewElementCount,
+              targetElementCount,
+              sourceElementCount,
+              badges,
+              committed: true,
+              newElementIds,
+              changedElementIds,
+              conflictElementIds,
+              preMergeVersionId,
+              switchedHead,
+              deletedSource,
+            }
+          }),
       }),
     )
   }

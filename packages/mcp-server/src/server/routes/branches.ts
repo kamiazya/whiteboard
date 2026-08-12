@@ -351,6 +351,12 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // ── POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge ──
   // Spec §7. Merge source (URL param) into target (body). dryRun can return a preview without committing.
   // LWW edge-case detection lives in merge-engine.detectMergeBadges; document operations are delegated to performMerge.
+  // Unlike PUT /head above, this route itself holds no lock: performMerge
+  // (app.ts) owns the entire read-modify-write — including the live-doc
+  // read that used to race a concurrent rename/delete — under
+  // withWorkspaceWriteLock, the same way PUT /head's own handler owns its
+  // branches.json read+save. Locking here too would be redundant, not
+  // protective.
   app.post('/api/workspaces/:sid/canvases/:slug/branches/:source/merge', async (c) => {
     const { sid, slug, source } = c.req.param()
     try {
