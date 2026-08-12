@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { type LoroDoc, LoroMap } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { listCanvases, listWorkspaces, loadCanvas } from '../store/canvas-store.js'
 import { countAliveNodes } from '../store/count-alive-nodes.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
@@ -23,14 +23,8 @@ type WorkspaceInfo = {
 // definition; a nodes-model doc has none, since deleteSpatialNode removes
 // the entry outright rather than marking it dead.
 function countLegacyTombstones(doc: LoroDoc): number {
-  const list = doc.getMovableList('elements')
-  let tombstones = 0
-  for (let i = 0; i < list.length; i++) {
-    const item = list.get(i)
-    if (!(item instanceof LoroMap)) continue
-    if (item.get('isDeleted') === true) tombstones += 1
-  }
-  return tombstones
+  const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
+  return list.filter((el) => el?.isDeleted === true).length
 }
 
 async function summarizeCanvas(workspaceId: string, slug: string): Promise<CanvasInfo> {
