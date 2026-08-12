@@ -108,6 +108,16 @@ export const deleteCanvasResponseSchema = z.object({
   ok: z.literal(true),
 })
 
+// PUT /api/workspaces/:workspaceId/canvases/:slug/slug — request body.
+export const renameCanvasSlugRequestSchema = z.object({
+  slug: z.string().trim().min(1),
+})
+
+// PUT /api/workspaces/:workspaceId/canvases/:slug/slug — success body.
+export const renameCanvasSlugResponseSchema = z.object({
+  slug: z.string(),
+})
+
 // GET /api/canvas/:workspaceId/:slug/exists — success body. Read-only lookup
 // so callers can distinguish "canvas not yet created" from a live doc,
 // without the snapshot/update routes' silent lazy-create side effect.
@@ -155,6 +165,8 @@ export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
 export type UpdateCanvasResponse = z.infer<typeof updateCanvasResponseSchema>
 export type DeleteCanvasResponse = z.infer<typeof deleteCanvasResponseSchema>
+export type RenameCanvasSlugRequest = z.infer<typeof renameCanvasSlugRequestSchema>
+export type RenameCanvasSlugResponse = z.infer<typeof renameCanvasSlugResponseSchema>
 export type CanvasExistsResponse = z.infer<typeof canvasExistsResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
 

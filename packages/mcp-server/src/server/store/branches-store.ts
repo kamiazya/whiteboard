@@ -2,7 +2,7 @@ import { getDataDir } from '../config.js'
 import { validateBranchName, validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { upsertCanvasRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
@@ -388,40 +388,4 @@ export async function updateBranchTip(
     }
     return { next, result: undefined }
   })
-}
-
-// ── slug rename ──
-// Update only canvases.slug. Branches and versions FK on canvasId so they do
-// not need to move; the blob path also uses canvasId so the .loro stays put.
-// Returns the canvas id whose slug just changed.
-async function _renameCanvasSlug(
-  workspaceId: string,
-  oldSlug: string,
-  newSlug: string,
-): Promise<{ canvasId: string }> {
-  validateWorkspaceId(workspaceId)
-  validateSlug(oldSlug)
-  validateSlug(newSlug)
-  const db = await dbReady()
-  if (oldSlug === newSlug) {
-    const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
-    if (!id) {
-      throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
-    }
-    return { canvasId: id }
-  }
-  const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
-  if (!id) {
-    throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
-  }
-  const taken = await getCanvasIdBySlug(db, workspaceId, newSlug)
-  if (taken) {
-    throw new Error(`Canvas "${workspaceId}/${newSlug}" already exists`)
-  }
-  await db
-    .updateTable('canvases')
-    .set({ slug: newSlug, updatedAt: Date.now() })
-    .where('id', '=', id)
-    .execute()
-  return { canvasId: id }
 }
