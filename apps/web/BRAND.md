@@ -88,6 +88,11 @@ Rules the grammar enforces:
   paint a seam dot at the dash boundary (stray specks on Android Chrome).
 - **`prefers-reduced-motion` collapses every brand animation to the static
   drawn logo** — never a blank board, never a mid-story frame.
+- **The inline loader** (`src/brand/loader-mark.svg` + `SquiggleLoader`) is
+  a dash travelling along the signature over a faint full-path track — the
+  ring-spinner grammar on the brand's own shape. Use it at 20px+ only;
+  below that the travel collapses into flicker, so tiny affordances keep a
+  plain ring.
 - Skeletons in the app (DESIGN.md's domain) stay invisible for a 300ms beat
   and fade in only when the wait is real — a placeholder that pops for one
   frame reads as a glitch, not progress.
@@ -102,12 +107,26 @@ Rules the grammar enforces:
   preview (Settings → Social preview) is a manual upload of the same file —
   the API cannot set it.
 
+### In-app marks: SVGR
+
+Marks rendered inside the React app live as plain `.svg` files under
+`src/brand/` and are imported as components via vite-plugin-svgr
+(`import Mark from '../brand/error-mark.svg?react'`). One file is both the
+artwork's source of truth and a themable component: strokes use
+`currentColor`, so the call site picks the token (`text-muted-foreground`,
+`/30` for watermarks). Animation classes (e.g. `wb-scribble`) stay in
+`index.css` — an inlined `<style>` would collide across instances.
+Standalone assets (splash, favicon, README, OG/PWA generators) are NOT
+SVGR: they render outside the app where no theme exists, so they stay
+self-contained files with fixed mid-grays.
+
 ## Asset inventory and regeneration
 
 All commands run from `apps/web/`.
 
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
+| in-app marks (error / not-found / empty) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |
 | `public/favicon.svg` | hand-authored static fallback | edit directly |

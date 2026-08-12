@@ -1,4 +1,6 @@
 import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
@@ -10,6 +12,7 @@ import {
   WorkspaceNotFoundError,
 } from './canvas-crud.errors.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './canvas-crud.js'
+import { saveWorkspaceTree } from './workspace-tree-io.js'
 
 function makeDeps(): ServerDeps {
   return {
@@ -161,6 +164,35 @@ describe('wbCanvasList', () => {
     await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
     const result = await wbCanvasList(deps, { workspaceId: 'ws-1' })
     expect(result.canvases).toEqual([])
+  })
+
+  it('disambiguates a merge-produced duplicate sibling into a unique alias (ADR-0008 point 5)', async () => {
+    const deps = makeDeps()
+
+    // Two peers each create a root canvas segment 'notes' independently,
+    // then merge — the real CRDT production shape that
+    // #assertNoSiblingConflict cannot see coming, since it only guards a
+    // single doc's own local mutations.
+    const doc1 = new LoroDoc()
+    const tree1 = new WorkspaceTree(doc1)
+    tree1.createNode('canvas-b', 'notes')
+
+    const doc2 = new LoroDoc()
+    const tree2 = new WorkspaceTree(doc2)
+    tree2.createNode('canvas-a', 'notes')
+
+    doc1.import(doc2.export({ mode: 'snapshot' }))
+    const merged = new WorkspaceTree(doc1)
+    await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', merged)
+
+    const listed = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+    expect(listed.canvases).toHaveLength(2)
+    expect(listed.canvases.map((c) => c.alias).sort()).toEqual(['notes', 'notes-2'])
+
+    const winner = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: 'canvas-a' })
+    expect(winner.alias).toBe('notes')
+    const loser = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: 'canvas-b' })
+    expect(loser.alias).toBe('notes-2')
   })
 })
 

@@ -184,6 +184,41 @@
   }
 
   /*
+   * Error-state mark (src/brand/error-mark.svg via SVGR): the signature
+   * draws itself into a scribbled knot once on mount — the whiteboard
+   * gesture for "that's wrong". Base state is the finished scribble so
+   * the reduced-motion one-shot lands on it, not on a blank.
+   */
+  @keyframes wb-scribble {
+    from {
+      stroke-dashoffset: 210;
+    }
+  }
+
+  .wb-scribble {
+    stroke-dasharray: 210;
+    stroke-dashoffset: 0;
+    animation: wb-scribble 1.1s ease-in;
+  }
+
+  /*
+   * Inline loader (src/brand/loader-mark.svg): a 60-unit dash travelling
+   * along the 120-unit signature path. One period per cycle (60 + 60), so
+   * the loop is seamless; linear, because easing on a travelling dash
+   * reads as stutter.
+   */
+  @keyframes wb-loader {
+    to {
+      stroke-dashoffset: -120;
+    }
+  }
+
+  .wb-loader {
+    stroke-dasharray: 60 60;
+    animation: wb-loader 1.1s linear infinite;
+  }
+
+  /*
    * Skeletons appear only when the wait is real: invisible for a beat,
    * then a gentle fade-in. A skeleton that pops for a single frame
    * between a resolved chunk and first paint reads as a glitch, not as

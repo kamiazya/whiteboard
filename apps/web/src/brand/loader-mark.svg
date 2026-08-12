@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="25" viewBox="0 0 88 56" fill="none" data-mark="loader" aria-hidden="true">
+  <!--
+    Inline loader (BRAND.md): the signature as a faint track with a dash
+    travelling along it - the pen is moving, work is happening. Same
+    two-layer grammar as a ring spinner (track + arc), so the shape stays
+    legible at small sizes. pathLength normalizes the curve to 120 units so
+    the wb-loader dash math in index.css loops seamlessly. currentColor
+    follows the theme. Use at 20px+ only; below that keep a plain ring.
+  -->
+  <path pathLength="120" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="currentColor" stroke-opacity="0.25" stroke-width="8" stroke-linecap="round"/>
+  <path class="wb-loader" pathLength="120" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+</svg>

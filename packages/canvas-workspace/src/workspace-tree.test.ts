@@ -215,4 +215,141 @@ describe('WorkspaceTree', () => {
       expect(roots.map((r) => r.segment).sort()).toEqual(['from-peer-1', 'from-peer-2'])
     })
   })
+
+  describe('duplicate sibling segments (ADR-0008 point 5)', () => {
+    it('disambiguates two merged root nodes sharing a segment by canvasId order', () => {
+      const { doc: doc1, tree: tree1 } = makeTree()
+      tree1.createNode('canvas-b', 'notes')
+
+      const { doc: doc2, tree: tree2 } = makeTree()
+      tree2.createNode('canvas-a', 'notes')
+
+      // Real production shape: two peers each create 'notes' concurrently,
+      // then merge. #assertNoSiblingConflict never runs across this import.
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      const roots = merged.children()
+      expect(roots).toHaveLength(2)
+
+      const winner = roots.find((n) => n.canvasId === 'canvas-a')!
+      const loser = roots.find((n) => n.canvasId === 'canvas-b')!
+      expect(merged.resolveAlias(winner.id)).toBe('notes')
+      expect(merged.resolveAlias(loser.id)).toBe('notes-2')
+
+      expect(merged.findByAlias('notes')?.canvasId).toBe('canvas-a')
+      expect(merged.findByAlias('notes-2')?.canvasId).toBe('canvas-b')
+    })
+
+    it('cascades past a real sibling already named with a would-be suffix', () => {
+      const { doc: doc1, tree: tree1 } = makeTree()
+      tree1.createNode('canvas-b', 'notes')
+      tree1.createNode('canvas-real', 'notes-2')
+
+      const { doc: doc2, tree: tree2 } = makeTree()
+      tree2.createNode('canvas-a', 'notes')
+
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      const byCanvasId = new Map(merged.children().map((n) => [n.canvasId, n]))
+      expect(merged.resolveAlias(byCanvasId.get('canvas-a')!.id)).toBe('notes')
+      expect(merged.resolveAlias(byCanvasId.get('canvas-real')!.id)).toBe('notes-2')
+      expect(merged.resolveAlias(byCanvasId.get('canvas-b')!.id)).toBe('notes-3')
+
+      expect(merged.findByAlias('notes')?.canvasId).toBe('canvas-a')
+      expect(merged.findByAlias('notes-2')?.canvasId).toBe('canvas-real')
+      expect(merged.findByAlias('notes-3')?.canvasId).toBe('canvas-b')
+    })
+
+    it('propagates a duplicated parent segment into child aliases', () => {
+      const { doc: doc1, tree: tree1 } = makeTree()
+      const parentB = tree1.createNode('canvas-b', 'notes')
+      tree1.createNode('canvas-child-b', 'child', parentB)
+
+      const { doc: doc2, tree: tree2 } = makeTree()
+      const parentA = tree2.createNode('canvas-a', 'notes')
+      tree2.createNode('canvas-child-a', 'child', parentA)
+
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      const roots = merged.children()
+      const winnerParent = roots.find((n) => n.canvasId === 'canvas-a')!
+      const loserParent = roots.find((n) => n.canvasId === 'canvas-b')!
+      const winnerChild = merged.children(winnerParent.id)[0]!
+      const loserChild = merged.children(loserParent.id)[0]!
+
+      expect(merged.resolveAlias(winnerChild.id)).toBe('notes/child')
+      expect(merged.resolveAlias(loserChild.id)).toBe('notes-2/child')
+    })
+
+    it('resolves findByAlias against a duplicate segment at a non-root level', () => {
+      // Both peers share the same parent node (via a snapshot each starts
+      // from) so the collision this test targets is purely at the child
+      // level — the walk's non-root disambiguation call is what resolves it.
+      const { tree: seed } = makeTree()
+      const parentId = seed.createNode('canvas-folder', 'folder')
+      const seedBytes = seed.exportSnapshot()
+
+      const doc1 = new LoroDoc()
+      doc1.import(seedBytes)
+      const tree1 = new WorkspaceTree(doc1)
+      tree1.createNode('canvas-child-b', 'notes', parentId)
+
+      const doc2 = new LoroDoc()
+      doc2.import(seedBytes)
+      const tree2 = new WorkspaceTree(doc2)
+      tree2.createNode('canvas-child-a', 'notes', parentId)
+
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      expect(merged.children()).toHaveLength(1)
+      expect(merged.findByAlias('folder/notes')?.canvasId).toBe('canvas-child-a')
+      expect(merged.findByAlias('folder/notes-2')?.canvasId).toBe('canvas-child-b')
+    })
+
+    it('returns the bare alias to the surviving duplicate once the winner is deleted', () => {
+      const { doc: doc1, tree: tree1 } = makeTree()
+      tree1.createNode('canvas-b', 'notes')
+
+      const { doc: doc2, tree: tree2 } = makeTree()
+      tree2.createNode('canvas-a', 'notes')
+
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      const winner = merged.children().find((n) => n.canvasId === 'canvas-a')!
+      const loser = merged.children().find((n) => n.canvasId === 'canvas-b')!
+      expect(merged.resolveAlias(loser.id)).toBe('notes-2')
+
+      merged.delete(winner.id)
+      expect(merged.resolveAlias(loser.id)).toBe('notes')
+    })
+
+    it('never mutates the doc while deriving disambiguated aliases (read purity)', () => {
+      const { doc: doc1, tree: tree1 } = makeTree()
+      tree1.createNode('canvas-b', 'notes')
+      const { doc: doc2, tree: tree2 } = makeTree()
+      tree2.createNode('canvas-a', 'notes')
+      doc1.import(doc2.export({ mode: 'snapshot' }))
+      const merged = new WorkspaceTree(doc1)
+
+      const before = merged.exportSnapshot()
+      for (const node of merged.children()) {
+        merged.resolveAlias(node.id)
+      }
+      merged.findByAlias('notes')
+      merged.findByAlias('notes-2')
+      const after = merged.exportSnapshot()
+      expect(after).toEqual(before)
+
+      // Second pass is string-identical (idempotent derivation).
+      const winner = merged.children().find((n) => n.canvasId === 'canvas-a')!
+      const loser = merged.children().find((n) => n.canvasId === 'canvas-b')!
+      expect(merged.resolveAlias(winner.id)).toBe('notes')
+      expect(merged.resolveAlias(loser.id)).toBe('notes-2')
+    })
+  })
 })

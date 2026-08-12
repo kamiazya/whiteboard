@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { mcpSourceAlias } from './mcp-source-alias.js'
@@ -81,6 +82,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    svgr(),
     // Tailwind v4 does not need PostCSS; CSS imports `tailwindcss` directly.
     tailwindcss(),
     // Required for the browser bundle that includes the Loro CRDT WASM build.

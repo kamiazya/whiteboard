@@ -8,6 +8,12 @@ import { describe, expect, it } from 'vitest'
  * transitively.
  */
 describe('canvas-ports package smoke', () => {
+  // Everything after the import is pure in-memory arithmetic; the whole cost
+  // is resolving and transforming the barrel through package `exports` for
+  // the first time. CI runs seven vitest projects in one step, and under that
+  // contention the cold resolve alone can exceed the 5s default — which
+  // reports as a timeout on a test whose subject is resolvability, not
+  // latency. The generous budget belongs to this test, not to the project.
   it('imports the barrel via its package specifier and exercises a full round-trip', async () => {
     const pkg = await import('@kamiazya/whiteboard-canvas-ports')
 
@@ -35,5 +41,5 @@ describe('canvas-ports package smoke', () => {
 
     expect(pkg.TOKENS.CanvasDocStore).toBe(Symbol.for('whiteboard.ports.CanvasDocStore'))
     expect(pkg.negotiateProtocolVersion([1, 2], [2, 3])).toBe(2)
-  })
+  }, 30_000)
 })
