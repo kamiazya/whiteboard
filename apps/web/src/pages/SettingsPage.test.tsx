@@ -40,7 +40,7 @@ describe('SettingsPage — routing layout', () => {
   it('/settings/data shows the mobile detail view with a back-to-settings link', () => {
     renderAt('/settings/data')
     const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByRole('button', { name: /settings/i })).toBeTruthy()
+    expect(within(mobile).getByRole('link', { name: /settings/i })).toBeTruthy()
     expect(within(mobile).getByText('Persistent storage')).toBeTruthy()
   })
 

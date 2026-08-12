@@ -10,7 +10,7 @@ import {
   Waves,
 } from 'lucide-react'
 import { useCallback, useEffect, useId, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { useThemeMode } from '@/hooks/useThemeMode'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
@@ -209,7 +209,6 @@ function ConnectionsSection({ daemon }: { daemon?: { baseUrl: string; token: str
   if (!daemon) {
     return (
       <section>
-        <h2 className="mb-3 text-sm font-medium">Connections</h2>
         <p className="text-sm">Local daemon — Not connected</p>
         <p className="mt-1 text-xs text-muted-foreground">
           A local daemon holds durable storage and the AI agent connection for this app.
@@ -369,29 +368,27 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
             </div>
             <nav>
               {NAV_ITEMS.map(({ section, label, icon: Icon }) => (
-                <button
+                <Link
                   key={section}
-                  type="button"
-                  onClick={() => navigate(settingsPath(section))}
+                  to={settingsPath(section)}
                   className="flex w-full items-center gap-3 border-b px-4 py-3 text-left text-sm hover:bg-accent"
                 >
                   <Icon className="size-4 text-muted-foreground" />
                   <span className="flex-1">{label}</span>
                   <ChevronRight className="size-4 text-muted-foreground" />
-                </button>
+                </Link>
               ))}
             </nav>
           </div>
         ) : (
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
-              <button
-                type="button"
-                onClick={() => navigate(settingsPath())}
+              <Link
+                to={settingsPath()}
                 className="rounded-md p-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <span aria-hidden="true">← </span>Settings
-              </button>
+              </Link>
               <h1 className="text-sm font-semibold">{SECTION_TITLE[routeSection]}</h1>
             </div>
             <div className="p-4">{sectionContent(routeSection, sharedProps)}</div>
@@ -411,11 +408,10 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
           </button>
           <div className="space-y-1">
             {NAV_ITEMS.map(({ section, label, icon: Icon }) => (
-              <button
+              <Link
                 key={section}
-                type="button"
+                to={settingsPath(section)}
                 aria-current={desktopSection === section ? 'page' : undefined}
-                onClick={() => navigate(settingsPath(section))}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
                   desktopSection === section
                     ? 'bg-accent text-foreground'
@@ -424,7 +420,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
               >
                 <Icon className="size-4" />
                 {label}
-              </button>
+              </Link>
             ))}
           </div>
         </nav>
