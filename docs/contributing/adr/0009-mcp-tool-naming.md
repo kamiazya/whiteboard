@@ -1,6 +1,6 @@
 # ADR-0009: The Document model, and `wb_<entity>_<action>` tool naming
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 

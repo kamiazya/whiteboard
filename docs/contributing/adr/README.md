@@ -41,4 +41,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0006](0006-object-oriented-ui.md) | Object-oriented UI — create from the palette, act from the object | Accepted |
 | [ADR-0007](0007-canvas-identity-and-store-split.md) | Canvas identity and the daemon's two-store split | Accepted |
 | [ADR-0008](0008-slug-derivation-and-rename.md) | Slug derivation, rename, and sibling uniqueness | Accepted |
-| [ADR-0009](0009-mcp-tool-naming.md) | The Document model, and `wb_<entity>_<action>` tool naming | Proposed |
+| [ADR-0009](0009-mcp-tool-naming.md) | The Document model, and `wb_<entity>_<action>` tool naming | Accepted |
