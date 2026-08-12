@@ -153,11 +153,18 @@ the laid-out projection `canvas-render` already calls a **scene**.
 
 ## Consequences
 
-- **Fifteen of nineteen tools change name.** Only the four existing
-  `wb_canvas_*` survive unchanged in spelling, and three of those change
-  meaning (`wb_canvas_create`/`_delete`/`_get`/`_list` become
-  `wb_document_*`). Backward compatibility is explicitly not a goal: at
-  `0.0.19` this ships as a plain rename with no aliases.
+- **Every one of the nineteen tools changes name.** Even the four already
+  prefixed `wb_canvas_*` move, because point 1 makes the container a
+  Document: `wb_canvas_create`/`_delete`/`_get`/`_list` become
+  `wb_document_*`. There is no tool a caller can keep. Backward
+  compatibility is explicitly not a goal: at `0.0.19` this ships as a plain
+  rename with no aliases.
+- **Two of the nineteen are not renames at all.** `canvas_export_okf` and
+  `canvas_export_json_canvas` collapse into one `wb_document_get` that
+  branches on the document's format, which is new logic rather than a new
+  label — worth landing as its own increment, separate from the fourteen
+  one-to-one renames, so a reviewer is not reading a mechanical sweep and a
+  behaviour change in the same diff.
 - The rename is not confined to the tool surface. `canvasId`, `CanvasDocStore`,
   `canvas-store.ts`, the `/canvas/:ws/:slug` route, UI copy, and the
   `@kamiazya/whiteboard-canvas-*` packages all carry the old container noun.
