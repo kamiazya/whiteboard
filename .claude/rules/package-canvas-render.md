@@ -320,7 +320,7 @@ paths:
       genuine crossing never produces (verified against
       `edge-lane-rank.test.ts`'s sweep-rank pin: tier 1 placement adopted a
       route with a real crossing over a crossing-free one). `pairScore`/
-      `selfScore` (`spatial-edges.ts`) compose over the list, and every
+      `selfPenalty` (`spatial-edges.ts`) compose over the list, and every
       cost-tuple helper (`ConfigCost` shape, `addCost`, `lessCost`,
       `hasRepairableProblem`) derives from the declared tiers, so a new
       penalty rule is one list entry, never a new slot threaded by hand.

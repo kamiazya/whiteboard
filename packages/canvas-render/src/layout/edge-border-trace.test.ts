@@ -1,9 +1,7 @@
-// User-reported defect: a routed segment can trace exactly along a node's
-// own border (e.g. the source node's top edge), reading on screen as though
-// the line merges into the box outline. The exact user canvas below picked
-// fromSide 'top' / toSide 'left' for A->B, whose last segment
-// (200,570)->(220,570) rides A's own top border (A.y === 570, x in
-// [100,300]) before the border-tracing penalty existed.
+// A routed segment must never run along a node's own border: ink on an
+// outline reads as though the edge merges into the box. Overlapping nodes
+// are the arrangement that provokes it, because a side's anchor can sit
+// inside the other node and the route has to come back around.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
