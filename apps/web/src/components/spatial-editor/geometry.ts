@@ -261,36 +261,3 @@ export function distanceToPolyline(
   }
   return min
 }
-
-/**
- * The point at half the polyline's arc length — where an edge's inline
- * label editor anchors. Degenerate paths degrade instead of throwing:
- * empty → origin, single point → that point.
- */
-export function polylineMidpoint(path: readonly { x: number; y: number }[]): {
-  x: number
-  y: number
-} {
-  if (path.length === 0) return { x: 0, y: 0 }
-  if (path.length === 1) return { x: path[0].x, y: path[0].y }
-  const segmentLengths: number[] = []
-  let total = 0
-  for (let i = 0; i + 1 < path.length; i += 1) {
-    const length = Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y)
-    segmentLengths.push(length)
-    total += length
-  }
-  if (total === 0) return { x: path[0].x, y: path[0].y }
-  let remaining = total / 2
-  for (let i = 0; i < segmentLengths.length; i += 1) {
-    if (remaining <= segmentLengths[i]) {
-      const t = segmentLengths[i] === 0 ? 0 : remaining / segmentLengths[i]
-      return {
-        x: path[i].x + t * (path[i + 1].x - path[i].x),
-        y: path[i].y + t * (path[i + 1].y - path[i].y),
-      }
-    }
-    remaining -= segmentLengths[i]
-  }
-  return { x: path[path.length - 1].x, y: path[path.length - 1].y }
-}

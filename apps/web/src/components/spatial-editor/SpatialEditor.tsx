@@ -68,6 +68,7 @@ import type {
 import type { MeasureText, SpatialPresetKey, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
+  edgeLabelAnchor,
   flattenRoundedEdgePath,
   layoutSpatialEdges,
   renderSceneToSvg,
@@ -156,7 +157,6 @@ import {
   HANDLE_SIGN,
   hitTest,
   indexNodeBoxes,
-  polylineMidpoint,
   resizeBoxByDelta,
   scaleBoxWithin,
   unionBox,
@@ -3881,8 +3881,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             (() => {
               const edge = canvas.edges.find((entry) => entry.id === edgeLabelEditId)
               const path = edgePaths.find((entry) => entry.id === edgeLabelEditId)?.path
-              if (edge === undefined || path === undefined || path.length < 2) return null
-              const mid = polylineMidpoint(path)
+              if (edge === undefined || path === undefined) return null
+              // edgePaths is already the DRAWN (flattened) line, so the
+              // shared anchor needs no second rounding pass here.
+              const mid = edgeLabelAnchor(path)
+              if (mid === undefined) return null
               return (
                 <TextNodeEditor
                   box={{
