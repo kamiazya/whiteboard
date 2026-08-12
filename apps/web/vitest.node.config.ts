@@ -16,6 +16,7 @@ export default defineConfig({
       'vite-plugin-strip-wasm-sourcemap.test.ts',
       'index-html.test.ts',
       'pwa-icons.test.ts',
+      'mcp-source-alias-coverage.test.ts',
       'scripts/**/*.test.ts',
     ],
   },
