@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCanvasOkfV1, listCanvasesV1 } from '../../lib/daemon-api-client.js'
+import { DaemonApiError, getCanvasOkfV1, listCanvasesV1 } from '../../lib/daemon-api-client.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeCanvas } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -27,20 +27,23 @@ export function WorkspaceFilesPanel({
   workspaceId,
 }: WorkspaceFilesPanelProps) {
   const [canvases, setCanvases] = useState<WorkspaceFileTreeCanvas[] | null>(null)
-  const [listError, setListError] = useState(false)
+  // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
+  // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
+  const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [preview, setPreview] = useState<OkfPreview>({ kind: 'idle' })
 
   useEffect(() => {
     let cancelled = false
     setCanvases(null)
-    setListError(false)
+    setListStatus('ok')
     setPreview({ kind: 'idle' })
     listCanvasesV1(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
         if (!cancelled) setCanvases(res.canvases)
       })
-      .catch(() => {
-        if (!cancelled) setListError(true)
+      .catch((err) => {
+        if (cancelled) return
+        setListStatus(err instanceof DaemonApiError && err.status === 404 ? 'not-found' : 'error')
       })
     return () => {
       cancelled = true
@@ -68,11 +71,16 @@ export function WorkspaceFilesPanel({
       })
   }
 
-  if (listError) {
+  if (listStatus === 'error') {
     return (
       <p role="alert" className="text-destructive text-sm">
         Failed to load the workspace file tree.
       </p>
+    )
+  }
+  if (listStatus === 'not-found') {
+    return (
+      <p className="text-muted-foreground text-sm">This workspace has no OpenCanvas tree yet.</p>
     )
   }
   if (canvases === null) {

@@ -37,6 +37,7 @@ import type {
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import { computeEdgeJumps } from './edge-jumps.js'
+import { edgeLabelAnchor } from './edge-label-anchor.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
@@ -474,35 +475,11 @@ function composeEdge(
 }
 
 /**
- * The point along `path` used to center an edge's label. Not an exact
- * arc-length midpoint — the midpoint of the two vertices straddling the
- * path's index midpoint — which is exact for the common 2-point straight
- * edge and a stable, deterministic approximation for a multi-point routed
- * path (e.g. a self-edge loop).
- *
- * Returns `undefined` when the path draws no line — fewer than two points,
- * or every point at the same place. `routeEdge`'s missing-endpoint fallback
- * is that second case specifically: it degrades to `[origin, origin]`, a
- * two-point path of zero length. A point-count check alone would miss it and
- * center the label on the canvas origin, leaving text floating with nothing
- * attached to it.
- */
-function edgeMidpoint(
-  path: readonly { readonly x: number; readonly y: number }[],
-): { readonly x: number; readonly y: number } | undefined {
-  const first = path[0]
-  if (path.length < 2 || first === undefined) return undefined
-  if (path.every((p) => p.x === first.x && p.y === first.y)) return undefined
-  const mid = (path.length - 1) / 2
-  const lower = path[Math.floor(mid)]!
-  const upper = path[Math.ceil(mid)]!
-  return { x: (lower.x + upper.x) / 2, y: (lower.y + upper.y) / 2 }
-}
-
-/**
  * Composes a centered label run for an edge that carries one. Returns
  * `undefined` for no label, an empty/whitespace-only label, or a
- * degenerate path — `layoutSpatialCanvas` stays total either way.
+ * degenerate path — `layoutSpatialCanvas` stays total either way. The
+ * anchor comes from `edgeLabelAnchor`, the same producer the editor's
+ * inline label editor uses.
  */
 function composeEdgeLabel(
   edge: CanvasEdge,
@@ -510,7 +487,7 @@ function composeEdgeLabel(
   options: ResolvedLayoutOptions,
 ): TextRunNode | undefined {
   if (edge.label === undefined || edge.label.trim().length === 0) return undefined
-  const center = edgeMidpoint(routed.path)
+  const center = edgeLabelAnchor(routed.path, routed.rounded === true)
   if (!center) return undefined
 
   const labelAppearance = options.appearance.resolveLabel()

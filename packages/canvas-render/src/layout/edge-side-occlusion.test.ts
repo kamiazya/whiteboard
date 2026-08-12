@@ -84,9 +84,12 @@ describe('occlusion-aware default sides', () => {
   })
 
   it('the far endpoint overlapping the anchor is not an occluder — the edge is going there', () => {
-    // b overlaps a's right flank; entering the shared region is the point
-    // of the edge, not a crossing to avoid.
-    const nodes = [node('a', 0, 0, 100, 100), node('b', 80, 20, 100, 60)]
+    // b covers a's right-side midpoint; entering the shared region is the
+    // point of the edge, not a crossing to avoid. b sits low enough that
+    // dy is nonzero (an L-pair exists), so the exit stays 'right' by rank
+    // and only broken occlusion logic — treating the edge's own target as
+    // an occluder — would move it.
+    const nodes = [node('a', 0, 0, 100, 100), node('b', 80, 10, 100, 100)]
     const routed = routeEdge(nodes, edge('a', 'b'), 'straight')
     expect(routed.fromSide).toBe('right')
   })
