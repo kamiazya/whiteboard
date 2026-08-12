@@ -497,9 +497,8 @@ export const PENALTY_RULES: readonly PenaltyRule[] = [
   realizedBends,
 ]
 
-/** The all-zero cost, sized to `rules` — the composition path's only
- * length-4 literal is this `.map`, derived from the declared list rather
- * than hardcoded. */
+/** The all-zero cost, sized to `rules` — derived from the declared list
+ * (`rules.map`), never a hardcoded array length. */
 export function zeroPenalty(rules: readonly PenaltyRule[] = PENALTY_RULES): number[] {
   return rules.map(() => 0)
 }
