@@ -1,6 +1,6 @@
 # ADR-0008: Slug derivation, rename, and sibling uniqueness
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
@@ -180,10 +180,15 @@ read time. We already have Drive's projection layer.
   routing around: `WorkspaceTopBar` still owns rename precisely because
   `DaemonCanvasPage` has no canvas row, and moving copy-URL and export down
   waits on canvas-name resolution being lifted out of that component.
-- `workspaceIndexAliasHistory` stays write-only. ADR-0007 records that the
-  `workspaceIndex*` tables have no reader and must not be described as a
-  lookup path until something reads them; point 4 declines to make this ADR
-  that something, so the note stands unchanged.
+- The write-only `workspaceIndex*` machinery is **removed, not left
+  dormant**. Its only prospective consumer was the redirect point 4 defers
+  to the convergence step, and ADR-0007 already forbids describing unread
+  tables as a lookup path. At 0.0.x nothing depends on the stored rows, so
+  the storage layer (`libsql-workspace-index`, its tables via a drop
+  migration, `reindexAllWorkspaces`) and the derivation functions whose only
+  caller that was are deleted; git history is the resurrection path when
+  convergence needs an index, and rebuilding from the tree was always the
+  design (the rows are derived, never authoritative).
 - The daemon gallery's secondary line will show `untitled-N` under a
   meaningful display name for every canvas renamed by display name. That is
   honest — it *is* the address — and it is the intended reading order: the
