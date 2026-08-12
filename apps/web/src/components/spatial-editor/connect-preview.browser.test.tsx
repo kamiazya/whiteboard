@@ -93,3 +93,21 @@ it('previews the actual routed edge while hovering a target node', async () => {
   expect(points[0]).toEqual([300, 290])
   expect(points[points.length - 1]).toEqual([180, 290])
 })
+
+it('the preview line carries the committed arrowhead', async () => {
+  const { container } = render(<Host />)
+  const { root, rootRect } = await beginConnectFromWest(container)
+
+  fireEvent.pointerMove(root, {
+    pointerId: 80,
+    clientX: rootRect.left + 230,
+    clientY: rootRect.top + 290,
+    buttons: 1,
+  })
+  await new Promise((r) => requestAnimationFrame(r))
+
+  const arrow = container.querySelector('[data-testid="drag-preview"] polygon')
+  expect(arrow).not.toBeNull()
+  const corners = (arrow?.getAttribute('points') ?? '').split(' ').filter((p) => p.length > 0)
+  expect(corners.length).toBe(3)
+})

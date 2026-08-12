@@ -76,14 +76,26 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
           opacity={0.9}
         />
       ) : (
-        <polyline
-          points={preview.path.map((p) => `${p.x},${p.y}`).join(' ')}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          strokeDasharray={dashArray}
-          opacity={0.9}
-        />
+        <>
+          <polyline
+            points={preview.path.map((p) => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+            opacity={0.9}
+          />
+          {preview.arrows.map((arrow, i) => (
+            <polygon
+              // Arrow identity is positional within one preview frame.
+              // biome-ignore lint/suspicious/noArrayIndexKey: static per-frame list
+              key={i}
+              points={arrow.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="currentColor"
+              opacity={0.9}
+            />
+          ))}
+        </>
       )}
     </svg>
   )

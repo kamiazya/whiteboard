@@ -91,13 +91,42 @@ describe('computeDragPreview — connecting', () => {
   it('routes from the border anchor facing the pointer to the pointer itself', () => {
     const state = connectingState()
     const preview = computeDragPreview(state, boxes, { x: 300, y: 25 }, connect)
-    expect(preview).toEqual({
-      kind: 'line',
-      path: [
-        { x: 100, y: 25 },
-        { x: 300, y: 25 },
-      ],
-    })
+    expect(preview?.kind).toBe('line')
+    if (preview?.kind !== 'line') return
+    expect(preview.path).toEqual([
+      { x: 100, y: 25 },
+      { x: 300, y: 25 },
+    ])
+  })
+
+  it("carries the committed edge's target arrowhead", () => {
+    const state = connectingState()
+    const preview = computeDragPreview(state, boxes, { x: 300, y: 25 }, connect)
+    expect(preview?.kind).toBe('line')
+    if (preview?.kind !== 'line') return
+    // Default edge ends: none -> arrow, so exactly one polygon, tipped at
+    // the line's end.
+    expect(preview.arrows.length).toBe(1)
+    expect(preview.arrows[0]?.[0]).toEqual({ x: 300, y: 25 })
+  })
+
+  it('follows the flattened curve under the curved routing style', () => {
+    const curvedConnect = {
+      ...connect,
+      canvas: { ...connect.canvas, 'x-whiteboard': { edgeRouting: { style: 'curved' as const } } },
+    }
+    const state = connectingState()
+    // A pointer below-right forces a bend; curved routing rounds it.
+    const preview = computeDragPreview(state, boxes, { x: 300, y: 220 }, curvedConnect)
+    expect(preview?.kind).toBe('line')
+    if (preview?.kind !== 'line') return
+    // Rounded flattening produces diagonal chords; the raw orthogonal
+    // waypoints are all axis-aligned, so a diagonal segment is proof the
+    // preview follows the drawn curve.
+    const diagonal = preview.path.some(
+      (p, i) => i > 0 && p.x !== preview.path[i - 1]?.x && p.y !== preview.path[i - 1]?.y,
+    )
+    expect(diagonal).toBe(true)
   })
 
   it('returns undefined when the fromNode id is absent from boxes', () => {
