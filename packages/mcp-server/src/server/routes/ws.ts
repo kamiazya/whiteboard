@@ -14,6 +14,7 @@ import {
 import { saveCanvas } from '../store/canvas-store.js'
 import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
+import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { setBroadcastFn } from './canvas.js'
 import {
   setSyncSseHooks,
@@ -354,35 +355,49 @@ export async function handleWsUpgrade(
       ? getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions, parentCtx)
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
-      const currentDoc = await getDoc(workspaceId, slug)
-      // A second (or later) frame's handler can pass the `isClosing` check
-      // above before this frame's `await getDoc` resolves — both were
-      // still false at the top when they started. Recheck immediately after
-      // the await so a frame that lost that race does not import, persist,
-      // or close a socket the earlier frame already tore down.
-      if (isClosing) return
+      // Resolve the doc AND persist it inside one workspace-lock hold. getDoc()
+      // alone is unlocked, so a rename/delete that runs its whole lock-protected
+      // section between an unlocked read here and saveCanvas()'s own later lock
+      // acquisition would find no row left at this slug and silently insert a
+      // brand-new phantom canvas back at it (or resurrect deleted content).
+      // Sharing the lock across the read and the write closes that window —
+      // mirrors live-doc.ts's POST /update handler. Only the read-import-save
+      // span is covered: broadcast, the test hook, and auto-version trigger
+      // below stay outside since they never wait on another writer.
+      const currentDoc = await withWorkspaceWriteLock(workspaceId, async () => {
+        const doc = await getDoc(workspaceId, slug)
+        // A second (or later) frame's handler can pass the `isClosing` check
+        // above before this frame's `await getDoc` resolves — both were
+        // still false at the top when they started. Recheck immediately after
+        // the await so a frame that lost that race does not import, persist,
+        // or close a socket the earlier frame already tore down.
+        if (isClosing) return null
 
-      // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
-      // throw a non-Error value) whenever the bytes are not a valid Loro
-      // update/snapshot. A write-scope credential is real authorization to
-      // send edits, not a guarantee the bytes are well-formed CRDT data, so
-      // this boundary must not be able to crash the daemon on one bad frame.
-      // Treat it as a protocol violation: discard the frame, never persist
-      // or broadcast it, and close — consistent with the 1008 scope-violation
-      // close above, but 1003 (Unsupported Data) since the socket itself was
-      // authorized, only this frame's payload was not decodable.
-      try {
-        currentDoc.import(bytes)
-      } catch (err: unknown) {
-        getLogger('ws').warning(
-          { workspaceId, slug, updateBytes: bytes.byteLength, err },
-          'ws binary update rejected: malformed Loro import data',
-        )
-        closeSocket(1003, 'Malformed canvas update')
-        return
-      }
+        // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
+        // throw a non-Error value) whenever the bytes are not a valid Loro
+        // update/snapshot. A write-scope credential is real authorization to
+        // send edits, not a guarantee the bytes are well-formed CRDT data, so
+        // this boundary must not be able to crash the daemon on one bad frame.
+        // Treat it as a protocol violation: discard the frame, never persist
+        // or broadcast it, and close — consistent with the 1008 scope-violation
+        // close above, but 1003 (Unsupported Data) since the socket itself was
+        // authorized, only this frame's payload was not decodable.
+        try {
+          doc.import(bytes)
+        } catch (err: unknown) {
+          getLogger('ws').warning(
+            { workspaceId, slug, updateBytes: bytes.byteLength, err },
+            'ws binary update rejected: malformed Loro import data',
+          )
+          closeSocket(1003, 'Malformed canvas update')
+          return null
+        }
 
-      await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
+        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+        return doc
+      })
+      if (currentDoc === null) return
+
       // Isolated in its own try/catch: this hook exists only so tests can
       // await a deterministic "persisted" signal instead of polling. A
       // callback throwing must never be able to make an already-successful

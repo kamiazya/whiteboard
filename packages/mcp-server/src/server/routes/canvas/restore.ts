@@ -5,6 +5,7 @@ import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canva
 import { ConflictError, canvasExists, getCanvasKind, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
+import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import {
   validateSlug,
   validateVersionId,
@@ -118,77 +119,37 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       overwrite = parsed.data.overwrite === true
     }
     try {
-      const doc = await getDoc(workspaceId, slug)
-      const past = await versionStore.load(workspaceId, id, doc)
-      if (!past) {
-        return c.json({ error: 'not_found' }, 404)
-      }
-
-      // Restore-as-new-canvas / overwrite-existing-canvas branch.
-      // targetSlug === slug is the same document as the in-place restore
-      // below, so route it there directly instead of forcing callers to
-      // pass overwrite:true against their own canvas.
-      if (targetSlug !== undefined && targetSlug !== slug) {
-        try {
-          validateSlug(targetSlug)
-        } catch (err) {
-          const body = validationErrorBody(err)
-          if (body) return c.json(body, 400)
-          throw err
+      // Every doc read + save below runs inside one workspace-lock hold.
+      // getDoc() alone is unlocked, so a concurrent delete/rename that runs
+      // its whole lock-protected section between an unlocked read here and
+      // the eventual saveCanvas() would find no row left at that slug and
+      // silently insert a brand-new phantom canvas (or resurrect content
+      // onto a slug the delete just cleared). Both the in-place branch and
+      // the targetSlug-overwrite branch have that getDoc(slug)->saveCanvas(slug)
+      // shape, so one lock around the whole handler body closes it for both
+      // — mirrors live-doc.ts's POST /update handler.
+      return await withWorkspaceWriteLock(workspaceId, async () => {
+        const doc = await getDoc(workspaceId, slug)
+        const past = await versionStore.load(workspaceId, id, doc)
+        if (!past) {
+          return c.json({ error: 'not_found' }, 404)
         }
 
-        const targetAlreadyExists = await canvasExists(workspaceId, targetSlug)
-        if (targetAlreadyExists && !overwrite) {
-          return c.json(
-            {
-              error: 'output_exists',
-              message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
-            },
-            409,
-          )
-        }
+        // Restore-as-new-canvas / overwrite-existing-canvas branch.
+        // targetSlug === slug is the same document as the in-place restore
+        // below, so route it there directly instead of forcing callers to
+        // pass overwrite:true against their own canvas.
+        if (targetSlug !== undefined && targetSlug !== slug) {
+          try {
+            validateSlug(targetSlug)
+          } catch (err) {
+            const body = validationErrorBody(err)
+            if (body) return c.json(body, 400)
+            throw err
+          }
 
-        if (targetAlreadyExists) {
-          // The version id belongs to the SOURCE canvas's history, so its
-          // label lives in the source's version list even though we are
-          // about to reconcile it onto the target.
-          const all = await versionStore.list(workspaceId, slug)
-          const label = all.find((v) => v.id === id)?.label
-          const targetDoc = await getDoc(workspaceId, targetSlug)
-          // The merged content is the source's own shape (spatial nodes/edges
-          // vs. a markdown body), same reasoning as the new-canvas branch
-          // below — the target's stored kind must follow it or a kind-aware
-          // consumer (editor routing) opens the overwritten canvas with the
-          // wrong editor.
-          const sourceKind = await getCanvasKind(workspaceId, slug)
-          await reconcileCommitSaveBroadcast(
-            workspaceId,
-            targetSlug,
-            targetDoc,
-            past,
-            label,
-            sourceKind,
-          )
-          return c.json({
-            canvasId: `${workspaceId}/${targetSlug}`,
-            elementCount: countElements(targetDoc),
-          })
-        }
-
-        // Genuinely new canvas: no live doc and no connected clients, so
-        // there is nothing to reconcile against. The restored content is
-        // whatever the source canvas actually stores (spatial nodes/edges
-        // maps vs. a markdown 'body' text container), so the new row must
-        // carry the source's own kind rather than falling back to the
-        // saveCanvas default.
-        try {
-          const sourceKind = await getCanvasKind(workspaceId, slug)
-          await saveCanvas(workspaceId, targetSlug, past, {
-            overwrite: false,
-            ...(sourceKind !== null ? { kind: sourceKind } : {}),
-          })
-        } catch (err) {
-          if (err instanceof ConflictError) {
+          const targetAlreadyExists = await canvasExists(workspaceId, targetSlug)
+          if (targetAlreadyExists && !overwrite) {
             return c.json(
               {
                 error: 'output_exists',
@@ -197,22 +158,73 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               409,
             )
           }
-          throw err
-        }
-        // Guard against a stale cache entry from a since-deleted canvas at
-        // this slug being served instead of the just-written snapshot.
-        evictDoc(workspaceId, targetSlug)
-        return c.json({
-          canvasId: `${workspaceId}/${targetSlug}`,
-          elementCount: countElements(past),
-        })
-      }
 
-      // In-place reconcile branch (default).
-      const all = await versionStore.list(workspaceId, slug)
-      const label = all.find((v) => v.id === id)?.label
-      await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
-      return c.json({ ok: true })
+          if (targetAlreadyExists) {
+            // The version id belongs to the SOURCE canvas's history, so its
+            // label lives in the source's version list even though we are
+            // about to reconcile it onto the target.
+            const all = await versionStore.list(workspaceId, slug)
+            const label = all.find((v) => v.id === id)?.label
+            const targetDoc = await getDoc(workspaceId, targetSlug)
+            // The merged content is the source's own shape (spatial nodes/edges
+            // vs. a markdown body), same reasoning as the new-canvas branch
+            // below — the target's stored kind must follow it or a kind-aware
+            // consumer (editor routing) opens the overwritten canvas with the
+            // wrong editor.
+            const sourceKind = await getCanvasKind(workspaceId, slug)
+            await reconcileCommitSaveBroadcast(
+              workspaceId,
+              targetSlug,
+              targetDoc,
+              past,
+              label,
+              sourceKind,
+            )
+            return c.json({
+              canvasId: `${workspaceId}/${targetSlug}`,
+              elementCount: countElements(targetDoc),
+            })
+          }
+
+          // Genuinely new canvas: no live doc and no connected clients, so
+          // there is nothing to reconcile against. The restored content is
+          // whatever the source canvas actually stores (spatial nodes/edges
+          // maps vs. a markdown 'body' text container), so the new row must
+          // carry the source's own kind rather than falling back to the
+          // saveCanvas default.
+          try {
+            const sourceKind = await getCanvasKind(workspaceId, slug)
+            await saveCanvas(workspaceId, targetSlug, past, {
+              overwrite: false,
+              ...(sourceKind !== null ? { kind: sourceKind } : {}),
+            })
+          } catch (err) {
+            if (err instanceof ConflictError) {
+              return c.json(
+                {
+                  error: 'output_exists',
+                  message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
+                },
+                409,
+              )
+            }
+            throw err
+          }
+          // Guard against a stale cache entry from a since-deleted canvas at
+          // this slug being served instead of the just-written snapshot.
+          evictDoc(workspaceId, targetSlug)
+          return c.json({
+            canvasId: `${workspaceId}/${targetSlug}`,
+            elementCount: countElements(past),
+          })
+        }
+
+        // In-place reconcile branch (default).
+        const all = await versionStore.list(workspaceId, slug)
+        const label = all.find((v) => v.id === id)?.label
+        await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
+        return c.json({ ok: true })
+      })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
