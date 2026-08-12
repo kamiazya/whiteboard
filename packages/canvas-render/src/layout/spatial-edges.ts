@@ -98,7 +98,16 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
  * derivation falls back to the preferred side, so fully-boxed-in nodes
  * keep the old behaviour.
  */
-/** Inset tangent spans of two facing sides overlap — a zero-bend lane exists. */
+/** Minimum shared-lane width for a facing pair to count as zero-bend. A
+ * narrower window forces the aligned anchor into both nodes' corner zones —
+ * the "straight" segment runs down the seam between two corners, or (since
+ * anchors are placed by side fraction, not dragged into the window) is not
+ * realized at all and degrades to a shallow diagonal. Such pairs read far
+ * better through the one-bend perpendicular L. */
+const ZERO_LANE_MIN_OVERLAP_PX = 20
+
+/** Inset tangent spans of two facing sides share a lane wide enough to host
+ * an anchor — a zero-bend segment is actually realizable. */
 function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): boolean {
   const span = (r: Rect): readonly [number, number] =>
     axis === 'h'
@@ -112,7 +121,7 @@ function facingSpansOverlap(fromRect: Rect, toRect: Rect, axis: 'h' | 'v'): bool
         ]
   const [aLo, aHi] = span(fromRect)
   const [bLo, bHi] = span(toRect)
-  return Math.max(aLo, bLo) <= Math.min(aHi, bHi)
+  return Math.min(aHi, bHi) - Math.max(aLo, bLo) >= ZERO_LANE_MIN_OVERLAP_PX
 }
 
 /**
