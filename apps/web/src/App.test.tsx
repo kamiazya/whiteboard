@@ -1035,6 +1035,57 @@ describe('App /settings routing', () => {
       token: 'tok',
     })
   })
+
+  it('passes token: null for a paired fragment connection with authMode "none" (no bootstrap token)', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: undefined,
+        slug: undefined,
+        authMode: 'none',
+      },
+    }
+    renderAppWithRouter(BROWSER_LOCAL_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: 'http://127.0.0.1:3099',
+      token: null,
+    })
+  })
+
+  it('passes the daemon from a session grant established via the silent-renewal seam', async () => {
+    // Same mechanism as the "silent renewal" suite above: a stored
+    // localDaemonBaseUrl plus a 'paired' renewPairingToken result lands in
+    // grantConnection, which /settings must resolve exactly like a #wb-grant
+    // fragment consumed directly on this route would.
+    localStorage.clear()
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.daemon).toEqual({
+      baseUrl: 'http://127.0.0.1:3099',
+      token: 'tok-r',
+    })
+    renewPairingTokenMock.mockClear()
+    mockRenewResult = { status: 'none' }
+    localStorage.clear()
+  })
 })
 
 describe('App error boundary', () => {

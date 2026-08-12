@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STORAGE_KEY } from '@/lib/user-settings-store'
 import { SettingsPage } from './SettingsPage.js'
@@ -45,14 +45,41 @@ describe('SettingsPage — routing layout', () => {
   })
 
   it('the desktop sidebar back button returns to the app root when there is no in-app history', () => {
-    // MemoryRouter's initial entry has no react-router history.idx to pop
-    // into, so the fallback path (navigate('/')) is what's under test here.
-    renderAt('/settings')
+    // window.history.state in jsdom starts out without an `idx` (unlike a
+    // real react-router-driven session, which stamps one on every push), so
+    // the fallback path (navigate('/')) is what's under test here.
+    const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
+      initialEntries: ['/settings'],
+    })
+    render(<RouterProvider router={router} />)
     const desktop = screen.getByTestId('settings-desktop')
     fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
-    // No assertion needed beyond "did not throw" plus the URL sync below —
-    // MemoryRouter has no way to observe the resulting location without a
-    // Routes tree, so the pushed-state case is covered separately.
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('the desktop sidebar back button pops in-app history when window.history.state.idx > 0', () => {
+    // handleBackToApp reads the REAL window.history.state (react-router's
+    // history library stamps an `idx` there on every push in a live
+    // session), which is independent of MemoryRouter's own in-memory stack —
+    // stub it directly rather than relying on MemoryRouter to populate it.
+    // The first entry is deliberately NOT '/': the fallback branch
+    // (navigate('/')) would land on a different pathname than this branch
+    // (navigate(-1), which pops back to '/w/ws1'), so a regression that
+    // dropped the idx>0 check still shows up as a real assertion failure
+    // rather than two branches coincidentally agreeing on '/'.
+    const idxSpy = vi.spyOn(window.history, 'state', 'get').mockReturnValue({ idx: 2 })
+    try {
+      const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
+        initialEntries: ['/w/ws1', '/settings'],
+        initialIndex: 1,
+      })
+      render(<RouterProvider router={router} />)
+      const desktop = screen.getByTestId('settings-desktop')
+      fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
+      expect(router.state.location.pathname).toBe('/w/ws1')
+    } finally {
+      idxSpy.mockRestore()
+    }
   })
 })
 
