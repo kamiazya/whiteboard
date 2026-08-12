@@ -21,3 +21,11 @@ describe('PWA icons', () => {
     expect(pngSize('./public/icon-512.png')).toEqual({ width: 512, height: 512 })
   })
 })
+
+describe('OG image', () => {
+  // The og:image meta in index.html points at this file; 1200x630 is the
+  // standard large-summary card size.
+  it('og-image.png is the 1200x630 card', () => {
+    expect(pngSize('./public/og-image.png')).toEqual({ width: 1200, height: 630 })
+  })
+})

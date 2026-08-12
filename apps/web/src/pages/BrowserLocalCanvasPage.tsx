@@ -196,8 +196,12 @@ export function BrowserLocalCanvasPage({
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
-  // /canvas/:workspaceId/:slug contract). The first sync replaces so a
-  // plain '/' load doesn't leave an extra history entry behind it; every
+  // /canvas/:workspaceId/:slug contract). This page only mounts on
+  // /local/:canvasId (App routes '/' to the list), so on a normal open the
+  // first run is a no-op — the URL already matches. The first-sync REPLACE
+  // exists for the stale-deep-link case: a bookmarked id that no longer
+  // exists falls back to the default canvas, and repairing the URL with a
+  // push would leave the dead link as a history entry behind it. Every
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
   // This never fights the URL->canvas effect below: that effect only calls
