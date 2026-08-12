@@ -424,44 +424,6 @@ describe('App capability wiring', () => {
   })
 })
 
-describe('App beta banner', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
-
-  it('shows the browser-only persistence copy for the browser-local state', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_LOCAL_STATE} />
-      </MemoryRouter>,
-    )
-    expect(
-      screen.getByText('Beta preview — your data is stored only in this browser.'),
-    ).toBeTruthy()
-  })
-
-  it('shows daemon-neutral copy for the local-daemon state (no browser-only claim)', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={LOCAL_DAEMON_STATE} />
-      </MemoryRouter>,
-    )
-    expect(screen.getByText('Beta preview — features may be incomplete.')).toBeTruthy()
-    expect(
-      screen.queryByText('Beta preview — your data is stored only in this browser.'),
-    ).toBeNull()
-  })
-
-  it('does not show the beta banner on the invalid-config error page', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={INVALID_CONFIG_STATE} />
-      </MemoryRouter>,
-    )
-    expect(screen.queryByText(/Beta preview/)).toBeNull()
-  })
-})
-
 describe('App daemon-pairing routing', () => {
   beforeEach(() => {
     mockDaemonConnectionResult = { status: 'none' }
@@ -736,7 +698,7 @@ describe('App local-daemon provider state', () => {
     expect(receivedDaemonPageProps?.slug).toBe('canvas-b')
   })
 
-  it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES and neutral banner copy', async () => {
+  it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
@@ -762,10 +724,6 @@ describe('App local-daemon provider state', () => {
     await screen.findByTestId('browser-local-canvas-page')
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_CAPABILITIES)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
-    expect(
-      screen.getByText('Beta preview — your data is stored only in this browser.'),
-    ).toBeTruthy()
-    expect(screen.queryByText('Beta preview — features may be incomplete.')).toBeNull()
   })
 
   it('catches an error surfacing through the local-daemon lazy path (boundary outside Suspense)', async () => {

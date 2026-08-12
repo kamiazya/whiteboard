@@ -3,6 +3,7 @@ import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { AppShell } from '../components/AppShell.js'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
@@ -34,10 +35,9 @@ import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.j
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
-import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserLocalCanvasPath, parseBrowserLocalRoute, settingsPath } from '../lib/app-routes.js'
+import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/canvas-embed-content.js'
@@ -165,8 +165,6 @@ export function BrowserLocalCanvasPage({
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
   const { resolvedTheme } = useThemeMode()
-  // Browser-local pages have no daemon by definition.
-  const settingsNudge = useSettingsNudge(false)
 
   // Fullscreen can also be left with Escape or the browser's own chrome, so
   // the button's label follows the DOCUMENT rather than our own click.
@@ -569,9 +567,8 @@ export function BrowserLocalCanvasPage({
             <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
           }
         >
+          <AppShell daemonConnected={false} />
           <WorkspaceTopBar
-            onNavigateHome={() => navigate('/')}
-            settingsNudge={settingsNudge}
             statusSlot={
               <ConnectionStatus state="local">
                 <p className="text-muted-foreground">
@@ -617,11 +614,6 @@ export function BrowserLocalCanvasPage({
               branches: capabilities.branches,
               merge: capabilities.merge,
             }}
-            onOpenSettings={() =>
-              navigate(settingsPath(), {
-                state: { from: `${window.location.pathname}${window.location.search}` },
-              })
-            }
           />
         </Suspense>
       </div>

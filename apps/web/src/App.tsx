@@ -1,7 +1,6 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { BetaBanner } from './components/BetaBanner.js'
 
 // Lazy: the not-found page renders on rare, dead-end navigations only —
 // it must not ride the critical-path bundle.
@@ -510,10 +509,6 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <BetaBanner
-            store={userSettingsStore}
-            message="Beta preview — features may be incomplete."
-          />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -557,10 +552,6 @@ export function App({ providerState }: AppProps) {
   return (
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
-        <BetaBanner
-          store={userSettingsStore}
-          message="Beta preview — your data is stored only in this browser."
-        />
         {grantConnection?.status === 'identity-mismatch' && !grantErrorDismissed && (
           // Fail-closed renewal refusal: a PINNED daemon answered with a
           // wrong or missing identity signature. Either the daemon rotated

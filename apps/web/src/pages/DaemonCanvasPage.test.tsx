@@ -1876,7 +1876,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      fireEvent.click(screen.getByTestId('settings-trigger'))
+      fireEvent.click(screen.getByTestId('shell-settings'))
       expect(router.state.location.pathname).toBe('/settings')
       // The entry point rides along so the settings Back button can return
       // here deterministically instead of popping history.
@@ -1903,7 +1903,7 @@ describe('DaemonCanvasPage', () => {
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
-      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('link', { name: 'Home' }))
       expect(router.state.location.pathname).toBe('/')
     })
 

@@ -29,9 +29,6 @@ function renderBar(overrides?: {
   onNavigateToCanvas?: (slug: string) => void
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
-  onNavigateHome?: () => void
-  onOpenSettings?: () => void
-  settingsNudge?: boolean
 }) {
   // React 18 delegates events to the root container. Radix portals render into document.body,
   // which is a DOM sibling of the default test container. Using document.body as the React root
@@ -46,9 +43,6 @@ function renderBar(overrides?: {
       onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
       workspaces={overrides?.workspaces}
       onSwitchWorkspace={overrides?.onSwitchWorkspace}
-      onNavigateHome={overrides?.onNavigateHome}
-      onOpenSettings={overrides?.onOpenSettings}
-      settingsNudge={overrides?.settingsNudge}
     />,
     { container: document.body },
   )
@@ -1381,48 +1375,5 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
       target: { value: 'canvas-a' },
     })
     expect(screen.queryByText('Workspaces')).toBeNull()
-  })
-})
-
-describe('WorkspaceTopBar — brand mark home affordance', () => {
-  it('renders the brand mark as a Home button when onNavigateHome is provided', () => {
-    const onNavigateHome = vi.fn()
-    renderBar({ onNavigateHome })
-    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
-    expect(onNavigateHome).toHaveBeenCalledTimes(1)
-  })
-
-  it('renders no home affordance without the callback', () => {
-    renderBar()
-    expect(screen.queryByRole('button', { name: 'Home' })).toBeNull()
-  })
-})
-
-describe('WorkspaceTopBar — settings nudge dot', () => {
-  it('shows the blue dot on the settings gear while a setup todo remains', () => {
-    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
-    expect(screen.getByTestId('settings-nudge')).toBeTruthy()
-  })
-
-  it('shows no dot when there is nothing actionable', () => {
-    renderBar({ onOpenSettings: () => {} })
-    expect(screen.queryByTestId('settings-nudge')).toBeNull()
-    expect(screen.queryByTestId('settings-nudge-overflow')).toBeNull()
-  })
-
-  it('carries the dot on the collapsed overflow trigger only when settings is reachable there', () => {
-    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
-    expect(screen.getByTestId('settings-nudge-overflow')).toBeTruthy()
-  })
-
-  it('shows no overflow dot when settings is not offered at all', () => {
-    renderBar({ settingsNudge: true })
-    expect(screen.queryByTestId('settings-nudge-overflow')).toBeNull()
-  })
-
-  it('marks the Settings item inside the opened overflow menu', async () => {
-    renderBar({ onOpenSettings: () => {}, settingsNudge: true })
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'View options' }), { button: 0 })
-    expect(await screen.findByTestId('settings-nudge-item')).toBeTruthy()
   })
 })

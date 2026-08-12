@@ -134,6 +134,7 @@ All commands run from `apps/web/`.
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
 | in-app marks (error / not-found / empty / home) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
+| ALPHA chip (AppShell) | `src/components/AppShell.tsx` — amber chip + honesty popover; the durable home of "data durability is not guaranteed" | code |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |
 | `public/favicon.svg` | hand-authored static fallback | edit directly |
