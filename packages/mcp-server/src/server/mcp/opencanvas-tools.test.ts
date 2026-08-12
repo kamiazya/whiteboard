@@ -21,15 +21,15 @@ function fakeDeps() {
 }
 
 describe('registerOpenCanvasTools', () => {
-  it('registers version_save, version_list, and version_restore via the server-core wiring', () => {
+  it('registers wb_version_save, wb_version_list, and wb_version_restore via the server-core wiring', () => {
     const server = fakeServer()
     registerOpenCanvasTools(server, fakeDeps())
 
     const registerToolMock = vi.mocked(server.registerTool)
     const names = registerToolMock.mock.calls.map((call) => call[0])
-    expect(names).toContain('version_save')
-    expect(names).toContain('version_list')
-    expect(names).toContain('version_restore')
+    expect(names).toContain('wb_version_save')
+    expect(names).toContain('wb_version_list')
+    expect(names).toContain('wb_version_restore')
   })
 
   it("forwards a server-core log record to this composition root's logger", () => {

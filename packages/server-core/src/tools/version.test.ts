@@ -28,7 +28,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
   return doc
 }
 
-describe('version_save tool', () => {
+describe('wb_version_save tool', () => {
   test('saves a version and returns metadata', async () => {
     const tool = createVersionSaveTool(makeDeps(new FakeCanvasDocStore()))
 
@@ -51,7 +51,7 @@ describe('version_save tool', () => {
   })
 })
 
-describe('version_list tool', () => {
+describe('wb_version_list tool', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -113,7 +113,7 @@ describe('version_list tool', () => {
   })
 })
 
-describe('version_restore tool', () => {
+describe('wb_version_restore tool', () => {
   test('restores spatial canvas content from a saved version', async () => {
     const store = new FakeCanvasDocStore()
     const deps = makeDeps(store)

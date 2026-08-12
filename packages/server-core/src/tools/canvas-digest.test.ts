@@ -14,7 +14,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('canvas_digest tool', () => {
+describe('wb_scene_digest tool', () => {
   test('matches sceneDigest computed directly over an overlapping two-node canvas', async () => {
     const store = new FakeCanvasDocStore()
     const canvas = {

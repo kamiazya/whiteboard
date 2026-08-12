@@ -6,25 +6,25 @@ import { TOOL_PROFILES } from './tool-profiles.js'
 // create_frame, etc.) must have no entry here — a stale entry gives a
 // client a misleading approval-policy hint for a tool that no longer exists.
 const ACTIVE_TOOL_NAMES = [
-  'facet_set',
-  'node_lock',
-  'node_patch',
-  'edge_lock',
-  'edge_patch',
-  'tidy_canvas',
-  'body_patch',
-  'canvas_render_svg',
-  'canvas_digest',
-  'canvas_import_okf',
+  'wb_facet_set',
+  'wb_node_lock',
+  'wb_node_patch',
+  'wb_edge_lock',
+  'wb_edge_patch',
+  'wb_canvas_tidy',
+  'wb_body_patch',
+  'wb_scene_render',
+  'wb_scene_digest',
+  'wb_document_set',
   'canvas_export_okf',
   'canvas_export_json_canvas',
-  'wb_canvas_create',
-  'wb_canvas_list',
-  'wb_canvas_get',
-  'wb_canvas_delete',
-  'version_save',
-  'version_restore',
-  'version_list',
+  'wb_document_create',
+  'wb_document_list',
+  'wb_document_resolve',
+  'wb_document_delete',
+  'wb_version_save',
+  'wb_version_restore',
+  'wb_version_list',
 ]
 
 describe('TOOL_PROFILES', () => {
@@ -32,8 +32,8 @@ describe('TOOL_PROFILES', () => {
     expect(Object.keys(TOOL_PROFILES).sort()).toEqual([...ACTIVE_TOOL_NAMES].sort())
   })
 
-  it('declares canvas_import_okf as mutating, not read-only or destructive', () => {
-    const profile = TOOL_PROFILES.canvas_import_okf.profile
+  it('declares wb_document_set as mutating, not read-only or destructive', () => {
+    const profile = TOOL_PROFILES.wb_document_set.profile
     expect(profile.readOnlyHint).not.toBe(true)
     expect(profile.destructiveHint).not.toBe(true)
   })

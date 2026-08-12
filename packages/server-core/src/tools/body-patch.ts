@@ -77,7 +77,9 @@ function spliceLines(text: string, range: BodyPatchRange): string {
 
 export function createBodyPatchTool(deps: ServerDeps) {
   return {
-    name: 'body_patch' as const,
+    name: 'wb_body_patch' as const,
+    description:
+      'Patch the markdown body of a text node. Either replace the whole body or replace a line range; the schema rules out passing both.',
     inputSchema: bodyPatchInputSchema,
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {

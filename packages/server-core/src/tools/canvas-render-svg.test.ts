@@ -11,7 +11,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('canvas_render_svg tool', () => {
+describe('wb_scene_render tool', () => {
   test('renders a seeded canvas to SVG with dimensions', async () => {
     const store = new FakeCanvasDocStore()
     await seedDoc(store, CANVAS_ID, (doc) => {

@@ -23,7 +23,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
   return doc
 }
 
-describe('canvas_import_okf tool', () => {
+describe('wb_document_set tool', () => {
   test('imports markdown with facets and body into a new LoroDoc', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)

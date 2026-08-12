@@ -14,8 +14,8 @@ describe('canvas-sync event name constants', () => {
     expect(CANVAS_SYNC_DOC_CHANGED_EVENT).toBe('excalidraw:doc_changed')
   })
 
-  it('keeps the version_saved event name unchanged', () => {
-    expect(CANVAS_SYNC_VERSION_SAVED_EVENT).toBe('excalidraw:version_saved')
+  it('keeps the wb_version_saved event name unchanged', () => {
+    expect(CANVAS_SYNC_VERSION_SAVED_EVENT).toBe('excalidraw:wb_version_saved')
   })
 
   it('dispatchIdentityEvent fires the constant event name it is called with', () => {

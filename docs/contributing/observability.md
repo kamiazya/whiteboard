@@ -15,7 +15,7 @@ WHITEBOARD_OTEL=1 pnpm mcp:http:dev
 Each tool call / HTTP request prints a single span line on stderr:
 
 ```
-{"time":"2026-05-02T03:00:00.000Z","level":"trace","scope":"otel","traceId":"…","spanId":"…","name":"mcp.tool.call wb_canvas_create","attributes":{"mcp.tool.name":"wb_canvas_create",…}}
+{"time":"2026-05-02T03:00:00.000Z","level":"trace","scope":"otel","traceId":"…","spanId":"…","name":"mcp.tool.call wb_document_create","attributes":{"mcp.tool.name":"wb_document_create",…}}
 ```
 
 ## Forwarding to a collector

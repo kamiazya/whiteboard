@@ -7,7 +7,7 @@
 //
 // Coverage:
 //   1. tools/list matches the authoritative set in mcp-smoke-coverage.ts
-//   2. wb_canvas_create → facet_set → version_save → version_list → version_restore
+//   2. wb_document_create → wb_facet_set → wb_version_save → wb_version_list → wb_version_restore
 //
 // This does not consume API quota, so it is safe in CI.
 
@@ -120,25 +120,25 @@ const WORKSPACE_ID = 'e2e'
 
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
 const EXPECTED_TOOLS = [
-  'body_patch',
-  'canvas_digest',
+  'wb_body_patch',
+  'wb_scene_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
-  'canvas_import_okf',
-  'canvas_render_svg',
-  'edge_lock',
-  'edge_patch',
-  'facet_set',
-  'node_lock',
-  'node_patch',
-  'tidy_canvas',
-  'version_list',
-  'version_restore',
-  'version_save',
-  'wb_canvas_create',
-  'wb_canvas_delete',
-  'wb_canvas_get',
-  'wb_canvas_list',
+  'wb_document_set',
+  'wb_scene_render',
+  'wb_edge_lock',
+  'wb_edge_patch',
+  'wb_facet_set',
+  'wb_node_lock',
+  'wb_node_patch',
+  'wb_canvas_tidy',
+  'wb_version_list',
+  'wb_version_restore',
+  'wb_version_save',
+  'wb_document_create',
+  'wb_document_delete',
+  'wb_document_resolve',
+  'wb_document_list',
 ]
 
 async function main() {
@@ -171,44 +171,44 @@ async function main() {
 
   // Unknown-workspace guard: without createWorkspace the create must fail
   // (workspaces never materialize implicitly from a typo'd workspaceId).
-  await expectToolError('wb_canvas_create', {
+  await expectToolError('wb_document_create', {
     workspaceId: WORKSPACE_ID,
     segment: 'e2e-src',
   })
 
-  // wb_canvas_create: first daemon-dependent RPC (cold-start latency).
-  const created = await callTool('wb_canvas_create', {
+  // wb_document_create: first daemon-dependent RPC (cold-start latency).
+  const created = await callTool('wb_document_create', {
     workspaceId: WORKSPACE_ID,
     segment: 'e2e-src',
     createWorkspace: true,
   })
   if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
-    throw new Error(`wb_canvas_create returned unexpected shape: ${JSON.stringify(created)}`)
+    throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
   }
   const canvasId = created.canvasId
-  console.log(`[e2e] wb_canvas_create → ${canvasId}`)
+  console.log(`[e2e] wb_document_create → ${canvasId}`)
 
-  // facet_set: seed extension-facet state so version_save has content.
-  const facets = await callTool('facet_set', {
+  // wb_facet_set: seed extension-facet state so wb_version_save has content.
+  const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     facets: { 'e2e/1': { note: 'before-save' } },
   })
   if (facets.canvasId !== canvasId) {
-    throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
+    throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
-  console.log('[e2e] facet_set → seeded canvas state')
+  console.log('[e2e] wb_facet_set → seeded canvas state')
 
-  // node_lock: the sidecar lock round-trip. canvas_import_okf is the only
+  // wb_node_lock: the sidecar lock round-trip. wb_document_set is the only
   // MCP path that creates a spatial node, and it always writes one text
   // node with this id.
-  await callTool('canvas_import_okf', {
+  await callTool('wb_document_set', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     markdown: '---\ntype: canvas\ntitle: e2e-lock\n---\n\nlockable body\n',
   })
 
-  const nodeLocked = await callTool('node_lock', {
+  const nodeLocked = await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     nodeId: 'okf-body',
@@ -219,13 +219,13 @@ async function main() {
     nodeLocked.nodeId !== 'okf-body' ||
     nodeLocked.locked !== true
   ) {
-    throw new Error(`node_lock returned unexpected shape: ${JSON.stringify(nodeLocked)}`)
+    throw new Error(`wb_node_lock returned unexpected shape: ${JSON.stringify(nodeLocked)}`)
   }
-  console.log('[e2e] node_lock → okf-body locked')
+  console.log('[e2e] wb_node_lock → okf-body locked')
 
   // The lock binds agents, not just the pointer.
   await expectToolError(
-    'node_patch',
+    'wb_node_patch',
     { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'okf-body', patch: { x: 999 } },
     'on a locked node',
   )
@@ -245,38 +245,38 @@ async function main() {
   }
   console.log('[e2e] canvas_export_json_canvas → no lock leaked into the export')
 
-  await callTool('node_lock', {
+  await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     nodeId: 'okf-body',
     locked: false,
   })
 
-  // tidy_canvas: the canvas holds a single node here, so the contract answer
+  // wb_canvas_tidy: the canvas holds a single node here, so the contract answer
   // is "nothing to tidy" — the call still runs the full pipeline (input
   // parse → doc load → tidy → structuredContent vs outputSchema), which is
   // the drift guard this smoke exists for. The geometry itself is covered by
   // canvas-render's unit/property tests.
-  const tidied = await callTool('tidy_canvas', {
+  const tidied = await callTool('wb_canvas_tidy', {
     workspaceId: WORKSPACE_ID,
     canvasId,
   })
   if (tidied.canvasId !== canvasId || !Array.isArray(tidied.moved) || tidied.moved.length !== 0) {
-    throw new Error(`tidy_canvas returned unexpected shape: ${JSON.stringify(tidied)}`)
+    throw new Error(`wb_canvas_tidy returned unexpected shape: ${JSON.stringify(tidied)}`)
   }
-  console.log('[e2e] tidy_canvas → single-node canvas reports no moves')
+  console.log('[e2e] wb_canvas_tidy → single-node canvas reports no moves')
 
-  // edge_lock reaches its ghost-id guard only: no MCP tool creates an edge
+  // wb_edge_lock reaches its ghost-id guard only: no MCP tool creates an edge
   // (edges come from the editor), so this is the whole of its reachable
   // surface here. Its success path is covered by edge-lock.test.ts.
   await expectToolError(
-    'edge_lock',
+    'wb_edge_lock',
     { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },
     'with an id the canvas does not have',
   )
 
-  // version_save
-  const saved = await callTool('version_save', {
+  // wb_version_save
+  const saved = await callTool('wb_version_save', {
     canvasId,
     label: 'e2e',
   })
@@ -287,23 +287,23 @@ async function main() {
     !saved.timestamp ||
     !saved.frontier
   ) {
-    throw new Error(`version_save returned unexpected shape: ${JSON.stringify(saved)}`)
+    throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
   }
-  console.log(`[e2e] version_save → ${saved.versionId}`)
+  console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
-  // version_list
-  const listed = await callTool('version_list', { canvasId })
+  // wb_version_list
+  const listed = await callTool('wb_version_list', { canvasId })
   if (
     listed.canvasId !== canvasId ||
     !Array.isArray(listed.versions) ||
     !listed.versions.some((v) => v.versionId === saved.versionId)
   ) {
-    throw new Error(`version_list missing the saved id: ${JSON.stringify(listed)}`)
+    throw new Error(`wb_version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
-  console.log(`[e2e] version_list → ${listed.versions.length} version(s)`)
+  console.log(`[e2e] wb_version_list → ${listed.versions.length} version(s)`)
 
-  // version_restore
-  const restored = await callTool('version_restore', {
+  // wb_version_restore
+  const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     versionId: saved.versionId,
@@ -314,11 +314,11 @@ async function main() {
     restored.label !== saved.label ||
     restored.frontier !== saved.frontier
   ) {
-    throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
+    throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
   }
-  console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
+  console.log(`[e2e] wb_version_restore → ${restored.restoredVersionId}`)
 
-  // canvas_import_okf → canvas_export_okf round-trip, including the core
+  // wb_document_set → canvas_export_okf round-trip, including the core
   // facets (type/title/tags) — these are stored via writeCoreFacets, a
   // separate code path from the extension `facets` bucket below, so this is
   // the runtime guard for structuredContent-vs-outputSchema drift on both.
@@ -335,15 +335,15 @@ async function main() {
     '---',
     'Imported body.',
   ].join('\n')
-  const imported = await callTool('canvas_import_okf', {
+  const imported = await callTool('wb_document_set', {
     workspaceId: WORKSPACE_ID,
     canvasId,
     markdown: importMarkdown,
   })
   if (!imported.imported || imported.canvasId !== canvasId) {
-    throw new Error(`canvas_import_okf returned unexpected shape: ${JSON.stringify(imported)}`)
+    throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
-  console.log('[e2e] canvas_import_okf → imported')
+  console.log('[e2e] wb_document_set → imported')
 
   const exported = await callTool('canvas_export_okf', {
     workspaceId: WORKSPACE_ID,

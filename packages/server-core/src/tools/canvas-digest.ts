@@ -19,7 +19,9 @@ export type CanvasDigestInput = z.infer<typeof canvasDigestInputSchema>
 
 export function createCanvasDigestTool(deps: ServerDeps) {
   return {
-    name: 'canvas_digest' as const,
+    name: 'wb_scene_digest' as const,
+    description:
+      'Summarise the laid-out scene for an agent that cannot see the canvas. Derived from layout, not read back from stored content.',
     inputSchema: canvasDigestInputSchema,
     outputSchema: sceneDigestSchema,
     async execute(input: CanvasDigestInput): Promise<SceneDigest> {

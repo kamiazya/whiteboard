@@ -90,7 +90,7 @@ export async function withWorkspaceWriteLock<T>(
  * but nothing compares it against the stored one. So two tool calls that
  * load the same base before either saves silently drop one of the two
  * changes, whichever finishes first. That is not hypothetical for a canvas
- * an agent and a user are both touching, and node_lock racing node_patch
+ * an agent and a user are both touching, and wb_node_lock racing wb_node_patch
  * can even erase a lock the user just set.
  *
  * The key is namespaced because workspace ids and canvas ids are separate
