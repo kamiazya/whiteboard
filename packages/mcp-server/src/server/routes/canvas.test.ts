@@ -555,6 +555,43 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     expect(freshIds).toEqual(['fresh-element'])
     expect(freshIds).not.toContain('old-element')
   })
+
+  it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
+    await saveCanvas('session1', 'a', new LoroDoc())
+    const canvasStore = await import('../store/canvas-store.js')
+    const spy = vi
+      .spyOn(canvasStore, 'renameCanvasSlug')
+      .mockRejectedValueOnce(
+        corruptStoredData('/tmp/blobs/session1/canvas/abc.loro', 'broken canvas blob'),
+      )
+    const app = createCanvasRouter()
+    try {
+      const res = await app.request('/api/workspaces/session1/canvases/a/slug', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'b' }),
+      })
+      expect(res.status).toBe(500)
+      await expect(res.json()).resolves.toEqual({
+        error: 'corrupt_stored_data',
+        message: expect.stringContaining('broken canvas blob'),
+      })
+
+      // Mutation guard: a non-corruption throw must NOT hit the same
+      // branch — proves the mapping checks the error type, not "any throw".
+      spy.mockRejectedValueOnce(new Error('disk exploded'))
+      const res2 = await app.request('/api/workspaces/session1/canvases/a/slug', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'b' }),
+      })
+      expect(res2.status).toBe(500)
+      const json2: unknown = await res2.json()
+      expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
