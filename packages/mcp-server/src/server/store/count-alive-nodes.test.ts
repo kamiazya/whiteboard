@@ -1,7 +1,7 @@
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
-import { countAliveNodes } from './count-alive-nodes.js'
+import { countAliveNodes, countLegacyTombstones } from './count-alive-nodes.js'
 
 function legacyElement(doc: LoroDoc, id: string, isDeleted = false): void {
   const list = doc.getMovableList('elements')
@@ -45,5 +45,47 @@ describe('countAliveNodes', () => {
     legacyElement(doc, 'stale-1', false)
     legacyElement(doc, 'stale-2', false)
     expect(countAliveNodes(doc)).toBe(1)
+  })
+
+  it('drops a raw (non-map) legacy list entry instead of miscounting it as alive', () => {
+    // A LoroMovableList can hold plain values alongside LoroMap containers.
+    // A blind `as Array<{ isDeleted?: boolean }>` cast would read
+    // `(42).isDeleted` as `undefined` and count this entry alive; the
+    // schema-validated walk rejects it outright, same as the old
+    // `instanceof LoroMap` guard did.
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    list.insert(0, 42)
+    doc.commit()
+    expect(countAliveNodes(doc)).toBe(0)
+  })
+})
+
+describe('countLegacyTombstones', () => {
+  it('counts tombstoned entries in a legacy-only doc', () => {
+    const doc = new LoroDoc()
+    legacyElement(doc, 'el-1', false)
+    legacyElement(doc, 'el-2', true)
+    legacyElement(doc, 'el-3', true)
+    expect(countLegacyTombstones(doc)).toBe(2)
+  })
+
+  it('returns 0 once nodes are present, ignoring stale legacy tombstones', () => {
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    legacyElement(doc, 'stale-dead', true)
+    expect(countLegacyTombstones(doc)).toBe(0)
+  })
+
+  it('skips entries with a non-boolean isDeleted field instead of casting it', () => {
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const map = list.insertContainer(list.length, new LoroMap())
+    map.set('id', 'weird')
+    map.set('isDeleted', 'true') // string, not boolean — must not count as a tombstone
+    doc.commit()
+    expect(countLegacyTombstones(doc)).toBe(0)
   })
 })

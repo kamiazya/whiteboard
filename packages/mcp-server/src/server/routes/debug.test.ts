@@ -137,6 +137,45 @@ describe('GET /api/debug', () => {
     )
   })
 
+  it('ignores stale legacy tombstones once a canvas has migrated to the nodes model', async () => {
+    await mkdir(join(tempDir, 'sess-mixed'), { recursive: true })
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    const legacy = doc.getMovableList('elements')
+    const map = legacy.insertContainer(legacy.length, new LoroMap())
+    map.set('id', 'stale-dead')
+    map.set('type', 'rectangle')
+    map.set('isDeleted', true)
+    doc.commit()
+    await saveCanvas('sess-mixed', 'canvas-1', doc)
+
+    const app = createDebugRouter()
+    const res = await app.request('/api/debug')
+    const json = (await res.json()) as {
+      workspaces: Array<{
+        workspaceId: string
+        canvases: Array<{
+          slug: string
+          totalElements: number
+          visibleElements: number
+          tombstones: number
+        }>
+      }>
+    }
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-mixed')
+    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    expect(canvas).toEqual(
+      expect.objectContaining({
+        slug: 'canvas-1',
+        totalElements: 1,
+        visibleElements: 1,
+        tombstones: 0,
+      }),
+    )
+  })
+
   it('marks only canvases touched through getDoc as cached in the cache section', async () => {
     await mkdir(join(tempDir, 'sess-cache'), { recursive: true })
     await saveCanvas('sess-cache', 'touched', makeDocWithElements(1, 0))
