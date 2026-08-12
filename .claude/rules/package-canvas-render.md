@@ -304,6 +304,12 @@ paths:
 - `layout/translate-scene.test.ts`: identity/additivity, the wrapper-relative
   x rule, and the tripwire asserting exactly `listItem`/`tableCell` emit an
   SVG transform.
+- `svg/pixel-golden.browser.test.ts` pixel-level regression harness
+  (`toMatchScreenshot`, baselines under `svg/__screenshots__/`) for the
+  shape classes a byte-level SVG-string golden cannot protect (sweep-flag/
+  coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
+  rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
+  regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
 
 ## Common mistakes (append as review finds them)
 
