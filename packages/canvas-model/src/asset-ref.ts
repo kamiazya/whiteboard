@@ -2,10 +2,11 @@
  * The one convention distinguishing a file node that points at a stored image
  * from one that points at another canvas.
  *
- * Shared by both backends deliberately: a canvas authored in browser-local
- * mode and one authored against the daemon must mean the same thing by the
- * same `file` value, or moving content between them would silently
- * reinterpret every image node as a canvas reference.
+ * Shared by every backend and every reader deliberately: a canvas authored in
+ * browser-local mode, one authored against the daemon, and the daemon's own
+ * file-GC reference walk must all mean the same thing by the same `file`
+ * value, or moving content between them (or garbage-collecting it) would
+ * silently reinterpret every image node as a canvas reference.
  *
  * The colon is what makes this unambiguous — a daemon slug and a browser-local
  * canvas id both match /^[a-zA-Z0-9_-]+$/, so neither can ever collide with a

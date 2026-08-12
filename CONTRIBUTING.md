@@ -121,9 +121,19 @@ This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code
 ### First-clone setup
 
 1. `pnpm install` (required before anything else — the dev daemon and tests need the workspace installed).
-2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which probes `http://127.0.0.1:3099` and, if nothing is listening, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to bind. So the hardcoded `http://127.0.0.1:3099/mcp` endpoint is normally up by the time the first MCP request fires.
-3. **If the daemon is not up** — hooks disabled, project not trusted yet, a fresh clone where step 1 has not run, or port 3099 already taken — Claude Code simply shows a connection error for the `whiteboard` MCP server. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal.
-4. The `Authorization: Bearer whiteboard-dev` in `.claude/settings.json` is a **non-secret, well-known local-dev constant** that authenticates only to the loopback daemon — it grants nothing on any other machine. To use a different value, override the header in your gitignored `.claude/settings.local.json`.
+2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which probes this checkout's derived dev port (3099 on the main checkout) and, if nothing is listening, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to bind.
+3. **Register the stdio proxy once per checkout** so Claude Code actually talks to that daemon instead of the published npm package. `.claude/settings.json` has no `mcpServers` field in its schema — a definition there is silently ignored — so this is a one-time `--scope local` CLI registration (machine-private `~/.claude.json`) per checkout:
+
+   ```bash
+   claude mcp add --scope local --transport stdio whiteboard -- \
+     node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+   ```
+
+   Local scope shadows the repo-tracked `.mcp.json` (precedence: local > project), which stays pointed at the published `npx @kamiazya/whiteboard-mcp@latest` package — do not repoint `.mcp.json` at dev tooling. The proxy runs the ensure hook itself and retries each request across daemon watch-restarts, so registering it as stdio (rather than the HTTP URL directly) survives a `tsx watch` restart mid-session.
+4. **Self-check — am I hitting my checkout, not npx?** Run `claude mcp get whiteboard`: it should show the `node .../mcp-http-stdio-proxy.mjs` command, not `npx -y @kamiazya/whiteboard-mcp@latest`. If it shows the `npx` command, step 3's local-scope registration did not take (or is missing) and your MCP calls are silently hitting the published package instead of your local code changes.
+5. **If the daemon is not up** — hooks disabled, project not trusted yet, or the port is already taken — the `whiteboard` MCP server shows a connection error. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal.
+
+See AGENTS.md's "MCP Development Mode" section for the full daemon/proxy design (per-worktree ports, the spawn lock, why stdio wraps HTTP) and `docs/contributing/mcp-debugging.md` for debugging the endpoint itself.
 
 ### Discipline (if you author/run workflows)
 
