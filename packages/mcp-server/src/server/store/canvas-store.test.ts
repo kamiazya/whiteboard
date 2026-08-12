@@ -963,6 +963,35 @@ describe('renameCanvasSlug', () => {
       clearCache()
     }
   })
+
+  it('evicts a phantom doc-cache entry already sitting at the destination slug, so the renamed content is not overwritten', async () => {
+    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    clearCache()
+    try {
+      // Write real content under 'a'.
+      const doc = new LoroDoc()
+      doc.getText('content').insert(0, 'real content')
+      doc.commit()
+      await saveCanvas('session1', 'a', doc)
+
+      // Simulate a WS connect (or update route) against a not-yet-created
+      // slug 'b': getDoc() lazily caches an empty in-memory doc for it
+      // even though there is no DB row yet.
+      await getDoc('session1', 'b')
+      expect(peekDoc('session1', 'b')).toBeDefined()
+
+      await renameCanvasSlug('session1', 'a', 'b')
+
+      // The stale phantom doc must not still shadow the just-renamed
+      // canvas's real content at the destination slug.
+      expect(peekDoc('session1', 'b')).toBeUndefined()
+
+      const reloaded = await getDoc('session1', 'b')
+      expect(reloaded.getText('content').toString()).toBe('real content')
+    } finally {
+      clearCache()
+    }
+  })
 })
 
 describe('auto-compact', () => {

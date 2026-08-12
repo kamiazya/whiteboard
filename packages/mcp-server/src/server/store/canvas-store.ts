@@ -566,11 +566,17 @@ export async function renameCanvasSlug(
       .set({ slug: newSlug, updatedAt: Date.now() })
       .where('id', '=', canvasId)
       .execute()
-    // Force the next getDoc() to reload under the new slug key; a caller
-    // still reading through the old slug should lazily create a fresh
-    // canvas rather than resurrect the renamed doc's cached instance.
+    // Force the next getDoc() to reload under both slug keys. oldSlug: a
+    // caller still reading through it should lazily create a fresh canvas
+    // rather than resurrect the renamed doc's cached instance. newSlug: a
+    // WS connect or update-route call against the destination slug before
+    // this rename can lazily cache an empty phantom doc there (getDoc()
+    // creates one for any slug with no DB row yet) — leaving that phantom
+    // cached would shadow the just-renamed canvas's real content and the
+    // next write through newSlug would persist the phantom over it.
     const { evictDoc } = await import('./doc-cache.js')
     evictDoc(workspaceId, oldSlug)
+    evictDoc(workspaceId, newSlug)
     return { canvasId }
   })
 }
