@@ -1,6 +1,5 @@
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AppShell } from '../components/AppShell.js'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
@@ -105,7 +104,6 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
-      <AppShell daemonConnected={false} />
       <h1 className="sr-only">Canvases</h1>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">

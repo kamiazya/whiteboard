@@ -577,63 +577,6 @@ describe('BrowserLocalCanvasPage', () => {
     expect(await store.getDefaultCanvasId()).toBe('c2')
   })
 
-  it('the header Settings trigger navigates to /settings', async () => {
-    vi.useRealTimers()
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    // createMemoryRouter (not this file's declarative `render` helper) so
-    // the resulting navigation is observable via router.state.
-    const router = createMemoryRouter(
-      [{ path: '*', element: <BrowserLocalCanvasPage store={store} /> }],
-      {
-        initialEntries: ['/'],
-      },
-    )
-    await act(async () => {
-      rtlRender(<RouterProvider router={router} />)
-    })
-    await screen.findByRole('button', { name: /^Workspace:/i })
-
-    const before = router.state.location.pathname
-    fireEvent.click(screen.getByTestId('shell-settings'))
-    expect(router.state.location.pathname).toBe('/settings')
-    // The entry point rides along so the settings Back button can return
-    // here deterministically instead of popping history.
-    expect((router.state.location.state as { from?: string }).from).toBe(before)
-  })
-
-  it('always lights the settings nudge dot — a browser-local page has no daemon', async () => {
-    vi.useRealTimers()
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    await act(async () => {
-      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
-    })
-    expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
-  })
-
-  it('the header brand mark navigates home', async () => {
-    vi.useRealTimers()
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    const router = createMemoryRouter(
-      [{ path: '*', element: <BrowserLocalCanvasPage store={store} /> }],
-      {
-        initialEntries: ['/local/c1'],
-      },
-    )
-    await act(async () => {
-      rtlRender(<RouterProvider router={router} />)
-    })
-    await screen.findByRole('button', { name: /^Workspace:/i })
-
-    fireEvent.click(screen.getByRole('link', { name: 'Home' }))
-    expect(router.state.location.pathname).toBe('/')
-  })
-
   it('honors an explicit initialCanvasId prop over the store default canvas', async () => {
     // This only proves the page itself respects initialCanvasId — it does NOT
     // cover the URL->initialCanvasId wiring (App.tsx's parseBrowserLocalRoute),

@@ -4,7 +4,6 @@ import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppShell } from '../components/AppShell.js'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
@@ -31,6 +30,7 @@ import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { setShellDaemonAuthError } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
@@ -144,6 +144,14 @@ export function DaemonCanvasPage({
       : null
 
   const [authError, setAuthError] = useState(false)
+  // Report the live auth error to the App-mounted shell: it means the daemon
+  // needs the user's action (re-pair lives under Settings -> Connections),
+  // so it counts as disconnected for the attention dot; transient reconnects
+  // don't.
+  useEffect(() => {
+    setShellDaemonAuthError(authError)
+    return () => setShellDaemonAuthError(false)
+  }, [authError])
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
@@ -435,11 +443,6 @@ export function DaemonCanvasPage({
       <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
         <div className="min-w-0">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
-          {/* An auth error means the daemon needs the user's action (re-pair
-              lives under Settings -> Connections), so it counts as
-              disconnected for the shell's attention dot; transient
-              reconnects don't. */}
-          <AppShell daemonConnected={!authError} />
           {controller.switchError && (
             <div
               role="alert"

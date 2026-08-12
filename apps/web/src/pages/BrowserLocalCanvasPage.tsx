@@ -3,7 +3,6 @@ import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AppShell } from '../components/AppShell.js'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
@@ -567,7 +566,6 @@ export function BrowserLocalCanvasPage({
             <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
           }
         >
-          <AppShell daemonConnected={false} />
           <WorkspaceTopBar
             statusSlot={
               <ConnectionStatus state="local">
