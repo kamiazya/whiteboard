@@ -969,10 +969,15 @@ describe('createApp daemon mutation auth', () => {
       preview?: { elementCount: number }
       target?: { elementCount: number }
       source?: { elementCount: number }
+      previewElements?: Array<{ id: string; type: string }>
     }
     expect(json.preview).toEqual({ elementCount: 1 })
     expect(json.target).toEqual({ elementCount: 1 })
     expect(json.source).toEqual({ elementCount: 1 })
+    // The dry-run preview payload is the nodes-model equivalent of the
+    // retired Excalidraw-style elements list — MergeDialog reads its
+    // .length as a previewElementCount fallback (contents are unread today).
+    expect(json.previewElements).toEqual([expect.objectContaining({ id: 'A', type: 'text' })])
   })
 
   it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {

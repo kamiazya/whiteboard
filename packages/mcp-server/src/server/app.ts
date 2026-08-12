@@ -626,8 +626,9 @@ export function createApp(options: AppOptions) {
               // For dry runs, return every current node + edge so MergeDialog can
               // render a read-only preview. Payload shape is deliberately the
               // nodes-model equivalent of the retired Excalidraw-style elements
-              // list; the field stays untyped (z.array(z.unknown())) and no
-              // consumer reads it today.
+              // list; the field stays untyped (z.array(z.unknown())) because no
+              // consumer reads element field contents today — MergeDialog only
+              // reads .length, kept available for a future static renderer.
               const previewElements = [...pMap.values()]
               return {
                 previewElementCount,
