@@ -62,14 +62,12 @@ const listGrantsResponseSchema = z
   .strict()
 type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
 
-type TokenResponse = PairingTokenResponse
-
 function signTokenResponse(
   identity: DaemonIdentity,
   nonce: string,
   minted: { token: string; expiresAt: string },
   origin: string,
-): NonNullable<TokenResponse['identity']> {
+): NonNullable<PairingTokenResponse['identity']> {
   const tokenHash = createHash('sha256').update(minted.token, 'utf8').digest('base64url')
   return {
     alg: identity.alg,
@@ -148,7 +146,7 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
         return c.json({ error: 'invalid or expired code' }, 403)
       }
       const minted = tokens.mint(redeemed.origin)
-      const response: TokenResponse = pairingTokenResponseSchema.parse({
+      const response = pairingTokenResponseSchema.parse({
         ...minted,
         origin: redeemed.origin,
         ...(parsed.data.nonce !== undefined
@@ -173,7 +171,7 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
       return c.json({ error: 'origin has no pairing grant' }, 403)
     }
     const minted = tokens.mint(origin)
-    const response: TokenResponse = pairingTokenResponseSchema.parse({
+    const response = pairingTokenResponseSchema.parse({
       ...minted,
       origin,
       ...(parsed.data.nonce !== undefined
