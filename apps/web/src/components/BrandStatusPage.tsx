@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react'
+import type { JSX } from 'react'
 import { Button } from '@/components/ui/button'
 
 // Full-page brand status states (BRAND.md). Each variant speaks the mark's
