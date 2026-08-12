@@ -1377,3 +1377,22 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
     expect(screen.queryByText('Workspaces')).toBeNull()
   })
 })
+
+describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
+  it('renders the page-provided title segment inside the header', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onToggleFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        titleSlot={<input aria-label="Merged title" readOnly value="t" />}
+      />,
+      { container: document.body },
+    )
+    const header = screen.getByRole('banner')
+    expect(header.contains(screen.getByLabelText('Merged title'))).toBe(true)
+  })
+})

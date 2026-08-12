@@ -545,6 +545,54 @@ export function BrowserLocalCanvasPage({
     </>
   )
 
+  // The merged header row's flexible middle: canvas identity (title, core
+  // facets, display settings) lives in the SAME row as workspace context —
+  // the second chrome strip is gone. Kind decides the exact segment.
+  const canvasTitleSlot =
+    canvasKind === 'markdown' ? (
+      markdownDoc.body !== null && markdownDoc.coreMeta !== null ? (
+        <CanvasProperties
+          inline
+          key={canvasId ?? 'no-canvas'}
+          status={<SaveStatusChip state={pageState.persistence} />}
+          actions={canvasRowActions}
+          meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
+          onChange={(next) => {
+            markdownDoc.setCoreMeta(next)
+            // title and the canvas name are ONE concept: the facet is the
+            // document's own truth, the snapshot row is the copy the canvas
+            // list reads without loading every document. `renameCanvas`
+            // normalises a cleared title to 'untitled', which is exactly
+            // what an absent facet should list as.
+            if (next.title !== markdownDoc.coreMeta?.title) {
+              void renameCanvas(next.title ?? '').catch(() => {
+                // Surfaced through persistence state; the facet write is
+                // independent and has already landed in the document.
+              })
+            }
+          }}
+        />
+      ) : null
+    ) : (
+      <CanvasProperties
+        inline
+        key={canvasId ?? 'no-canvas'}
+        status={<SaveStatusChip state={pageState.persistence} />}
+        settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
+        actions={canvasRowActions}
+        meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}
+        onChange={(next) => {
+          setCoreFacets(next)
+          if (next.title !== coreFacets?.title) {
+            void renameCanvas(next.title ?? '').catch(() => {
+              // Surfaced through persistence state; the facet write is
+              // independent and has already landed in the document.
+            })
+          }
+        }}
+      />
+    )
+
   return (
     // Two-row grid shell (h-dvh makes the page own its viewport height):
     // every header-shaped row stacks inside the auto row, and the editor
@@ -567,6 +615,7 @@ export function BrowserLocalCanvasPage({
           }
         >
           <WorkspaceTopBar
+            titleSlot={canvasTitleSlot}
             statusSlot={
               <ConnectionStatus state="local">
                 <p className="text-muted-foreground">
@@ -624,27 +673,6 @@ export function BrowserLocalCanvasPage({
           markdownDoc.body !== null &&
           markdownDoc.coreMeta !== null && (
             <div className="flex h-full min-h-0 flex-col">
-              <CanvasProperties
-                key={canvasId ?? 'no-canvas'}
-                status={<SaveStatusChip state={pageState.persistence} />}
-                actions={canvasRowActions}
-                meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
-                onChange={(next) => {
-                  markdownDoc.setCoreMeta(next)
-                  // title and the canvas name are ONE concept: the facet is
-                  // the document's own truth, the snapshot row is the copy
-                  // the canvas list reads without loading every document.
-                  // `renameCanvas` normalises a cleared title to 'untitled',
-                  // which is exactly what an absent facet should list as.
-                  if (next.title !== markdownDoc.coreMeta?.title) {
-                    void renameCanvas(next.title ?? '').catch(() => {
-                      // The rename surfaces its own failure through
-                      // persistence state; the facet write is independent
-                      // and has already landed in the document.
-                    })
-                  }
-                }}
-              />
               <div className="min-h-0 flex-1">
                 <MarkdownEditor
                   key={canvasId ?? 'no-canvas'}
@@ -659,25 +687,6 @@ export function BrowserLocalCanvasPage({
           )
         ) : (
           <div className="flex h-full min-h-0 flex-col">
-            {/* Same bar as the markdown branch. A spatial canvas has no body
-                to sit above, so it sits above the viewport instead — the
-                facets belong to the CANVAS, not to either editor. */}
-            <CanvasProperties
-              key={canvasId ?? 'no-canvas'}
-              status={<SaveStatusChip state={pageState.persistence} />}
-              settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
-              actions={canvasRowActions}
-              meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}
-              onChange={(next) => {
-                setCoreFacets(next)
-                if (next.title !== coreFacets?.title) {
-                  void renameCanvas(next.title ?? '').catch(() => {
-                    // Surfaced through persistence state; the facet write is
-                    // independent and has already landed in the document.
-                  })
-                }
-              }}
-            />
             <div className="relative min-h-0 flex-1">
               {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                   gesture and open text editor all describe ONE canvas, and
