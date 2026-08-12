@@ -95,8 +95,14 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // immediately, and the dropdown's close-time focus return must never
     // steal keystrokes mid-word (the bug shipped as "type a sentence,
     // only the first three characters persist").
+    //
+    // The wait checks activeElement IS the CodeMirror contentDOM (.cm-content,
+    // same element as `editable`), not merely contained by .cm-editor — that
+    // exact identity is what real keyboard-event delivery depends on, and a
+    // looser containment check can pass while focus still sits on some other
+    // in-flight descendant (e.g. mid-mount) and races the first keystrokes.
     await waitFor(() => {
-      expect(editable.closest('.cm-editor')?.contains(document.activeElement)).toBe(true)
+      expect(document.activeElement).toBe(editable)
     })
     await userEvent.keyboard('# Persisted note')
     await waitFor(() => {
@@ -203,8 +209,15 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       expect(el).not.toBeNull()
       return el as HTMLElement
     })
+    // Click-focus (matching every other CodeMirror typing suite in this
+    // repo) rather than relying on autofocus: this test's subject is
+    // body/facet independence, not the fresh-note autofocus guarantee that
+    // test 1 above already pins. The wait then checks activeElement IS the
+    // contentDOM (.cm-content, same element as `editable`), not merely
+    // contained by .cm-editor.
+    await userEvent.click(editable)
     await waitFor(() => {
-      expect(editable.closest('.cm-editor')?.contains(document.activeElement)).toBe(true)
+      expect(document.activeElement).toBe(editable)
     })
     await userEvent.keyboard('body first')
     await waitFor(() => {
