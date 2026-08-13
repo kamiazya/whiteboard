@@ -193,6 +193,7 @@ function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSc
   const resolved = options.appearance.resolveNode(node)
   return {
     kind: 'shape',
+    id: node.id,
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     ...(resolved.radius !== undefined ? { radius: resolved.radius } : {}),
     ...(resolved.appearance !== undefined ? { appearance: resolved.appearance } : {}),

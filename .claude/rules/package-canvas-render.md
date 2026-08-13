@@ -35,7 +35,16 @@ paths:
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
   one implementation shared by Node/browser/Workers.
 - `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
-  Zod-schematized output of this package.
+  Zod-schematized output of this package. It reports one entry per
+  ADDRESSABLE node — the chrome shapes carrying a document `id` — because
+  the reader's only way to act on what it sees is a tool that takes a node
+  id. Content laid out inside a node (its text runs, a facet card's rows)
+  carries a bbox too but is deliberately excluded: reporting it made a
+  three-node canvas answer with six entries, each "contained in" another,
+  and none of the extra three could be acted on. A scene with no identified
+  shape at all (hand-built, a fragment) keeps the older behaviour of taking
+  every bbox-carrying node named by position — there is nothing better to
+  name them by, and the alternative is answering with nothing.
 
 ## What does NOT belong here
 

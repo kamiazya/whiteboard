@@ -270,7 +270,15 @@ async function main() {
   if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
     throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
   }
-  console.log('[e2e] wb_scene_digest → digest over the seeded text node')
+  // The names have to be the ones the OTHER tools take. A digest that reads
+  // back positionally still satisfies the schema and still looks right in a
+  // unit test, while telling a reader to patch a node that does not exist.
+  if (!digest.nodes.some((node) => node.id === 'okf-body')) {
+    throw new Error(
+      `wb_scene_digest did not name the seeded node by its document id: ${JSON.stringify(digest.nodes)}`,
+    )
+  }
+  console.log('[e2e] wb_scene_digest → digest naming the seeded node by document id')
 
   // wb_canvas_tidy: the canvas holds a single node here, so the contract answer
   // is "nothing to tidy" — the call still runs the full pipeline (input

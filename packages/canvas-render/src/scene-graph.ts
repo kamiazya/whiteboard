@@ -83,6 +83,16 @@ export interface TextRunNode {
  */
 export interface ShapeSceneNode {
   readonly kind: 'shape'
+  /**
+   * The DOCUMENT node this chrome belongs to, when the scene was built from
+   * one. Semantic provenance in the same sense as a heading's `level` — the
+   * SVG backend never emits it, but `sceneDigest` needs it to name what it
+   * reports something the reader can actually address (`wb_node_patch`
+   * takes a node id, not a position in a list). Optional because a scene
+   * can be built by hand, and a chrome rect drawn for something that is not
+   * a document node has no id to give.
+   */
+  readonly id?: string
   readonly bbox: BoundingBox
   /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely. */
   readonly radius?: number
