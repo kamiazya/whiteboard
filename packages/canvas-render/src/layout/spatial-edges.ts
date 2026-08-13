@@ -5,10 +5,10 @@ import {
   addCost,
   bendCount,
   composeSidePairs,
-  endpointBodyInk,
   facingLaneWindow,
   fullyContains,
   hasRepairableProblem,
+  interiorInkThrough,
   lessCost,
   oppositeSide,
   type Point,
@@ -932,7 +932,7 @@ function bestCandidate(
   // several times.
   const scored = candidates.map((path) => ({
     path,
-    ink: endpointBodyInk.selfTerm(path, [], [], endpointRects),
+    ink: interiorInkThrough(path, endpointRects),
     length: pathLength(path),
     bends: bendCount(path),
   }))
@@ -1219,22 +1219,38 @@ function routeOrthogonal(
     return withoutRepeats([start, exit, ...middles, ...approach, end])
   }
 
+  const endpointRects = [fromRect, toRect]
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
-  if (elbows.some((path) => pathIsClear(path, inflated))) {
-    return bestCandidate(elbows, inflated, raw, [fromRect, toRect])
+  // An elbow is good enough to stop here only if it is clear of the FOREIGN
+  // obstacles AND puts no ink inside its own endpoints. Testing foreign
+  // clearance alone returned an elbow that tunnelled straight through the
+  // target's body without ever generating a detour — the endpoint rects are
+  // not obstacles, so nothing reported the route as blocked.
+  if (
+    elbows.some(
+      (path) => pathIsClear(path, inflated) && interiorInkThrough(path, endpointRects) === 0,
+    )
+  ) {
+    return bestCandidate(elbows, inflated, raw, endpointRects)
   }
 
   // Detours are needed when the paths this style actually travels are
   // blocked — which the direct diagonal cannot answer, since an orthogonal
   // edge never travels it. Two obstacles can sit on the two elbows while
   // leaving that diagonal clear.
-  const region = unionRect(
-    inflated.filter((rect) =>
-      elbows.some((path) =>
-        path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
-      ),
-    ),
-  )
+  //
+  // An endpoint body the elbows cut through joins the region for the same
+  // reason a foreign body does: it is what the route has to get around. It
+  // can never be an obstacle for the CLEARANCE test — every route has to
+  // reach a point on it — but it is a perfectly good thing to steer past.
+  const crossedBy = (rect: Rect) =>
+    elbows.some((path) =>
+      path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
+    )
+  const region = unionRect([
+    ...inflated.filter(crossedBy),
+    ...endpointRects.filter((rect) => elbows.some((path) => interiorInkThrough(path, [rect]) > 0)),
+  ])
   const candidates =
     region === undefined
       ? elbows
@@ -1242,7 +1258,7 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, inflated, raw, [fromRect, toRect])
+  return bestCandidate(candidates, inflated, raw, endpointRects)
 }
 
 /**

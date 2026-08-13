@@ -641,21 +641,36 @@ const borderTracing: PenaltyRule = {
  * it is choosing between paths, so the inter-edge terms do not apply and
  * the foreign-body ones are already the clearance tiers it sorts within.
  */
+/**
+ * Length of `path` running STRICTLY between a rect's two borders — ink laid
+ * over content rather than over an existing stroke. A rect that fully
+ * contains another in the same list is dropped: a group frame is drawn
+ * around its members, and a route legitimately inside it is not tunnelling
+ * through anything a reader would notice.
+ *
+ * Exported because `spatial-edges.ts` asks the same question of a candidate
+ * path directly, rather than through the whole cost tuple: inside a single
+ * side pair it is choosing between paths, so the inter-edge terms do not
+ * apply. Two producers of "how much ink is inside a box" is exactly the
+ * drift this package has a one-producer-per-geometry rule about.
+ */
+export function interiorInkThrough(path: readonly Point[], rects: readonly Rect[]): number {
+  return inkAlongRects(
+    path,
+    rects.filter(
+      (r) =>
+        !rects.some((other) => other !== r && fullyContains(r, other) && !fullyContains(other, r)),
+    ),
+    (fixed, near, far) => near < fixed && fixed < far,
+  )
+}
+
 export const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
   tier: 3,
   pairTerm: () => 0,
   selfTerm: (path, _foreignBodies, _nodeBorders, endpointRects) =>
-    inkAlongRects(
-      path,
-      endpointRects.filter(
-        (r) =>
-          !endpointRects.some(
-            (other) => other !== r && fullyContains(r, other) && !fullyContains(other, r),
-          ),
-      ),
-      (fixed, near, far) => near < fixed && fixed < far,
-    ),
+    interiorInkThrough(path, endpointRects),
 }
 
 /** Quantized per-axis direction sign, in the same COST_QUANTUM space every
