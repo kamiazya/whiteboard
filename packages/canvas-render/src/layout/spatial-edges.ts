@@ -20,6 +20,7 @@ import {
   shouldAdoptCandidate,
   zeroPenalty,
 } from './edge-rules.js'
+import { routeOnGrid } from './grid-route.js'
 
 function rectOf(node: SpatialNode): Rect {
   return { x: node.x, y: node.y, w: node.width, h: node.height }
@@ -1258,7 +1259,18 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, inflated, raw, endpointRects)
+  const enumerated = bestCandidate(candidates, inflated, raw, endpointRects)
+  if (interiorInkThrough(enumerated, endpointRects) === 0 && pathIsClear(enumerated, raw)) {
+    return enumerated
+  }
+  // Nothing enumerated works, so pay for a real search. It runs between the
+  // STUBS, not the anchors, so the perpendicular departure and arrival the
+  // rest of this function guarantees survive it — the grid only decides what
+  // happens in between.
+  const searched = routeOnGrid(exit, entry, [...raw, ...endpointRects], OBSTACLE_CLEARANCE_PX)
+  return searched === undefined
+    ? enumerated
+    : bestCandidate([enumerated, between(searched.slice(1, -1))], inflated, raw, endpointRects)
 }
 
 /**
