@@ -112,11 +112,43 @@ function hasNoExcludedDescendant(node: any): boolean {
   return true
 }
 
+/**
+ * A literal backslash in text is excluded, and this one is an upstream
+ * DEFECT rather than an encoding ambiguity like the exclusions above.
+ *
+ * `mdast-util-to-markdown`'s `safe()` makes a character safe one of two
+ * ways: ASCII punctuation gets a backslash escape, anything else gets a
+ * character reference. On the reference branch it flushes the text before
+ * the position with `escapeBackslashes(value.slice(start, position), '\\')`
+ * — a HARDCODED `after`, which is not what actually follows. What follows
+ * is the reference it is about to push, whose first character is `&`. A
+ * backslash before `&` is an escape, so a trailing backslash that needed no
+ * escaping of its own silently becomes one:
+ *
+ *     text '\\A' next to emphasis-wrapped math
+ *       -> serialized  \&#x41;
+ *       -> re-parsed   text '&#x41;'
+ *
+ * `markdown-backslash-round-trip.test.ts` pins that exact behaviour, so
+ * this exclusion disappears the moment upstream stops doing it. Excluded
+ * here rather than in canvas-model's shared arbitrary because the totality
+ * property has no problem with the same input.
+ */
+function hasNoBackslashText(node: { type?: string; value?: unknown; children?: unknown }): boolean {
+  if (node?.type === 'text' && typeof node.value === 'string' && node.value.includes('\\')) {
+    return false
+  }
+  return Array.isArray(node?.children)
+    ? node.children.every((child) => hasNoBackslashText(child as { type?: string }))
+    : true
+}
+
 function nonListFlowArbitrary(maxDepth: number) {
   return mdastFlowContentArbitrary(maxDepth)
     .filter((node) => !EXCLUDED_ROUND_TRIP_TYPES.has(node.type))
     .filter(hasNoEmptyContainer)
     .filter(hasNoExcludedDescendant)
+    .filter(hasNoBackslashText)
 }
 
 const rootArbitrary = fc
