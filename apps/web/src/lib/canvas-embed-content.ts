@@ -10,9 +10,9 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readCoreFacets, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
-import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
+import type { CanvasFileAdapter, LoadedFileDocument } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
 import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
@@ -20,16 +20,18 @@ import { LoroStore } from './loro-store.js'
 const log = getAppLogger('canvas-embed-content')
 
 /** Loads one referenced canvas's spatial content from IndexedDB. */
-async function loadEmbeddedSpatialCanvas(canvasId: string): Promise<SpatialCanvas | undefined> {
+async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocument | undefined> {
   try {
     const result = await new LoroStore().load(canvasId)
     if (result.kind !== 'ok') return undefined
     const doc = new Loro()
     doc.import(result.snapshot)
     for (const delta of result.deltas ?? []) doc.import(delta)
-    return readSpatialCanvas(doc)
+    // One load, both reads — the doc used to be discarded after the canvas
+    // read, which is why facets need no second store round-trip.
+    return { canvas: readSpatialCanvas(doc), facets: readCoreFacets(doc) }
   } catch (err) {
-    log.warn('embedded canvas load failed', { canvasId, err })
+    log.warn('embedded document load failed', { canvasId, err })
     return undefined
   }
 }
@@ -73,7 +75,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  */
 export const BROWSER_LOCAL_FILE_ADAPTER: CanvasFileAdapter = {
   isImageRef,
-  loadCanvas: loadEmbeddedSpatialCanvas,
+  loadDocument: loadEmbeddedDocument,
   loadImageUrl: loadImageAssetUrl,
   storeImage: storeImageAsset,
 }

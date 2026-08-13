@@ -66,6 +66,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-model'
 import type {
   EdgeSides,
+  FacetCardData,
   MeasureText,
   SpatialPresetKey,
   TextMetrics,
@@ -306,6 +307,7 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
   /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
   readonly resolveFileImage?: (
     file: string,
@@ -416,6 +418,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileFacets,
       resolveFileImage,
       onAddImage,
       isImageFileRef,
@@ -627,25 +630,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const byFile = new Map(fileRefOptions.map((option) => [option.file, option.label]))
       return (file: string) => byFile.get(file)
     }, [fileRefOptions])
+    // ONE object for every render path below (committed scene, drag ghost,
+    // drag-static backdrop, resize preview). Four hand-listed copies is how a
+    // seam ends up wired into the committed render and missing from the drag
+    // overlay, which reads as content vanishing mid-gesture.
+    const fileSeamOptions = useMemo(
+      () => ({
+        resolveFileLabel,
+        resolveFileCanvas,
+        expandFileNode,
+        resolveFileImage,
+        resolveFileFacets,
+      }),
+      [resolveFileLabel, resolveFileCanvas, expandFileNode, resolveFileImage, resolveFileFacets],
+    )
     const { svg, bounds, scene } = useMemo(
       () =>
         renderCanvasToSvg(canvas, {
           measure: resolvedMeasure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         }),
-      [
-        canvas,
-        resolvedMeasure,
-        theme,
-        resolveFileLabel,
-        resolveFileCanvas,
-        expandFileNode,
-        resolveFileImage,
-      ],
+      [canvas, resolvedMeasure, theme, fileSeamOptions],
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
@@ -743,10 +749,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {
           measure: resolvedMeasure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         },
       )
       return {
@@ -763,10 +766,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedNodeIds,
       resolvedMeasure,
       theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
+      fileSeamOptions,
     ])
 
     /**
@@ -803,10 +803,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const rendered = renderCanvasToSvg(base, {
         measure: resolvedMeasure,
         theme,
-        resolveFileLabel,
-        resolveFileCanvas,
-        expandFileNode,
-        resolveFileImage,
+        ...fileSeamOptions,
       })
       const metricsCache = new Map<string, TextMetrics>()
       const measure: MeasureText = (text, font) => {
@@ -835,10 +832,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedNodeIds,
       resolvedMeasure,
       theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
+      fileSeamOptions,
     ])
 
     useImperativeHandle(
@@ -1037,24 +1031,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {
           measure: dragStatic.measure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         },
       )
       return { svg: rendered.svg, bounds: rendered.bounds }
-    }, [
-      gestureState,
-      dragPreview,
-      dragStatic,
-      canvas,
-      theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
-    ])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
 
     /**
      * How far a snap guide extends, in canvas space: across all content plus

@@ -67,6 +67,23 @@ describe('theme resolver purity (no ambient DOM read)', () => {
   })
 })
 
+describe('file seams reach every render path', () => {
+  it('SpatialEditor builds its file-seam options once and spreads them everywhere', () => {
+    // Four render paths draw the same nodes — committed scene, drag ghost,
+    // drag-static backdrop, resize preview. When each listed the seams by
+    // hand, adding one meant remembering four places, and the failure mode
+    // is silent: content that renders committed and vanishes mid-gesture.
+    const source = modules['./SpatialEditor.tsx'] as string
+    expect(source.match(/const fileSeamOptions = useMemo\(/g) ?? []).toHaveLength(1)
+    const renderCalls = (source.match(/renderCanvasToSvg\(/g) ?? []).length
+    const spreads = (source.match(/\.\.\.fileSeamOptions/g) ?? []).length
+    expect(spreads).toBe(renderCalls)
+    // A seam named at a call site instead of inside the shared object is the
+    // regression this pins.
+    expect(source).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveFileCanvas,/)
+  })
+})
+
 describe('single content path (S10 guardrail)', () => {
   it('raw HTML injection exists ONLY at the two documented scene-svg sinks', async () => {
     // String-level TRIPWIRE, not a syntax-aware proof: it catches the ways

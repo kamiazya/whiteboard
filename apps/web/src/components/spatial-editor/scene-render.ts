@@ -6,7 +6,12 @@
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { BoundingBox, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  BoundingBox,
+  FacetCardData,
+  MeasureText,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
   renderSceneToSvg,
@@ -30,6 +35,8 @@ export interface RenderCanvasOptions {
   readonly resolveFileImage?: (
     file: string,
   ) => { readonly href: string; readonly alt?: string } | undefined
+  /** Passed through to layout: the referenced document's facets as card content. */
+  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
 }
 
 export interface RenderedCanvas {
@@ -71,6 +78,7 @@ export function renderCanvasToSvg(
     resolveFileCanvas: options.resolveFileCanvas,
     expandFileNode: options.expandFileNode,
     resolveFileImage: options.resolveFileImage,
+    resolveFileFacets: options.resolveFileFacets,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, {
