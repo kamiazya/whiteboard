@@ -11,7 +11,11 @@ export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
 } from './layout/spatial-appearance.js'
-export type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout/spatial-canvas.js'
+export type {
+  FacetCardData,
+  SpatialLayoutDegradation,
+  SpatialLayoutOptions,
+} from './layout/spatial-canvas.js'
 export { layoutSpatialCanvas, layoutSpatialEdges } from './layout/spatial-canvas.js'
 export {
   assignEdgeAnchors,

@@ -25,7 +25,7 @@
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
@@ -67,6 +67,21 @@ export type SpatialLayoutDegradation =
       readonly nodeId: string
       readonly style: 'repeat'
     }
+
+/**
+ * Presentation-shaped card content for a file node, mapped by the caller
+ * from its own facet data (canvas-model's `coreFacetsSchema` and friends).
+ * Deliberately NOT domain-shaped: this package renders "one bare heading
+ * line, then labelled rows" and learns nothing about what a facet MEANS —
+ * the semantic mapping (`title = facets.title ?? facets.type`, one row per
+ * core facet) is the caller's job. Plain TS, not Zod, per
+ * zod-schema-discipline: it is constructed and consumed entirely
+ * in-process and never crosses a process boundary.
+ */
+export interface FacetCardData {
+  readonly title?: string
+  readonly rows: readonly { readonly label: string; readonly value: string }[]
+}
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
@@ -123,6 +138,15 @@ export interface SpatialLayoutOptions {
   readonly resolveFileImage?: (
     file: string,
   ) => { readonly href: string; readonly alt?: string } | undefined
+  /**
+   * Resolves a file node's reference to card content built from its facet
+   * data. Checked LAST among the file-node content resolvers — after the
+   * image and canvas-embed seams — so it never outranks either; `undefined`,
+   * a throw, or card data with no usable title/rows (the common case for a
+   * document that carries no facets this caller maps) all keep the plain
+   * chrome+label rendering.
+   */
+  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
@@ -368,6 +392,88 @@ function composeFileImage(
 }
 
 /**
+ * The facet-card rendering of a file node: a bare heading line (the card's
+ * `title`) followed by one paragraph per row (`label: value`), laid out
+ * through `layoutMdastBlocks` — the same producer `composeTextNode` uses —
+ * rather than a second text-layout producer (package-canvas-render.md's
+ * "one producer per geometry" rule). Deliberately only `heading`/
+ * `paragraph` blocks: `list`/`table` are the only two block renderers that
+ * emit their own SVG `transform` (the `subtreeOffsetX` class), and this
+ * card has no reason to enter that tripwire.
+ *
+ * Returns `undefined` — keeping the plain chrome+label rendering — for
+ * every "no usable content" path: no resolver, an `undefined` or thrown
+ * result, a title that is empty/whitespace-only with no usable row, or a
+ * degenerate (non-positive) content box. This is the expected common case,
+ * not an error: the model guarantees payloads this layer cannot validate,
+ * so canvas-render never reports it via `onDegrade`.
+ */
+function composeFileFacets(
+  node: Extract<SpatialNode, { type: 'file' }>,
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] | undefined {
+  if (options.resolveFileFacets === undefined) return undefined
+  let card: FacetCardData | undefined
+  try {
+    card = options.resolveFileFacets(node.file)
+  } catch {
+    card = undefined
+  }
+  if (card === undefined) return undefined
+
+  const title =
+    typeof card.title === 'string' && card.title.trim().length > 0 ? card.title : undefined
+  const rows = card.rows.filter((row) => row.label.trim().length > 0 || row.value.trim().length > 0)
+  if (title === undefined && rows.length === 0) return undefined
+
+  const padding = options.geometry.paddingPx
+  const innerW = node.width - 2 * padding
+  const innerH = node.height - 2 * padding
+  if (!(innerW > 0) || !(innerH > 0)) return undefined
+
+  const blocks: MdastFlowContent[] = []
+  if (title !== undefined) {
+    blocks.push({ type: 'heading', depth: 3, children: [{ type: 'text', value: title }] })
+  }
+  for (const row of rows) {
+    blocks.push({
+      type: 'paragraph',
+      children: [
+        { type: 'strong', children: [{ type: 'text', value: row.label }] },
+        { type: 'text', value: `: ${row.value}` },
+      ],
+    })
+  }
+
+  const body = layoutMdastBlocks(
+    { type: 'root', children: blocks },
+    {
+      measure: options.measure,
+      maxWidth: contentWidth(node.width, options),
+      fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+    },
+  )
+
+  // Truncate at whole-block granularity: layoutMdastBlocks lays top-level
+  // blocks out with strictly increasing bottoms, so the blocks whose bottom
+  // fits the padded content box are exactly a contiguous top prefix.
+  //
+  // ponytail: silently dropping the rest is the ceiling for this slice — a
+  // "more" affordance needs a focusable DOM-overlay/keyboard treatment this
+  // pure-geometry package cannot own. Upgrade path is an editor-side
+  // overlay in a later slice, not a scene node here.
+  // `layoutMdastBlocks` never emits a `ResolvedEdgeNode` (the one SceneNode
+  // variant with no `bbox`); the guard is for the type checker, not runtime.
+  const fitted = body.nodes.filter(
+    (entry): entry is Exclude<SceneNode, ResolvedEdgeNode> =>
+      entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
+  )
+  if (fitted.length === 0) return undefined
+
+  return [chromeShape(node, options), ...placeInNode(node, { nodes: fitted }, options)]
+}
+
+/**
  * JSON Canvas group background: a full-frame image behind the members.
  * `backgroundStyle` maps 'ratio' -> contain and 'cover'/absent -> cover
  * (the spec's visual default); 'repeat' degrades to cover, reported via
@@ -416,6 +522,8 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
           ? [chrome, embed]
           : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
       }
+      const facets = composeFileFacets(node, options)
+      if (facets !== undefined) return facets
       break
     }
     default:

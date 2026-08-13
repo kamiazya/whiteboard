@@ -4,9 +4,19 @@
 // package's embed contract already promises.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import type { EmbedResolvedNode, ShapeSceneNode } from '../scene-graph.js'
+import type {
+  EmbedResolvedNode,
+  HeadingBlockNode,
+  ParagraphBlockNode,
+  ShapeSceneNode,
+} from '../scene-graph.js'
+import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
+import {
+  type FacetCardData,
+  layoutSpatialCanvas,
+  type SpatialLayoutOptions,
+} from './spatial-canvas.js'
 
 const APPEARANCE = {
   resolveNode: () => ({}),
@@ -103,6 +113,19 @@ describe('file-node inline embeds', () => {
       baseOptions({ resolveFileCanvas: () => undefined, expandFileNode: () => true }),
     )
     expect(embedOf(unresolvable)).toBeUndefined()
+  })
+
+  it('a resolved canvas embed wins over a resolved facet card', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileCanvas: (file) => (file === 'child' ? childCanvas : undefined),
+        expandFileNode: () => true,
+        resolveFileFacets: () => ({ title: 'Card', rows: [{ label: 'type', value: 'note' }] }),
+      }),
+    )
+    expect(embedOf(scene)).toBeDefined()
+    expect(scene.nodes.some((n) => n.kind === 'heading')).toBe(false)
   })
 
   it("keeps a line-jump child's hop points inside the frame (jumps transform with the path)", () => {
@@ -226,5 +249,152 @@ describe('file-node images', () => {
     expect(throwing.nodes.some((n) => n.kind === 'image')).toBe(false)
     // The card label still renders.
     expect(throwing.nodes.some((n) => n.kind === 'textRun')).toBe(true)
+  })
+
+  it('image resolution wins over a resolved facet card', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileImage: () => ({ href: 'data:image/png;base64,AAA' }),
+        resolveFileFacets: () => ({ title: 'Card', rows: [{ label: 'type', value: 'note' }] }),
+      }),
+    )
+    expect(scene.nodes.some((n) => n.kind === 'image')).toBe(true)
+    expect(scene.nodes.some((n) => n.kind === 'heading')).toBe(false)
+  })
+})
+
+describe('file-node facet cards', () => {
+  const card: FacetCardData = {
+    title: 'Ship it',
+    rows: [
+      { label: 'type', value: 'issue' },
+      { label: 'tags', value: 'a, b' },
+    ],
+  }
+
+  it("renders the card's title and rows, replacing the plain label", () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({ resolveFileFacets: (file) => (file === 'child' ? card : undefined) }),
+    )
+    const heading = scene.nodes.find((n): n is HeadingBlockNode => n.kind === 'heading')
+    expect(heading?.runs.map((run) => run.text).join('')).toBe('Ship it')
+
+    const paragraphs = scene.nodes.filter((n): n is ParagraphBlockNode => n.kind === 'paragraph')
+    expect(paragraphs).toHaveLength(2)
+    expect(paragraphs[0]?.runs.map((run) => run.text).join('')).toBe('type: issue')
+    expect(paragraphs[1]?.runs.map((run) => run.text).join('')).toBe('tags: a, b')
+
+    // The raw file label is a plain top-level textRun — the card replaces it.
+    expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
+
+    // Card content is drawn strictly inside the node's own padded box.
+    for (const entry of [heading, ...paragraphs]) {
+      expect(entry).toBeDefined()
+      expect(entry!.bbox.x).toBeGreaterThanOrEqual(100)
+      expect(entry!.bbox.y).toBeGreaterThanOrEqual(100)
+      expect(entry!.bbox.x + entry!.bbox.w).toBeLessThanOrEqual(320)
+      expect(entry!.bbox.y + entry!.bbox.h).toBeLessThanOrEqual(280)
+    }
+  })
+
+  it('wins over the plain label when both resolvers resolve', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveFileLabel: () => 'A human title',
+        resolveFileFacets: () => card,
+      }),
+    )
+    expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
+    expect(scene.nodes.some((n) => n.kind === 'heading')).toBe(true)
+  })
+
+  it('degrades to the plain chrome+label rendering when there is no usable card data', () => {
+    const canvas: SpatialCanvas = { nodes: [fileNode()], edges: [] }
+    const baseline = layoutSpatialCanvas(canvas, baseOptions())
+    const baselineSvg = renderSceneToSvg(baseline)
+
+    const noResolverScene = layoutSpatialCanvas(canvas, baseOptions())
+    expect(noResolverScene).toEqual(baseline)
+    expect(renderSceneToSvg(noResolverScene)).toBe(baselineSvg)
+
+    const resolvers: Array<() => FacetCardData | undefined> = [
+      () => undefined,
+      () => {
+        throw new Error('boom')
+      },
+      () => ({ rows: [] }),
+      () => ({ title: '   ', rows: [{ label: '', value: '' }] }),
+    ]
+    for (const resolveFileFacets of resolvers) {
+      const scene = layoutSpatialCanvas(canvas, baseOptions({ resolveFileFacets }))
+      expect(scene).toEqual(baseline)
+      expect(renderSceneToSvg(scene)).toBe(baselineSvg)
+    }
+  })
+
+  it('truncates content that overflows the node box at whole-block granularity', () => {
+    const shortNode = fileNode({ height: 100 })
+    const manyRows: FacetCardData = {
+      title: 'Overflowing',
+      rows: Array.from({ length: 40 }, (_, i) => ({ label: `k${i}`, value: `v${i}` })),
+    }
+    const scene = layoutSpatialCanvas(
+      { nodes: [shortNode], edges: [] },
+      baseOptions({ resolveFileFacets: () => manyRows }),
+    )
+    const blocks = scene.nodes.filter((n) => n.kind === 'heading' || n.kind === 'paragraph')
+    expect(blocks.length).toBeGreaterThan(0)
+    expect(blocks.length).toBeLessThan(41)
+    for (const block of blocks) {
+      expect(block.bbox.y + block.bbox.h).toBeLessThanOrEqual(shortNode.y + shortNode.height - 8)
+    }
+  })
+
+  it('keeps the chrome-only rendering for a degenerate (zero-size) node rather than throwing', () => {
+    const zeroNode = fileNode({ width: 0, height: 0 })
+    expect(() =>
+      layoutSpatialCanvas(
+        { nodes: [zeroNode], edges: [] },
+        baseOptions({ resolveFileFacets: () => card }),
+      ),
+    ).not.toThrow()
+    const scene = layoutSpatialCanvas(
+      { nodes: [zeroNode], edges: [] },
+      baseOptions({ resolveFileFacets: () => card }),
+    )
+    expect(scene.nodes.some((n) => n.kind === 'heading' || n.kind === 'paragraph')).toBe(false)
+  })
+
+  it('renders byte-identical SVG for the same canvas laid out twice (determinism)', () => {
+    const canvas: SpatialCanvas = { nodes: [fileNode()], edges: [] }
+    const options = baseOptions({ resolveFileFacets: () => card })
+    const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, options))
+    const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, options))
+    expect(svgA).toBe(svgB)
+  })
+
+  it('emits the card within its own node slot, in document order ahead of a later node', () => {
+    const textNode: SpatialNode = {
+      id: 't1',
+      type: 'text',
+      x: 400,
+      y: 100,
+      width: 100,
+      height: 100,
+      text: '',
+    }
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode(), textNode], edges: [] },
+      baseOptions({ resolveFileFacets: () => card }),
+    )
+    const headingIndex = scene.nodes.findIndex((n) => n.kind === 'heading')
+    const textChromeIndex = scene.nodes.findIndex(
+      (n) => n.kind === 'shape' && n.bbox.x === 400 && n.bbox.y === 100,
+    )
+    expect(headingIndex).toBeGreaterThanOrEqual(0)
+    expect(textChromeIndex).toBeGreaterThan(headingIndex)
   })
 })
