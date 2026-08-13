@@ -254,6 +254,24 @@ async function main() {
     locked: false,
   })
 
+  // wb_scene_render / wb_scene_digest: the only two tools whose
+  // structuredContent is built through server-core's layoutSpatialCanvas
+  // delegate (compose-canvas-scene.ts) rather than read back from stored
+  // content — this is the runtime guard that the laid-out scene still
+  // validates against canvasRenderSvgOutputSchema / sceneDigestSchema
+  // through the real MCP SDK, which a type-level check cannot see.
+  const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, canvasId })
+  if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<rect')) {
+    throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
+  }
+  console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
+
+  const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, canvasId })
+  if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
+    throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
+  }
+  console.log('[e2e] wb_scene_digest → digest over the seeded text node')
+
   // wb_canvas_tidy: the canvas holds a single node here, so the contract answer
   // is "nothing to tidy" — the call still runs the full pipeline (input
   // parse → doc load → tidy → structuredContent vs outputSchema), which is

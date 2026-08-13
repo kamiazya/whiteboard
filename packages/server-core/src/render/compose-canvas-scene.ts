@@ -1,134 +1,60 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type {
-  ListItemNode,
   MeasureText,
   Scene,
-  SceneNode,
+  SpatialLayoutDegradation,
 } from '@kamiazya/whiteboard-canvas-render'
-import {
-  layoutMdastBlocks,
-  routeEdge,
-  SPATIAL_THEME_FONT_FAMILY,
-} from '@kamiazya/whiteboard-canvas-render'
+import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { getLogger } from '../log.js'
 
-/**
- * Recursively translates every bbox in a scene node subtree by (dx, dy).
- * `layoutMdastBlocks` always starts a document at (0, 0); a spatial
- * canvas's text node lives at its own (x, y), so its laid-out scene must be
- * shifted into place before joining the rest of the canvas's scene graph.
- */
-export function translateNode(node: SceneNode, dx: number, dy: number): SceneNode {
-  if (node.kind === 'edge') {
-    // Edges are already resolved in absolute canvas coordinates by
-    // routeEdge — translating them here would double-shift them.
-    return node
-  }
+// MCP render/digest are deliberately pinned to light (package-canvas-render.md
+// decision #8): a user's ambient UI theme must never change what wb_scene_render
+// or wb_scene_digest emit. Built once — the resolver is stateless.
+const MCP_SCENE_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
-  const bbox = { x: node.bbox.x + dx, y: node.bbox.y + dy, w: node.bbox.w, h: node.bbox.h }
+const log = getLogger('compose-canvas-scene')
 
-  switch (node.kind) {
-    case 'textRun':
-    case 'thematicBreak':
-    case 'codeBlock':
-    case 'rawHtml':
-    case 'unresolvedReference':
-    case 'svgFragment':
-    case 'embedPlaceholder':
-    case 'shape':
-    case 'image':
-      return { ...node, bbox }
-    case 'heading':
-    case 'paragraph':
-      return {
-        ...node,
-        bbox,
-        runs: node.runs.map((run) => translateNode(run, dx, dy) as typeof run),
-      }
-    case 'list':
-      return {
-        ...node,
-        bbox,
-        items: node.items.map((item) => translateListItem(item, dx, dy)),
-      }
-    case 'blockquote':
-    case 'group':
-    case 'embedResolved':
-      return { ...node, bbox, children: node.children.map((child) => translateNode(child, dx, dy)) }
-    case 'table':
-      return {
-        ...node,
-        bbox,
-        rows: node.rows.map((row) => ({
-          ...row,
-          bbox: { x: row.bbox.x + dx, y: row.bbox.y + dy, w: row.bbox.w, h: row.bbox.h },
-          cells: row.cells.map((cell) => ({
-            ...cell,
-            bbox: { x: cell.bbox.x + dx, y: cell.bbox.y + dy, w: cell.bbox.w, h: cell.bbox.h },
-            runs: cell.runs.map((run) => translateNode(run, dx, dy) as typeof run),
-          })),
-        })),
-      }
-  }
-}
-
-/** `ListItemNode` is not itself a `SceneNode` variant, so it needs its own translator. */
-function translateListItem(item: ListItemNode, dx: number, dy: number): ListItemNode {
-  return {
-    ...item,
-    bbox: { x: item.bbox.x + dx, y: item.bbox.y + dy, w: item.bbox.w, h: item.bbox.h },
-    children: item.children.map((child) => translateNode(child, dx, dy)),
+/** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
+function onDegrade(event: SpatialLayoutDegradation): void {
+  switch (event.kind) {
+    case 'body-parse-failed':
+      log.warning('text node body failed to parse as markdown; falling back to literal text', {
+        nodeId: event.nodeId,
+        err: event.err,
+      })
+      return
+    case 'unsupported-background-style':
+      log.warning('group backgroundStyle not supported; rendering as cover', {
+        nodeId: event.nodeId,
+        style: event.style,
+      })
+      return
+    case 'unknown-node-kind':
+      log.warning('unrecognized spatial node kind; emitting chrome only', {
+        nodeId: event.nodeId,
+        type: event.type,
+      })
+      return
   }
 }
 
 /**
- * `file`/`link`/`group` spatial nodes have no markdown body to lay out.
- * Multi-doc embed recursion (`resolveEmbeds`/`ResolvedDocBundle`) is out of
- * scope for this tool set — these nodes degrade to a placeholder box at
- * their own bbox, matching canvas-render's own "degrade rather than throw"
- * convention (`EmbedPlaceholderNode`).
- */
-function placeholderFor(node: SpatialNode): SceneNode {
-  return {
-    kind: 'group',
-    bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-    children: [],
-  }
-}
-
-function layoutTextNode(node: SpatialNode & { type: 'text' }, measure: MeasureText): SceneNode[] {
-  let laidOut: Scene
-  try {
-    const mdastRoot = parseMarkdownBody(node.text)
-    laidOut = layoutMdastBlocks(mdastRoot, {
-      measure,
-      maxWidth: node.width,
-      fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    })
-  } catch {
-    // parseMarkdownBody throws when a body's remark-parsed tree falls
-    // outside the closed mdast subset (mdastRootSchema rejects it) — a
-    // real, reachable case, not a bug in this composer. Degrade instead of
-    // aborting the whole canvas's render for one bad node.
-    return [placeholderFor(node)]
-  }
-  return laidOut.nodes.map((sceneNode) => translateNode(sceneNode, node.x, node.y))
-}
-
-/**
- * Composes a full-canvas scene from a `SpatialCanvas`'s independently
- * positioned nodes and edges. Assembling one scene from many per-node
- * layouts is tool-specific composition (not a generic layout function), so
- * it lives here rather than in canvas-render's library surface.
+ * Composes a full-canvas scene from a `SpatialCanvas`. Delegates to
+ * canvas-render's `layoutSpatialCanvas` — the single SpatialCanvas -> Scene
+ * builder shared by every consumer (package-canvas-render.md decision #7).
+ * No `resolveFileCanvas`/`resolveFileImage`/`resolveFileLabel`/`expandFileNode`
+ * are passed, which keeps the MCP surface a pure function of the canvas
+ * snapshot (decision #10's opt-in rule) — a file node renders as chrome +
+ * label regardless of whether the reference resolves to anything.
  */
 export function composeCanvasScene(canvas: SpatialCanvas, measure: MeasureText): Scene {
-  const blockNodes = canvas.nodes.flatMap((node) =>
-    node.type === 'text' ? layoutTextNode(node, measure) : [placeholderFor(node)],
-  )
-  const edgeNodes = canvas.edges.map((edge) =>
-    routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style),
-  )
-  return { nodes: [...blockNodes, ...edgeNodes] }
+  return layoutSpatialCanvas(canvas, {
+    measure,
+    parseBody: parseMarkdownBody,
+    appearance: MCP_SCENE_APPEARANCE,
+    onDegrade,
+  })
 }
 
 /**

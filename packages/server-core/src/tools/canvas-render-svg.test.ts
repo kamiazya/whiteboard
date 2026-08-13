@@ -26,6 +26,10 @@ describe('wb_scene_render tool', () => {
 
     expect(result.svg).toContain('<svg xmlns="http://www.w3.org/2000/svg">')
     expect(result.svg).toContain('hi')
+    // The node's chrome — absent from every MCP-rendered SVG before this
+    // migration, since the old builder degraded every node to an empty
+    // `<g>` with no visible shape.
+    expect(result.svg).toContain('<rect')
     expect(result.width).toBe(100)
     expect(result.height).toBe(50)
   })
