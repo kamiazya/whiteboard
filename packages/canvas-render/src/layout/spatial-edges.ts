@@ -4,6 +4,7 @@ import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
   addCost,
   bendCount,
+  COST_QUANTUM,
   composeSidePairs,
   facingLaneWindow,
   fullyContains,
@@ -627,9 +628,39 @@ function optimizeSideChoices(
     return path
   }
 
+  // Axis-aligned bounds per routed path, kept beside `paths`. Two edges
+  // whose bounds are disjoint cannot overlap, cross, or sit illegibly close
+  // to each other, so the pair scores zero without looking at a single
+  // segment. `buildPairwiseScores` already prunes the FULL build this way
+  // (200 edges in ~1.6ms); the per-trial update did not, and comparing one
+  // re-routed edge against all 200 by brute force is where the search spent
+  // most of its time.
+  const boundsOf = (path: readonly Point[]): Rect => {
+    let minX = Number.POSITIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+    for (const point of path) {
+      if (point.x < minX) minX = point.x
+      if (point.x > maxX) maxX = point.x
+      if (point.y < minY) minY = point.y
+      if (point.y > maxY) maxY = point.y
+    }
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+  }
+  // Inflated by one quantum so a pair that merely touches still reaches the
+  // exact scorer: the broad phase must never be tighter than the thing it
+  // is standing in for.
+  const boundsOverlap = (a: Rect, b: Rect): boolean =>
+    a.x - COST_QUANTUM <= b.x + b.w &&
+    b.x - COST_QUANTUM <= a.x + a.w &&
+    a.y - COST_QUANTUM <= b.y + b.h &&
+    b.y - COST_QUANTUM <= a.y + a.h
+
   let current = new Map(initial)
   let anchors = computeAnchorsFor(nodes, edges, current, false)
   let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
+  let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
   const foreignBodiesFor = edges.map((e) =>
@@ -673,6 +704,7 @@ function optimizeSideChoices(
     cost: ConfigCost
     anchors: ReadonlyMap<string, EdgeAnchorPair>
     paths: (readonly Point[])[]
+    bounds: Rect[]
     touched: number[]
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
@@ -683,8 +715,10 @@ function optimizeSideChoices(
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
     }
     const trialPaths = paths.slice()
+    const trialBounds = bounds.slice()
     for (const i of touched) {
       trialPaths[i] = routeCached(edges[i]!, trialAnchors.get(edges[i]!.id))
+      trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
     let cost = currentCost
@@ -710,13 +744,33 @@ function optimizeSideChoices(
         // A pair between two touched edges is visited once thanks to the
         // updates map; a pair with an untouched edge reuses its cached path.
         if (touchedSet.has(j) && j < i) continue
+        if (!boundsOverlap(trialBounds[lo]!, trialBounds[hi]!)) {
+          // Scores zero. Subtract whatever this pair used to cost and leave
+          // the key absent — every reader already zero-defaults an absent
+          // key — rather than paying for the segment sweep and two cost
+          // tuples to arrive at the same answer.
+          const prior = matrix.get(key)
+          if (prior !== undefined) {
+            cost = addCost(cost, prior, -1)
+            updates.set(key, zeroPenalty())
+          }
+          continue
+        }
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
         cost = addCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
         cost = addCost(cost, next, 1)
         updates.set(key, next)
       }
     }
-    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates, selfUpdates }
+    return {
+      cost,
+      anchors: trialAnchors,
+      paths: trialPaths,
+      bounds: trialBounds,
+      touched,
+      updates,
+      selfUpdates,
+    }
   }
 
   const candidatesFor = (edge: CanvasEdge): SidePair[] => {
@@ -802,6 +856,7 @@ function optimizeSideChoices(
           currentCost = evaluated.cost
           anchors = evaluated.anchors
           paths = evaluated.paths
+          bounds = evaluated.bounds
           for (const [key, score] of evaluated.updates) matrix.set(key, score)
           for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
           improved = true
