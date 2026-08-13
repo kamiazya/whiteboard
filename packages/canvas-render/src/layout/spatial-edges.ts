@@ -1167,8 +1167,21 @@ function routeOrthogonal(
   }
   const exit = stubFrom(start, fromSide, fromDepth)
   const entry = stubFrom(end, toSide, toDepth)
-  const between = (middles: readonly Point[]) =>
-    withoutRepeats([start, exit, ...middles, entry, end])
+  const toNormal = outwardNormal(toSide)
+  // The arrival stub exists so the last segment reaches the anchor from
+  // OUTSIDE its side. When the elbow already sits outside, on the arrival
+  // axis, the stub only buys a detour past the anchor and back — a 20px
+  // excursion that reads as a hook and reverses direction on that axis.
+  // The DEPARTURE stub is never dropped the same way: its depth is what
+  // separates edges sharing one side into distinct corridors.
+  const arrivesFromOutside = (point: Point) =>
+    toNormal.x * (point.x - end.x) + toNormal.y * (point.y - end.y) > 0 &&
+    (toNormal.x === 0 ? point.x === end.x : point.y === end.y)
+  const between = (middles: readonly Point[]) => {
+    const last = middles[middles.length - 1]
+    const approach = last !== undefined && arrivesFromOutside(last) ? [] : [entry]
+    return withoutRepeats([start, exit, ...middles, ...approach, end])
+  }
 
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
   if (elbows.some((path) => pathIsClear(path, inflated))) {

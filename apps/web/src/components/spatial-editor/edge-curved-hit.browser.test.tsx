@@ -10,7 +10,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 // a → b routes as a one-bend L with its corner at (480,130); the drawn
-// curve's apex for that corner is (450,151.25), well off the waypoint
+// curve's apex for that corner is (450,153.75), well off the waypoint
 // polyline.
 const canvas: SpatialCanvas = {
   nodes: [
@@ -35,8 +35,8 @@ it('selects a curved edge by clicking the drawn curve, and highlights along it',
   await vi.waitFor(() => expect(container.querySelector('svg path[d*="Q"]')).not.toBeNull())
 
   // The curve's apex — on the ink, 20px away from the waypoint polyline.
-  fireEvent.pointerDown(root, { pointerId: 1, clientX: 450, clientY: 151.25, buttons: 1 })
-  fireEvent.pointerUp(root, { pointerId: 1, clientX: 450, clientY: 151.25 })
+  fireEvent.pointerDown(root, { pointerId: 1, clientX: 450, clientY: 153.75, buttons: 1 })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: 450, clientY: 153.75 })
 
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
@@ -51,6 +51,6 @@ it('selects a curved edge by clicking the drawn curve, and highlights along it',
     const [x, y] = pair.split(',').map(Number)
     return { x: x as number, y: y as number }
   })
-  expect(points.some((p) => Math.hypot(p.x - 450, p.y - 151.25) < 2)).toBe(true)
+  expect(points.some((p) => Math.hypot(p.x - 450, p.y - 153.75) < 2)).toBe(true)
   expect(points.some((p) => p.x === 480 && p.y === 130)).toBe(false)
 })
