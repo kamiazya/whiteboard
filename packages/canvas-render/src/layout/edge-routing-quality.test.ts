@@ -15,7 +15,14 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import { ROUTING_CORPUS, syntheticLayouts } from '../test-utils/routing-corpus.js'
-import { interiorInk, type MetricRect } from '../test-utils/routing-metrics.js'
+import {
+  bends,
+  borderInk,
+  crossings,
+  interiorInk,
+  type MetricRect,
+  pathLength,
+} from '../test-utils/routing-metrics.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 type Violation = { edge: string; node: string; ink: number; kind: ViolationKind }
@@ -71,27 +78,71 @@ describe('routing quality', () => {
 
 /**
  * The aggregate the individual pins could never give: how often the router
- * does this across many layouts, split by which search failed to stop it.
+ * draws through a box across many layouts, split by which search failed to
+ * stop it, plus what the drawing costs.
  *
- * The counts are pinned EXACTLY, not as a ceiling, so an improvement is as
- * loud as a regression — the point of a scoreboard is that the number moves
- * and someone has to say why. They are a debt figure, not a target: the goal
- * is three zeroes, and reaching it turns this into the strict property the
- * corpus above already holds to.
+ * Two kinds of number, read differently:
  *
- * `own-endpoint` dominating by an order of magnitude is the measurement that
- * says where to start: it is exactly the class `bestCandidate` cannot see.
+ * - `violations` and `interiorInk` are DEBT. The target is zero, and
+ *   reaching it turns this into the strict property the corpus above
+ *   already holds to. `own-endpoint` dominating by an order of magnitude is
+ *   what says where to start — it is exactly the class `bestCandidate`
+ *   cannot see.
+ * - `borderInk`, `bends`, `crossings` and `length` are PRICE. They have no
+ *   target; they are here so a change that buys less tunnelling with a
+ *   worse-looking drawing cannot do it silently. A fix that halves interior
+ *   ink and doubles the bend count is a trade someone has to accept out
+ *   loud, not a win.
+ *
+ * Everything is pinned EXACTLY, not as a ceiling, so an improvement is as
+ * loud as a regression: the point of a scoreboard is that the number moves
+ * and someone has to say why. It is not a golden to regenerate.
  */
 describe('routing quality across the synthetic corpus', () => {
-  it('reports the current violation count per class', () => {
-    const tally: Record<ViolationKind, number> = {
+  // A deliberate 2000-layout sweep, not a unit test: it routes tens of
+  // thousands of edges and the default 5s timeout is close enough to its
+  // runtime to fail under a loaded parallel suite rather than on merit.
+  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
+    const violations: Record<ViolationKind, number> = {
       'own-endpoint': 0,
       foreign: 0,
       degenerate: 0,
     }
+    let interior = 0
+    let border = 0
+    let bendCount = 0
+    let crossingCount = 0
+    let length = 0
     for (const testCase of syntheticLayouts(2000)) {
-      for (const v of avoidableInk(testCase.nodes, testCase.edges)) tally[v.kind]++
+      for (const v of avoidableInk(testCase.nodes, testCase.edges)) {
+        violations[v.kind]++
+        interior += v.ink
+      }
+      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
+      const paths = testCase.edges.map(
+        (edge) => routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
+      )
+      crossingCount += crossings(paths)
+      for (const path of paths) {
+        bendCount += bends(path)
+        length += pathLength(path)
+        for (const n of testCase.nodes) border += borderInk(path, rectOf(n))
+      }
     }
-    expect(tally).toEqual({ 'own-endpoint': 160, foreign: 24, degenerate: 2 })
+    expect({
+      violations,
+      interiorInk: Math.round(interior),
+      borderInk: Math.round(border),
+      bends: bendCount,
+      crossings: crossingCount,
+      length: Math.round(length),
+    }).toEqual({
+      violations: { 'own-endpoint': 84, foreign: 24, degenerate: 2 },
+      interiorInk: 9029,
+      borderInk: 1106,
+      bends: 7975,
+      crossings: 598,
+      length: 1313806,
+    })
   })
 })
