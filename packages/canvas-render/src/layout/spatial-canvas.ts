@@ -421,8 +421,7 @@ function composeFileFacets(
   }
   if (card === undefined) return undefined
 
-  const title =
-    typeof card.title === 'string' && card.title.trim().length > 0 ? card.title : undefined
+  const title = card.title?.trim() ? card.title : undefined
   const rows = card.rows.filter((row) => row.label.trim().length > 0 || row.value.trim().length > 0)
   if (title === undefined && rows.length === 0) return undefined
 
@@ -462,11 +461,10 @@ function composeFileFacets(
   // "more" affordance needs a focusable DOM-overlay/keyboard treatment this
   // pure-geometry package cannot own. Upgrade path is an editor-side
   // overlay in a later slice, not a scene node here.
-  // `layoutMdastBlocks` never emits a `ResolvedEdgeNode` (the one SceneNode
-  // variant with no `bbox`); the guard is for the type checker, not runtime.
+  // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
+  // no `bbox`); that guard is for the type checker, not runtime.
   const fitted = body.nodes.filter(
-    (entry): entry is Exclude<SceneNode, ResolvedEdgeNode> =>
-      entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
+    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
   )
   if (fitted.length === 0) return undefined
 
