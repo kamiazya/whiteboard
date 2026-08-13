@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-const modules = import.meta.glob('./**/*.{ts,tsx}', { query: '?raw', import: 'default' })
+// Eager: Vite inlines every source as a string at build time, exactly as
+// canvas-render's import-guard.test.ts does. A lazy glob makes each case
+// await a per-file transform, and scanning the whole directory serially
+// that way overran the 5s default under a saturated worker pool.
+const modules = import.meta.glob('./**/*.{ts,tsx}', {
+  query: '?raw',
+  eager: true,
+  import: 'default',
+}) as Record<string, string | undefined>
 
 // The theme threading in editor-appearance.ts/scene-render.ts must stay a
 // pure function of its `theme` argument — no ambient DOM read. viewport.ts
@@ -28,9 +36,9 @@ describe('theme resolver purity (no ambient DOM read)', () => {
   })
 
   for (const path of SCANNED_PATHS) {
-    it(`${path} reads no window/document/matchMedia/navigator global`, async () => {
+    it(`${path} reads no window/document/matchMedia/navigator global`, () => {
       const loader = modules[path]
-      const source = (await loader?.()) as string
+      const source = loader as string
       expect(source).not.toMatch(/\bwindow\./)
       expect(source).not.toMatch(/\bdocument\./)
       expect(source).not.toMatch(/\bmatchMedia\(/)
@@ -42,33 +50,33 @@ describe('theme resolver purity (no ambient DOM read)', () => {
     // regression mechanically instead of relying on review. React
     // imports/hooks are the other ambient-state door a "pure" module could
     // sneak through (closing over component state via a hook).
-    it(`${path} imports no React and calls no React hook`, async () => {
+    it(`${path} imports no React and calls no React hook`, () => {
       const loader = modules[path]
-      const source = (await loader?.()) as string
+      const source = loader as string
       expect(source).not.toMatch(/\bfrom ['"]react['"]/)
       expect(source).not.toMatch(/\buse(State|Ref|Effect|Callback|Memo)\(/)
     })
 
-    it(`${path} references no ambient crypto`, async () => {
+    it(`${path} references no ambient crypto`, () => {
       const loader = modules[path]
-      const source = (await loader?.()) as string
+      const source = loader as string
       expect(source).not.toMatch(/\bcrypto\./)
     })
   }
 
-  it('editor-appearance.ts carries no bare color literal (it is a thin adapter, no palette of its own)', async () => {
+  it('editor-appearance.ts carries no bare color literal (it is a thin adapter, no palette of its own)', () => {
     // Since the theme-layer slice, every color literal lives in
     // canvas-render's shared palette (theme/spatial-palette.ts) — this file
     // only re-projects that shared palette's values, so it should carry NO
     // hex literal at all, not even inside a palette record of its own.
     const loader = modules['./editor-appearance.ts']
-    const source = (await loader?.()) as string
+    const source = loader as string
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })
 })
 
 describe('single content path (S10 guardrail)', () => {
-  it('raw HTML injection exists ONLY at the two documented scene-svg sinks', async () => {
+  it('raw HTML injection exists ONLY at the two documented scene-svg sinks', () => {
     // String-level TRIPWIRE, not a syntax-aware proof: it catches the ways
     // raw markup realistically enters a React/DOM codebase
     // (dangerouslySetInnerHTML, innerHTML/outerHTML assignment,
@@ -86,19 +94,19 @@ describe('single content path (S10 guardrail)', () => {
       /dangerouslySetInnerHTML=|\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML\(/g
     for (const [path, loader] of Object.entries(modules)) {
       if (/\.(test|spec)\.(ts|tsx)$/.test(path)) continue
-      const source = (await loader()) as string
+      const source = loader as string
       const injections = (source.match(sinkPattern) ?? []).length
       expect({ path, injections }).toEqual({ path, injections: allowed.get(path) ?? 0 })
     }
   })
 
-  it('canvas mutations construct typed EditorCommands (no setter bypasses applyCommand)', async () => {
+  it('canvas mutations construct typed EditorCommands (no setter bypasses applyCommand)', () => {
     // The palette and every tool mode mutate the canvas exclusively by
     // dispatching an EditorCommand through applyCommand — a hand-rolled
     // canvas object spread reaching onChange directly would bypass the
     // command layer sync consumers replay.
     const loader = modules['./SpatialEditor.tsx']
-    const source = (await loader?.()) as string
+    const source = loader as string
     // String-level TRIPWIRE for the command boundary: every statement-level
     // onChange call must hand over a canvas spelled `running` (the
     // applyCommand accumulator) or an inline `applyCommand(...)` result.
