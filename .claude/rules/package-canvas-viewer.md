@@ -65,6 +65,17 @@ paths:
   injected string and escapes `&`/`<`/`>` in text and `"`/`'` in attribute
   values (`packages/canvas-render/src/svg/format.ts`). No sanitizer
   dependency is added because of this.
+- The injected SVG is wrapped in a **named `<figure>` element** (the
+  element, not `role="figure"` on a div — biome's `useSemanticElements`
+  enforces that, and its UA margin is cleared since this is a layout
+  container the host sizes), never `role="img"`.
+  The SVG's `<text>` runs are real content and, until canvas-render grows
+  the a11y projection it defers, the only way a screen reader reaches any
+  of it; `img` would supply a name while marking every child
+  presentational, buying the label at the cost of the content. The name
+  itself comes from the host (`label`, defaulting to "Canvas") because a
+  document's name lives in the workspace, never in canvas content
+  (vocabulary.md).
 - `VIEWER_FONT_FAMILY` and mcp-server's `EXPORT_FONT_FAMILY` name the same
   font family ("Roboto") in two packages that cannot import each other —
   a deliberate, documented duplication (see `font.ts`'s comment). A font
