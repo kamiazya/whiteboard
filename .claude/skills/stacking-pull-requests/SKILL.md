@@ -122,6 +122,15 @@ Upper PRs that stay behind retarget themselves automatically.
 **Always `--squash`.** release-please derives the version bump and changelog from
 squash-merge commit subjects, so a merge commit or a rebase merge breaks that contract.
 
+**`gh stack merge` only recognises a stack `gh stack init` created.** A set of
+PRs whose base branches merely point at each other is not one: the command
+answers `#N is not a stack number or a stacked pull request`, and you are
+left merging them one at a time. Worse, each squash rewrites the layer below
+into a commit the upper branch has never seen, so the next PR turns
+`CONFLICTING` the moment its predecessor lands and needs `origin/main`
+merged back in by hand. Verified twice. Decide you are stacking BEFORE you
+push the first branch.
+
 Two limits of the preview, both verified against `gh stack merge --help`:
 
 - **Bypassing merge requirements is not supported for stacks.** Branch protection and
