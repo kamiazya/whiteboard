@@ -1107,7 +1107,7 @@ function withoutRepeats(path: readonly Point[]): Point[] {
  * edge around a region that is not there.
  */
 function routeOrthogonal(
-  start: Point,
+  startAnchor: Point,
   end: Point,
   fromSide: Side,
   toSide: Side,
@@ -1118,6 +1118,7 @@ function routeOrthogonal(
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
+  let start = startAnchor
   // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
   // often share one tangent coordinate — anchors are renderer-chosen
   // defaults, so sliding one end along its side buys a single straight
@@ -1165,9 +1166,31 @@ function routeOrthogonal(
       }
     }
   }
+  const toNormal = outwardNormal(toSide)
+  // An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so
+  // an approach shorter than this leaves the arrow with no line behind it —
+  // it reads as a marker stuck to the box rather than an edge arriving at
+  // it. Two arrow-lengths gives the head its own run plus the same again of
+  // plain line.
+  const MIN_APPROACH_PX = 20
+  // Perpendicular pairs take their corner from the DEPARTURE anchor's
+  // tangent coordinate, so the approach is only as long as that anchor is
+  // far from the arrival side. Sliding the departure along its own side
+  // lengthens it without adding a corner; a side with no room to slide
+  // keeps the anchor and falls through to the stub-and-elbow path.
+  if (fromSide !== toSide && fromSide !== oppositeSide(toSide)) {
+    const approach = toNormal.x * (start.x - end.x) + toNormal.y * (start.y - end.y)
+    if (approach > 0 && approach < MIN_APPROACH_PX) {
+      const shortfall = MIN_APPROACH_PX - approach
+      const slid = slideAlongSide(start, fromRect, fromSide, {
+        x: start.x + toNormal.x * shortfall,
+        y: start.y + toNormal.y * shortfall,
+      })
+      if (slid !== undefined) start = slid
+    }
+  }
   const exit = stubFrom(start, fromSide, fromDepth)
   const entry = stubFrom(end, toSide, toDepth)
-  const toNormal = outwardNormal(toSide)
   // The arrival stub exists so the last segment reaches the anchor from
   // OUTSIDE its side. When the elbow already sits outside, on the arrival
   // axis, the stub only buys a detour past the anchor and back — a 20px

@@ -1,8 +1,11 @@
-// The arrival stub is what makes a perpendicular pair read as two corners
-// instead of one: the route reaches the elbow, continues 20px PAST the
-// arrival anchor, then comes back to it. The departure stub stays — its
-// depth is what separates edges that share a side into distinct
-// corridors — so a one-corner route still carries a collinear stub point.
+// Two things make a perpendicular pair read badly. The arrival stub sends
+// the route 20px PAST the anchor and back, which is a hook rather than a
+// corner. And the corner's distance from the arrival side is whatever the
+// departure anchor happened to be, which can leave the final segment
+// shorter than the arrowhead drawn on it — a marker stuck to the box with
+// no line behind it. The departure stub itself stays: its depth is what
+// separates edges sharing a side into distinct corridors, so a one-corner
+// route still carries a collinear stub point.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
@@ -47,16 +50,19 @@ it('meets perpendicular sides at one corner instead of stubbing out of both', ()
 
   const { path } = routeEdge(nodes, edges[0] as CanvasEdge, 'orthogonal', anchors.get('e'))
 
-  // A's right anchor already sits below B's bottom border, so the arrival
-  // needs no excursion under it: right (through the departure stub, which
-  // is collinear and so draws as one straight run), then up.
+  // Right (through the collinear departure stub, so it draws as one
+  // straight run), then up. The departure slid from y=620 to y=630 so the
+  // final segment is 20px — the arrowhead's own length plus as much again
+  // of plain line.
   expect(path).toEqual([
-    { x: 300, y: 620 },
-    { x: 320, y: 620 },
-    { x: 346, y: 620 },
+    { x: 300, y: 630 },
+    { x: 320, y: 630 },
+    { x: 346, y: 630 },
     { x: 346, y: 610 },
   ])
   expect(bendCount(path)).toBe(1)
+  const approach = Math.abs((path[3] as { y: number }).y - (path[2] as { y: number }).y)
+  expect(approach).toBeGreaterThanOrEqual(20)
 })
 
 it('keeps stubbing out when the corner would sit inside the arrival side', () => {
