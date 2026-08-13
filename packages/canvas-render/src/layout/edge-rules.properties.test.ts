@@ -8,6 +8,7 @@
 // of them.
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { referenceReversalCount } from '../test-utils/reversal-count.js'
 import {
   bendCount,
   COST_QUANTUM,
@@ -514,31 +515,9 @@ const orthogonalPathArb: fc.Arbitrary<readonly Point[]> = fc
     return path
   })
 
-/** Independent oracle (never calls production code): direction reversals
- * per axis. All generator coordinates are integers, so COST_QUANTUM
- * rounding in the production rule never changes a sign here — no
- * quantization drift to account for, unlike the ink-length oracles above. */
-function referenceReversalCount(path: readonly Point[]): number {
-  let reversals = 0
-  let lastSignX: number | undefined
-  let lastSignY: number | undefined
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1] as Point
-    const b = path[i] as Point
-    const sx = Math.sign(b.x - a.x)
-    const sy = Math.sign(b.y - a.y)
-    if (sx !== 0) {
-      if (lastSignX !== undefined && sx === -lastSignX) reversals++
-      lastSignX = sx
-    }
-    if (sy !== 0) {
-      if (lastSignY !== undefined && sy === -lastSignY) reversals++
-      lastSignY = sy
-    }
-  }
-  return reversals
-}
-
+// All generator coordinates here are integers, so COST_QUANTUM rounding in
+// the production rule never changes a sign — no quantization drift to
+// account for against the oracle, unlike the ink-length oracles above.
 const pathReversalRule = penaltyRule('path-reversal')
 
 describe('path-reversal: dense-orthogonal-walk property (mutation-checked)', () => {

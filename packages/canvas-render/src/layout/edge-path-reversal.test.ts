@@ -5,6 +5,7 @@
 // apart, never collinear, so nothing catches it before path-reversal.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { expect, it } from 'vitest'
+import { referenceReversalCount as reversalCount } from '../test-utils/reversal-count.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
@@ -16,30 +17,6 @@ const box = (id: string, x: number, y: number, w: number, h: number): SpatialNod
   height: h,
   text: id,
 })
-
-/** Independent oracle (never calls production code): direction reversals
- * per axis along a polyline — a segment whose sign on an axis is opposite
- * to the last non-zero sign on that same axis. */
-function reversalCount(path: readonly { x: number; y: number }[]): number {
-  let reversals = 0
-  let lastSignX: number | undefined
-  let lastSignY: number | undefined
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1] as { x: number; y: number }
-    const b = path[i] as { x: number; y: number }
-    const sx = Math.sign(b.x - a.x)
-    const sy = Math.sign(b.y - a.y)
-    if (sx !== 0) {
-      if (lastSignX !== undefined && sx === -lastSignX) reversals++
-      lastSignX = sx
-    }
-    if (sy !== 0) {
-      if (lastSignY !== undefined && sy === -lastSignY) reversals++
-      lastSignY = sy
-    }
-  }
-  return reversals
-}
 
 const userCanvasNodes = [
   box('A', 100, 570, 200, 100),
