@@ -607,11 +607,29 @@ function optimizeSideChoices(
   // the anchor groups it left and joined) re-route and re-score their
   // pairs — everything else is carried over. This is what keeps a trial
   // O(affected * E) instead of O(E^2).
+  // Same edge, same anchors, same obstacles -> same path. A trial re-sides
+  // ONE edge, but that recomputes the anchor groups it leaves and joins, so
+  // the same (edge, anchor) combination comes back around repeatedly:
+  // measured at 60 nodes / 200 edges, 296 of 854 routings were repeats of an
+  // identical call, one combination recurring nine times. `nodes` and
+  // `style` are fixed for the whole call, so they are not part of the key —
+  // and the cache lives only as long as this call, so a later layout of a
+  // moved canvas never sees a stale path.
+  const routeCache = new Map<string, readonly Point[]>()
+  const anchorKey = (edge: CanvasEdge, a: EdgeAnchorPair | undefined) =>
+    `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}`
+  const routeCached = (edge: CanvasEdge, a: EdgeAnchorPair | undefined): readonly Point[] => {
+    const key = anchorKey(edge, a)
+    const hit = routeCache.get(key)
+    if (hit !== undefined) return hit
+    const path = routeEdge(nodes, edge, style, a).path
+    routeCache.set(key, path)
+    return path
+  }
+
   let current = new Map(initial)
   let anchors = computeAnchorsFor(nodes, edges, current, false)
-  let paths: (readonly Point[])[] = edges.map(
-    (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
-  )
+  let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
   const foreignBodiesFor = edges.map((e) =>
@@ -666,7 +684,7 @@ function optimizeSideChoices(
     }
     const trialPaths = paths.slice()
     for (const i of touched) {
-      trialPaths[i] = routeEdge(nodes, edges[i]!, style, trialAnchors.get(edges[i]!.id)).path
+      trialPaths[i] = routeCached(edges[i]!, trialAnchors.get(edges[i]!.id))
     }
     const touchedSet = new Set(touched)
     let cost = currentCost
