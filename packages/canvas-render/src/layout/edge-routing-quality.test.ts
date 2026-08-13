@@ -1,0 +1,97 @@
+// The one invariant every reported routing defect violated: a line drawn
+// through the inside of a box. Four of them (#705, #706, #711, #713) reached
+// a human before they reached the suite, because each was pinned by the
+// single canvas that exposed it and nothing asked the question generally.
+//
+// The exemption is the one `routeEdge` already applies when it picks
+// obstacles: a rect that STRICTLY contains an anchor can never be routed
+// around, since every detour still has to reach the point inside it — that is
+// what lets an edge between two members of a group run inside the group's
+// frame. A rect merely touched by an anchor on its border, INCLUDING the
+// edge's own two endpoints, is not exempt. That distinction is the whole
+// point: `routeEdge` drops both endpoint nodes from its obstacle list, so a
+// route through its own target's body is invisible to the search that picks
+// it, and only the side-choice penalties upstream ever priced it.
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import { describe, expect, it } from 'vitest'
+import { ROUTING_CORPUS, syntheticLayouts } from '../test-utils/routing-corpus.js'
+import { interiorInk, type MetricRect } from '../test-utils/routing-metrics.js'
+import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+
+type Violation = { edge: string; node: string; ink: number; kind: ViolationKind }
+
+/**
+ * Which search was supposed to prevent it. `own-endpoint` and `degenerate`
+ * are invisible to `bestCandidate` by construction; `foreign` is a path
+ * `pathIsClear` rejected but `bestCandidate` returned anyway, because its
+ * last fallback takes the shortest BLOCKED candidate when none of its six
+ * is clear.
+ */
+type ViolationKind = 'own-endpoint' | 'foreign' | 'degenerate'
+
+const rectOf = (n: SpatialNode): MetricRect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
+
+const strictlyInside = (r: MetricRect, p: { x: number; y: number }) =>
+  p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h
+
+/** Every node body an edge put ink inside that it could have gone around. */
+function avoidableInk(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[]): Violation[] {
+  const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
+  const found: Violation[] = []
+  for (const edge of edges) {
+    const { path } = routeEdge(nodes, edge, 'orthogonal', anchors.get(edge.id))
+    const start = path[0]
+    const end = path[path.length - 1]
+    if (start === undefined || end === undefined) continue
+    const coincident = start.x === end.x && start.y === end.y
+    for (const n of nodes) {
+      const rect = rectOf(n)
+      if (strictlyInside(rect, start) || strictlyInside(rect, end)) continue
+      const ink = interiorInk(path, rect)
+      if (ink <= 0) continue
+      const own = n.id === edge.fromNode || n.id === edge.toNode
+      found.push({
+        edge: edge.id,
+        node: n.id,
+        ink,
+        kind: coincident ? 'degenerate' : own ? 'own-endpoint' : 'foreign',
+      })
+    }
+  }
+  return found
+}
+
+describe('routing quality', () => {
+  it.each(
+    ROUTING_CORPUS.map((c) => [c.name, c] as const),
+  )('draws no line through a node body — %s', (_name, testCase) => {
+    expect(avoidableInk(testCase.nodes, testCase.edges)).toEqual([])
+  })
+})
+
+/**
+ * The aggregate the individual pins could never give: how often the router
+ * does this across many layouts, split by which search failed to stop it.
+ *
+ * The counts are pinned EXACTLY, not as a ceiling, so an improvement is as
+ * loud as a regression — the point of a scoreboard is that the number moves
+ * and someone has to say why. They are a debt figure, not a target: the goal
+ * is three zeroes, and reaching it turns this into the strict property the
+ * corpus above already holds to.
+ *
+ * `own-endpoint` dominating by an order of magnitude is the measurement that
+ * says where to start: it is exactly the class `bestCandidate` cannot see.
+ */
+describe('routing quality across the synthetic corpus', () => {
+  it('reports the current violation count per class', () => {
+    const tally: Record<ViolationKind, number> = {
+      'own-endpoint': 0,
+      foreign: 0,
+      degenerate: 0,
+    }
+    for (const testCase of syntheticLayouts(2000)) {
+      for (const v of avoidableInk(testCase.nodes, testCase.edges)) tally[v.kind]++
+    }
+    expect(tally).toEqual({ 'own-endpoint': 160, foreign: 24, degenerate: 2 })
+  })
+})
