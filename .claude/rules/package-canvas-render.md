@@ -314,14 +314,15 @@ paths:
       candidate ORDER, not the search budget, so `CROSSING_OPT_MAX_PASSES`
       stays 2. The PENALTY half is `PENALTY_RULES`: overlap-and-intrusion
       (tier 0, collinear overlap plus self-retrace/body-intrusion),
-      illegibility (tier 1), crossings (tier 2), border-tracing (tier 3,
-      self-only — a routed segment collinear with AND overlapping a node's
-      own border, `nodeBorders` including the path's own endpoint rects
-      unlike `foreignBodies`), endpoint-body-ink (tier 4, self-only — a
-      routed segment STRICTLY BETWEEN a rect's two borders, the interior
-      complement of border-tracing, priced against the edge's OWN endpoint
-      rects since `foreignBodies` deliberately excludes them for the tunnel
-      check), and realized-bends (tier 5, self-only and deliberately last).
+      illegibility (tier 1), crossings (tier 2), endpoint-body-ink (tier 3,
+      self-only — a routed segment STRICTLY BETWEEN a rect's two borders,
+      priced against the edge's OWN endpoint rects since `foreignBodies`
+      deliberately excludes them for the tunnel check), border-tracing
+      (tier 4, self-only — the border complement: a segment collinear with
+      AND overlapping a node's own border, `nodeBorders` including the
+      path's own endpoint rects unlike `foreignBodies`), path-reversal
+      (tier 5) and realized-bends (tier 6, self-only and deliberately
+      last).
       border-tracing sits BELOW crossings rather than adjacent to
       overlap-and-intrusion: it is evaluated against the optimizer's
       unaligned TRIAL paths (`computeAnchorsFor`'s pre-`slideAlongSide`
