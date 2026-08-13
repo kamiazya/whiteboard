@@ -130,9 +130,8 @@ function deriveDefaultSides(
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
     return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
   }
-  // Ranking is geometric only; occlusion then adjusts each end
-  // independently from the chosen pair (an occluded end moves to its next
-  // exposed side alone, rather than dragging the other end with it).
+  // Ranking is geometric only; occlusion then moves an end that is buried
+  // under a neighbour to its next exposed side.
   const best = pairs[0]!
   const pick = (rect: Rect, primary: Side, mirror: readonly [Side, Side, Side, Side]): Side => {
     const candidates = [primary, ...mirror.filter((sd) => sd !== primary)]
@@ -140,10 +139,24 @@ function deriveDefaultSides(
   }
   const fromMirror = facingSides(dx, dy)
   const toMirror = fromMirror.map(oppositeSide) as unknown as readonly [Side, Side, Side, Side]
-  return {
-    fromSide: pick(fromRect, best.fromSide, fromMirror),
-    toSide: pick(toRect, best.toSide, toMirror),
+  const fromSide = pick(fromRect, best.fromSide, fromMirror)
+  // partner-follows-moved-end: an arrival is chosen as the partner of a
+  // particular departure, so when occlusion moves the departure the arrival
+  // is left describing a pair that no longer exists — `left->bottom` with
+  // the departure pushed to `top` becomes `top->bottom`, a combination the
+  // ranking never proposed and which reaches the target's far side the long
+  // way round. The coherent partner is the one on the axis the departure did
+  // NOT take: leaving horizontally arrives on the vertical facing side, and
+  // leaving vertically arrives on the horizontal one. Only the orphaned half
+  // is replaced — an arrival occlusion never touched keeps its own choice.
+  const horizontal = (side: Side) => side === 'left' || side === 'right'
+  const { h, v } = {
+    h: dx >= 0 ? ('right' as Side) : ('left' as Side),
+    v: dy >= 0 ? ('bottom' as Side) : ('top' as Side),
   }
+  const partnerSide =
+    fromSide === best.fromSide ? best.toSide : oppositeSide(horizontal(fromSide) ? v : h)
+  return { fromSide, toSide: pick(toRect, partnerSide, toMirror) }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
