@@ -137,12 +137,12 @@ describe('routing quality across the synthetic corpus', () => {
       crossings: crossingCount,
       length: Math.round(length),
     }).toEqual({
-      violations: { 'own-endpoint': 69, foreign: 21, degenerate: 2 },
-      interiorInk: 6866,
-      borderInk: 1343,
-      bends: 8317,
-      crossings: 593,
-      length: 1345035,
+      violations: { 'own-endpoint': 39, foreign: 19, degenerate: 2 },
+      interiorInk: 4052,
+      borderInk: 1147,
+      bends: 8493,
+      crossings: 644,
+      length: 1360632,
     })
   })
 })
