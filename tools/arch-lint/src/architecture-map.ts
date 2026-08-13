@@ -92,6 +92,30 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: [],
     allowedThirdParty: [],
   },
+  // The OTHER composition root (browser). Registered for the same reason
+  // `@kamiazya/whiteboard-mcp` is — being in this table is what makes
+  // direction-check.ts flag a shared package that takes a dependency on it —
+  // and, unlike that one, with its real allowed set, because apps/web's own
+  // manifest is direction-checked (see repo-coverage.test.ts's
+  // COMPOSITION_ROOTS).
+  //
+  // `@kamiazya/whiteboard-mcp` is in that set deliberately. Rule 2 forbids a
+  // SHARED package importing a composition root; one composition root
+  // consuming the other's browser-safe client subpaths (`/api-client`,
+  // `/api-contracts`, `/browser-contract`) is a different thing, and the
+  // right place for the daemon's client contract is beside the daemon. Its
+  // Node entrypoints are not reachable from here.
+  '@kamiazya/whiteboard-web': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-canvas-model',
+      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-canvas-render',
+      '@kamiazya/whiteboard-canvas-workspace',
+      '@kamiazya/whiteboard-canvas-viewer',
+      '@kamiazya/whiteboard-mcp',
+    ],
+    allowedThirdParty: [],
+  },
 }
 
 export function allowedDependencies(packageName: string): readonly string[] {

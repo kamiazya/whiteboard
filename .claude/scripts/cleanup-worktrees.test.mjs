@@ -6,7 +6,7 @@
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -111,4 +111,70 @@ test('removes a squash-merged lane whose remote branch was deleted after merge (
     /would remove lane-squashed/,
     'a published lane whose remote branch was deleted after a squash-merge should be removable without --include-fresh'
   )
+})
+
+test('never removes the worktree the caller is standing in', () => {
+  const scratch = makeScratch()
+  const { seedDir, repoDir } = setupRepos(scratch)
+
+  const laneDir = join(repoDir, '.claude', 'worktrees', 'lane-here')
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', 'lane-here', laneDir, 'origin/main'])
+  git(laneDir, ['config', 'user.email', 't@example.com'])
+  git(laneDir, ['config', 'user.name', 'Test'])
+  git(laneDir, ['commit', '--allow-empty', '--quiet', '-m', 'lane work'])
+  git(repoDir, ['push', '--quiet', '-u', 'origin', 'lane-here'])
+  git(seedDir, ['commit', '--allow-empty', '--quiet', '-m', 'squash-merged lane work'])
+  git(seedDir, ['push', '--quiet', 'origin', 'main'])
+  git(seedDir, ['push', '--quiet', 'origin', '--delete', 'lane-here'])
+
+  // From the main checkout it is removable — every other signal says reclaim.
+  assert.match(runCleanup(repoDir), /would remove lane-here/)
+
+  // From inside it, removing would delete the caller's own cwd. Merging a PR
+  // from within its own lane is the normal way this flow runs.
+  const fromInside = execFileSync('node', [scriptPath, '--dry-run'], {
+    cwd: laneDir,
+    encoding: 'utf-8',
+    env: { ...process.env, CLEANUP_WORKTREES_REPO_ROOT: repoDir },
+  })
+  assert.match(fromInside, /keep lane-here: it is the current working directory/)
+  assert.doesNotMatch(fromInside, /would remove lane-here/)
+})
+
+test('finds the main checkout when invoked through a linked worktree copy', () => {
+  // The bug this pins: `__dirname/../..` is the main checkout only when the
+  // script is reached through the main checkout's own copy. Run through a
+  // linked worktree's copy, it resolved to that worktree — which has no
+  // .claude/worktrees of its own — and the script printed "nothing to clean"
+  // and exited 0. A silent no-op that reads exactly like success.
+  const scratch = makeScratch()
+  const { seedDir, repoDir } = setupRepos(scratch)
+
+  const laneDir = join(repoDir, '.claude', 'worktrees', 'lane-merged')
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', 'lane-merged', laneDir, 'origin/main'])
+  git(laneDir, ['config', 'user.email', 't@example.com'])
+  git(laneDir, ['config', 'user.name', 'Test'])
+  git(laneDir, ['commit', '--allow-empty', '--quiet', '-m', 'lane work'])
+  git(repoDir, ['push', '--quiet', '-u', 'origin', 'lane-merged'])
+  git(seedDir, ['commit', '--allow-empty', '--quiet', '-m', 'squash-merged lane work'])
+  git(seedDir, ['push', '--quiet', 'origin', 'main'])
+  git(seedDir, ['push', '--quiet', 'origin', '--delete', 'lane-merged'])
+
+  // A second lane, holding the copy of the script we invoke — standing in
+  // for "the session is working inside a worktree".
+  const hostDir = join(repoDir, '.claude', 'worktrees', 'lane-host')
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', 'lane-host', hostDir, 'origin/main'])
+  const hostScripts = join(hostDir, '.claude', 'scripts')
+  mkdirSync(hostScripts, { recursive: true })
+  const hostScript = join(hostScripts, 'cleanup-worktrees.mjs')
+  copyFileSync(scriptPath, hostScript)
+
+  // No CLEANUP_WORKTREES_REPO_ROOT: the script has to find the main checkout
+  // itself, which is the whole point.
+  const output = execFileSync('node', [hostScript, '--dry-run'], {
+    cwd: hostDir,
+    encoding: 'utf-8',
+  })
+  assert.doesNotMatch(output, /nothing to clean/, 'must not silently no-op from a linked worktree')
+  assert.match(output, /would remove lane-merged/)
 })

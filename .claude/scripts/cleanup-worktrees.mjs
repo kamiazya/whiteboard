@@ -15,15 +15,44 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+/**
+ * The MAIN checkout, found from wherever this runs.
+ *
+ * `__dirname/../..` is only the main checkout when the script is invoked
+ * through the main checkout's own copy — and a session normally sits inside
+ * a linked worktree, whose `.claude/worktrees` does not exist (it is
+ * gitignored, so a fresh worktree has none). The script then printed
+ * "nothing to clean" and exited 0: a silent no-op that looks exactly like
+ * success, which is how sixteen worktrees accumulated while the tool
+ * "worked".
+ *
+ * `--git-common-dir` resolves to the MAIN repository's `.git` from any
+ * linked worktree, so its parent is the main checkout.
+ */
+function findMainCheckout() {
+  try {
+    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: __dirname,
+      encoding: 'utf-8',
+    }).trim()
+    return dirname(commonDir)
+  } catch {
+    return resolve(__dirname, '../..')
+  }
+}
+
 // Overridable so tests can point the script at a throwaway git repo instead
 // of the real one this file lives in.
 const repoRoot = process.env.CLEANUP_WORKTREES_REPO_ROOT
   ? resolve(process.env.CLEANUP_WORKTREES_REPO_ROOT)
-  : resolve(__dirname, '../..')
+  : findMainCheckout()
 const worktreesDir = join(repoRoot, '.claude', 'worktrees')
 const dryRun = process.argv.includes('--dry-run')
 const storePrune = process.argv.includes('--store-prune')
 const includeFresh = process.argv.includes('--include-fresh')
+// Resolved once: a worktree containing this path is never a removal candidate.
+const cwd = resolve(process.cwd())
 
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf-8', ...opts }).trim()
@@ -136,6 +165,17 @@ for (const entry of entries) {
 
   if (!merged) {
     console.log(`keep ${entry.name}: branch '${branch}' not merged and remote still exists`)
+    kept++
+    continue
+  }
+
+  // Never remove the worktree the caller is standing in. Its branch is
+  // merged and its tree is clean, so every other check says "reclaim it" —
+  // and `git worktree remove --force` would then delete the current working
+  // directory out from under the shell that asked for the cleanup. Merging a
+  // PR from inside its own lane is the normal way this flow runs.
+  if (cwd === wt || cwd.startsWith(`${wt}/`)) {
+    console.log(`keep ${entry.name}: it is the current working directory`)
     kept++
     continue
   }
