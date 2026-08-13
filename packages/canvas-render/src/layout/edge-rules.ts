@@ -652,14 +652,89 @@ const endpointBodyInk: PenaltyRule = {
     ),
 }
 
+/** Quantized per-axis direction sign, in the same COST_QUANTUM space every
+ * other ink-length term is measured in — anchors are fractional (a slid
+ * anchor can land at e.g. 233.333...px), so a raw `Math.sign` would read a
+ * sub-quarter-pixel rounding wobble as a reversal. */
+function quantizedSign(a: number, b: number): number {
+  return Math.sign(Math.round(b * COST_QUANTUM) - Math.round(a * COST_QUANTUM))
+}
+
+/** Direction reversals per axis along a polyline: a segment whose sign on
+ * an axis is opposite to the last NON-ZERO sign this walk saw on that same
+ * axis. Axes are tracked independently (unlike `bendCount`, which combines
+ * both axes into one direction pair) — a Z zig-zags through two different
+ * combined directions without ever undoing either axis alone, so it must
+ * read 0 here while still reading 2 bends. */
+function reversalCount(path: readonly Point[]): number {
+  let reversals = 0
+  let lastSignX: number | undefined
+  let lastSignY: number | undefined
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    const sx = quantizedSign(a.x, b.x)
+    const sy = quantizedSign(a.y, b.y)
+    if (sx !== 0) {
+      if (lastSignX !== undefined && sx === -lastSignX) reversals++
+      lastSignX = sx
+    }
+    if (sy !== 0) {
+      if (lastSignY !== undefined && sy === -lastSignY) reversals++
+      lastSignY = sy
+    }
+  }
+  return reversals
+}
+
+/**
+ * path-reversal: a routed path that doubles back on itself — moving up
+ * then down, or left then right, on the SAME axis. This is invisible to
+ * every tier above it: the two retrograde segments of the defect this rule
+ * was written for sit a few px apart (never collinear), so
+ * overlap-and-intrusion's self-retrace check never fires, and there is no
+ * foreign-body ink and no crossing either. A route like this reads on
+ * screen as a small knot hanging off the node, independent of and often
+ * shorter than a clean alternative — a length-based term would keep
+ * choosing it, so this rule counts reversals, not length.
+ *
+ * Self-only, and REPAIRABLE (unlike its `realized-bends` neighbour): a
+ * deliberate same-side U-hook over an interpenetrating pair (see
+ * `u-hook-when-degenerate`) also reverses once by construction, so this
+ * tier alone cannot forbid a reversal outright — it can only rank a
+ * reversal-free route ahead of a reversing one when both are otherwise
+ * candidates, which is exactly what makes the knot repairable while a
+ * genuinely unavoidable hook still settles.
+ *
+ * Tier placement is evidence-driven, same discipline as border-tracing and
+ * endpoint-body-ink above: on the canvas this rule exists to fix, every
+ * tier below `endpoint-body-ink` is zero for the settled configuration
+ * (`hasRepairableProblem` was false, so the optimizer never evaluated a
+ * single candidate), so the rule has to sit BELOW the last declared tier to
+ * change the outcome at all. It sits directly above `realized-bends` —
+ * the lowest repairable slot — rather than higher: this file's own history
+ * (border-tracing tier 1 -> 3, endpoint-body-ink placed below it) is a
+ * rule scored against the optimizer's UNALIGNED TRIAL paths, where a
+ * higher tier risks an artifact outranking a real signal; the lowest
+ * repairable slot is the least aggressive placement that still fixes the
+ * defect.
+ */
+const pathReversal: PenaltyRule = {
+  name: 'path-reversal',
+  tier: 5,
+  pairTerm: () => 0,
+  selfTerm: (path) => reversalCount(path),
+}
+
 /** realized-bends: direction changes along ONE routed path. Self-only, and
- * deliberately the last tier — the optimizer's short-circuit
+ * deliberately the LAST tier — the optimizer's short-circuit
  * (`hasRepairableProblem`) and worst-offender filter both ignore it, since
- * a configuration with no overlap/illegibility/crossings is already healthy
- * and reshuffling it purely to shave bends is churn, not repair. */
+ * a configuration with no overlap/illegibility/crossings/reversal is
+ * already healthy and reshuffling it purely to shave bends is churn, not
+ * repair. */
 const realizedBends: PenaltyRule = {
   name: 'realized-bends',
-  tier: 5,
+  tier: 6,
   pairTerm: () => 0,
   selfTerm: (path) => bendCount(path),
 }
@@ -676,6 +751,7 @@ export const PENALTY_RULES: readonly PenaltyRule[] = [
   crossings,
   borderTracing,
   endpointBodyInk,
+  pathReversal,
   realizedBends,
 ]
 

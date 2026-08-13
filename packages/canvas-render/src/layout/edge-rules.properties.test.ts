@@ -6,9 +6,11 @@
 // why the other candidate-contributing rules are presence-gated, not
 // order-only) plus a weaker monotonic-removal property that holds for all
 // of them.
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { referenceReversalCount } from '../test-utils/reversal-count.js'
 import {
+  bendCount,
   COST_QUANTUM,
   composeSidePairs,
   hasRepairableProblem,
@@ -485,6 +487,95 @@ describe('border-tracing / endpoint-body-ink: no double-charge', () => {
       const border = borderTracingRule.selfTerm([a, b], [], [rect], [])
       const endpointInk = endpointBodyInkRule.selfTerm([a, b], [], [], [rect])
       expect(Math.min(border, endpointInk)).toBe(0)
+    },
+  )
+})
+
+// path-reversal-specific properties: pathArb's four-point-max, +-200-range
+// generic domain rarely lands two consecutive same-axis moves with opposite
+// signs (passes vacuously — see AGENTS.md's PBT discipline), so this domain
+// builds a path as an explicit walk of alternating-or-not axis moves, dense
+// enough that a same-axis sign flip (a reversal) is common rather than rare.
+const axisMoveArb = fc.record({
+  axis: fc.constantFrom<'h' | 'v'>('h', 'v'),
+  delta: fc.integer({ min: -20, max: 20 }),
+})
+
+const orthogonalPathArb: fc.Arbitrary<readonly Point[]> = fc
+  .array(axisMoveArb, { minLength: 0, maxLength: 10 })
+  .map((moves) => {
+    let x = 0
+    let y = 0
+    const path: Point[] = [{ x, y }]
+    for (const move of moves) {
+      if (move.axis === 'h') x += move.delta
+      else y += move.delta
+      path.push({ x, y })
+    }
+    return path
+  })
+
+// All generator coordinates here are integers, so COST_QUANTUM rounding in
+// the production rule never changes a sign — no quantization drift to
+// account for against the oracle, unlike the ink-length oracles above.
+const pathReversalRule = penaltyRule('path-reversal')
+
+describe('path-reversal: dense-orthogonal-walk property (mutation-checked)', () => {
+  it('the generator actually produces reversing paths (not vacuous)', () => {
+    const samples = fc.sample(orthogonalPathArb, 200)
+    expect(samples.some((path) => referenceReversalCount(path) > 0)).toBe(true)
+  })
+
+  fcTest.prop([orthogonalPathArb], withDefaults())(
+    'the path-reversal term is a finite, non-negative, integral, deterministic total',
+    (path) => {
+      const term1 = pathReversalRule.selfTerm(path, [], [], [])
+      const term2 = pathReversalRule.selfTerm(path, [], [], [])
+      expect(term1).toBe(term2)
+      expect(Number.isInteger(term1)).toBe(true)
+      expect(term1).toBeGreaterThanOrEqual(0)
+    },
+  )
+
+  // The property that actually catches a "returns 0" or otherwise-wrong
+  // mutation: totality/determinism above hold trivially for a stub that
+  // always returns 0, so this is the one that must go red under mutation
+  // (verified: reverting pathReversal.selfTerm to `() => 0` fails this
+  // test, confirming the dense generator reaches real reversals).
+  fcTest.prop([orthogonalPathArb], withDefaults())(
+    'agrees with an independently-computed per-axis reversal count',
+    (path) => {
+      expect(pathReversalRule.selfTerm(path, [], [], [])).toBe(referenceReversalCount(path))
+    },
+  )
+
+  fcTest.prop(
+    [orthogonalPathArb, fc.integer({ min: -500, max: 500 }), fc.integer({ min: -500, max: 500 })],
+    withDefaults(),
+  )('is invariant under translating the whole path by any offset', (path, dx, dy) => {
+    const translated = path.map((p) => ({ x: p.x + dx, y: p.y + dy }))
+    expect(pathReversalRule.selfTerm(translated, [], [], [])).toBe(
+      pathReversalRule.selfTerm(path, [], [], []),
+    )
+  })
+
+  fcTest.prop([orthogonalPathArb], withDefaults())(
+    'is invariant under reversing the point order',
+    (path) => {
+      const reversed = [...path].reverse()
+      expect(pathReversalRule.selfTerm(reversed, [], [], [])).toBe(
+        pathReversalRule.selfTerm(path, [], [], []),
+      )
+    },
+  )
+
+  // Cross-rule: a reversal is always a direction change, so this tier can
+  // never exceed its realized-bends sibling — ties the two rules together
+  // instead of letting them drift independently.
+  fcTest.prop([orthogonalPathArb], withDefaults())(
+    'reversalCount never exceeds bendCount, for any generated path',
+    (path) => {
+      expect(pathReversalRule.selfTerm(path, [], [], [])).toBeLessThanOrEqual(bendCount(path))
     },
   )
 })
