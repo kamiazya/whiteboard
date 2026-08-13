@@ -68,7 +68,8 @@
     "knip": "knip",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "test:scripts": "node --test .claude/scripts/*.test.mjs .claude/workflows/lib/*.test.mjs",
-    "prepare": "lefthook install || true"
+    "prepare": "lefthook install || true",
+    "bench": "vitest bench --project canvas-render-node"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
