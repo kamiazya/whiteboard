@@ -26,9 +26,17 @@ export interface CanvasViewerProps {
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
   testId?: string
+  /**
+   * Accessible name for the rendered canvas. The viewer cannot derive one:
+   * a document's name lives in the workspace, never in canvas content (see
+   * vocabulary.md), so the host supplies it and `DEFAULT_LABEL` is only the
+   * floor.
+   */
+  label?: string
 }
 
 const DEFAULT_TEST_ID = 'canvas-viewer'
+const DEFAULT_LABEL = 'Canvas'
 
 export function CanvasViewer({
   canvas,
@@ -38,6 +46,7 @@ export function CanvasViewer({
   background,
   measure,
   testId = DEFAULT_TEST_ID,
+  label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
   // Stable across re-renders of the same component instance so layoutSpatialCanvas
   // doesn't recreate the (lazily-created) Canvas 2D context on every render.
@@ -74,10 +83,26 @@ export function CanvasViewer({
   // path here, and this is not a generic sanitizer-needed sink. Do not add a
   // sanitizer dependency; if this ever stops being canvas-render's own output,
   // this reasoning no longer holds and must be revisited.
+  // `figure`, not `img`: the injected SVG's `<text>` runs are real content
+  // and today the ONLY way a screen reader reaches any of it, and `img`
+  // marks every child presentational — that would buy a name at the cost of
+  // the content. A figure names the region and leaves its children
+  // reachable. Reading it is still choppy (one run per wrapped line, in
+  // document order), which is what the deferred a11y projection is for; a
+  // name and reachable text is the honest floor until then.
   return (
-    <div
+    <figure
       data-testid={testId}
-      style={{ width: width ?? '100%', height: height ?? '100%', overflow: 'hidden' }}
+      aria-label={label}
+      // A real <figure>, not role="figure" on a div: same semantics, and the
+      // element carries them without ARIA. Its UA margin is cleared because
+      // this is a layout container the host sizes, not prose.
+      style={{
+        width: width ?? '100%',
+        height: height ?? '100%',
+        overflow: 'hidden',
+        margin: 0,
+      }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
