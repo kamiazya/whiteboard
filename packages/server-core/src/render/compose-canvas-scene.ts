@@ -15,28 +15,18 @@ const MCP_SCENE_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 const log = getLogger('compose-canvas-scene')
 
+// Keyed by every `SpatialLayoutDegradation['kind']`, so a kind added in
+// canvas-render is a compile error here rather than a silently unreported
+// degradation.
+const DEGRADATION_MESSAGE: Record<SpatialLayoutDegradation['kind'], string> = {
+  'body-parse-failed': 'text node body failed to parse as markdown; falling back to literal text',
+  'unsupported-background-style': 'group backgroundStyle not supported; rendering as cover',
+  'unknown-node-kind': 'unrecognized spatial node kind; emitting chrome only',
+}
+
 /** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
-function onDegrade(event: SpatialLayoutDegradation): void {
-  switch (event.kind) {
-    case 'body-parse-failed':
-      log.warning('text node body failed to parse as markdown; falling back to literal text', {
-        nodeId: event.nodeId,
-        err: event.err,
-      })
-      return
-    case 'unsupported-background-style':
-      log.warning('group backgroundStyle not supported; rendering as cover', {
-        nodeId: event.nodeId,
-        style: event.style,
-      })
-      return
-    case 'unknown-node-kind':
-      log.warning('unrecognized spatial node kind; emitting chrome only', {
-        nodeId: event.nodeId,
-        type: event.type,
-      })
-      return
-  }
+function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
+  log.warning(DEGRADATION_MESSAGE[kind], data)
 }
 
 /**
