@@ -635,7 +635,13 @@ const borderTracing: PenaltyRule = {
  * pass budget is a matter of candidate ORDER, not more passes: see
  * `u-hook-span-exposed-first` above.
  */
-const endpointBodyInk: PenaltyRule = {
+/**
+ * Exported because `bestCandidate` (`spatial-edges.ts`) ranks by this ONE
+ * term directly rather than the whole cost tuple: inside a single side pair
+ * it is choosing between paths, so the inter-edge terms do not apply and
+ * the foreign-body ones are already the clearance tiers it sorts within.
+ */
+export const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
   tier: 3,
   pairTerm: () => 0,

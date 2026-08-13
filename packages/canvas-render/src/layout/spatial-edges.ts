@@ -5,6 +5,7 @@ import {
   addCost,
   bendCount,
   composeSidePairs,
+  endpointBodyInk,
   facingLaneWindow,
   fullyContains,
   hasRepairableProblem,
@@ -924,16 +925,28 @@ function bestCandidate(
   candidates: readonly Point[][],
   inflated: readonly Rect[],
   raw: readonly Rect[],
+  endpointRects: readonly Rect[] = [],
 ): Point[] {
-  const byLength = [...candidates].sort((a, b) => {
-    const byLen = pathLength(a) - pathLength(b)
-    if (Math.abs(byLen) > 1e-6) return byLen
-    return bendCount(a) - bendCount(b)
-  })
+  // Scored once per candidate, not once per comparison: this runs per edge
+  // on every layout, inside an optimizer that reroutes the whole edge set
+  // several times.
+  const scored = candidates.map((path) => ({
+    path,
+    ink: endpointBodyInk.selfTerm(path, [], [], endpointRects),
+    length: pathLength(path),
+    bends: bendCount(path),
+  }))
+  const ranked = scored
+    .sort((a, b) => {
+      if (a.ink !== b.ink) return a.ink - b.ink
+      if (Math.abs(a.length - b.length) > 1e-6) return a.length - b.length
+      return a.bends - b.bends
+    })
+    .map((c) => c.path)
   return (
-    byLength.find((path) => pathIsClear(path, inflated)) ??
-    byLength.find((path) => pathIsClear(path, raw)) ??
-    (byLength[0] as Point[])
+    ranked.find((path) => pathIsClear(path, inflated)) ??
+    ranked.find((path) => pathIsClear(path, raw)) ??
+    (ranked[0] as Point[])
   )
 }
 
@@ -1208,7 +1221,7 @@ function routeOrthogonal(
 
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
   if (elbows.some((path) => pathIsClear(path, inflated))) {
-    return bestCandidate(elbows, inflated, raw)
+    return bestCandidate(elbows, inflated, raw, [fromRect, toRect])
   }
 
   // Detours are needed when the paths this style actually travels are
@@ -1229,7 +1242,7 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, inflated, raw)
+  return bestCandidate(candidates, inflated, raw, [fromRect, toRect])
 }
 
 /**

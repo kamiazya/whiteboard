@@ -99,7 +99,10 @@ describe('routing quality', () => {
  * and someone has to say why. It is not a golden to regenerate.
  */
 describe('routing quality across the synthetic corpus', () => {
-  it('reports the current violation count and drawing cost', () => {
+  // A deliberate 2000-layout sweep, not a unit test: it routes tens of
+  // thousands of edges and the default 5s timeout is close enough to its
+  // runtime to fail under a loaded parallel suite rather than on merit.
+  it('reports the current violation count and drawing cost', { timeout: 60_000 }, () => {
     const violations: Record<ViolationKind, number> = {
       'own-endpoint': 0,
       foreign: 0,
@@ -134,12 +137,12 @@ describe('routing quality across the synthetic corpus', () => {
       crossings: crossingCount,
       length: Math.round(length),
     }).toEqual({
-      violations: { 'own-endpoint': 160, foreign: 24, degenerate: 2 },
-      interiorInk: 18234,
-      borderInk: 722,
-      bends: 7525,
-      crossings: 683,
-      length: 1308831,
+      violations: { 'own-endpoint': 84, foreign: 24, degenerate: 2 },
+      interiorInk: 9029,
+      borderInk: 1106,
+      bends: 7975,
+      crossings: 598,
+      length: 1313806,
     })
   })
 })
