@@ -1,11 +1,15 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type {
   MeasureText,
   Scene,
   SpatialLayoutDegradation,
 } from '@kamiazya/whiteboard-canvas-render'
-import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import {
+  createSpatialTheme,
+  layoutSpatialCanvas,
+  sceneBounds,
+} from '@kamiazya/whiteboard-canvas-render'
 import { getLogger } from '../log.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
@@ -48,22 +52,23 @@ export function composeCanvasScene(canvas: SpatialCanvas, measure: MeasureText):
 }
 
 /**
- * Union bounding box over every top-level node's own geometry — the `<svg>`
- * root's width/height for `wb_scene_render`. An empty canvas has no
- * geometry to union, so it defaults to a zero-sized box rather than an
- * arbitrary sentinel.
+ * How far the drawing extends from the origin — the size a consumer needs to
+ * show all of `wb_scene_render`'s SVG.
+ *
+ * Measured from the SCENE, not the canvas's nodes. The two agree only while
+ * nothing is drawn outside a node's own box, and the router deliberately
+ * breaks that: an edge steps AROUND a node it would otherwise cut through,
+ * and that step lands beyond every node's geometry. Measuring the nodes
+ * reported a size that clipped the very detours the routing work added.
+ *
+ * Right/bottom extent rather than `sceneBounds`' width/height, because the
+ * SVG this describes is the bodyless-root form with no `viewBox`: its user
+ * space starts at the origin whatever the content does, so a consumer needs
+ * the far edge, not the span. An empty scene has no geometry to measure and
+ * reports zero rather than `sceneBounds`' non-degenerate 1x1 fallback.
  */
-export function computeCanvasDimensions(nodes: readonly SpatialNode[]): {
-  width: number
-  height: number
-} {
-  if (nodes.length === 0) return { width: 0, height: 0 }
-
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  for (const node of nodes) {
-    maxX = Math.max(maxX, node.x + node.width)
-    maxY = Math.max(maxY, node.y + node.height)
-  }
-  return { width: maxX, height: maxY }
+export function computeSceneDimensions(scene: Scene): { width: number; height: number } {
+  if (scene.nodes.length === 0) return { width: 0, height: 0 }
+  const bounds = sceneBounds(scene)
+  return { width: bounds.x + bounds.w, height: bounds.y + bounds.h }
 }
