@@ -336,12 +336,31 @@ paths:
       helper (`ConfigCost` shape, `addCost`, `lessCost`,
       `hasRepairableProblem`) derives from the declared tiers, so a new
       penalty rule is one list entry, never a new slot threaded by hand.
-    - **Facet-driven rendering rides the injected-resolver pattern**
-      (a future `resolveFileFacets`, same seam class as
-      `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
-      function of the canvas snapshot by default — resolving another
-      document's live facet state into exported bytes is opt-in, exactly
-      parallel to the style opt-in above.
+    - **Facet-driven rendering rides the injected-resolver pattern.**
+      Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
+      FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam
+      class as `resolveFileCanvas`/`resolveFileImage` — synchronous,
+      optional, caller-supplied, total (a throw or `undefined` degrades to
+      the plain chrome+label rendering rather than aborting layout).
+      `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
+      string; value: string }> }`) is plain TS, not Zod — it never crosses a
+      process boundary; the caller maps its own facet data
+      (`coreFacetsSchema` and friends) into it in-process, and this package
+      learns nothing about what a facet MEANS. `composeFileFacets` is
+      checked LAST in the file-node pre-pass — after `composeFileImage` and
+      `composeFileEmbed` — so a resolved image or canvas embed always
+      outranks a facet card, and the card in turn always outranks the plain
+      label it replaces. Card text goes through `layoutMdastBlocks`
+      (`heading`+`paragraph` blocks only, never `list`/`table`, to stay out
+      of the `subtreeOffsetX` transform-boundary class); content that
+      overflows the node's padded box is truncated at whole-block
+      granularity with no "more" affordance (ponytail: that needs a
+      focusable DOM-overlay/keyboard treatment this pure-geometry package
+      cannot own — upgrade path is an editor-side overlay in a later
+      slice). No consumer passes the seam yet — export stays a pure
+      function of the canvas snapshot by default, exactly parallel to the
+      style opt-in above; wiring `apps/web` to paint a card on a real screen
+      is a separate, later increment.
 
 ## Conventions
 
