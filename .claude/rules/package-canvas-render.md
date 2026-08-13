@@ -412,6 +412,25 @@ paths:
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+- `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
+  answer to "did that rule change help overall". Four reported defects were
+  each pinned by the one canvas that exposed it, which could never say
+  whether a fix moved the failure somewhere nobody had looked. It holds one
+  invariant — no routed line runs strictly inside a node body it could have
+  gone around — strictly over the named corpus, and COUNTS violations over
+  2000 deterministic synthetic layouts, split by which search should have
+  stopped each: `own-endpoint` (invisible to `bestCandidate`, since
+  `routeEdge` drops both endpoint nodes from its obstacle list),
+  `foreign` (`bestCandidate`'s last fallback returning the shortest BLOCKED
+  candidate when none of its six is clear), `degenerate` (coincident
+  anchors). The exemption is `routeEdge`'s own: a rect STRICTLY containing
+  an anchor cannot be routed around; a rect merely touched on its border
+  can. The counts are pinned EXACTLY, not as a ceiling, so an improvement is
+  as loud as a regression — they are a debt figure whose target is three
+  zeroes, at which point the aggregate becomes the strict property. Metrics
+  live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
+  (the `reversal-count.ts` independent-oracle contract); layouts live in
+  `src/test-utils/routing-corpus.ts`.
 
 ## Common mistakes (append as review finds them)
 
