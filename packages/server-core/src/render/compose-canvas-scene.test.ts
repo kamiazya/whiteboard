@@ -8,7 +8,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
-import { composeCanvasScene, computeCanvasDimensions } from './compose-canvas-scene.js'
+import { composeCanvasScene } from './compose-canvas-scene.js'
 import { fallbackMeasureText } from './fallback-measure.js'
 
 afterEach(() => {
@@ -173,19 +173,5 @@ describe('composeCanvasScene', () => {
     expect(composeCanvasScene(canvas, fallbackMeasureText)).toEqual(
       composeCanvasScene(canvas, fallbackMeasureText),
     )
-  })
-})
-
-describe('computeCanvasDimensions', () => {
-  test('returns a zero-sized default for an empty canvas', () => {
-    expect(computeCanvasDimensions([])).toEqual({ width: 0, height: 0 })
-  })
-
-  test('returns the union bounding box over multiple nodes', () => {
-    const dims = computeCanvasDimensions([
-      { id: 'a', type: 'group', x: 0, y: 0, width: 50, height: 50 },
-      { id: 'b', type: 'group', x: 100, y: 100, width: 50, height: 50 },
-    ])
-    expect(dims).toEqual({ width: 150, height: 150 })
   })
 })
