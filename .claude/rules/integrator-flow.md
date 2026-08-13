@@ -43,4 +43,5 @@ When a preview contradicts a green test, suspect the cache before suspecting the
 ## CI flakes
 
 - A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running.
+- **A property-test failure is not a flake, however random it looks.** fast-check reports a seed; a different seed passing means the generator did not reach the input, not that the input is fine. Re-running is how a real defect gets waved through — and how it comes back to block an unrelated PR. Reproduce by passing that seed to `withDefaults({ seed })`, read the shrunk counterexample, and then either fix it or exclude the input EXPLICITLY with a comment and a task (never by pinning the seed, and never by weakening the property). One such failure this way turned out to be silent content corruption in the markdown round trip, reached from a PR that touched a different package entirely.
 - Timestamp-equality and post-teardown assertions on shared global resources (real home dir, wall clock) are the recurring flake shapes here — reviews should reject new ones.
