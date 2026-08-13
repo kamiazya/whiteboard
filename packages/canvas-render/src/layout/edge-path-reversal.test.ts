@@ -5,11 +5,11 @@
 // apart, never collinear, so nothing catches it before path-reversal.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { expect, it } from 'vitest'
-import { COST_QUANTUM } from './edge-rules.js'
 import {
   assertQuantumSeparated,
   referenceReversalCount as reversalCount,
 } from '../test-utils/reversal-count.js'
+import { COST_QUANTUM } from './edge-rules.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
