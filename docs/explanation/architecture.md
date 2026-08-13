@@ -64,8 +64,8 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `wb_node_patch` / `wb_edge_patch` / `wb_body_patch` | Patch a canvas's spatial nodes, edges, or a node's Markdown body. |
 | `wb_canvas_tidy` | Normalize a canvas's spatial layout: snap near-aligned nodes into rows/columns on the grid and separate overlaps, optionally restricted to a `scope` of node ids. Locked nodes never move. Idempotent — a second call reports no moves. |
 | `wb_facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
-| `wb_scene_render` | Render the current canvas to an SVG string from its persisted document — no browser connection required. |
-| `wb_scene_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. |
+| `wb_scene_render` | Render the current canvas to an SVG string from its persisted document — no browser connection required. The reported `width`/`height` cover everything drawn, edges included, not just the nodes' own boxes. |
+| `wb_scene_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. Entries are named by the canvas's own node ids, so anything the digest reports can be acted on directly with `wb_node_patch`; content laid out inside a node is not reported as a node of its own. |
 | `canvas_export_okf` / `wb_document_set` | Export/import a canvas as an OKF Markdown document (YAML frontmatter + Markdown body). |
 | `canvas_export_json_canvas` | Export a canvas as JSON Canvas 1.0 (with the `x-whiteboard` extension). |
 | `wb_version_save` / `wb_version_restore` / `wb_version_list` | Save and restore labeled canvas versions. `wb_version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
