@@ -18,6 +18,21 @@ import {
   zeroPenalty,
 } from './edge-rules.js'
 
+/** A zero cost tuple with one rule's slot set, built from the DECLARED tier so
+ * a deliberate reorder never rewrites an expectation. */
+const costAt = (name: string, value: number): number[] => {
+  const cost = zeroPenalty()
+  cost[tierOf(name)] = value
+  return cost
+}
+
+/** The declared slot for a rule, so a deliberate tier reorder never edits a test. */
+const tierOf = (name: string): number => {
+  const rule = PENALTY_RULES.find((r) => r.name === name)
+  if (rule === undefined) throw new Error(`no penalty rule named ${name}`)
+  return rule.tier
+}
+
 function candidateRule(name: string): Extract<PreferenceRule, { kind: 'candidates' }> {
   const rule = SIDE_PREFERENCE_RULES.find((r) => r.name === name)
   if (rule === undefined || rule.kind !== 'candidates') {
@@ -247,8 +262,8 @@ describe('PENALTY_RULES', () => {
       'overlap-and-intrusion',
       'illegibility',
       'crossings',
-      'border-tracing',
       'endpoint-body-ink',
+      'border-tracing',
       'path-reversal',
       'realized-bends',
     ])
@@ -351,20 +366,20 @@ describe('crossings', () => {
 describe('border-tracing', () => {
   const rect: Rect = { x: 0, y: 0, w: 100, h: 40 }
 
-  it('self term: a horizontal segment lying along the rect top contributes the quantized clipped overlap length to tier 3', () => {
+  it('self term: a horizontal segment lying along the rect top contributes the quantized clipped overlap length to the border-tracing tier', () => {
     const path = [
       { x: 0, y: 0 },
       { x: 100, y: 0 },
     ]
-    expect(selfPenalty(path, [], [rect])).toEqual([0, 0, 0, 100 * COST_QUANTUM, 0, 0, 0])
+    expect(selfPenalty(path, [], [rect])).toEqual(costAt('border-tracing', 100 * COST_QUANTUM))
   })
 
-  it('self term: a vertical segment lying along the rect right side contributes the quantized overlap length to tier 3', () => {
+  it('self term: a vertical segment lying along the rect right side contributes the quantized overlap length to the border-tracing tier', () => {
     const path = [
       { x: 100, y: 0 },
       { x: 100, y: 40 },
     ]
-    expect(selfPenalty(path, [], [rect])).toEqual([0, 0, 0, 40 * COST_QUANTUM, 0, 0, 0])
+    expect(selfPenalty(path, [], [rect])).toEqual(costAt('border-tracing', 40 * COST_QUANTUM))
   })
 
   it('self term: a perpendicular segment touching the border at a single point contributes 0', () => {
@@ -396,7 +411,7 @@ describe('border-tracing', () => {
       { x: -50, y: 0 },
       { x: 200, y: 0 },
     ]
-    expect(selfPenalty(path, [], [rect])[3]).toBe(100 * COST_QUANTUM)
+    expect(selfPenalty(path, [], [rect])[tierOf('border-tracing')]).toBe(100 * COST_QUANTUM)
   })
 
   it('self term: a zero-height rect is charged once, not twice, for a segment lying on it', () => {
@@ -405,7 +420,7 @@ describe('border-tracing', () => {
       { x: 0, y: 0 },
       { x: 100, y: 0 },
     ]
-    expect(selfPenalty(path, [], [flat])[3]).toBe(100 * COST_QUANTUM)
+    expect(selfPenalty(path, [], [flat])[tierOf('border-tracing')]).toBe(100 * COST_QUANTUM)
   })
 
   it('self term: fires against the path’s OWN endpoint node, unlike foreignBodies which excludes it', () => {
@@ -416,7 +431,7 @@ describe('border-tracing', () => {
       { x: 0, y: 0 },
       { x: 100, y: 0 },
     ]
-    expect(selfPenalty(path, [rect], [rect])).toEqual([0, 0, 0, 100 * COST_QUANTUM, 0, 0, 0])
+    expect(selfPenalty(path, [rect], [rect])).toEqual(costAt('border-tracing', 100 * COST_QUANTUM))
   })
 
   it('defaults nodeBorders to [] when omitted, contributing 0 (no border ink declared)', () => {
@@ -431,20 +446,24 @@ describe('border-tracing', () => {
 describe('endpoint-body-ink', () => {
   const rect: Rect = { x: 0, y: 0, w: 100, h: 40 }
 
-  it('self term: a horizontal segment strictly between the rect top and bottom contributes the quantized clipped chord length to tier 4', () => {
+  it('self term: a horizontal segment strictly between the rect top and bottom contributes the quantized clipped chord length to the endpoint-body-ink tier', () => {
     const path = [
       { x: -10, y: 20 },
       { x: 110, y: 20 },
     ]
-    expect(selfPenalty(path, [], [], [rect])).toEqual([0, 0, 0, 0, 100 * COST_QUANTUM, 0, 0])
+    expect(selfPenalty(path, [], [], [rect])).toEqual(
+      costAt('endpoint-body-ink', 100 * COST_QUANTUM),
+    )
   })
 
-  it('self term: a vertical segment strictly between the rect left and right contributes the quantized clipped chord length to tier 4', () => {
+  it('self term: a vertical segment strictly between the rect left and right contributes the quantized clipped chord length to the endpoint-body-ink tier', () => {
     const path = [
       { x: 50, y: -10 },
       { x: 50, y: 50 },
     ]
-    expect(selfPenalty(path, [], [], [rect])).toEqual([0, 0, 0, 0, 40 * COST_QUANTUM, 0, 0])
+    expect(selfPenalty(path, [], [], [rect])).toEqual(
+      costAt('endpoint-body-ink', 40 * COST_QUANTUM),
+    )
   })
 
   it('self term: a segment riding exactly on the border contributes 0 to this tier (border-tracing prices it instead, no double-charge)', () => {
@@ -453,8 +472,8 @@ describe('endpoint-body-ink', () => {
       { x: 100, y: 0 },
     ]
     const cost = selfPenalty(path, [], [rect], [rect])
-    expect(cost[4]).toBe(0)
-    expect(cost[3]).toBe(100 * COST_QUANTUM)
+    expect(cost[tierOf('endpoint-body-ink')]).toBe(0)
+    expect(cost[tierOf('border-tracing')]).toBe(100 * COST_QUANTUM)
   })
 
   it('self term: a perpendicular segment departing from a point on its own node border contributes 0', () => {
@@ -474,7 +493,9 @@ describe('endpoint-body-ink', () => {
     ]
     // outer fully contains inner: outer is excluded, so only inner (strictly
     // crossed at y=15, clipped to inner's x-range [10,30]) is priced.
-    expect(selfPenalty(path, [], [], [outer, inner])[4]).toBe(20 * COST_QUANTUM)
+    expect(selfPenalty(path, [], [], [outer, inner])[tierOf('endpoint-body-ink')]).toBe(
+      20 * COST_QUANTUM,
+    )
   })
 
   it('self term: the same geometry WITHOUT containment prices both rects', () => {
@@ -486,7 +507,7 @@ describe('endpoint-body-ink', () => {
     ]
     // Neither fully contains the other: a clips to [0,30] (30px), b clips to
     // [20,50] (30px), summed.
-    expect(selfPenalty(path, [], [], [a, b])[4]).toBe(60 * COST_QUANTUM)
+    expect(selfPenalty(path, [], [], [a, b])[tierOf('endpoint-body-ink')]).toBe(60 * COST_QUANTUM)
   })
 
   it('self term: two DISTINCT but numerically-equal endpoint rects (e.g. a self-loop, or two fully-overlapping same-size nodes) are NOT mutually excluded — this is the exact worst-case overlap the rule prices', () => {
@@ -507,7 +528,9 @@ describe('endpoint-body-ink', () => {
     // drop BOTH rects and price 0. Neither PROPERLY contains the other, so
     // both stay in the ink-priced set (chord clipped to [0,50], summed once
     // per rect since inkAlongRects iterates the rect list).
-    expect(selfPenalty(path, [], [], [rectA, rectB])[4]).toBe(2 * 50 * COST_QUANTUM)
+    expect(selfPenalty(path, [], [], [rectA, rectB])[tierOf('endpoint-body-ink')]).toBe(
+      2 * 50 * COST_QUANTUM,
+    )
   })
 
   it('self term: zero-width and zero-height endpoint rects contribute 0 (unsatisfiable strict-interior test)', () => {
@@ -517,7 +540,7 @@ describe('endpoint-body-ink', () => {
       { x: -10, y: 0 },
       { x: 110, y: 0 },
     ]
-    expect(selfPenalty(path, [], [], [flatH, flatW])[4]).toBe(0)
+    expect(selfPenalty(path, [], [], [flatH, flatW])[tierOf('endpoint-body-ink')]).toBe(0)
   })
 
   it('defaults endpointRects to [] when omitted, contributing 0 (no endpoint ink declared)', () => {

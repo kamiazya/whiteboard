@@ -24,6 +24,13 @@ import {
   selfPenalty,
 } from './edge-rules.js'
 
+/** The declared slot for a rule, so a deliberate tier reorder never edits a test. */
+const tierOf = (name: string): number => {
+  const rule = PENALTY_RULES.find((r) => r.name === name)
+  if (rule === undefined) throw new Error(`no penalty rule named ${name}`)
+  return rule.tier
+}
+
 const rectArb: fc.Arbitrary<Rect> = fc.record({
   x: fc.integer({ min: -100, max: 100 }),
   y: fc.integer({ min: -100, max: 100 }),
@@ -279,9 +286,9 @@ describe('border-tracing: dense-on-borders property (mutation-checked)', () => {
     ({ path, nodeBorders }) => {
       const cost1 = selfPenalty(path, [], nodeBorders)
       const cost2 = selfPenalty(path, [], nodeBorders)
-      expect(cost1[3]).toBe(cost2[3])
-      expect(Number.isInteger(cost1[3])).toBe(true)
-      expect(cost1[3]).toBeGreaterThanOrEqual(0)
+      expect(cost1[tierOf('border-tracing')]).toBe(cost2[tierOf('border-tracing')])
+      expect(Number.isInteger(cost1[tierOf('border-tracing')])).toBe(true)
+      expect(cost1[tierOf('border-tracing')]).toBeGreaterThanOrEqual(0)
     },
   )
 
@@ -289,7 +296,9 @@ describe('border-tracing: dense-on-borders property (mutation-checked)', () => {
     'is invariant under permutation of the node-border array (a sum must not depend on order)',
     ({ path, nodeBorders }) => {
       const shuffled = [...nodeBorders].reverse()
-      expect(selfPenalty(path, [], nodeBorders)[3]).toBe(selfPenalty(path, [], shuffled)[3])
+      expect(selfPenalty(path, [], nodeBorders)[tierOf('border-tracing')]).toBe(
+        selfPenalty(path, [], shuffled)[tierOf('border-tracing')],
+      )
     },
   )
 
@@ -301,7 +310,9 @@ describe('border-tracing: dense-on-borders property (mutation-checked)', () => {
   fcTest.prop([tracingScenarioArb], withDefaults())(
     'agrees with an independently-computed collinear overlap length',
     ({ path, nodeBorders }) => {
-      expect(selfPenalty(path, [], nodeBorders)[3]).toBe(referenceBorderTrace(path, nodeBorders))
+      expect(selfPenalty(path, [], nodeBorders)[tierOf('border-tracing')]).toBe(
+        referenceBorderTrace(path, nodeBorders),
+      )
     },
   )
 })
@@ -401,9 +412,9 @@ describe('endpoint-body-ink: dense-interior property (mutation-checked)', () => 
     ({ path, endpointRects }) => {
       const cost1 = selfPenalty(path, [], [], endpointRects)
       const cost2 = selfPenalty(path, [], [], endpointRects)
-      expect(cost1[4]).toBe(cost2[4])
-      expect(Number.isInteger(cost1[4])).toBe(true)
-      expect(cost1[4]).toBeGreaterThanOrEqual(0)
+      expect(cost1[tierOf('endpoint-body-ink')]).toBe(cost2[tierOf('endpoint-body-ink')])
+      expect(Number.isInteger(cost1[tierOf('endpoint-body-ink')])).toBe(true)
+      expect(cost1[tierOf('endpoint-body-ink')]).toBeGreaterThanOrEqual(0)
     },
   )
 
@@ -411,8 +422,8 @@ describe('endpoint-body-ink: dense-interior property (mutation-checked)', () => 
     'is invariant under permutation of the endpoint-rect array (a sum must not depend on order)',
     ({ path, endpointRects }) => {
       const shuffled = [...endpointRects].reverse()
-      expect(selfPenalty(path, [], [], endpointRects)[4]).toBe(
-        selfPenalty(path, [], [], shuffled)[4],
+      expect(selfPenalty(path, [], [], endpointRects)[tierOf('endpoint-body-ink')]).toBe(
+        selfPenalty(path, [], [], shuffled)[tierOf('endpoint-body-ink')],
       )
     },
   )
@@ -426,7 +437,7 @@ describe('endpoint-body-ink: dense-interior property (mutation-checked)', () => 
   fcTest.prop([endpointBodyInkScenarioArb], withDefaults())(
     'agrees with an independently-computed strictly-interior chord length',
     ({ path, endpointRects }) => {
-      expect(selfPenalty(path, [], [], endpointRects)[4]).toBe(
+      expect(selfPenalty(path, [], [], endpointRects)[tierOf('endpoint-body-ink')]).toBe(
         referenceEndpointBodyInk(path, endpointRects),
       )
     },

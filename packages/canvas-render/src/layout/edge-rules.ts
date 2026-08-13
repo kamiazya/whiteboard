@@ -591,7 +591,7 @@ const crossings: PenaltyRule = {
  */
 const borderTracing: PenaltyRule = {
   name: 'border-tracing',
-  tier: 3,
+  tier: 4,
   pairTerm: () => 0,
   selfTerm: (path, _foreignBodies, nodeBorders) =>
     inkAlongRects(path, nodeBorders, (fixed, near, far) => fixed === near || fixed === far),
@@ -637,7 +637,7 @@ const borderTracing: PenaltyRule = {
  */
 const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
-  tier: 4,
+  tier: 3,
   pairTerm: () => 0,
   selfTerm: (path, _foreignBodies, _nodeBorders, endpointRects) =>
     inkAlongRects(
@@ -749,8 +749,8 @@ export const PENALTY_RULES: readonly PenaltyRule[] = [
   overlapAndIntrusion,
   illegibility,
   crossings,
-  borderTracing,
   endpointBodyInk,
+  borderTracing,
   pathReversal,
   realizedBends,
 ]
