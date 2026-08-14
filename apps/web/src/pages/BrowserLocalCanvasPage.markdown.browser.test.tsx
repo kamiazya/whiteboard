@@ -469,7 +469,14 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       { timeout: 10_000 },
     )
     editable.focus()
-    await userEvent.keyboard(`![[[[canvas:${TARGET_ID}]]`)
+    // Trailing keystrokes AFTER the reference completes are the regression
+    // surface: each one re-runs the embed-content effect while the load is
+    // in flight, and a per-effect cancellation dropped the result with
+    // nothing left to re-fire it (the stuck-placeholder bug).
+    // Blank line after the reference: a single newline is a markdown SOFT
+    // break, which would fold the trailing text into the embed's paragraph
+    // and turn it into an INLINE run instead of a block embed.
+    await userEvent.keyboard(`![[[[canvas:${TARGET_ID}]]{Enter}{Enter}and more typing`)
 
     // The preview loads the target body asynchronously and lays it out
     // inline through the render pipeline's embed seam.
