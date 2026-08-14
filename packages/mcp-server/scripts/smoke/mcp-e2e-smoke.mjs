@@ -125,6 +125,7 @@ const EXPECTED_TOOLS = [
   'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
+  'wb_edge_add',
   'wb_edge_lock',
   'wb_edge_patch',
   'wb_facet_set',
@@ -223,6 +224,35 @@ async function main() {
     'on an id that is already taken',
   )
 
+  // wb_edge_add: the only MCP path that connects two nodes. Needs a second
+  // node, so it also proves wb_node_add adds rather than replaces.
+  await callTool('wb_node_add', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    node: { id: 'target', type: 'text', x: 300, y: 0, width: 200, height: 100, text: 'target' },
+  })
+  const linked = await callTool('wb_edge_add', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    edge: { id: 'link', fromNode: 'lockable', toNode: 'target' },
+  })
+  if (linked.edge?.id !== 'link') {
+    throw new Error(`wb_edge_add returned unexpected shape: ${JSON.stringify(linked)}`)
+  }
+  console.log('[e2e] wb_edge_add → lockable→target')
+
+  // spatialCanvasSchema owns endpoint existence, so a dangling edge is
+  // refused by the same gate a retarget goes through.
+  await expectToolError(
+    'wb_edge_add',
+    {
+      workspaceId: WORKSPACE_ID,
+      canvasId,
+      edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' },
+    },
+    'with an endpoint the canvas does not have',
+  )
+
   const nodeLocked = await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
@@ -293,23 +323,44 @@ async function main() {
   }
   console.log('[e2e] wb_scene_digest → digest naming the seeded node by document id')
 
-  // wb_canvas_tidy: the canvas holds a single node here, so the contract answer
-  // is "nothing to tidy" — the call still runs the full pipeline (input
-  // parse → doc load → tidy → structuredContent vs outputSchema), which is
-  // the drift guard this smoke exists for. The geometry itself is covered by
-  // canvas-render's unit/property tests.
+  // wb_canvas_tidy: what this asserts is the full pipeline (input parse →
+  // doc load → tidy → structuredContent vs outputSchema), which is the drift
+  // guard this smoke exists for. How far anything moves is geometry, covered
+  // by canvas-render's unit/property tests — so this checks the shape of
+  // every entry rather than a move count, which would only be restating the
+  // layout the nodes above happen to have.
   const tidied = await callTool('wb_canvas_tidy', {
     workspaceId: WORKSPACE_ID,
     canvasId,
   })
-  if (tidied.canvasId !== canvasId || !Array.isArray(tidied.moved) || tidied.moved.length !== 0) {
+  if (
+    tidied.canvasId !== canvasId ||
+    !Array.isArray(tidied.moved) ||
+    tidied.moved.some(
+      (m) => typeof m.id !== 'string' || typeof m.x !== 'number' || typeof m.y !== 'number',
+    )
+  ) {
     throw new Error(`wb_canvas_tidy returned unexpected shape: ${JSON.stringify(tidied)}`)
   }
-  console.log('[e2e] wb_canvas_tidy → single-node canvas reports no moves')
+  console.log(`[e2e] wb_canvas_tidy → ${tidied.moved.length} move(s), each well-formed`)
 
-  // wb_edge_lock reaches its ghost-id guard only: no MCP tool creates an edge
-  // (edges come from the editor), so this is the whole of its reachable
-  // surface here. Its success path is covered by edge-lock.test.ts.
+  const edgeLocked = await callTool('wb_edge_lock', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    edgeId: 'link',
+    locked: true,
+  })
+  if (edgeLocked.edgeId !== 'link' || edgeLocked.locked !== true) {
+    throw new Error(`wb_edge_lock returned unexpected shape: ${JSON.stringify(edgeLocked)}`)
+  }
+  console.log('[e2e] wb_edge_lock → link locked')
+
+  await expectToolError(
+    'wb_edge_patch',
+    { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'link', patch: { label: 'nope' } },
+    'on a locked edge',
+  )
+
   await expectToolError(
     'wb_edge_lock',
     { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },

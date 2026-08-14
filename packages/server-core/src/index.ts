@@ -60,6 +60,8 @@ export {
   canvasRenderSvgOutputSchema,
   createCanvasRenderSvgTool,
 } from './tools/canvas-render-svg.js'
+export type { EdgeAddInput, EdgeAddOutput } from './tools/edge-add.js'
+export { createEdgeAddTool, edgeAddInputSchema, edgeAddOutputSchema } from './tools/edge-add.js'
 export type { EdgeLockInput, EdgeLockOutput } from './tools/edge-lock.js'
 export {
   createEdgeLockTool,
