@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
@@ -194,7 +194,16 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   })
 
   it('hands the registry the resolved-absolute dir even when --data-dir is relative', async () => {
-    const rel = `./tmp-daemon-run-rel-${Date.now()}`
+    // A relative --data-dir resolves against cwd, and runDaemonRun creates it.
+    // Pointing at `./something` would therefore plant a directory in whatever
+    // cwd the suite runs from — the repo root — and because the daemon never
+    // writes into it, the empty dir is invisible to `git status` and just
+    // accumulates. Aim the relative path at a temp dir instead: still
+    // relative, so it still exercises the resolve(), but nothing lands here.
+    const absolute = join(tmpdir(), `daemon-run-rel-${Date.now()}`)
+    const rel = relative(process.cwd(), absolute)
+    expect(isAbsolute(rel)).toBe(false)
+    expect(resolve(rel).startsWith(process.cwd())).toBe(false)
     const outcome = await runDaemonRun({
       host: '127.0.0.1',
       port: 3099,
