@@ -164,4 +164,43 @@ describe('findFreeSpot', () => {
     expect(Number.isFinite(spot.x)).toBe(true)
     expect(Number.isFinite(spot.y)).toBe(true)
   })
+  it('stays inside the visible area while it has room, so creating never pans the canvas', () => {
+    const size = { width: 200, height: 100 }
+    // A column of notes filling the cascade's diagonal path.
+    const occupied = Array.from({ length: 13 }, (_, i) => ({
+      x: 400 + i * 24 - 100,
+      y: 300 + i * 24 - 50,
+      width: 200,
+      height: 100,
+    }))
+    const visible = { x: 0, y: 0, width: 800, height: 600 }
+    const spot = findFreeSpot({ x: 400, y: 300 }, size, occupied, visible)
+    // The unbounded cascade would have walked to (712,612) — its box runs
+    // past the visible bottom, so the viewport would have to chase it.
+    expect(spot.x - size.width / 2).toBeGreaterThanOrEqual(visible.x)
+    expect(spot.y - size.height / 2).toBeGreaterThanOrEqual(visible.y)
+    expect(spot.x + size.width / 2).toBeLessThanOrEqual(visible.x + visible.width)
+    expect(spot.y + size.height / 2).toBeLessThanOrEqual(visible.y + visible.height)
+  })
+
+  it('uses a straight column when the visible area is too narrow for the diagonal', () => {
+    const size = { width: 200, height: 100 }
+    // Phone-shaped: one note wide, many notes tall.
+    const visible = { x: 0, y: 0, width: 240, height: 700 }
+    const occupied = [{ x: 20, y: 300, width: 200, height: 100 }]
+    const spot = findFreeSpot({ x: 120, y: 350 }, size, occupied, visible)
+    expect(spot.x - size.width / 2).toBeGreaterThanOrEqual(visible.x)
+    expect(spot.x + size.width / 2).toBeLessThanOrEqual(visible.x + visible.width)
+    expect(spot.y + size.height / 2).toBeLessThanOrEqual(visible.y + visible.height)
+  })
+
+  it('falls back to the plain cascade once the visible area is genuinely full', () => {
+    const size = { width: 200, height: 100 }
+    // Wall-to-wall: nothing inside `visible` can hold another box.
+    const occupied = [{ x: -1000, y: -1000, width: 4000, height: 4000 }]
+    const visible = { x: 0, y: 0, width: 800, height: 600 }
+    const withVisible = findFreeSpot({ x: 400, y: 300 }, size, occupied, visible)
+    const without = findFreeSpot({ x: 400, y: 300 }, size, occupied)
+    expect(withVisible).toEqual(without)
+  })
 })

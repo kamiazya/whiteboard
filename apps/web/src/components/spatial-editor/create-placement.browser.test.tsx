@@ -142,3 +142,56 @@ it('tapping a menu entry keeps placing it at the viewport centre', () => {
   expect(centre.x).toBeCloseTo(400, 0)
   expect(centre.y).toBeCloseTo(300, 0)
 })
+
+it('creating repeatedly does not move the viewport while the screen has room', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const transform = () =>
+    (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
+  const before = transform()
+
+  // Four is well within what an 800x600 view holds at 200x100 per node —
+  // enough to prove the point without making this the suite's heaviest file.
+  for (let i = 0; i < 4; i++) {
+    openAddMenu(container)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+  }
+
+  // Making something is not a request to go somewhere: the canvas under the
+  // hand must stay put while there is still room in view to place into.
+  expect(transform()).toBe(before)
+})
+
+it('nothing is ever parked under the dock', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const dock = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+
+  for (let i = 0; i < 5; i++) {
+    openAddMenu(container)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+  }
+
+  const rootRect = root.getBoundingClientRect()
+  const dockTop = dock.getBoundingClientRect().top - rootRect.top
+  const zoom = Number(/scale\(([\d.]+)\)/.exec(transformOfRoot(container))?.[1] ?? 1)
+  const offset = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(transformOfRoot(container))
+  const panX = Number(offset?.[1] ?? 0)
+  const panY = Number(offset?.[2] ?? 0)
+  for (const node of latest.canvas.nodes) {
+    const screenBottom = (node.y + node.height) * zoom + panY
+    const screenTop = node.y * zoom + panY
+    // A node whose whole body is above the dock strip, or scrolled off the
+    // top, is fine — the failure being pinned is a node sitting IN the strip.
+    if (screenTop > rootRect.height) continue
+    expect({ id: node.id, screenBottom }).toEqual({ id: node.id, screenBottom: screenBottom })
+    expect(screenBottom).toBeLessThanOrEqual(dockTop)
+  }
+  expect(panX).toBeDefined()
+})
+
+function transformOfRoot(container: HTMLElement): string {
+  return (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style
+    .transform
+}

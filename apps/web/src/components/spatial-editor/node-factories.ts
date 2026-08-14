@@ -120,8 +120,9 @@ export function resolveSpawnPoint(
   preferred: Point,
   size: Size,
   occupied: readonly Box[],
+  visible?: Box,
 ): Point {
-  return anchor ?? findFreeSpot(preferred, size, occupied)
+  return anchor ?? findFreeSpot(preferred, size, occupied, visible)
 }
 
 export interface GroupEnclosure {

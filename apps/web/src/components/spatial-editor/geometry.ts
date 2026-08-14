@@ -120,6 +120,7 @@ export function findFreeSpot(
   preferred: Point,
   size: { readonly width: number; readonly height: number },
   occupied: readonly Box[],
+  visible?: Box,
 ): Point {
   const candidateAt = (step: number): Point => ({
     x: preferred.x + step * CASCADE_STEP_PX,
@@ -131,10 +132,51 @@ export function findFreeSpot(
     width: size.width,
     height: size.height,
   })
+  const isFree = (box: Box) => !occupied.some((other) => boxesIntersect(box, other))
+  const insideVisible = (box: Box) =>
+    visible === undefined ||
+    (box.x >= visible.x &&
+      box.y >= visible.y &&
+      box.x + box.width <= visible.x + visible.width &&
+      box.y + box.height <= visible.y + visible.height)
+
+  // First pass: a spot that is both free AND already on screen. Walking the
+  // cascade off the edge is what makes creation pan the canvas — the node
+  // has to be chased to a place nobody asked to go.
+  //
+  // Down-right first (the familiar cascade), then the other three diagonals,
+  // because one direction runs out of screen quickly on a phone: at 390px a
+  // 200px-wide note leaves the viewport after two steps, and every creation
+  // after that would pan.
+  // Diagonals first (the familiar cascade look), then the orthogonals: a
+  // phone is far taller than it is wide, so once the diagonals hit the side
+  // edge a straight column down is the only shape left that still fits.
+  const DIRECTIONS = [
+    { x: 1, y: 1 },
+    { x: -1, y: 1 },
+    { x: -1, y: -1 },
+    { x: 1, y: -1 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+  ] as const
+  for (const dir of DIRECTIONS) {
+    for (let step = 0; step < MAX_CASCADE_STEPS; step += 1) {
+      const candidate = {
+        x: preferred.x + dir.x * step * CASCADE_STEP_PX,
+        y: preferred.y + dir.y * step * CASCADE_STEP_PX,
+      }
+      const box = boxAt(candidate)
+      if (isFree(box) && insideVisible(box)) return candidate
+    }
+  }
+  // The visible area is genuinely full: fall back to the unbounded cascade,
+  // which will land off-screen and be panned to — the correct outcome once
+  // there is nowhere left to put it.
   for (let step = 0; step < MAX_CASCADE_STEPS; step += 1) {
     const candidate = candidateAt(step)
-    const box = boxAt(candidate)
-    if (!occupied.some((other) => boxesIntersect(box, other))) return candidate
+    if (isFree(boxAt(candidate))) return candidate
   }
   return candidateAt(MAX_CASCADE_STEPS)
 }

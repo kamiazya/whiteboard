@@ -182,25 +182,56 @@ export function frameViewport(
  * "already visible" (nothing to pan) or `containerSize: null` (root not yet
  * measured, nothing to pan against).
  */
+/** Breathing room left between a revealed box and the edge that hid it. */
+export const PAN_MARGIN_PX = 12
+
+/**
+ * Chrome painted OVER the canvas, which the viewport must not treat as
+ * visible space. Today that is the bottom dock; a node parked underneath it
+ * is as invisible as one past the edge, and the creation cascade walks
+ * straight into that strip.
+ */
+export interface ViewportOcclusion {
+  readonly bottom: number
+}
+
+/** How far one axis must move so [start,end] lands inside [min,max]. */
+function shiftToReveal(start: number, end: number, min: number, max: number): number {
+  // Too big to reveal whole — center it, because every pan leaves some of it
+  // off-screen and the middle is the least arbitrary choice.
+  if (end - start > max - min) return (start + end) / 2 - (min + max) / 2
+  if (start < min + PAN_MARGIN_PX) return start - (min + PAN_MARGIN_PX)
+  if (end > max - PAN_MARGIN_PX) return end - (max - PAN_MARGIN_PX)
+  return 0
+}
+
+/**
+ * Moves the viewport the LEAST it can to reveal `box`, or leaves it alone.
+ *
+ * Not a re-center: creating something is not a request to go somewhere. A
+ * center-on-create slides the whole board by hundreds of pixels every time a
+ * note is added, so the thing just made appears in the middle while
+ * everything already on the canvas walks off under the hand of the person
+ * who only added one node.
+ */
 export function panToShowTarget(
   box: BBoxLike,
   viewport: Viewport,
   containerSize: ContainerSize | null,
+  occlusion?: ViewportOcclusion,
 ): Viewport | undefined {
   if (containerSize === null) return undefined
   const topLeft = canvasToScreen({ x: box.x, y: box.y }, viewport)
   const bottomRight = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, viewport)
+  const visibleBottom = containerSize.height - (occlusion?.bottom ?? 0)
   const fits =
     topLeft.x >= 0 &&
     topLeft.y >= 0 &&
     bottomRight.x <= containerSize.width &&
-    bottomRight.y <= containerSize.height
+    bottomRight.y <= visibleBottom
   if (fits) return undefined
-  const centerX = box.x + box.width / 2
-  const centerY = box.y + box.height / 2
-  return {
-    ...viewport,
-    x: centerX - containerSize.width / 2 / viewport.zoom,
-    y: centerY - containerSize.height / 2 / viewport.zoom,
-  }
+  const dx = shiftToReveal(topLeft.x, bottomRight.x, 0, containerSize.width)
+  const dy = shiftToReveal(topLeft.y, bottomRight.y, 0, visibleBottom)
+  // The shifts are screen pixels; the viewport origin is canvas units.
+  return { ...viewport, x: viewport.x + dx / viewport.zoom, y: viewport.y + dy / viewport.zoom }
 }

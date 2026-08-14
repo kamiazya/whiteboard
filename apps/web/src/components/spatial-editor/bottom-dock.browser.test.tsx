@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import '../../index.css'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { SpatialEditor } from './SpatialEditor.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 
 afterEach(cleanup)
 
@@ -77,6 +78,20 @@ it('the dock is the same in every mode, and still fits a phone width in one row'
     [...palette.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)),
   )
   expect(tops.size).toBe(1)
+})
+
+it('DOCK_OCCLUSION_PX still covers what the dock actually paints over', () => {
+  const { container } = renderAt(375)
+  const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+  const host = container.firstElementChild as HTMLElement
+
+  // The viewport subtracts this constant instead of measuring, so this is
+  // the only thing standing between a class change on the dock and nodes
+  // quietly parking underneath it again.
+  const covered = host.getBoundingClientRect().bottom - palette.getBoundingClientRect().top
+  expect(covered).toBeLessThanOrEqual(DOCK_OCCLUSION_PX)
+  // And not wildly generous: a too-large inset wastes canvas on every pan.
+  expect(covered).toBeGreaterThan(DOCK_OCCLUSION_PX - 24)
 })
 
 it('creation entries live in the + menu, which opens upward inside the viewport', () => {

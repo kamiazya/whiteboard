@@ -83,6 +83,16 @@ interface ToolPaletteProps {
   readonly onZoomToFit: () => void
 }
 
+/**
+ * Vertical strip of the canvas this dock covers: its own height plus the
+ * `bottom-3` offset, doubled so a revealed node clears it rather than
+ * touching it. The viewport subtracts this from the visible area — see
+ * ViewportOcclusion. Pinned against the real rendered height by
+ * bottom-dock.browser.test.tsx, which is what stops it drifting when the
+ * dock's classes change.
+ */
+export const DOCK_OCCLUSION_PX = 70
+
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground`
 
 interface AddMenuEntry {
