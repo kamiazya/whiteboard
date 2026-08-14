@@ -26,6 +26,12 @@ export const createCanvasInputSchema = z
       'What the document is. `markdown` serialises as OKF, `spatial` as JSON Canvas. Required: the format follows from the document rather than from a read parameter, so a document created without one cannot be read back.',
     ),
     parentId: treeIdSchema.optional(),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        'What a human reads. Free text, unlike `segment`, which is a slug and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the slug as a title.',
+      ),
     // Workspaces are never materialized implicitly: a typo'd or hallucinated
     // workspaceId must fail loudly instead of silently writing data into a
     // workspace nobody asked for. Creating a genuinely new workspace is an
@@ -56,6 +62,10 @@ const canvasDetailSchema = z
     canvasId: canvasIdSchema,
     segment: z.string(),
     alias: z.string(),
+    // Absent rather than defaulted to the segment: a reader that wants that
+    // fallback can choose it, and a listing that invents one reads as if
+    // somebody typed the slug as the title.
+    name: z.string().optional(),
   })
   .strict()
 

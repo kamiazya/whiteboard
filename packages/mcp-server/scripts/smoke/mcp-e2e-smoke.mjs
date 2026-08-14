@@ -191,6 +191,25 @@ async function main() {
   const canvasId = created.canvasId
   console.log(`[e2e] wb_document_create → ${canvasId}`)
 
+  // A document's name is the workspace's, not its content's (ADR-0009), so
+  // it round-trips through create -> list without any document read.
+  const named = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    segment: 'e2e-named',
+    kind: 'markdown',
+    name: 'リリース計画 2026 / v2',
+  })
+  const namedList = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  const namedRow = namedList.canvases.find((c) => c.canvasId === named.canvasId)
+  if (namedRow?.name !== 'リリース計画 2026 / v2') {
+    throw new Error(`wb_document_list lost the document name: ${JSON.stringify(namedRow)}`)
+  }
+  const unnamedRow = namedList.canvases.find((c) => c.canvasId === canvasId)
+  if (unnamedRow === undefined || 'name' in unnamedRow) {
+    throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
+  }
+  console.log('[e2e] wb_document_create/list → name round-trips, unnamed stays unnamed')
+
   // wb_facet_set: seed extension-facet state so wb_version_save has content.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
