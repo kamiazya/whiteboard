@@ -24,10 +24,21 @@ describe('compareDocumentPaths', () => {
     .array(fc.stringMatching(/^[a-z0-9-]{1,3}$/), { minLength: 1, maxLength: 3 })
     .map((segments) => segments.join('/'))
 
+  // Pinned counterexample (CI seed 691127220): a TIE. `toBe` is Object.is,
+  // and Object.is(+0, -0) is false — so asserting `sign(f(a,b))` equals
+  // `-sign(f(b,a))` fails on any pair the comparator ties, purely from the
+  // negation of zero. `===` (which treats ±0 as equal) states the actual
+  // antisymmetry law; the comparator was never wrong.
+  it('ties are antisymmetric too (equal paths compare to 0 both ways)', () => {
+    expect(compareDocumentPaths('a', 'a')).toBe(0)
+    const forward = Math.sign(compareDocumentPaths('a/b', 'a/b'))
+    expect(forward === -forward).toBe(true)
+  })
+
   fcTest.prop([pathArbitrary, pathArbitrary])('is antisymmetric', (left, right) => {
-    expect(Math.sign(compareDocumentPaths(left, right))).toBe(
-      -Math.sign(compareDocumentPaths(right, left)),
-    )
+    const forward = Math.sign(compareDocumentPaths(left, right))
+    const backward = Math.sign(compareDocumentPaths(right, left))
+    expect(forward === -backward).toBe(true)
   })
 
   fcTest.prop([pathArbitrary, pathArbitrary, pathArbitrary])(
