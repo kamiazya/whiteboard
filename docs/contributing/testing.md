@@ -343,7 +343,7 @@ Which gate enforces each hosted-app security property (entry points for `securit
 
 ## Quality Gates
 
-Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates). This section is the canonical gate matrix.
+Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#pull-request-checklist). This section is the canonical gate matrix.
 
 ```bash
 pnpm lint           # Biome — must be green before review
