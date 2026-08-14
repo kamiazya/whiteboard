@@ -8,9 +8,9 @@ describe('TOKENS', () => {
     }
   })
 
-  it('has exactly the three port interface names as keys', () => {
+  it('has exactly the port interface names as keys', () => {
     expect(Object.keys(TOKENS).sort()).toEqual(
-      ['BlobStore', 'CanvasDocStore', 'PresenceChannel'].sort(),
+      ['BlobStore', 'CanvasDocStore', 'DocumentIndex', 'PresenceChannel'].sort(),
     )
   })
 

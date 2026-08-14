@@ -1,11 +1,15 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { BlockList, isIP } from 'node:net'
+import { DOCUMENT_PATH_SEGMENT_PATTERN } from '@kamiazya/whiteboard-canvas-model'
 import {
   isExternalUrlPolicyError,
   validateBrowserExternalUrl,
 } from '../shared/external-url-policy.js'
 
-const SAFE_SLUG_SEGMENT = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
+// The rule itself lives in canvas-model so the shared layer and this
+// validator cannot drift apart; what stays here is only how a rejection is
+// explained, which the schema's single message cannot do per cause.
+const SAFE_SLUG_SEGMENT = DOCUMENT_PATH_SEGMENT_PATTERN
 const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
 const SAFE_BRANCH_NAME = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
