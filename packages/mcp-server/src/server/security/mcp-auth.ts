@@ -1,4 +1,4 @@
-import { isAuthorized } from '../routes/auth.js'
+import { isAuthorized } from './bearer-token.js'
 import { requiresMcpHttpAuth } from './mcp-http.js'
 
 export interface McpProtectedResourceMetadataConfig {

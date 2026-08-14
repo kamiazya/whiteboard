@@ -42,8 +42,8 @@
 // route-level scope contract.
 
 import type { MiddlewareHandler } from 'hono'
-import { parseBearerAuthorizationHeader } from '../routes/auth.js'
 import type { AuthAuthorizeInput, AuthDecision, AuthScope } from './auth-strategy.js'
+import { parseBearerAuthorizationHeader } from './bearer-token.js'
 
 type OAuthResourceTokenValidationFailureReason =
   | 'missing'

@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
-import { exemptedBoundaryViolationKinds } from './architecture-map.js'
+import { exemptedBoundaryViolationKinds, KNOWN_IMPORT_CYCLES } from './architecture-map.js'
+import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
 
@@ -32,19 +33,38 @@ const SHARED_LAYER_PACKAGES = [
  */
 const COMPOSITION_ROOTS = ['apps/web', 'packages/mcp-server']
 
-function listTsFiles(dir: string): string[] {
+// `extensions` defaults to `.ts` only, so the existing boundary/direction/
+// allowed-deps scans below keep collecting exactly what they always did; the
+// cycle scan further down opts into `.tsx` explicitly instead of widening
+// this default for everyone.
+function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
-      files.push(...listTsFiles(full))
-    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
-      files.push(full)
+      files.push(...listTsFiles(full, extensions))
+      continue
     }
+    const ext = extensions.find((candidate) => entry.name.endsWith(candidate))
+    if (ext === undefined || entry.name.endsWith(`.test${ext}`)) continue
+    files.push(full)
   }
   return files
 }
+
+/**
+ * Scope of the circular-value-import check, deliberately narrower than
+ * "the whole repo": `packages/mcp-server/src` + the six shared-layer
+ * packages + `canvas-viewer/src`. `apps/web/src` is excluded — a concurrent
+ * session owns files under it, and a value cycle it introduces mid-flight
+ * would turn this check red for a reason outside this lane's scope. It is
+ * a safe exclusion today (verified cycle-free), and the follow-up is a
+ * pure inclusion, not a cleanup.
+ */
+const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server'].map((packageDir) =>
+  join(REPO_ROOT, packageDir, 'src'),
+)
 
 describe('composition-root dependency direction', () => {
   for (const packageDir of COMPOSITION_ROOTS) {
@@ -98,6 +118,32 @@ describe('shared-layer boundary lint (real source coverage)', () => {
   }
 })
 
+describe('circular value-import check (real source coverage)', () => {
+  const files = CYCLE_SCAN_DIRS.flatMap((dir) =>
+    listTsFiles(dir, ['.ts', '.tsx']).map((path) => ({
+      path: relative(REPO_ROOT, path),
+      text: readFileSync(path, 'utf-8'),
+    })),
+  )
+  const cycles = findImportCycles(buildValueImportGraph(files))
+  const knownKeys = new Set(KNOWN_IMPORT_CYCLES.map((group) => [...group].sort().join('|')))
+  const foundKeys = new Set(cycles.map((group) => group.join('|')))
+
+  it('reports no value-import cycle outside KNOWN_IMPORT_CYCLES', () => {
+    const unlisted = cycles.filter((group) => !knownKeys.has(group.join('|')))
+    expect(unlisted, JSON.stringify(unlisted, null, 2)).toHaveLength(0)
+  })
+
+  // The allowlist is bounded above by reality on both sides: this catches a
+  // stale entry (renamed/fixed file, no longer detected) so it cannot
+  // silently keep exempting nothing, same as the assertion above catches a
+  // new cycle appearing.
+  it('every KNOWN_IMPORT_CYCLES entry is still an actually-detected cycle', () => {
+    const stale = [...knownKeys].filter((key) => !foundKeys.has(key))
+    expect(stale, JSON.stringify(stale)).toHaveLength(0)
+  })
+})
+
 describe('architecture-map.md doc sync', () => {
   const doc = readFileSync(ARCHITECTURE_MAP_DOC, 'utf-8')
 
@@ -120,5 +166,9 @@ describe('architecture-map.md doc sync', () => {
     const missing = COMPOSITION_ROOTS.filter((packageDir) => !doc.includes(packageDir))
     expect(missing).toHaveLength(0)
     expect(doc).toContain('web-app-boundary.test.ts')
+  })
+
+  it('names the circular-value-import enforcer', () => {
+    expect(doc).toContain('cycle-check.ts')
   })
 })

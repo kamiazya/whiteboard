@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
+import { isAuthorized } from '../security/bearer-token.js'
 import { listCanvases, listWorkspaces, loadCanvas } from '../store/canvas-store.js'
 import { countAliveNodes, countLegacyTombstones } from '../store/count-alive-nodes.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
-import { isAuthorized } from './auth.js'
 
 type CanvasInfo = {
   slug: string

@@ -118,6 +118,42 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   },
 }
 
+/**
+ * Cycles `cycle-check.ts`'s value-import graph detects today that are NOT
+ * fixed yet — a shrinking allowlist in the same shape as
+ * `exemptBoundaryViolationKinds` above: a group leaving this list is
+ * progress, a group staying stale (no longer an actual cycle) is caught by
+ * `repo-coverage.test.ts`'s allowlist-hygiene assertion. Each group is the
+ * SORTED list of file paths (relative to repo root) in the strongly-
+ * connected component, matching `findImportCycles`'s output shape exactly —
+ * that's what makes a path-keyed lookup viable.
+ *
+ * Both entries below are closed by a deliberate `await import()`, not a
+ * static edge both ways: the dynamic side only evaluates at call time,
+ * after both modules have already finished loading, so neither carries the
+ * module-eval TDZ risk a static-both-ways cycle (like the auth one this
+ * check was added to catch) does. The coupling is still real — untangling
+ * either is its own lane, not this one's.
+ */
+export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
+  // doc-cache.ts imports canvas-store.ts statically; canvas-store.ts closes
+  // the loop with `await import('./doc-cache.js')` at three eviction call
+  // sites — resolved at call time, so no module-eval TDZ risk.
+  [
+    'packages/mcp-server/src/server/store/canvas-store.ts',
+    'packages/mcp-server/src/server/store/doc-cache.ts',
+  ],
+  // ws.ts imports canvas.ts statically (setBroadcastFn); canvas.ts and its
+  // live-doc.ts/restore.ts routers close the loop with `await import('../ws.js')` /
+  // `await import('./ws.js')` — resolved at call time, so no module-eval TDZ risk.
+  [
+    'packages/mcp-server/src/server/routes/canvas.ts',
+    'packages/mcp-server/src/server/routes/canvas/live-doc.ts',
+    'packages/mcp-server/src/server/routes/canvas/restore.ts',
+    'packages/mcp-server/src/server/routes/ws.ts',
+  ],
+]
+
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []
 }
