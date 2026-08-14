@@ -26,7 +26,7 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     const { result } = renderHook(() =>
@@ -42,8 +42,8 @@ describe('useDaemonCanvasController', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'first', updatedAt: '2026-01-01', kind: 'spatial' },
-        { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { slug: 'first', id: 'id-first', updatedAt: '2026-01-01', kind: 'spatial' },
+        { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
 
@@ -77,7 +77,7 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w-explicit' }, { workspaceId: 'w-other' }],
     })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'explicit', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ slug: 'explicit', id: 'id-explicit', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     const { result } = renderHook(() =>
@@ -104,7 +104,7 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     const { result } = renderHook(() =>
@@ -121,7 +121,9 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -132,7 +134,9 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.slug).toBe('w1-canvas')
 
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
+      ],
     })
 
     await act(async () => {
@@ -143,7 +147,7 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.workspaceId).toBe('w2')
     expect(result.current.slug).toBe('w2-canvas')
     expect(result.current.canvases).toEqual([
-      { slug: 'w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
+      { slug: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
     ])
   })
 
@@ -152,7 +156,9 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -175,7 +181,9 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w3' }],
     })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -184,16 +192,18 @@ describe('useDaemonCanvasController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     let resolveW2: (value: {
-      canvases: { slug: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
+      canvases: { slug: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
     }) => void = () => {}
     const w2Promise = new Promise<{
-      canvases: { slug: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
+      canvases: { slug: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
     }>((resolve) => {
       resolveW2 = resolve
     })
     mockListCanvases.mockReturnValueOnce(w2Promise)
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w3-canvas', updatedAt: '2026-01-03', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w3-canvas', id: 'id-w3-canvas', updatedAt: '2026-01-03', kind: 'spatial' },
+      ],
     })
 
     let switchW2Done: Promise<void> = Promise.resolve()
@@ -207,7 +217,11 @@ describe('useDaemonCanvasController', () => {
 
     // The stale w2 response resolves after w3 already won; it must be discarded.
     await act(async () => {
-      resolveW2({ canvases: [{ slug: 'w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' }] })
+      resolveW2({
+        canvases: [
+          { slug: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
+        ],
+      })
       await switchW2Done
     })
 
@@ -219,8 +233,8 @@ describe('useDaemonCanvasController', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'a', updatedAt: '2026-01-01', kind: 'spatial' },
-        { slug: 'b', updatedAt: '2026-01-02', kind: 'spatial' },
+        { slug: 'a', id: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
+        { slug: 'b', id: 'id-b', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
 
@@ -240,7 +254,9 @@ describe('useDaemonCanvasController', () => {
     mockListCanvases.mockResolvedValueOnce({ canvases: [] })
     mockCreateCanvas.mockResolvedValue({ slug: 'brand-new' })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'brand-new', updatedAt: '2026-01-03', kind: 'spatial' }],
+      canvases: [
+        { slug: 'brand-new', id: 'id-brand-new', updatedAt: '2026-01-03', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -288,7 +304,7 @@ describe('useDaemonCanvasController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'untitled', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ slug: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     await act(async () => {
@@ -298,7 +314,7 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.createError).toBe('slug already exists')
     // The refreshed list now shows the slug another client already took.
     expect(result.current.canvases).toEqual([
-      { slug: 'untitled', updatedAt: '2026-01-01', kind: 'spatial' },
+      { slug: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
     ])
   })
 
@@ -335,7 +351,9 @@ describe('useDaemonCanvasController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [
+        { slug: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -354,7 +372,7 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.workspaceId).toBe('w1')
     expect(result.current.slug).toBe('w1-canvas')
     expect(result.current.canvases).toEqual([
-      { slug: 'w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
+      { slug: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
     ])
   })
 })

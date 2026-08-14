@@ -223,6 +223,20 @@ export function DaemonCanvasPage({
     identity: canvas ?? undefined,
   })
 
+  // New file nodes store the target's immutable id (ADR-0008: stored
+  // references key on ids, so a slug rename cannot dangle them); the
+  // daemon's read routes stay slug-addressed, so refs resolve to the
+  // CURRENT slug through the live canvases list. Read through a ref so the
+  // adapter identity survives list refreshes; the lookup itself resolves by
+  // membership, never by format — legacy slug refs miss it and pass
+  // through unchanged.
+  const canvasesRef = useRef(controller.canvases)
+  canvasesRef.current = controller.canvases
+  const resolveRefSlug = useCallback(
+    (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.slug,
+    [],
+  )
+
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
   // updatedAt, exactly as in browser-local mode.
@@ -235,11 +249,20 @@ export function DaemonCanvasPage({
           daemonBaseUrl,
           workspaceId: canvas?.workspaceId ?? '',
           slug: canvas?.slug ?? '',
+          resolveRefSlug,
         }),
-      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug],
+      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug, resolveRefSlug],
     ),
+    // Keyed by BOTH id and slug so id refs and legacy slug refs each find
+    // their staleness stamp.
     stampOf: useMemo(
-      () => new Map(controller.canvases.map((entry) => [entry.slug, entry.updatedAt ?? ''])),
+      () =>
+        new Map(
+          controller.canvases.flatMap((entry) => [
+            [entry.slug, entry.updatedAt ?? ''] as const,
+            ...(entry.id ? [[entry.id, entry.updatedAt ?? ''] as const] : []),
+          ]),
+        ),
       [controller.canvases],
     ),
   })
@@ -637,12 +660,16 @@ export function DaemonCanvasPage({
               onChange={onChange}
               externalVersion={externalVersion}
               theme={resolvedTheme}
-              // File-node reference = the canvas slug within this workspace
-              // (the daemon's alias path); the current canvas is excluded.
+              // File-node reference = the target's immutable id (rename-
+              // safe); the label shows its current slug and the current
+              // canvas is excluded. Legacy documents still carry slug refs,
+              // which resolveRefSlug misses and switchCanvas takes as-is.
+              // An older daemon's list has no ids yet; those entries fall
+              // back to slug refs (same behavior as before ids existed).
               fileRefOptions={controller.canvases
                 .filter((entry) => entry.slug !== canvas?.slug)
-                .map((entry) => ({ file: entry.slug, label: entry.slug }))}
-              onOpenFileRef={(file) => controller.switchCanvas(file)}
+                .map((entry) => ({ file: entry.id ?? entry.slug, label: entry.slug }))}
+              onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
               {...fileSeams}
               lockedNodeIds={lockedNodeIds}
               lockedEdgeIds={lockedEdgeIds}
