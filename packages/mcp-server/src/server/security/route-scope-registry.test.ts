@@ -11,6 +11,14 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
+// Imported STATICALLY, though nothing here mocks it. As `await import()`
+// inside the test body, the cost of transforming and loading app.ts's whole
+// module graph was charged to the 10s per-test budget — fine on an idle
+// machine, and the first thing to blow that budget once the full suite runs
+// every project in parallel (aggregate import time there is measured in
+// minutes). The test's own work is milliseconds; only the load was slow, so
+// it belongs in the collection phase, which no per-test timeout bounds.
+import { createApp } from '../app.js'
 
 let tempDir: string
 
@@ -30,7 +38,6 @@ const alwaysDeny: AsyncAuthStrategy = {
 
 describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* routes', () => {
   it('every /api/* route mounted on the server-mode app resolves to a scope decision', async () => {
-    const { createApp } = await import('../app.js')
     const app = createApp({
       authMode: 'server-mode',
       publicBaseUrl: 'https://example.com',
@@ -85,7 +92,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     // app.ts), so the server-mode walk above never sees it — a local-daemon
     // app is built here too, or a newly local-daemon-only route could ship
     // with a registry gap the guard above would never catch.
-    const { createApp } = await import('../app.js')
     const app = createApp({
       authMode: 'local-daemon',
       touch: () => {},
