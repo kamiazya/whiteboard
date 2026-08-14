@@ -1,12 +1,19 @@
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  readDocumentKind,
+  readFacets,
+  readSpatialCanvas,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
+  seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createCanvasImportOkfTool } from './canvas-import-okf.js'
+import { createCanvasImportOkfTool, DocumentKindMismatchError } from './canvas-import-okf.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -116,5 +123,65 @@ describe('wb_document_set tool', () => {
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown }),
     ).rejects.toThrow()
+  })
+
+  test('refuses a spatial document instead of flattening it into one text node', async () => {
+    // This write replaces the whole spatial canvas. Run unguarded against a
+    // diagram and the nodes and edges are gone, which is not a rejected write
+    // but a silently destroyed document (ADR-0009 decision 4).
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'diagram' }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasImportOkfTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        markdown: '---\ntype: note\n---\nBody.',
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+
+    const canvas = readSpatialCanvas(await loadDoc(store, CANVAS_ID))
+    expect(canvas.nodes).toHaveLength(1)
+    expect(canvas.nodes[0].id).toBe('n1')
+  })
+
+  test('writes a markdown document, and leaves it recorded as markdown', async () => {
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    const tool = createCanvasImportOkfTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\n---\nBody.',
+    })
+
+    expect(readDocumentKind(await loadDoc(store, CANVAS_ID))).toBe('markdown')
+  })
+
+  test('a document predating kinds is healed by the write, not refused', async () => {
+    // The only way an existing document gets a kind. Refusing here would
+    // leave every pre-kind document unreadable through wb_document_get and
+    // unwritable through this tool, with no path out.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const tool = createCanvasImportOkfTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\n---\nBody.',
+    })
+
+    expect(readDocumentKind(await loadDoc(store, CANVAS_ID))).toBe('markdown')
   })
 })
