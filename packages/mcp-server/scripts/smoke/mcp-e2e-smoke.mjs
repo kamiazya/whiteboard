@@ -210,16 +210,25 @@ async function main() {
   }
   console.log('[e2e] wb_document_create/list → name round-trips, unnamed stays unnamed')
 
-  // wb_facet_set: seed extension-facet state so wb_version_save has content.
+  // wb_facet_set: a facet is OKF frontmatter, so it goes on the markdown
+  // document. The spatial one used to carry it, to give wb_version_save
+  // content — wb_node_add does that now, which is content the format can
+  // actually hold.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    canvasId: named.canvasId,
     facets: { 'e2e/1': { note: 'before-save' } },
   })
-  if (facets.canvasId !== canvasId) {
+  if (facets.canvasId !== named.canvasId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
-  console.log('[e2e] wb_facet_set → seeded canvas state')
+  console.log('[e2e] wb_facet_set → set on the markdown document')
+
+  await expectToolError(
+    'wb_facet_set',
+    { workspaceId: WORKSPACE_ID, canvasId, facets: { 'e2e/1': { note: 'nope' } } },
+    'on a spatial document',
+  )
 
   // wb_node_add: the only MCP path that puts a node on a spatial canvas,
   // and what the lock round-trip below needs to have something to lock.
