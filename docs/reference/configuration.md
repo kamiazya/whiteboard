@@ -153,7 +153,7 @@ Inside the Codex sandbox, two issues are common:
 Each workspace lives at `${WHITEBOARD_DATA_DIR}/{workspaceId}/` and contains:
 
 - `*.loro` — Loro CRDT snapshots (one per canvas)
-- `*.svg`, `*.md` (OKF), `*.canvas` (JSON Canvas) — exports (via `wb_scene_render` / `canvas_export_okf` / `canvas_export_json_canvas`)
+- `*.svg`, `*.md` (OKF), `*.canvas` (JSON Canvas) — exports (via `wb_scene_render` / `wb_document_get`)
 - `palette.json`, `manifestJson`, library metadata, and other persisted JSON
 
 See [architecture](../explanation/architecture.md) for how each layer reads and writes this tree.
