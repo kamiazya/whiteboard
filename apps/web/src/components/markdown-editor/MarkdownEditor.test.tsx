@@ -83,6 +83,54 @@ describe('MarkdownEditor', () => {
     expect(getByTestId('markdown-word-count').textContent).toContain('3')
   })
 
+  it('disables the formatting buttons in Read mode and re-enables them in Write', () => {
+    const { getByRole } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    const bold = getByRole('button', { name: 'Bold' }) as HTMLButtonElement
+    expect(bold.disabled).toBe(false)
+
+    fireEvent.click(getByRole('button', { name: 'Read' }))
+    expect(bold.disabled).toBe(true)
+
+    fireEvent.click(getByRole('button', { name: 'Write' }))
+    expect(bold.disabled).toBe(false)
+  })
+
+  it('falls back from Split to Write in a narrow container, reflecting it in the toolbar without overwriting the stored preference', () => {
+    // jsdom has no ResizeObserver; stub one that reports a narrow container.
+    class NarrowResizeObserver {
+      private readonly callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback
+      }
+      observe() {
+        this.callback(
+          [{ contentRect: { width: 480 } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        )
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', NarrowResizeObserver)
+    try {
+      window.localStorage.setItem('whiteboard.markdown-view-mode', 'split')
+      const { getByRole, queryByTestId, queryByRole, getByTestId } = render(
+        <MarkdownEditor value="# Hi" onChange={() => {}} />,
+      )
+      // Write layout is in effect: source only, no divider, no preview.
+      expect(getByTestId('markdown-source-wrap').style.display).not.toBe('none')
+      expect(queryByTestId('markdown-split-divider')).toBeNull()
+      expect(queryByTestId('markdown-preview-pane')).toBeNull()
+      // The toolbar reflects the EFFECTIVE mode (Split is not offered at all).
+      expect(queryByRole('button', { name: 'Split' })).toBeNull()
+      expect(getByRole('button', { name: 'Write' }).getAttribute('aria-pressed')).toBe('true')
+      // The stored preference survives the fallback.
+      expect(window.localStorage.getItem('whiteboard.markdown-view-mode')).toBe('split')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('renders the core facets as a document header in Read mode', () => {
     const { getByRole, getByTestId } = render(
       <MarkdownEditor

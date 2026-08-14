@@ -219,7 +219,10 @@ export function MarkdownEditor({
   return (
     <div ref={rootRef} className={cn('flex h-full w-full min-w-0 flex-col', className)}>
       <EditorToolbar
-        mode={mode}
+        // The EFFECTIVE mode, not the stored preference: on a narrow
+        // container a stored 'split' renders as Write, and the toolbar's
+        // active state (and aria-pressed) must describe what is on screen.
+        mode={effectiveMode}
         onModeChange={changeMode}
         splitAvailable={splitAvailable}
         wordCount={wordCount}
