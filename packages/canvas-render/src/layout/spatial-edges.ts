@@ -1219,6 +1219,18 @@ function routeOrthogonal(
   raw: readonly Rect[],
 ): Point[] {
   let start = startAnchor
+  // Boxes that touch exactly can put both anchors on the same point — two
+  // flush-stacked nodes wired bottom-to-top land on the shared corner of
+  // their fan-out spans. There is no distance to route: the connection IS
+  // that point. Everything below assumes a direction to leave and arrive
+  // along, and with none it built a stub each way, drawing a spike 20px
+  // into one box and 40px back through both.
+  //
+  // ponytail: this draws nothing rather than the wrong thing. A VISIBLE
+  // connector between flush boxes would have to leave from a face with room
+  // beside it, which is a side-choice decision (`rankedSidePairs`), not
+  // something this function can invent after the sides are fixed.
+  if (start.x === end.x && start.y === end.y) return [start, end]
   // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
   // often share one tangent coordinate — anchors are renderer-chosen
   // defaults, so sliding one end along its side buys a single straight
