@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import '../../index.css'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
+import { CREATION_LABELS } from './creation-labels.js'
 import { SpatialEditor } from './SpatialEditor.js'
 import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 
@@ -99,7 +100,7 @@ it('creation entries live in the + menu, which opens upward inside the viewport'
   const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
 
   // No flat per-type creation buttons on the dock itself.
-  for (const label of ['Add note', 'Add rectangle', 'Add link', 'Add group', 'Add canvas']) {
+  for (const label of Object.values(CREATION_LABELS)) {
     expect(
       [...palette.querySelectorAll(':scope > button, :scope [data-slot="tooltip-trigger"]')].some(
         (b) => b.getAttribute('aria-label') === label,
@@ -112,7 +113,7 @@ it('creation entries live in the + menu, which opens upward inside the viewport'
   const items = [...menu.querySelectorAll('[role="menuitem"]')].map((b) =>
     b.getAttribute('aria-label'),
   )
-  expect(items).toEqual(['Add note', 'Add rectangle', 'Add link', 'Add group', 'Add canvas'])
+  expect(items).toEqual(['Note', 'Link', 'Group', 'Document'])
 
   // Opens upward from the dock and stays inside the host, above the dock.
   const menuRect = menu.getBoundingClientRect()

@@ -111,14 +111,6 @@ export type GestureEvent =
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
   | { readonly type: 'pointerdown-empty' }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
-  /**
-   * The same text node `dblclick-empty` makes, left CLOSED. JSON Canvas has
-   * no shape type and the `x-whiteboard` extension is deliberately not an
-   * escape hatch for new visual primitives, so a rectangle is a text node
-   * nobody typed into — the only difference from a note is that no editor
-   * opens on top of it.
-   */
-  | { readonly type: 'create-closed-node'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
@@ -410,14 +402,6 @@ export function reduceGesture(
         commands: [],
         selectedId: null,
       })
-    case 'create-closed-node': {
-      const id = createId()
-      return withPendingTextCommit(state, {
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node: newTextNodeAt(event.point, id) }],
-        selectedId: id,
-      })
-    }
     case 'dblclick-empty':
       return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
     case 'delete-selection':

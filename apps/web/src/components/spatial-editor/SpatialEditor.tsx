@@ -14,7 +14,7 @@
  * onto another node, OR Enter/Space the connect handle then Tab to a
  * target node's connect-target control and Enter/Space it; Escape cancels
  * an in-flight gesture from the keyboard too), create a node (double-click
- * empty canvas space, or the keyboard-reachable "Add note" button — both
+ * empty canvas space, or the keyboard-reachable "+" menu's Note entry — both
  * open the new node for typing immediately), delete the current
  * selection (Delete/Backspace, disabled while its text editor is open so
  * Backspace-while-typing edits text instead of deleting the node), select
@@ -22,15 +22,15 @@
  * edge's label (double-click its line; commits on blur, empty removes,
  * Escape cancels), and restyle an edge from its context menu (arrowhead
  * direction per JSON Canvas fromEnd/toEnd, and per-endpoint side pinning
- * with an auto option), create a link node (the palette's "Add link" URL
+ * with an auto option), create a link node (the palette's Link entry (URL
  * dialog), follow it (double-click, or "Open link" in its context menu —
  * opens in a new tab with noopener), rewrite its URL ("Edit URL"), create
- * a group frame (the palette's "Add group" empty frame, or "Group
+ * a group frame (the palette's Group entry (an empty frame), or "Group
  * selection" from a multi-selected node's context menu), move a frame
  * with its geometrically contained members, edit the frame's label
  * (double-click, or "Edit label" in its context menu; empty removes),
  * and — when the host supplies the seams — create a file node referencing
- * another canvas (the palette's "Add canvas" picker), follow it
+ * another canvas (the palette's Document picker), follow it
  * (double-click / "Open canvas"), and retarget it ("Change target").
  *
  * The component is CONTROLLED and owns no persistence: every mutating
@@ -110,6 +110,7 @@ import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'
+import { CREATION_LABELS } from './creation-labels.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
@@ -307,7 +308,7 @@ export interface SpatialEditorProps {
   /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (browser-local canvas id,
-   * daemon alias path). Absent → the "Add canvas" affordance hides.
+   * daemon alias path). Absent → the Document affordance hides.
    */
   readonly fileRefOptions?: readonly FileRefOption[]
   /** Follows a file node's reference (navigation). Absent → follow hides. */
@@ -479,7 +480,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
     // Select restores the pre-tool editing behavior byte-for-byte; Connect
     // arms object-first click-A, click-B edge creation. Creation is
-    // deliberately NOT a mode — the palette's Add note works in every mode.
+    // deliberately NOT a mode — the palette's Note entry works in every mode.
     const [tool, setTool] = useState<EditorTool>(defaultTool)
     const toolChosenByUserRef = useRef(false)
     const initialToolAppliedRef = useRef(false)
@@ -2256,17 +2257,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
-     * A rectangle: the same node Add-note makes, with no editor opened on
-     * top of it. Not a new node type — see the reducer's `create-closed-node`.
-     */
-    const createRectangleAt = (point: Point) => {
-      applyResult(
-        reduceGesture(gestureState, canvas, { type: 'create-closed-node', point }, { createId }),
-      )
-      applySelection({ type: 'collapse-extras' })
-    }
-
-    /**
      * The button path (unlike double-click, whose point comes straight from
      * the pointer) always resolves to the same viewport-center point, so
      * without a placement rule every click here would stack an identical,
@@ -2366,31 +2356,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** Places one of the directly-creatable kinds at a canvas-space point. */
     const createAt = (kind: DraggableCreation, point: Point) => {
       if (kind === 'note') createNodeAt(point)
-      else if (kind === 'rectangle') createRectangleAt(point)
       else createGroupAtViewportCenter(point)
-    }
-
-    /**
-     * Same cascade as the note path: the tap path always resolves to the one
-     * viewport-centre point, so without it every press stacks an identical
-     * rectangle on the last one and looks like nothing happened.
-     */
-    const createRectangleAtViewportCenter = () => {
-      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = findFreeSpot(
-        preferred,
-        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      createRectangleAt(point)
-      panToShow({
-        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
-        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: NEW_NODE_HEIGHT,
-      })
     }
 
     const createNodeAtViewportCenter = () => {
@@ -2757,7 +2723,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
-          onCreateRectangle={createRectangleAtViewportCenter}
           onCreateCanvasRef={
             fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
           }
@@ -2848,7 +2813,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             setGroupLabelEditId={setGroupLabelEditId}
             pasteClipboard={pasteClipboard}
             createNodeAt={createNodeAt}
-            createRectangleAt={createRectangleAt}
             createGroupAtViewportCenter={createGroupAtViewportCenter}
             setLinkDialog={setLinkDialog}
             fileRefOptions={fileRefOptions}
@@ -2874,7 +2838,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )}
         {canvasPicker !== null && fileRefOptions !== undefined && (
           <CanvasPickerDialog
-            title={canvasPicker.mode === 'create' ? 'Add canvas' : 'Change target'}
+            title={
+              canvasPicker.mode === 'create' ? `Add ${CREATION_LABELS.document}` : 'Change target'
+            }
             options={fileRefOptions}
             currentFile={
               canvasPicker.mode === 'retarget'
@@ -2900,7 +2866,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )}
         {linkDialog !== null && (
           <LinkUrlDialog
-            title={linkDialog.mode === 'create' ? 'Add link' : 'Edit URL'}
+            title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
             initialUrl={
               linkDialog.mode === 'edit'
                 ? (() => {

@@ -467,48 +467,6 @@ describe('text-edit gesture', () => {
   })
 })
 
-describe('create-closed-node (the rectangle path)', () => {
-  it('creates the same node dblclick-empty does, selects it, and opens NO editor', () => {
-    const c = canvas()
-    const result = reduceGesture(
-      createIdleState(),
-      c,
-      { type: 'create-closed-node', point: { x: 300, y: 200 } },
-      { createId: () => 'new-node' },
-    )
-    expect(result.commands).toEqual([
-      {
-        kind: 'create-node',
-        node: { id: 'new-node', type: 'text', text: '', x: 200, y: 150, width: 200, height: 100 },
-      },
-    ])
-    // Selecting it is what gives the new rectangle its handles: without this
-    // it lands on the canvas with nothing to grab, move or delete it by.
-    expect(result.selectedId).toBe('new-node')
-    // The whole difference from a note. `editing-text` here would open the
-    // editor on a shape nobody asked to type into.
-    expect(result.state).toEqual({ kind: 'idle' })
-  })
-
-  it('commits an open text edit first, exactly as the note path does', () => {
-    const c = canvas()
-    const editing = reduceGesture(createIdleState(), c, {
-      type: 'start-text-edit',
-      nodeId: 'a',
-      text: 'hi',
-    })
-    const result = reduceGesture(
-      editing.state,
-      c,
-      { type: 'create-closed-node', point: { x: 10, y: 10 } },
-      { createId: () => 'new-node' },
-    )
-    // Creating something else must not be a way to lose what was typed.
-    expect(result.commands[0]).toMatchObject({ kind: 'set-text', id: 'a' })
-    expect(result.commands.some((cmd) => cmd.kind === 'create-node')).toBe(true)
-  })
-})
-
 describe('dblclick-empty (create-node)', () => {
   it('creates a text node centered on the point, selects it, and opens it for typing immediately', () => {
     const c = canvas()

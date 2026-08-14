@@ -33,12 +33,12 @@ import {
   MousePointer2,
   Plus,
   Spline,
-  Square,
   StickyNote,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { CREATION_LABELS } from './creation-labels.js'
 
 export type EditorTool = 'select' | 'hand' | 'connect'
 
@@ -60,10 +60,10 @@ export function draggedCreation(types: readonly string[]): DraggableCreation | n
   const type = types.find((t) => t.startsWith(CREATE_DRAG_MIME_PREFIX))
   if (type === undefined) return null
   const kind = type.slice(CREATE_DRAG_MIME_PREFIX.length)
-  return kind === 'note' || kind === 'rectangle' || kind === 'group' ? kind : null
+  return kind === 'note' || kind === 'group' ? kind : null
 }
 /** Creations that place directly, so a drop point is all they need. */
-export type DraggableCreation = 'note' | 'rectangle' | 'group'
+export type DraggableCreation = 'note' | 'group'
 
 interface ToolPaletteProps {
   /** Host-supplied controls (undo/redo/versions) docked as the leading group. */
@@ -71,8 +71,6 @@ interface ToolPaletteProps {
   readonly onCreateNode: () => void
   readonly onCreateLink: () => void
   readonly onCreateGroup: () => void
-  /** Creates a text node nobody typed into, at the viewport center. */
-  readonly onCreateRectangle: () => void
   /** Absent when the host supplies no canvas listing — the entry hides. */
   readonly onCreateCanvasRef?: () => void
   /** Absent when the host supplies no image storage — the entry hides. */
@@ -112,7 +110,6 @@ export function ToolPalette({
   onCreateNode,
   onCreateLink,
   onCreateGroup,
-  onCreateRectangle,
   onCreateCanvasRef,
   onCreateImage,
   tool,
@@ -146,24 +143,18 @@ export function ToolPalette({
 
   const entries: readonly AddMenuEntry[] = [
     {
-      label: 'Add note',
+      label: CREATION_LABELS.note,
       icon: <StickyNote aria-hidden="true" className="size-4" />,
       onSelect: onCreateNode,
       drag: 'note',
     },
     {
-      label: 'Add rectangle',
-      icon: <Square aria-hidden="true" className="size-4" />,
-      onSelect: onCreateRectangle,
-      drag: 'rectangle',
-    },
-    {
-      label: 'Add link',
+      label: CREATION_LABELS.link,
       icon: <Link aria-hidden="true" className="size-4" />,
       onSelect: onCreateLink,
     },
     {
-      label: 'Add group',
+      label: CREATION_LABELS.group,
       icon: <Frame aria-hidden="true" className="size-4" />,
       onSelect: onCreateGroup,
       drag: 'group',
@@ -171,7 +162,7 @@ export function ToolPalette({
     ...(onCreateCanvasRef !== undefined
       ? [
           {
-            label: 'Add canvas',
+            label: CREATION_LABELS.document,
             icon: <FileBox aria-hidden="true" className="size-4" />,
             onSelect: onCreateCanvasRef,
           },
@@ -180,7 +171,7 @@ export function ToolPalette({
     ...(onCreateImage !== undefined
       ? [
           {
-            label: 'Add image',
+            label: CREATION_LABELS.image,
             icon: <ImageIcon aria-hidden="true" className="size-4" />,
             onSelect: onCreateImage,
           },
@@ -342,7 +333,7 @@ export function ToolPalette({
               <span aria-hidden="true" className="text-muted-foreground">
                 {entry.icon}
               </span>
-              {entry.label.replace(/^Add /, '')}
+              {entry.label}
             </button>
           ))}
         </div>

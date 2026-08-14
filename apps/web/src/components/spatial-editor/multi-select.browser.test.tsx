@@ -231,7 +231,7 @@ it('palette creation replaces the whole selection with the new node', async () =
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   fireEvent.click(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
-      (b) => b.getAttribute('aria-label') === 'Add note',
+      (b) => b.getAttribute('aria-label') === 'Note',
     ) as HTMLElement,
   )
   await vi.waitFor(() => expect(latest.nodes.length).toBe(4))

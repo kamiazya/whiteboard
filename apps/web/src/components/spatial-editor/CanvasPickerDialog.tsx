@@ -1,6 +1,6 @@
 /**
  * Canvas picker — the reference-entry surface for file nodes, used by the
- * palette's "Add canvas" (create) and the context menu's "Change target"
+ * palette's Document entry (create) and the context menu's "Change target"
  * (retarget). The host page supplies the options: the editor treats a
  * file reference as an opaque string whose meaning (browser-local canvas
  * id, daemon alias path) the composition root owns.

@@ -1,5 +1,5 @@
 /**
- * URL entry surface for link nodes — used both by the palette's "Add link"
+ * URL entry surface for link nodes — used both by the palette's Link entry
  * (create) and the context menu's "Edit URL" (rewrite).
  *
  * Validation delegates to the same rule the canvas-model schema enforces
