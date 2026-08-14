@@ -119,7 +119,20 @@ const rawPathsArbitrary = fc.array(
 )
 
 describe('edge-crossing sweep — differential equality with the pairwise oracle', () => {
-  fcTest.prop([scenarioArbitrary], withDefaults())(
+  // Fewer runs than the shared default, and the reason is measured rather than
+  // guessed: this property routes through the real `assignEdgeAnchors`, so the
+  // aligned second run that landed with the side-choice repair made each case
+  // 53% more expensive (1405ms -> 2150ms for 200 runs). The per-test budget is
+  // 5s, which left no headroom once every project runs in parallel — the test
+  // then times out, reports a fast-check seed, and reads like a property
+  // failure when nothing has failed at all.
+  //
+  // Trimming THIS property costs least: its distinct value is realism (paths
+  // exactly as the optimizer emits them), while the degenerate density the
+  // sweep is most likely to get wrong — collinear corridors, shared endpoints,
+  // zero-length segments — is covered at full strength by the raw-polyline
+  // property below, which is 20x cheaper.
+  fcTest.prop([scenarioArbitrary], withDefaults({ numRuns: 120 }))(
     'the sweep matrix equals the full O(E^2) scan for every pair',
     ({ nodes, edges, style }) => {
       if (edges.length < 2) return

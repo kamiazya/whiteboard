@@ -43,7 +43,17 @@ When a preview contradicts a green test, suspect the cache before suspecting the
 ## CI flakes
 
 - A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running.
-- **A property-test failure is not a flake, however random it looks.** fast-check reports a seed; a different seed passing means the generator did not reach the input, not that the input is fine. Re-running is how a real defect gets waved through — and how it comes back to block an unrelated PR. Reproduce by passing that seed to `withDefaults({ seed })`, read the shrunk counterexample, and then either fix it or exclude the input EXPLICITLY with a comment and a task (never by pinning the seed, and never by weakening the property). One such failure this way turned out to be silent content corruption in the markdown round trip, reached from a PR that touched a different package entirely.
+- **Read the property test's MESSAGE before hunting a counterexample.**
+  `@fast-check/vitest` prints the seed in the test NAME, so a plain per-test
+  timeout arrives looking exactly like a property failure — `... (with
+  seed=-867181341)` — and sends you looking for a shrunk input that does not
+  exist. `Error: Test timed out in 5000ms` means the property never failed;
+  the runs did not fit the budget. That is the load-dependent family above,
+  and the remedy is `numRuns` (or a budget sized on a measurement), never a
+  pinned seed. Worth measuring WHY it stopped fitting: one such timeout was
+  caused by a routing change that made each case 53% more expensive, so the
+  test was reporting a real cost regression in the code under it, not noise.
+- **A genuine property-test failure is not a flake, however random it looks.** fast-check reports a seed; a different seed passing means the generator did not reach the input, not that the input is fine. Re-running is how a real defect gets waved through — and how it comes back to block an unrelated PR. Reproduce by passing that seed to `withDefaults({ seed })`, read the shrunk counterexample, and then either fix it or exclude the input EXPLICITLY with a comment and a task (never by pinning the seed, and never by weakening the property). One such failure this way turned out to be silent content corruption in the markdown round trip, reached from a PR that touched a different package entirely.
 - Timestamp-equality and post-teardown assertions on shared global resources (real home dir, wall clock) are the recurring flake shapes here — reviews should reject new ones.
 - **A fourth and fifth shape, both found by root-causing rather than
   re-running (the two that flaked all through 2026-08-14).** Neither is a

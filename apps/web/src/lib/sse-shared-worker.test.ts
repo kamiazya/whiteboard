@@ -103,7 +103,23 @@ function connect(): MessagePort {
 // The worker's module load, its connect dispatch and its first fetch are all
 // async, and a fixed sleep long enough on an idle machine is not long enough
 // under a full parallel suite. Wait on the observable instead.
-const until = (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true))
+//
+// Importing the worker module statically to warm its graph — the trick that
+// fixed App.test.tsx's lazy pages — is WRONG here and was tried: the module
+// registers `onconnect` when it executes, so running it in the test realm
+// breaks the per-worker isolation the polyfill provides, and the first test
+// then hangs for the whole budget. A worker module is not context-free the way
+// a React page is.
+//
+// The budget is explicit because `vi.waitFor` defaults to 1000ms, which is a
+// fixed deadline wearing a poll's clothing: on a loaded machine the worker has
+// not finished booting when it expires. Enlarging it is not the thing this
+// file's header warns against — a poll returns the instant its condition
+// holds, so an idle run pays nothing for the headroom, while a sleep would
+// cost it every time.
+const WAIT_MS = 15_000
+const until = (predicate: () => boolean) =>
+  vi.waitFor(() => expect(predicate()).toBe(true), { timeout: WAIT_MS, interval: 25 })
 
 /** The index of the subscribe that first announced `doc`, or -1. */
 const subscribeIndexFor = (doc: string) =>
@@ -142,7 +158,9 @@ const pushTo = (doc: string, frame: string) => {
  */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
 
-describe('sse-shared-worker', () => {
+// Per-test budget above `until`'s, so a genuine hang still reports as the
+// assertion that hung rather than as an opaque test timeout.
+describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
   it('opens one stream however many documents are subscribed', async () => {
     // The whole reason this lives in a worker: six HTTP/1.1 connections per
     // origin is the budget, and a stream per canvas would spend it on sync.

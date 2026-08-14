@@ -11,9 +11,10 @@
 // Source is captured at build time via `?raw` rather than read at runtime, so
 // this stays free of `node:fs` — apps/web is browser-only (see
 // web-app-boundary.test.ts).
-import appSource from './App.tsx?raw'
-import testSource from './App.test.tsx?raw'
+
 import { describe, expect, it } from 'vitest'
+import testSource from './App.test.tsx?raw'
+import appSource from './App.tsx?raw'
 
 /** Every module path App hands to `lazy(() => import('...'))`. */
 const lazyImports = (source: string): string[] =>
