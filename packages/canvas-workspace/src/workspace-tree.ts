@@ -9,8 +9,10 @@ export interface WorkspaceNode {
   readonly segment: string
   /**
    * What a human reads, as opposed to `segment`, which is placement and is
-   * slug-validated. Absent means the document has never been named — a
-   * reader falls back to the segment rather than inventing one.
+   * slug-validated. Absent means no name is set — either never given one, or
+   * given one and since cleared, which `setDisplayName` does for a blank.
+   * The two are deliberately the same state; a reader falls back to the
+   * segment rather than inventing a name.
    *
    * ADR-0009 makes this the document's name: OKF frontmatter `title` is a
    * projection of it on serialise, never a second place to write it.

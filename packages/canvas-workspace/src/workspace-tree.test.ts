@@ -397,6 +397,20 @@ describe('display name', () => {
     expect(tree.getNode(id)?.displayName).toBe('リリース計画 2026 / v2')
   })
 
+  it('trims a name that has content, rather than storing the padding', () => {
+    // Separate from the blank case below: an implementation that only
+    // special-cased whitespace-ONLY input would pass that one and still
+    // store ' Doc ' verbatim, so the two names would compare unequal for a
+    // difference nobody typed on purpose.
+    const tree = new WorkspaceTree(new LoroDoc())
+    const created = tree.createNode('c1', 'doc', undefined, undefined, '  Release plan  ')
+    const renamed = tree.createNode('c2', 'other')
+    tree.setDisplayName(renamed, '\tRelease plan\n')
+
+    expect(tree.getNode(created)?.displayName).toBe('Release plan')
+    expect(tree.getNode(renamed)?.displayName).toBe('Release plan')
+  })
+
   it('clears the display name when set to empty, rather than storing a blank', () => {
     // An absent name and a blank one must not be two states: every reader
     // would have to test for both, and one of them would forget.
