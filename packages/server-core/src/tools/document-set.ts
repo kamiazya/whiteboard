@@ -80,9 +80,10 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // document it is a destruction rather than an edit. A document with no
       // kind predates them: the write is the only thing that can give it one,
       // and refusing would leave it with no way back (ADR-0009 decision 4) —
-      // but only an empty document has nothing to lose by being declared
-      // markdown. One that already holds a canvas gets its way back from the
-      // spatial side, which declares a kind without discarding anything.
+      // but only a document already in markdown's own shape has nothing to
+      // lose by being declared markdown. One holding a canvas gets its way
+      // back from the spatial side, which declares a kind without discarding
+      // anything.
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
         const existing = readSpatialCanvas(doc)
