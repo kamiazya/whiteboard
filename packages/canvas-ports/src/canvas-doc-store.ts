@@ -80,6 +80,9 @@ export type ReadFrontierInput = z.infer<typeof readFrontierInputSchema>
 export const readFrontierResultSchema = z.object({ frontier: frontierSchema }).strict().nullable()
 export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 
+export const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
+export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
+
 /**
  * Persistence for a single Loro-backed document (a canvas or the
  * workspace-tree). `docRef` carries the scope for every method; there is
@@ -92,4 +95,11 @@ export interface CanvasDocStore {
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>
   loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult>
   readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult>
+  /**
+   * Remove everything stored for the document: snapshot, chunks, frontier
+   * and deltas. Deleting an absent document succeeds — the caller wants the
+   * document gone, and reporting that it already was gone would only make
+   * every call site write the same catch.
+   */
+  deleteDoc(input: DeleteDocInput): Promise<void>
 }

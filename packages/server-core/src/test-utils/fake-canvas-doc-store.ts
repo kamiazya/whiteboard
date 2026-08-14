@@ -3,6 +3,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   CanvasDocStore,
+  DeleteDocInput,
   DocRef,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -54,6 +55,10 @@ export class FakeCanvasDocStore implements CanvasDocStore {
 
   async readFrontier(_input: ReadFrontierInput): Promise<ReadFrontierResult> {
     throw new Error('not implemented')
+  }
+
+  async deleteDoc(input: DeleteDocInput): Promise<void> {
+    this.saved.delete(docRefKey(input.docRef))
   }
 }
 

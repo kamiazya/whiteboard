@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   CanvasDocStore,
+  DeleteDocInput,
   Frontier,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -159,6 +160,20 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
     })
 
     log.debug({ docKey, chunkCount: manifest.chunkCount }, 'saved snapshot')
+  }
+
+  async deleteDoc({ docRef }: DeleteDocInput): Promise<void> {
+    const docKey = docRefKey(docRef)
+    // All four tables in one transaction. A partial delete would leave a
+    // frontier or a delta run addressing a snapshot that is gone, which
+    // loadSnapshot cannot distinguish from a document mid-write.
+    await this.db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('canvasDocSnapshotChunks').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('canvasDocSnapshots').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('canvasDocDeltas').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('canvasDocFrontiers').where('docKey', '=', docKey).execute()
+    })
+    log.debug({ docKey }, 'deleted doc')
   }
 
   async appendDeltas({ docRef, deltaBatch }: AppendDeltasInput): Promise<AppendDeltasResult> {

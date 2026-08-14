@@ -115,5 +115,8 @@ export async function wbCanvasDelete(
   const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
   tree.delete(node.id)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+  // The tree removal alone makes the document unreachable; its stored bytes
+  // would stay behind with nothing left that could ever name them again.
+  await deps.canvasDocStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: node.canvasId } })
   return { deleted: true }
 }
