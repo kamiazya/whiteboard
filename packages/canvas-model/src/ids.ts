@@ -33,6 +33,32 @@ export const workspaceIdSchema = z
   .min(1)
   .regex(WORKSPACE_ID_PATTERN, 'workspace id must be a path-safe slug ([a-zA-Z0-9_-]+)')
 
+/**
+ * One segment of a document path. Codifies the rule mcp-server enforces at
+ * runtime as `SAFE_SLUG_SEGMENT`: ASCII letters and digits, hyphens only in
+ * the interior. `.` is absent from the character class rather than merely
+ * unmatched, which is what forecloses `..` traversal once segments are
+ * joined into a filesystem-shaped path.
+ */
+export const DOCUMENT_PATH_SEGMENT_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
+
+/**
+ * A document's address within its workspace: segments joined by `/`.
+ * Hierarchy lives in this string rather than in a parent pointer, the way a
+ * filesystem stores paths rather than a tree — sibling uniqueness then falls
+ * out of path uniqueness. Interior `/` is the separator and nothing else, so
+ * a leading, trailing or repeated one is rejected: it would name an empty
+ * segment.
+ */
+export const documentPathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (path) => path.split('/').every((segment) => DOCUMENT_PATH_SEGMENT_PATTERN.test(segment)),
+    'each segment must be non-empty and contain only ASCII letters, digits and interior hyphens',
+  )
+
 export type CanvasId = z.infer<typeof canvasIdSchema>
+export type DocumentPath = z.infer<typeof documentPathSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>
 export type WorkspaceId = z.infer<typeof workspaceIdSchema>

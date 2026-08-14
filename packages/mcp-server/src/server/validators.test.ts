@@ -1,4 +1,6 @@
+import { documentPathSchema } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it, vi } from 'vitest'
+import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {
   validateBranchName,
   validateExternalUrl,
@@ -70,5 +72,38 @@ describe('shared validators', () => {
         ]),
       }),
     ).rejects.toThrow(/private or local/i)
+  })
+})
+
+describe('validateSlug / documentPathSchema conformance', () => {
+  // Two expressions of one rule: the schema is what the shared layer parses
+  // with, validateSlug is what explains a rejection per cause. They are
+  // single-sourced on DOCUMENT_PATH_SEGMENT_PATTERN, and this is what keeps
+  // the composition around it — the split on '/', the empty-segment case —
+  // from drifting away from the schema's own refine.
+  const accepts = (slug: string): boolean => {
+    try {
+      validateSlug(slug)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  fcTest.prop([
+    fc.oneof(
+      // Dense enough to reach the interesting arrangements: bare segments,
+      // real paths, and the separator abuse (leading/trailing/doubled '/')
+      // that a generic string arbitrary would essentially never produce.
+      fc.string(),
+      fc
+        .array(fc.stringMatching(/^[a-zA-Z0-9-]{0,4}$/), { minLength: 1, maxLength: 3 })
+        .map((parts) => parts.join('/')),
+      fc
+        .array(fc.stringMatching(/^[a-zA-Z0-9-]{0,4}$/), { minLength: 1, maxLength: 3 })
+        .map((parts) => `/${parts.join('//')}/`),
+    ),
+  ])('accept exactly the same strings', (slug) => {
+    expect(documentPathSchema.safeParse(slug).success).toBe(accepts(slug))
   })
 })

@@ -1,5 +1,6 @@
 import type { BlobStore } from './blob-store.js'
 import type { CanvasDocStore } from './canvas-doc-store.js'
+import type { DocumentIndex } from './document-index.js'
 import type { PresenceChannel } from './presence.js'
 
 /**
@@ -24,5 +25,6 @@ export function defineToken<T>(name: string): Token<T> {
 export const TOKENS = {
   CanvasDocStore: defineToken<CanvasDocStore>('CanvasDocStore'),
   BlobStore: defineToken<BlobStore>('BlobStore'),
+  DocumentIndex: defineToken<DocumentIndex>('DocumentIndex'),
   PresenceChannel: defineToken<PresenceChannel>('PresenceChannel'),
 } as const
