@@ -111,6 +111,14 @@ export type GestureEvent =
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
   | { readonly type: 'pointerdown-empty' }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
+  /**
+   * The same text node `dblclick-empty` makes, left CLOSED. JSON Canvas has
+   * no shape type and the `x-whiteboard` extension is deliberately not an
+   * escape hatch for new visual primitives, so a rectangle is a text node
+   * nobody typed into — the only difference from a note is that no editor
+   * opens on top of it.
+   */
+  | { readonly type: 'create-closed-node'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
@@ -343,9 +351,8 @@ export const NEW_NODE_HEIGHT = 100
  * immediately — a node you must double-click again to type into is a worse
  * affordance than Excalidraw's.
  */
-function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureResult {
-  const id = createId()
-  const node: SpatialNode = {
+function newTextNodeAt(point: Point, id: string): SpatialNode {
+  return {
     id,
     type: 'text',
     x: Math.round(point.x - NEW_NODE_WIDTH / 2),
@@ -354,6 +361,11 @@ function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureRe
     height: NEW_NODE_HEIGHT,
     text: '',
   }
+}
+
+function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureResult {
+  const id = createId()
+  const node = newTextNodeAt(point, id)
   return {
     state: { kind: 'editing-text', nodeId: id, pendingText: '', createdForEdit: true },
     commands: [{ kind: 'create-node', node }],
@@ -398,6 +410,14 @@ export function reduceGesture(
         commands: [],
         selectedId: null,
       })
+    case 'create-closed-node': {
+      const id = createId()
+      return withPendingTextCommit(state, {
+        state: { kind: 'idle' },
+        commands: [{ kind: 'create-node', node: newTextNodeAt(event.point, id) }],
+        selectedId: id,
+      })
+    }
     case 'dblclick-empty':
       return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
     case 'delete-selection':

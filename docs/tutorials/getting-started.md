@@ -21,9 +21,13 @@ switch between canvases later.
 
 ![Browser-local canvas list](../assets/browser-local-list.png)
 
-A fresh canvas starts empty —
-double-click empty canvas space, or click the "Add note" button in the
-top-left corner, to create a new note and start typing immediately. The
+A fresh canvas starts empty. Double-click empty canvas space to make a note
+and start typing immediately, or open the **+** menu in the bottom dock: tap
+an entry to place it in the middle of the view, or drag one onto the canvas
+to drop it exactly where you want it. In **Select** mode, right-clicking
+(long-pressing on touch) empty space offers the same creations, placed where
+you pressed — Hand mode is navigation only, so it deliberately leaves the
+right-click menu closed. The
 browser UI also selects, moves, resizes, connects, and edits existing nodes,
 and deletes the selected node with Delete/Backspace (disabled while you're
 typing in its text editor, so Backspace edits text instead of deleting the

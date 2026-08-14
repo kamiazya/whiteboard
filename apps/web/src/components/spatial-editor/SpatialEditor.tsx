@@ -164,7 +164,12 @@ import {
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import { type EditorTool, ToolPalette } from './ToolPalette.js'
+import {
+  type DraggableCreation,
+  draggedCreation,
+  type EditorTool,
+  ToolPalette,
+} from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   type ContainerSize,
@@ -2247,6 +2252,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
+     * A rectangle: the same node Add-note makes, with no editor opened on
+     * top of it. Not a new node type — see the reducer's `create-closed-node`.
+     */
+    const createRectangleAt = (point: Point) => {
+      applyResult(
+        reduceGesture(gestureState, canvas, { type: 'create-closed-node', point }, { createId }),
+      )
+      applySelection({ type: 'collapse-extras' })
+    }
+
+    /**
      * The button path (unlike double-click, whose point comes straight from
      * the pointer) always resolves to the same viewport-center point, so
      * without a placement rule every click here would stack an identical,
@@ -2341,6 +2357,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const frameSelection = (): boolean => {
       if (selection === undefined) return frameContent()
       return frameContent(new Set([selection.id, ...extraIds]))
+    }
+
+    /** Places one of the directly-creatable kinds at a canvas-space point. */
+    const createAt = (kind: DraggableCreation, point: Point) => {
+      if (kind === 'note') createNodeAt(point)
+      else if (kind === 'rectangle') createRectangleAt(point)
+      else createGroupAtViewportCenter(point)
+    }
+
+    /**
+     * Same cascade as the note path: the tap path always resolves to the one
+     * viewport-centre point, so without it every press stacks an identical
+     * rectangle on the last one and looks like nothing happened.
+     */
+    const createRectangleAtViewportCenter = () => {
+      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
+        occupied,
+      )
+      createRectangleAt(point)
+      panToShow({
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: NEW_NODE_HEIGHT,
+      })
     }
 
     const createNodeAtViewportCenter = () => {
@@ -2555,11 +2600,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // Image intake: drop anywhere on the canvas, or paste — both route
         // through the same host storage seam as the picker.
         onDragOver={(e) => {
+          if (draggedCreation(e.dataTransfer.types) !== null) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+            return
+          }
           if (onAddImage !== undefined && e.dataTransfer.types.includes('Files')) {
             e.preventDefault()
           }
         }}
         onDrop={(e) => {
+          const dragged = draggedCreation(e.dataTransfer.types)
+          if (dragged !== null) {
+            e.preventDefault()
+            const root = rootRef.current
+            if (root === null) return
+            const local = clientPointToRootLocal(e, root)
+            createAt(dragged, screenToCanvas(local, viewport))
+            return
+          }
           if (onAddImage === undefined) return
           if (e.dataTransfer.files.length === 0) return
           // Cancel the browser's default file-drop handling (navigation to
@@ -2669,6 +2728,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
+          onCreateRectangle={createRectangleAtViewportCenter}
           onCreateCanvasRef={
             fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
           }
@@ -2759,6 +2819,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             setGroupLabelEditId={setGroupLabelEditId}
             pasteClipboard={pasteClipboard}
             createNodeAt={createNodeAt}
+            createRectangleAt={createRectangleAt}
             createGroupAtViewportCenter={createGroupAtViewportCenter}
             setLinkDialog={setLinkDialog}
             fileRefOptions={fileRefOptions}

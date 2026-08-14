@@ -41,6 +41,7 @@ import {
   Scissors,
   SendToBack,
   Sparkles,
+  Square,
   SquareDashed,
   StickyNote,
   Tag,
@@ -94,6 +95,8 @@ export interface CanvasContextMenuProps {
   readonly setGroupLabelEditId: (id: string | null) => void
   readonly pasteClipboard: (at?: Point) => boolean
   readonly createNodeAt: (point: Point) => void
+  /** Places a text node nobody typed into — no editor opens. */
+  readonly createRectangleAt: (point: Point) => void
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly fileRefOptions?: readonly FileRefOption[]
@@ -132,6 +135,7 @@ export function CanvasContextMenu({
   setGroupLabelEditId,
   pasteClipboard,
   createNodeAt,
+  createRectangleAt,
   createGroupAtViewportCenter,
   setLinkDialog,
   fileRefOptions,
@@ -373,6 +377,11 @@ export function CanvasContextMenu({
               label: 'Add note here',
               icon: <StickyNote />,
               onSelect: () => createNodeAt(contextMenu.point),
+            },
+            {
+              label: 'Add rectangle here',
+              icon: <Square />,
+              onSelect: () => createRectangleAt(contextMenu.point),
             },
             {
               label: 'Add link here',
