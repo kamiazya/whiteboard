@@ -1,6 +1,13 @@
 /**
  * The claim this change exists to make, measured rather than felt: while a
- * large canvas is being laid out, the main thread keeps running.
+ * large canvas is being laid out, the main thread keeps running — and it is
+ * the WORKER doing it, not a canvas that happened to be cheap.
+ *
+ * Both assertions ride one interaction on purpose. Every other browser test
+ * here uses a canvas well under the offload threshold, so this is the only
+ * one exercising the wiring at all; but a canvas big enough to show a freeze
+ * is also expensive to lay out, and two such tests measurably raised the
+ * flake rate of the whole parallel project. One interaction, two questions.
  *
  * A canvas this size takes a few hundred ms to lay out, so on the synchronous
  * path the frame loop stalls for that whole window — which is the freeze a
@@ -48,8 +55,23 @@ function Host() {
   )
 }
 
-it('keeps painting frames while a heavy canvas is laid out', async () => {
+it('lays a heavy canvas out in the worker and keeps painting while it does', async () => {
+  // Observing the Worker CONSTRUCTION is the only honest way to pin which
+  // path ran. Asserting "the DOM has not caught up yet" does not: React
+  // schedules the synchronous path's re-render too, so that assertion holds
+  // either way — verified by watching it pass with offloading disabled.
+  const RealWorker = globalThis.Worker
+  const built: string[] = []
+  globalThis.Worker = class extends RealWorker {
+    constructor(url: string | URL, options?: WorkerOptions) {
+      built.push(String(url))
+      super(url, options)
+    }
+  } as typeof Worker
+
   const { container } = render(<Host />)
+  // First paint is synchronous by design — a mount must never show an empty
+  // canvas while a worker boots.
   expect(container.textContent ?? '').toContain('first')
 
   let frames = 0
@@ -66,9 +88,12 @@ it('keeps painting frames while a heavy canvas is laid out', async () => {
     timeout: 20_000,
   })
   running = false
+  globalThis.Worker = RealWorker
 
+  expect(built.filter((url) => url.includes('layout-worker'))).not.toEqual([])
   // A layout of this size blocks for hundreds of ms synchronously, which at
   // 60Hz is tens of frames lost. The bar is deliberately far below what a
-  // free thread produces and far above what a blocked one can.
+  // free thread produces and far above what a blocked one can: measured at 2
+  // frames with offloading disabled.
   expect(frames).toBeGreaterThan(5)
 }, 40_000)
