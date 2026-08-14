@@ -16,6 +16,21 @@ import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
 
+/**
+ * Whether a canvas is one this tool could itself have written, and so holds
+ * nothing a markdown write would destroy. A markdown document's stored
+ * content IS a valid spatial canvas — the body lives in one text node — so
+ * "has any node" cannot tell the two apart, and the documents that predate
+ * kinds include both shapes. Matching the exact shape written below keeps
+ * the pre-kind markdown ones editable without letting a diagram through.
+ */
+function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: readonly unknown[] }) {
+  if (canvas.edges.length > 0) return false
+  return (
+    canvas.nodes.length === 0 || (canvas.nodes.length === 1 && canvas.nodes[0]?.id === TEXT_NODE_ID)
+  )
+}
+
 export const documentSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
@@ -71,7 +86,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
         const existing = readSpatialCanvas(doc)
-        if (existing.nodes.length > 0 || existing.edges.length > 0) {
+        if (!isMarkdownShaped(existing)) {
           throw new DocumentContentLossError(
             input.canvasId,
             `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +

@@ -186,6 +186,36 @@ describe('wb_document_set tool', () => {
     expect(readDocumentKind(await loadDoc(store, CANVAS_ID))).toBe('markdown')
   })
 
+  test('a document predating kinds that holds only an OKF body is still healed', async () => {
+    // A markdown document's stored content is a valid spatial canvas: its
+    // body lives in one text node. So "holds nodes" alone would refuse the
+    // pre-kind markdown documents the OKF import path produced, and send
+    // them to wb_node_add, which would declare them spatial — the wrong
+    // kind, and the "no way back" the healing exists to prevent.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'okf-body', type: 'text', x: 0, y: 0, width: 600, height: 400, text: 'Old body.' },
+        ],
+        edges: [],
+      })
+    })
+    const tool = createDocumentSetTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\n---\nNew body.',
+    })
+
+    const doc = await loadDoc(store, CANVAS_ID)
+    expect(readDocumentKind(doc)).toBe('markdown')
+    const node = readSpatialCanvas(doc).nodes[0]
+    expect(node?.type === 'text' ? node.text : undefined).toBe('New body.')
+  })
+
   test('a document predating kinds that holds nodes is refused, not flattened', async () => {
     // The healing above is safe because an empty document has nothing to
     // lose. A pre-kind document that holds a diagram does: this write
