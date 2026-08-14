@@ -15,6 +15,13 @@ import { pwaOptions } from './vite-pwa-options.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  // Both workers are constructed with `type: 'module'`, but Vite's default
+  // worker output is `iife` — which happened to run anyway, since a module
+  // worker executes IIFE code fine. It stops being harmless the moment a
+  // worker needs a dependency with top-level await: loro-crdt's WASM init has
+  // one, and `iife` cannot express it, so the build fails with
+  // UNSUPPORTED_FEATURE pointing at a file nobody here wrote.
+  worker: { format: 'es' },
   resolve: {
     alias: {
       ...mcpSourceAlias,
