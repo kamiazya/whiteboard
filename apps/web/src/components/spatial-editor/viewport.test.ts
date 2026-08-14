@@ -8,6 +8,7 @@ import {
   IDENTITY_VIEWPORT,
   MAX_ZOOM,
   MIN_ZOOM,
+  PAN_MARGIN_PX,
   panBy,
   panToShowTarget,
   screenToCanvas,
@@ -173,14 +174,63 @@ describe('panToShowTarget', () => {
     )
   })
 
-  it('pans to center the box, keeping the current zoom, when it does not fit', () => {
-    const vp = { x: 0, y: 0, zoom: 2 }
-    const box = { x: 5000, y: 5000, width: 100, height: 100 }
+  it('pans the MINIMUM distance, not to the center: making something must not slide the canvas', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    // 40px below the bottom edge. Centering would move the canvas by ~340px
+    // and take every other node with it — the whole board lurches under the
+    // hand of someone who only added one note.
+    const box = { x: 100, y: 580, width: 100, height: 60 }
     const next = panToShowTarget(box, vp, containerSize)
-    expect(next?.zoom).toBe(2)
-    const centerScreen = canvasToScreen({ x: 5050, y: 5050 }, next as typeof vp)
-    expect(centerScreen.x).toBeCloseTo(containerSize.width / 2)
-    expect(centerScreen.y).toBeCloseTo(containerSize.height / 2)
+    if (next === undefined) throw new Error('expected a pan')
+    expect(next.zoom).toBe(1)
+    // Horizontally already visible: untouched.
+    expect(next.x).toBe(0)
+    // Just far enough that the box's bottom clears the edge, plus the margin.
+    expect(next.y).toBeCloseTo(580 + 60 + PAN_MARGIN_PX - containerSize.height, 0)
+  })
+
+  it('treats the bottom dock as not-visible: a box under it is panned clear', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    // Fully inside the container, but underneath the dock's strip.
+    const box = { x: 100, y: 540, width: 100, height: 40 }
+    expect(panToShowTarget(box, vp, containerSize)).toBe(undefined)
+    const next = panToShowTarget(box, vp, containerSize, { bottom: 80 })
+    if (next === undefined) throw new Error('expected a pan out from under the dock')
+    expect(next.y).toBeCloseTo(540 + 40 + PAN_MARGIN_PX - (containerSize.height - 80), 0)
+  })
+
+  it('reveals a box whose size is within a margin of the visible extent — both edges, not one', () => {
+    // The band the one-edge-at-a-time shift used to miss: tall enough that
+    // honouring the top margin pushes the bottom back under the dock, but
+    // still small enough to fit. A node landing 2px under the strip is the
+    // exact thing the pan exists to prevent.
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const container = { width: 800, height: 280 }
+    const box = { x: 100, y: -100, width: 100, height: 200 }
+    const next = panToShowTarget(box, vp, container, { bottom: 70 })
+    if (next === undefined) throw new Error('expected a pan')
+    const top = canvasToScreen({ x: box.x, y: box.y }, next)
+    const bottom = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, next)
+    expect(top.y).toBeGreaterThanOrEqual(0)
+    expect(bottom.y).toBeLessThanOrEqual(container.height - 70)
+  })
+
+  it('centers on an axis the box cannot fit on, since no pan can reveal all of it', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const box = { x: 0, y: 0, width: 100, height: 2000 }
+    const next = panToShowTarget(box, vp, containerSize)
+    if (next === undefined) throw new Error('expected a pan')
+    const center = canvasToScreen({ x: 50, y: 1000 }, next)
+    expect(center.y).toBeCloseTo(containerSize.height / 2, 0)
+  })
+
+  it('scales the pan by zoom — the distance is in screen pixels, the viewport is in canvas units', () => {
+    const vp = { x: 0, y: 0, zoom: 2 }
+    const box = { x: 100, y: 320, width: 50, height: 50 }
+    const next = panToShowTarget(box, vp, containerSize)
+    if (next === undefined) throw new Error('expected a pan')
+    // Box bottom sits at 740 screen px; it must end at 600 - PAN_MARGIN_PX.
+    expect(next.y).toBeCloseTo((740 + PAN_MARGIN_PX - containerSize.height) / 2, 0)
   })
 
   it('returns undefined when containerSize is null (root not yet measured)', () => {

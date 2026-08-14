@@ -165,6 +165,7 @@ import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
+  DOCK_OCCLUSION_PX,
   type DraggableCreation,
   draggedCreation,
   type EditorTool,
@@ -2381,6 +2382,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       createRectangleAt(point)
       panToShow({
@@ -2398,6 +2400,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       createNodeAt(point)
       panToShow({
@@ -2419,6 +2422,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       const id =
         createId?.() ??
@@ -2449,6 +2453,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       const id = newId()
       const node = fileNodeDefaults(id, point, file)
@@ -2480,6 +2485,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       const id = newId()
       const node = imageNodeDefaults(id, point, file)
@@ -2518,10 +2524,29 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * When the created box does not fully fit on screen, pan (keeping the
      * zoom) so it sits centered — creation is always visible feedback.
      */
+    /**
+     * The canvas-space rectangle a person can actually see: the root, minus
+     * the strip the dock paints over. Creation places inside this before it
+     * places anywhere else, which is what keeps the view still.
+     */
+    const visibleCanvasRect = (): Box | undefined => {
+      const containerSize = containerSizeOf(rootRef.current)
+      if (containerSize === null) return undefined
+      const topLeft = screenToCanvas({ x: 0, y: 0 }, viewport)
+      return {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: containerSize.width / viewport.zoom,
+        height: (containerSize.height - DOCK_OCCLUSION_PX) / viewport.zoom,
+      }
+    }
+
     const panToShow = (box: Box) => {
       const containerSize = containerSizeOf(rootRef.current)
       if (containerSize === null) return
-      setViewport((vp) => panToShowTarget(box, vp, containerSize) ?? vp)
+      setViewport(
+        (vp) => panToShowTarget(box, vp, containerSize, { bottom: DOCK_OCCLUSION_PX }) ?? vp,
+      )
     }
 
     const newId = () =>
@@ -2541,6 +2566,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         preferred,
         { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
         occupied,
+        visibleCanvasRect(),
       )
       const id = newId()
       const node = groupNodeDefaults(id, point)
