@@ -101,9 +101,17 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // exact identity is what real keyboard-event delivery depends on, and a
     // looser containment check can pass while focus still sits on some other
     // in-flight descendant (e.g. mid-mount) and races the first keystrokes.
-    await waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    // Same 10s budget every other wait in this file carries: this one waits on
+    // mount PLUS autofocus against a real browser and real IndexedDB, and the
+    // testing-library default is 1s. Under CI load that expires with focus
+    // still on <body>, which reads as "autofocus is broken" when it only means
+    // "autofocus had not happened yet".
+    await waitFor(
+      () => {
+        expect(document.activeElement).toBe(editable)
+      },
+      { timeout: 10_000 },
+    )
     await userEvent.keyboard('# Persisted note')
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('# Persisted note')
@@ -218,9 +226,12 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // test 1 above already pins (see its focus-wait comment for why exact
     // contentDOM identity is required).
     await userEvent.click(editable)
-    await waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await waitFor(
+      () => {
+        expect(document.activeElement).toBe(editable)
+      },
+      { timeout: 10_000 },
+    )
     await userEvent.keyboard('body first')
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('body first')
