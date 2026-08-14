@@ -20,6 +20,14 @@ export const createDocumentInputSchema = z
   .strict()
 export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
 
+export const createWorkspaceInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
+
+export const resolveDocumentByIdInputSchema = z
+  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .strict()
+export type ResolveDocumentByIdInput = z.infer<typeof resolveDocumentByIdInputSchema>
+
 export const resolveDocumentInputSchema = z
   .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
   .strict()
@@ -57,6 +65,20 @@ export function compareDocumentPaths(left: string, right: string): number {
     if (segmentA !== segmentB) return segmentA < segmentB ? -1 : 1
   }
   return a.length - b.length
+}
+
+/**
+ * Thrown when an operation names a workspace that does not exist.
+ *
+ * Workspaces never materialize implicitly here. A typo'd or hallucinated
+ * workspaceId is otherwise indistinguishable from a new one, and the caller
+ * gets a workspace nobody asked for with its data quietly inside.
+ */
+export class WorkspaceNotFoundError extends Error {
+  constructor(readonly workspaceId: string) {
+    super(`Workspace not found: "${workspaceId}". Create it before adding documents to it.`)
+    this.name = 'WorkspaceNotFoundError'
+  }
 }
 
 /**
@@ -136,13 +158,26 @@ export class DocumentMoveIntoSelfError extends Error {
  */
 export interface DocumentIndex {
   /**
-   * Fails if the path is taken. Creating never silently adopts an existing
+   * Idempotent: creating a workspace that exists is not an error, because the
+   * caller wants it to be there and it is. Explicit because `createDocument`
+   * refuses an absent workspace rather than conjuring one.
+   */
+  createWorkspace(input: CreateWorkspaceInput): Promise<void>
+  /**
+   * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
+   * the path is taken. Creating never silently adopts an existing
    * document, because the caller that wanted a new one would otherwise
    * start writing into somebody else's. Claiming the path and assigning the
    * `canvasId` is one step, not a check followed by a write.
    */
   createDocument(input: CreateDocumentInput): Promise<DocumentEntry>
   resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null>
+  /**
+   * The same lookup keyed by the id the index assigned. Still workspace-scoped:
+   * an id is a handle within a workspace, not a capability that reaches across
+   * them, so the wrong workspace resolves to null rather than to the document.
+   */
+  resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null>
   /**
    * Ordered by path, compared SEGMENT BY SEGMENT — not as whole strings.
    * A hierarchical listing is the point of this index, and leaving the order

@@ -1,10 +1,12 @@
 import type {
   CreateDocumentInput,
+  CreateWorkspaceInput,
   DeleteDocumentInput,
   DocumentEntry,
   DocumentIndex,
   ListDocumentsInput,
   MoveDocumentInput,
+  ResolveDocumentByIdInput,
   ResolveDocumentInput,
 } from '@kamiazya/whiteboard-canvas-ports'
 import {
@@ -13,6 +15,7 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-canvas-ports'
 import { generateCanvasId } from '@kamiazya/whiteboard-server-core'
 import type { Database } from './db/index.js'
@@ -44,9 +47,22 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
 export class SqliteDocumentIndex implements DocumentIndex {
   constructor(private readonly db: Database) {}
 
+  async createWorkspace({ workspaceId }: CreateWorkspaceInput): Promise<void> {
+    await withWorkspaceWriteLock(workspaceId, async () => {
+      await upsertWorkspaceRow(this.db, workspaceId)
+    })
+  }
+
   async createDocument({ workspaceId, path, kind }: CreateDocumentInput): Promise<DocumentEntry> {
     return withWorkspaceWriteLock(workspaceId, async () => {
-      await upsertWorkspaceRow(this.db, workspaceId)
+      const workspace = await this.db
+        .selectFrom('workspaces')
+        .select('id')
+        .where('id', '=', workspaceId)
+        .executeTakeFirst()
+      if (!workspace) {
+        throw new WorkspaceNotFoundError(workspaceId)
+      }
       const canvasId = generateCanvasId()
       const now = Date.now()
       // One statement, so the check and the claim cannot be separated: the
@@ -84,6 +100,20 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .select(['id', 'slug', 'kind'])
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', path)
+      .executeTakeFirst()
+    if (!row?.kind) return null
+    return { canvasId: row.id, path: row.slug, kind: row.kind }
+  }
+
+  async resolveDocumentById({
+    workspaceId,
+    canvasId,
+  }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
+    const row = await this.db
+      .selectFrom('canvases')
+      .select(['id', 'slug', 'kind'])
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', canvasId)
       .executeTakeFirst()
     if (!row?.kind) return null
     return { canvasId: row.id, path: row.slug, kind: row.kind }

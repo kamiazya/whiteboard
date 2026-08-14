@@ -4,6 +4,7 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-canvas-ports'
 import { expect, it } from 'vitest'
 
@@ -27,11 +28,54 @@ export function describeDocumentIndexConformance(
   async function withIndex(body: (index: DocumentIndex) => Promise<void>): Promise<void> {
     const { index, dispose } = await makeIndex()
     try {
+      // Workspaces are explicit now, so the shared fixture makes the two the
+      // cases below use rather than each test repeating it.
+      await index.createWorkspace({ workspaceId: WS })
+      await index.createWorkspace({ workspaceId: 'ws-other' })
       await body(index)
     } finally {
       await dispose()
     }
   }
+
+  it('refuses to create a document in a workspace that does not exist', async () => {
+    await withIndex(async (index) => {
+      // A typo'd or hallucinated workspaceId must fail loudly rather than
+      // quietly bringing a workspace into being and writing into it.
+      await expect(
+        index.createDocument({ workspaceId: 'never-created', path: 'plan', kind: 'spatial' }),
+      ).rejects.toThrow(WorkspaceNotFoundError)
+    })
+  })
+
+  it('creates a workspace idempotently, and only then accepts documents', async () => {
+    await withIndex(async (index) => {
+      await index.createWorkspace({ workspaceId: 'fresh' })
+      await index.createWorkspace({ workspaceId: 'fresh' })
+      await expect(
+        index.createDocument({ workspaceId: 'fresh', path: 'plan', kind: 'spatial' }),
+      ).resolves.toMatchObject({ path: 'plan' })
+    })
+  })
+
+  it('resolves a document by the id it was assigned, scoped to its workspace', async () => {
+    await withIndex(async (index) => {
+      const created = await index.createDocument({
+        workspaceId: WS,
+        path: 'plan/sub',
+        kind: 'markdown',
+      })
+
+      expect(
+        await index.resolveDocumentById({ workspaceId: WS, canvasId: created.canvasId }),
+      ).toEqual(created)
+      // The id alone is not the address: another workspace must not see it.
+      await index.createWorkspace({ workspaceId: 'ws-other' })
+      expect(
+        await index.resolveDocumentById({ workspaceId: 'ws-other', canvasId: created.canvasId }),
+      ).toBeNull()
+    })
+  })
 
   it('creates a document a later resolve finds, and reports absent as null', async () => {
     await withIndex(async (index) => {
