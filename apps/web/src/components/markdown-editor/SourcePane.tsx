@@ -1,12 +1,14 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
+import { EditorSelection, EditorState, Prec, type StateCommand } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
+import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { minimalChange } from './minimal-change.js'
+import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 
 // Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
 // collapsed selection inserts an empty pair and parks the cursor between
@@ -31,6 +33,8 @@ function wrapSelectionWith(delimiter: string): StateCommand {
 const styleKeymap = [
   { key: 'Mod-b', run: wrapSelectionWith('**') },
   { key: 'Mod-i', run: wrapSelectionWith('*') },
+  { key: 'Mod-e', run: wrapSelectionWith('`') },
+  { key: 'Mod-Enter', run: toggleTaskCheckbox },
 ]
 
 /**
@@ -128,6 +132,12 @@ export function SourcePane({
         // an escaped-source placeholder anyway (see render-preview.ts), so
         // there is nothing yet for a source-side math grammar to agree with.
         markdown({ extensions: [GFM] }),
+        // Above the language keymap's own Enter (`markdown()` registers
+        // lang-markdown's auto-continuation at high precedence): Enter on
+        // an EMPTY list item must delete the marker, not march it down
+        // another line. Everywhere else this reports unhandled and
+        // continuation runs as usual.
+        Prec.highest(keymap.of([{ key: 'Enter', run: exitEmptyListItem }])),
         syntaxHighlighting(markdownHighlightStyle),
         history(),
         // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any

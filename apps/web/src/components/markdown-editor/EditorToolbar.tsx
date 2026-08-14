@@ -39,7 +39,7 @@ interface FormatAction {
 const FORMAT_ACTIONS: readonly FormatAction[] = [
   { label: 'Bold', delimiter: '**', icon: Bold, shortcut: '⌘B' },
   { label: 'Italic', delimiter: '*', icon: Italic, shortcut: '⌘I' },
-  { label: 'Code', delimiter: '`', icon: Code, shortcut: '' },
+  { label: 'Code', delimiter: '`', icon: Code, shortcut: '⌘E' },
 ]
 
 /**

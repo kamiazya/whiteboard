@@ -90,3 +90,48 @@ describe('SourcePane keymap (real browser)', () => {
     await expect.poll(() => scroller.scrollWidth <= scroller.clientWidth + 1).toBe(true)
   })
 })
+
+describe('SourcePane markdown ergonomics (real browser)', () => {
+  it('Enter continues an unordered list marker', async () => {
+    const { onChange, editable } = mountEditor()
+    await userEvent.click(editable)
+    await userEvent.keyboard('- one{Enter}two')
+    expect(lastValue(onChange)).toBe('- one\n- two')
+  })
+
+  it('Enter increments an ordered list marker', async () => {
+    const { onChange, editable } = mountEditor()
+    await userEvent.click(editable)
+    await userEvent.keyboard('1. one{Enter}two')
+    expect(lastValue(onChange)).toBe('1. one\n2. two')
+  })
+
+  it('Enter on an empty list item removes the marker instead of continuing forever', async () => {
+    const { onChange, editable } = mountEditor()
+    await userEvent.click(editable)
+    // First Enter continues to "- "; the second, on the now-empty item,
+    // deletes the marker and leaves the caret on the emptied line.
+    await userEvent.keyboard('- one{Enter}{Enter}after')
+    expect(lastValue(onChange)).toBe('- one\nafter')
+  })
+
+  it('Mod-Enter toggles a task checkbox on the caret line', async () => {
+    const { onChange, editable } = mountEditor()
+    await userEvent.click(editable)
+    // `[[` is userEvent.keyboard's escape for a literal `[`.
+    await userEvent.keyboard('- [[ ] task')
+    await userEvent.keyboard(mod('{Enter}'))
+    expect(lastValue(onChange)).toBe('- [x] task')
+    await userEvent.keyboard(mod('{Enter}'))
+    expect(lastValue(onChange)).toBe('- [ ] task')
+  })
+
+  it('Mod-e wraps the selection in backticks', async () => {
+    const { onChange, editable } = mountEditor()
+    await userEvent.click(editable)
+    await userEvent.keyboard('code')
+    await userEvent.keyboard(mod('a'))
+    await userEvent.keyboard(mod('e'))
+    expect(lastValue(onChange)).toBe('`code`')
+  })
+})
