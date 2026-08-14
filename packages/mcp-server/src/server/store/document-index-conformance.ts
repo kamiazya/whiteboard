@@ -154,6 +154,26 @@ export function describeDocumentIndexConformance(
     })
   })
 
+  it('orders a self-vacating move by depth, not by path order', async () => {
+    await withIndex(async (index) => {
+      // The contended pair here are NOT ancestor and descendant of each
+      // other: `a/b/x` and `a/b/b/x` branch below `a/b`. Moving `a/b` to `a`
+      // sends the second onto the path the first is vacating, so the first
+      // has to write before the second — and segment-wise path order puts
+      // them the other way round, because `b` sorts before `x`. Only depth
+      // separates them.
+      await index.createDocument({ workspaceId: WS, path: 'a/b/x', kind: 'spatial' })
+      await index.createDocument({ workspaceId: WS, path: 'a/b/b/x', kind: 'markdown' })
+
+      await index.moveDocument({ workspaceId: WS, from: 'a/b', to: 'a' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'a/b/x',
+        'a/x',
+      ])
+    })
+  })
+
   it('refuses a move into the moving subtree', async () => {
     await withIndex(async (index) => {
       await index.createDocument({ workspaceId: WS, path: 'a', kind: 'spatial' })

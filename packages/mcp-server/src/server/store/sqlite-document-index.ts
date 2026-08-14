@@ -19,6 +19,11 @@ import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
+/** How many segments a path has. */
+function depth(path: string): number {
+  return path.split('/').length
+}
+
 /** Whether `path` is `ancestor` itself or sits below it. */
 function isSelfOrDescendant(path: string, ancestor: string): boolean {
   return path === ancestor || path.startsWith(`${ancestor}/`)
@@ -131,14 +136,18 @@ export class SqliteDocumentIndex implements DocumentIndex {
           }
         }
 
-        // Shallowest source first. When a move goes UP into its own ancestor
-        // namespace the produced path of a deeper row equals the vacated path
-        // of a shallower one, so writing them in the order the query happened
-        // to return can hit the unique index on a move the contract says
-        // succeeds. `compareDocumentPaths` already sorts a parent before its
-        // descendants, which is exactly the order that frees each path before
-        // anything claims it.
-        rewritten.sort((left, right) => compareDocumentPaths(left.from, right.from))
+        // Shallowest source first, by DEPTH — not by path order. A move up
+        // into its own ancestor namespace sends a deeper row onto the path a
+        // shallower one is vacating, so the shallower write has to land
+        // first or the unique index rejects a move the contract requires to
+        // succeed. The two contending rows need not be ancestor and
+        // descendant of each other (`a/b/x` and `a/b/b/x` both branch below
+        // `a/b`), which is why segment-wise path order is not enough here: it
+        // would put `a/b/b/x` first because `b` precedes `x`. Only the depth
+        // difference is guaranteed, and it is: the row producing a contested
+        // path is always deeper than the row vacating it, by exactly the
+        // number of segments the move removes.
+        rewritten.sort((left, right) => depth(left.from) - depth(right.from))
 
         const now = Date.now()
         for (const row of rewritten) {
