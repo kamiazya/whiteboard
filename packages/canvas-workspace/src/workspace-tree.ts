@@ -7,6 +7,15 @@ export interface WorkspaceNode {
   readonly id: TreeID
   readonly canvasId: string
   readonly segment: string
+  /**
+   * What a human reads, as opposed to `segment`, which is placement and is
+   * slug-validated. Absent means the document has never been named — a
+   * reader falls back to the segment rather than inventing one.
+   *
+   * ADR-0009 makes this the document's name: OKF frontmatter `title` is a
+   * projection of it on serialise, never a second place to write it.
+   */
+  readonly displayName?: string
 }
 
 export interface WorkspaceTreeSnapshot {
@@ -15,13 +24,14 @@ export interface WorkspaceTreeSnapshot {
 
 export class WorkspaceTree {
   readonly #doc: LoroDoc
-  readonly #tree: LoroTree<{ canvasId: string; segment: string }>
+  readonly #tree: LoroTree<{ canvasId: string; segment: string; displayName?: string }>
 
   constructor(doc: LoroDoc) {
     this.#doc = doc
     this.#tree = doc.getTree(TREE_KEY) as LoroTree<{
       canvasId: string
       segment: string
+      displayName?: string
     }>
   }
 
@@ -39,14 +49,34 @@ export class WorkspaceTree {
     return new Uint8Array(encoded)
   }
 
-  createNode(canvasId: string, segment: string, parent?: TreeID, index?: number): TreeID {
+  createNode(
+    canvasId: string,
+    segment: string,
+    parent?: TreeID,
+    index?: number,
+    displayName?: string,
+  ): TreeID {
     validateSegment(segment)
     this.#assertNoSiblingConflict(parent, segment)
     const node = this.#tree.createNode(parent, index)
     node.data.set('canvasId', canvasId)
     node.data.set('segment', segment)
+    const normalized = normalizeDisplayName(displayName)
+    if (normalized !== undefined) node.data.set('displayName', normalized)
     this.#doc.commit()
     return node.id
+  }
+
+  /**
+   * Blank clears rather than stores: an absent name and a whitespace-only one
+   * would otherwise be two states meaning the same thing, and every reader
+   * would have to test for both.
+   */
+  setDisplayName(target: TreeID, displayName: string): void {
+    const node = this.#getNode(target)
+    const normalized = normalizeDisplayName(displayName)
+    node.data.set('displayName', normalized)
+    this.#doc.commit()
   }
 
   move(target: TreeID, newParent?: TreeID, index?: number): void {
@@ -105,7 +135,9 @@ export class WorkspaceTree {
     const node = this.#tree.getNodeByID(id)
     if (!node || this.#tree.isNodeDeleted(id)) return undefined
     const segments: string[] = []
-    let current: LoroTreeNode<{ canvasId: string; segment: string }> | undefined = node
+    let current:
+      | LoroTreeNode<{ canvasId: string; segment: string; displayName?: string }>
+      | undefined = node
     while (current) {
       const parent = current.parent()
       const disambiguated = disambiguateSegments(this.children(parent?.id))
@@ -120,7 +152,9 @@ export class WorkspaceTree {
 
     let candidates = this.#tree.getNodes().filter((n) => n.parent() === undefined)
 
-    let matched: LoroTreeNode<{ canvasId: string; segment: string }> | undefined
+    let matched:
+      | LoroTreeNode<{ canvasId: string; segment: string; displayName?: string }>
+      | undefined
 
     for (const part of parts) {
       const disambiguated = disambiguateSegments(candidates.map(toWorkspaceNode))
@@ -138,7 +172,7 @@ export class WorkspaceTree {
     }
   }
 
-  #getNode(id: TreeID): LoroTreeNode<{ canvasId: string; segment: string }> {
+  #getNode(id: TreeID): LoroTreeNode<{ canvasId: string; segment: string; displayName?: string }> {
     const node = this.#tree.getNodeByID(id)
     if (!node) throw new Error(`Tree node not found: ${id}`)
     return node
@@ -173,11 +207,20 @@ function validateSegment(segment: string): void {
   }
 }
 
-function toWorkspaceNode(node: LoroTreeNode<{ canvasId: string; segment: string }>): WorkspaceNode {
+function normalizeDisplayName(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed
+}
+
+function toWorkspaceNode(
+  node: LoroTreeNode<{ canvasId: string; segment: string; displayName?: string }>,
+): WorkspaceNode {
+  const displayName = node.data.get('displayName')
   return {
     id: node.id,
     canvasId: node.data.get('canvasId') as string,
     segment: node.data.get('segment') as string,
+    ...(typeof displayName === 'string' && displayName !== '' ? { displayName } : {}),
   }
 }
 

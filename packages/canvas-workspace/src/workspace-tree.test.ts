@@ -353,3 +353,67 @@ describe('WorkspaceTree', () => {
     })
   })
 })
+
+describe('display name', () => {
+  // ADR-0009: a document's name lives in the workspace, not in its content —
+  // OKF frontmatter `title` is a projection of it on serialise. The tree is
+  // the only workspace store the shared layer can reach, so the name has to
+  // be expressible here before anything can project it.
+  it('a node created without one has no display name', () => {
+    const tree = new WorkspaceTree(new LoroDoc())
+    const id = tree.createNode('c1', 'notes')
+
+    expect(tree.getNode(id)?.displayName).toBeUndefined()
+  })
+
+  it('carries a display name given at creation', () => {
+    const tree = new WorkspaceTree(new LoroDoc())
+    const id = tree.createNode('c1', 'notes', undefined, undefined, '設計メモ')
+
+    expect(tree.getNode(id)?.displayName).toBe('設計メモ')
+  })
+
+  it('renames the display name without touching the segment', () => {
+    // The two are separate concerns: `segment` is placement and is
+    // slug-validated, the display name is what a human reads and is free
+    // text. Renaming one must not move the other.
+    const tree = new WorkspaceTree(new LoroDoc())
+    const id = tree.createNode('c1', 'notes', undefined, undefined, 'Notes')
+
+    tree.setDisplayName(id, 'Release plan 2026')
+
+    expect(tree.getNode(id)).toMatchObject({
+      segment: 'notes',
+      displayName: 'Release plan 2026',
+    })
+  })
+
+  it('accepts a display name a segment could never be', () => {
+    const tree = new WorkspaceTree(new LoroDoc())
+    const id = tree.createNode('c1', 'doc')
+
+    tree.setDisplayName(id, 'リリース計画 2026 / v2')
+
+    expect(tree.getNode(id)?.displayName).toBe('リリース計画 2026 / v2')
+  })
+
+  it('clears the display name when set to empty, rather than storing a blank', () => {
+    // An absent name and a blank one must not be two states: every reader
+    // would have to test for both, and one of them would forget.
+    const tree = new WorkspaceTree(new LoroDoc())
+    const id = tree.createNode('c1', 'doc', undefined, undefined, 'Doc')
+
+    tree.setDisplayName(id, '   ')
+
+    expect(tree.getNode(id)?.displayName).toBeUndefined()
+  })
+
+  it('survives a snapshot round-trip', () => {
+    const tree = new WorkspaceTree(new LoroDoc())
+    tree.createNode('c1', 'doc', undefined, undefined, 'Doc one')
+
+    const restored = WorkspaceTree.fromSnapshot(tree.exportSnapshot())
+
+    expect(restored.children().map((n) => n.displayName)).toEqual(['Doc one'])
+  })
+})
