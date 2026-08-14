@@ -94,7 +94,17 @@ describe('wb_document_set -> the OKF exporter round-trip property', () => {
       const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
       expect(result.frontmatter.type).toBe(doc.frontmatter.type)
-      expect(result.frontmatter.title).toBe(doc.frontmatter.title)
+      // Not verbatim: the name lives on the workspace now, and a blank name
+      // is no name (they are one state by design), so the round trip
+      // normalises a whitespace-only title to absent. Everything else about
+      // the title is still verbatim — AGENTS.md allows a round-trip property
+      // to assert a well-defined normalisation, not a weaker equality.
+      const submittedTitle = doc.frontmatter.title
+      const expectedTitle =
+        submittedTitle === undefined || submittedTitle.trim() === ''
+          ? undefined
+          : submittedTitle.trim()
+      expect(result.frontmatter.title).toBe(expectedTitle)
       expect(result.frontmatter.tags).toEqual(doc.frontmatter.tags)
       expect(result.frontmatter.view).toBe(doc.frontmatter.view)
       const expectedFacets = 'facets' in doc.frontmatter ? doc.frontmatter.facets : {}

@@ -12,7 +12,11 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
-import { assertCanvasInWorkspace } from './workspace-tree-io.js'
+import {
+  assertCanvasInWorkspace,
+  loadWorkspaceTree,
+  saveWorkspaceTree,
+} from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
 
@@ -103,7 +107,23 @@ export function createDocumentSetTool(deps: ServerDeps) {
         )
       }
 
-      const { facets, ...coreMeta } = frontmatter
+      // OKF is an export format, not the storage model: the Loro side keeps
+      // its own OKF-compatible document, and the workspace owns the name. So
+      // parsing an OKF projects it INTO that model exactly as serialising
+      // projects back out, and `title` lands on the workspace rather than
+      // becoming a second stored copy (ADR-0009 decision 2).
+      //
+      // Absent is not cleared: an OKF with no `title` says nothing about the
+      // name, so omitting it must not erase one.
+      const { facets, title, ...coreMeta } = frontmatter
+      if (title !== undefined) {
+        const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+        const node = tree.snapshot().nodes.find((n) => n.canvasId === input.canvasId)
+        if (node !== undefined) {
+          tree.setDisplayName(node.id, title)
+          await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+        }
+      }
       writeCoreFacets(doc, coreMeta)
       if (facets) {
         writeFacets(doc, facets)
