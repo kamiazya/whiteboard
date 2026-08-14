@@ -25,6 +25,7 @@
  */
 import {
   FileBox,
+  Focus,
   Frame,
   Hand,
   Image as ImageIcon,
@@ -52,6 +53,8 @@ interface ToolPaletteProps {
   readonly onCreateImage?: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
+  /** Frames every node in the viewport — the touch equivalent of Shift+1. */
+  readonly onZoomToFit: () => void
 }
 
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground`
@@ -71,6 +74,7 @@ export function ToolPalette({
   onCreateImage,
   tool,
   onToolChange,
+  onZoomToFit,
 }: ToolPaletteProps) {
   const [addOpen, setAddOpen] = useState(false)
   const dockRef = useRef<HTMLDivElement | null>(null)
@@ -213,6 +217,28 @@ export function ToolPalette({
           </button>
         </TooltipTrigger>
         <TooltipContent>Add</TooltipContent>
+      </Tooltip>
+      <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+      {/* The only view control in the dock. People ask to "see everything" or
+          to "get closer"; the magnification between those two is an
+          implementation coordinate, so no percentage is offered and there is
+          nothing to reset to. Getting closer is a double press in hand mode
+          (and the wheel/pinch), which needs no chrome at all. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="zoom-fit-button"
+            aria-label="Zoom to fit"
+            // Wrapped: a bare handler reference hands React's click event to
+            // the callback, and this one takes an optional id set.
+            onClick={() => onZoomToFit()}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <Focus aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Zoom to fit</TooltipContent>
       </Tooltip>
       {addOpen && (
         <div

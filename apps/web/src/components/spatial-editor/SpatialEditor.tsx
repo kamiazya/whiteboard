@@ -135,7 +135,6 @@ import {
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
-import { HandViewControls } from './HandViewControls.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
@@ -205,6 +204,14 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
 const SNAP_GRID_CANVAS_PX = 20
 
 /** Overview size. Big enough to aim at, small enough not to cover content. */
+/**
+ * One step of hand mode's double-press zoom. Bigger than a wheel notch:
+ * a tap that barely changed the view reads as a missed tap, and the way
+ * back out is one press on zoom-to-fit rather than N reverse taps.
+ */
+const DOUBLE_PRESS_ZOOM_FACTOR = 2
+/** Press-pairing key for hand mode, where no node identity is involved. */
+const HAND_PRESS_KEY = 'hand'
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
 
@@ -1341,6 +1348,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // available to promote the gesture.
       if (e.button === 1 || (e.button === 0 && (spaceDownRef.current || tool === 'hand'))) {
         e.preventDefault()
+        // Hand mode's own double press: get closer, anchored on what was
+        // pressed. It cannot collide with the double press that creates a
+        // note, because that one is detected further down — past this
+        // early return, which hand mode never gets past.
+        if (tool === 'hand' && e.button === 0 && !spaceDownRef.current) {
+          const isDoublePress =
+            lastPressRef.current !== null &&
+            lastPressRef.current.key === HAND_PRESS_KEY &&
+            e.timeStamp - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
+          lastPressRef.current = isDoublePress ? null : { key: HAND_PRESS_KEY, at: e.timeStamp }
+          if (isDoublePress) {
+            setViewport((vp) => zoomAt(vp, screenPointForPan, DOUBLE_PRESS_ZOOM_FACTOR))
+            return
+          }
+        }
         isPanningRef.current = true
         lastPanPointRef.current = screenPointForPan
         return
@@ -2279,11 +2301,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
     }, [boxes, canvas, theme])
 
-    /** Hand-mode zoom controls: zoom about the viewport CENTER, not a pointer. */
-    const zoomAtViewportCenter = (factor: number) => {
-      setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
-    }
-
     /**
      * Pans so the union of all node boxes sits centered in the viewport,
      * keeping the current zoom (the hand-mode "where did my content go"
@@ -2631,21 +2648,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
         <ToolPalette
-          // Hand mode is view-only, so the dock's leading slot shows VIEW
-          // controls (zoom in/out, 100% reset, center content) instead of
-          // the host's EDIT history cluster — undo/redo has nothing to act
-          // on in a mode where no press can change the canvas.
-          leading={
-            tool === 'hand' ? (
-              <HandViewControls
-                zoom={viewport.zoom}
-                onZoom={zoomAtViewportCenter}
-                onZoomToFit={frameContent}
-              />
-            ) : (
-              paletteLeading
-            )
-          }
+          // The dock does NOT change with the mode. Navigation belongs to the
+          // viewport, not to whichever tool is armed, so nothing is exchanged
+          // for entering hand mode — the host's history cluster stays put and
+          // the one view control (zoom to fit) is always in the same place.
+          leading={paletteLeading}
+          onZoomToFit={frameContent}
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
