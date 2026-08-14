@@ -319,8 +319,11 @@ export function ToolPalette({
                 if (entry.drag === undefined) return
                 e.dataTransfer.setData(`${CREATE_DRAG_MIME_PREFIX}${entry.drag}`, entry.drag)
                 e.dataTransfer.effectAllowed = 'copy'
-                setAddOpen(false)
               }}
+              // Closed on dragEND, not dragstart: removing the source element
+              // mid-drag tears down the drag session in Chromium, so closing
+              // early makes the drag never reach a drop.
+              onDragEnd={() => setAddOpen(false)}
               onClick={() => {
                 setAddOpen(false)
                 entry.onSelect()

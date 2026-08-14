@@ -164,7 +164,12 @@ import {
 import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import { draggedCreation, type EditorTool, ToolPalette } from './ToolPalette.js'
+import {
+  type DraggableCreation,
+  draggedCreation,
+  type EditorTool,
+  ToolPalette,
+} from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
   type ContainerSize,
