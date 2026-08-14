@@ -39,6 +39,84 @@ export const deleteDocumentInputSchema = z
 export type DeleteDocumentInput = z.infer<typeof deleteDocumentInputSchema>
 
 /**
+ * The `listDocuments` order, as a function, so two implementations cannot
+ * write it two ways. Compares segment against segment by code point, and a
+ * path sorts before every path it prefixes.
+ *
+ * A pure model-only helper in a contracts package for the same reason
+ * `chunkSnapshot` is one: the rule is part of the contract, and a comparator
+ * every store re-derives from prose is a comparator they will re-derive
+ * differently.
+ */
+export function compareDocumentPaths(left: string, right: string): number {
+  const a = left.split('/')
+  const b = right.split('/')
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const segmentA = a[i] as string
+    const segmentB = b[i] as string
+    if (segmentA !== segmentB) return segmentA < segmentB ? -1 : 1
+  }
+  return a.length - b.length
+}
+
+/**
+ * Thrown when a path the caller wanted to occupy is already occupied.
+ *
+ * Named in the contract rather than left to each implementation: "fails if the
+ * path is taken" is not a guarantee a caller can act on if one store throws
+ * this and another surfaces whatever its unique index raised. A store whose
+ * backing has no unique constraint has to detect the collision itself, and
+ * only a named error makes that difference visible instead of silent.
+ */
+export class DocumentPathTakenError extends Error {
+  constructor(
+    readonly workspaceId: string,
+    readonly path: string,
+  ) {
+    super(`Document path "${path}" already exists in workspace "${workspaceId}"`)
+    this.name = 'DocumentPathTakenError'
+  }
+}
+
+/**
+ * Thrown when an operation names a document that is not there. Deleting an
+ * absent path is deliberately NOT this — the caller wanted it gone and it is —
+ * but moving one is: there is a destination involved, and silently doing
+ * nothing would look identical to having moved it.
+ */
+export class DocumentNotFoundError extends Error {
+  constructor(
+    readonly workspaceId: string,
+    readonly path: string,
+  ) {
+    super(`No document at "${path}" in workspace "${workspaceId}"`)
+    this.name = 'DocumentNotFoundError'
+  }
+}
+
+/** Thrown when an operation would strand or swallow the documents below its target. */
+export class DocumentHasDescendantsError extends Error {
+  constructor(
+    readonly path: string,
+    detail: string,
+  ) {
+    super(`Document "${path}" has descendants. ${detail}`)
+    this.name = 'DocumentHasDescendantsError'
+  }
+}
+
+/** Thrown when a move's destination lies inside the subtree being moved. */
+export class DocumentMoveIntoSelfError extends Error {
+  constructor(
+    readonly from: string,
+    readonly to: string,
+  ) {
+    super(`Cannot move "${from}" to "${to}": the destination is inside the subtree being moved`)
+    this.name = 'DocumentMoveIntoSelfError'
+  }
+}
+
+/**
  * The workspace's index of the documents it holds: which paths exist, what
  * each one is, and which stored document each names.
  *
@@ -95,6 +173,10 @@ export interface DocumentIndex {
    * even though `c` is free. The move is rejected whole in that case — a
    * partial move would silently merge two hierarchies, and the caller asked
    * to relocate one.
+   *
+   * Fails when `from` names nothing — unlike a delete, which is content with
+   * an absent path, a move has a destination and doing nothing quietly would
+   * be indistinguishable from succeeding.
    *
    * Also fails when `to` is inside `from`'s own subtree (`a` to `a/b`). The
    * produced paths do not actually collide there — prefix replacement keeps
