@@ -99,3 +99,71 @@ export function syntheticLayouts(count: number): readonly RoutingCase[] {
   }
   return cases
 }
+
+/**
+ * One large canvas with REAL LOCALITY — the shape an AI-authored document
+ * grows into, and the case every other instrument in this package is blind
+ * to.
+ *
+ * The bench's `gridCanvas` wires nodes by a stride, so every edge spans the
+ * whole canvas and each one's bounding box overlaps roughly half the others
+ * (measured: 55% of pairs survive the broad phase). That is the worst case
+ * for any spatial pruning, and it is not what a real document looks like:
+ * work clusters, and so do the edges between it. Optimising against the
+ * stride canvas alone would price a spatial index at its least favourable
+ * input and reject it for the wrong reason.
+ *
+ * So: `clusters` groups of nodes laid out in well-separated regions, with
+ * `crossClusterRatio` of the edges reaching between neighbouring groups and
+ * the rest staying local. Deterministic for a given seed, like every other
+ * generator here.
+ */
+export function clusteredLayout(options: {
+  readonly clusters: number
+  readonly nodesPerCluster: number
+  readonly edgesPerCluster: number
+  readonly crossClusterRatio?: number
+  readonly seed?: number
+}): RoutingCase {
+  const { clusters, nodesPerCluster, edgesPerCluster } = options
+  const crossClusterRatio = options.crossClusterRatio ?? 0.15
+  const random = mulberry32(options.seed ?? 0xc105)
+  const int = (max: number) => Math.floor(random() * max)
+
+  // Cluster regions on a square grid, spaced far enough apart that a local
+  // edge cannot reach a neighbouring region — that separation is the whole
+  // point of the fixture.
+  const perRow = Math.ceil(Math.sqrt(clusters))
+  const REGION_PX = 1200
+  const nodes: SpatialNode[] = []
+  for (let c = 0; c < clusters; c++) {
+    const ox = (c % perRow) * REGION_PX
+    const oy = Math.floor(c / perRow) * REGION_PX
+    for (let n = 0; n < nodesPerCluster; n++) {
+      nodes.push(node(`c${c}n${n}`, ox + int(700), oy + int(700), 120 + int(120), 60 + int(80)))
+    }
+  }
+
+  const edges: CanvasEdge[] = []
+  const seen = new Set<string>()
+  const push = (from: string, to: string) => {
+    if (from === to) return
+    const key = `${from}->${to}`
+    if (seen.has(key)) return
+    seen.add(key)
+    edges.push({ id: `e${edges.length}`, fromNode: from, toNode: to })
+  }
+  for (let c = 0; c < clusters; c++) {
+    for (let e = 0; e < edgesPerCluster; e++) {
+      // A cross-cluster edge reaches the NEXT region only; a document's
+      // long-range links are few and mostly between neighbours.
+      if (random() < crossClusterRatio && clusters > 1) {
+        const other = (c + 1) % clusters
+        push(`c${c}n${int(nodesPerCluster)}`, `c${other}n${int(nodesPerCluster)}`)
+      } else {
+        push(`c${c}n${int(nodesPerCluster)}`, `c${c}n${int(nodesPerCluster)}`)
+      }
+    }
+  }
+  return { name: `clustered ${clusters}x${nodesPerCluster}`, nodes, edges }
+}

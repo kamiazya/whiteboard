@@ -14,7 +14,7 @@
 // it, and only the side-choice penalties upstream ever priced it.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import { ROUTING_CORPUS, syntheticLayouts } from '../test-utils/routing-corpus.js'
+import { clusteredLayout, ROUTING_CORPUS, syntheticLayouts } from '../test-utils/routing-corpus.js'
 import {
   bends,
   borderInk,
@@ -185,4 +185,50 @@ describe('routing quality across the synthetic corpus', () => {
       shortArrowRunway: 235,
     })
   })
+})
+
+// The corpus above is 2000 SMALL layouts, every one of them under the
+// side-choice optimizer's edge gate. Nothing in this file has ever asked
+// what a canvas past that gate looks like — and past it the optimizer is
+// skipped wholesale, so the answer is "whatever the initial ranking
+// happened to pick". An AI-authored document reaches this size easily, and
+// the debt below is what it is served today.
+//
+// Pinned exactly, like the aggregate above, and for the same reason: this
+// is a debt figure whose target is lower, and an improvement has to be as
+// loud as a regression.
+describe('routing quality past the side-choice optimizer gate', () => {
+  it('reports the drawing cost of a large clustered canvas', () => {
+    const layout = clusteredLayout({ clusters: 24, nodesPerCluster: 12, edgesPerCluster: 16 })
+    const violations = avoidableInk(layout.nodes, layout.edges)
+    const anchors = assignEdgeAnchors(layout.nodes, layout.edges, 'orthogonal')
+    const paths = layout.edges.map(
+      (edge) => routeEdge(layout.nodes, edge, 'orthogonal', anchors.get(edge.id)).path,
+    )
+    let bendCount = 0
+    let length = 0
+    let border = 0
+    for (const path of paths) {
+      bendCount += bends(path)
+      length += drawnLength(path)
+      for (const n of layout.nodes) border += borderInk(path, rectOf(n))
+    }
+    expect({
+      edges: layout.edges.length,
+      violations: violations.length,
+      interiorInk: Math.round(violations.reduce((sum, v) => sum + v.ink, 0)),
+      borderInk: Math.round(border),
+      bends: bendCount,
+      crossings: crossings(paths),
+      length: Math.round(length),
+    }).toEqual({
+      edges: 345,
+      violations: 183,
+      interiorInk: 21001,
+      borderInk: 554,
+      bends: 658,
+      crossings: 752,
+      length: 274428,
+    })
+  }, 120_000)
 })
