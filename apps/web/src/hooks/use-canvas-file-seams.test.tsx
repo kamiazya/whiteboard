@@ -149,26 +149,29 @@ describe('useCanvasFileSeams', () => {
 })
 
 describe('toFacetCard', () => {
-  it('maps a type-only facet set to a titled card with one row', () => {
-    expect(toFacetCard({ type: 'note' })).toEqual({
-      title: 'note',
+  it('heads a type-only facet set with the reference, and keeps type as a row', () => {
+    // Was `title: 'note'` — the type doubled as the heading. That reads the
+    // same on every card of a kind, so it identifies nothing; the reference
+    // does. `type` is still a row, which is where it says something.
+    expect(toFacetCard('spec-a1b2c3', { type: 'note' })).toEqual({
+      title: 'spec-a1b2c3',
       rows: [{ label: 'type', value: 'note' }],
     })
   })
 
   it('prefers the facet title over the type for the heading', () => {
-    expect(toFacetCard({ type: 'note', title: 'Spec' })).toEqual({
+    expect(toFacetCard('spec-a1b2c3', { type: 'note', title: 'Spec' })).toEqual({
       title: 'Spec',
       rows: [{ label: 'type', value: 'note' }],
     })
   })
 
   it('joins tags into one row and omits the row when there are none', () => {
-    expect(toFacetCard({ type: 'note', tags: ['a', 'b'] })?.rows).toEqual([
+    expect(toFacetCard('spec-a1b2c3', { type: 'note', tags: ['a', 'b'] })?.rows).toEqual([
       { label: 'type', value: 'note' },
       { label: 'tags', value: 'a, b' },
     ])
-    expect(toFacetCard({ type: 'note', tags: [] })?.rows).toEqual([
+    expect(toFacetCard('spec-a1b2c3', { type: 'note', tags: [] })?.rows).toEqual([
       { label: 'type', value: 'note' },
     ])
   })
@@ -179,12 +182,12 @@ describe('toFacetCard', () => {
     // `readCoreFacets` returns core facets PLUS `facetsRaw`, so the extra key
     // really does arrive at runtime even though the parameter narrows it away.
     const facets = { type: 'note', view: 'kanban/1', facetsRaw: { owner: 'x' } } as CoreFacets
-    const card = toFacetCard(facets)
+    const card = toFacetCard('spec-a1b2c3', facets)
     expect(card?.rows).toEqual([{ label: 'type', value: 'note' }])
   })
 
   it('has no card for a document with no readable facets', () => {
-    expect(toFacetCard(undefined)).toBeUndefined()
+    expect(toFacetCard('spec-a1b2c3', undefined)).toBeUndefined()
   })
 })
 
@@ -263,5 +266,24 @@ describe('useCanvasFileSeams empty canvases', () => {
 
     await waitFor(() => expect(result.current.resolveFileFacets('note')).toBeDefined())
     expect(result.current.resolveFileCanvas('note')).toBeUndefined()
+  })
+})
+
+describe('toFacetCard heading when the document has no stored title', () => {
+  it('falls back to the reference, not to the type', () => {
+    // The name moved to the workspace, so a document written through
+    // wb_document_set no longer stores a `title` facet. Falling back to
+    // `type` made every such card read "note" or "issue" — the same word on
+    // every card, identifying nothing. The reference is the slug, which is
+    // the fallback this model uses everywhere a name is absent.
+    expect(toFacetCard('release-plan', { type: 'note' })?.title).toBe('release-plan')
+  })
+
+  it('a stored title still wins, so browser-local documents are unaffected', () => {
+    // Browser-local canvases keep writing `title` into core facets; only the
+    // daemon path stopped. Both must keep working from this one function.
+    expect(toFacetCard('release-plan', { type: 'note', title: 'Release plan' })?.title).toBe(
+      'Release plan',
+    )
   })
 })

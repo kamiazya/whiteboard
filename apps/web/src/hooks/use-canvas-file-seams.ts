@@ -166,7 +166,7 @@ export function useCanvasFileSeams({
     [embedContent],
   )
   const resolveFileFacets = useCallback(
-    (file: string) => toFacetCard(embedContent.get(file)?.facets),
+    (file: string) => toFacetCard(file, embedContent.get(file)?.facets),
     [embedContent],
   )
   const resolveFileImage = useCallback(
@@ -191,13 +191,26 @@ export function useCanvasFileSeams({
  * `view` selects a template rather than carrying content, and `facetsRaw`
  * holds keys with no agreed presentation, so neither renders.
  */
-export function toFacetCard(facets: CoreFacets | undefined): FacetCardData | undefined {
+export function toFacetCard(
+  ref: string,
+  facets: CoreFacets | undefined,
+): FacetCardData | undefined {
   if (facets === undefined) return undefined
   const rows = [{ label: 'type', value: facets.type }]
   if (facets.tags !== undefined && facets.tags.length > 0) {
     rows.push({ label: 'tags', value: facets.tags.join(', ') })
   }
-  // `type` is required by the schema, so a parsed facet set always yields a
-  // heading and at least one row — an empty card is unrepresentable here.
-  return { title: facets.title ?? facets.type, rows }
+  // The heading falls back to the REFERENCE, not to `type`. A document's name
+  // lives in the workspace now (ADR-0009 decision 2), so one written through
+  // wb_document_set stores no `title` facet at all — and `type` as a heading
+  // made every such card read "note", identifying nothing. `ref` is the slug,
+  // which is the fallback this model uses wherever a name is absent.
+  //
+  // A stored `title` still wins: browser-local canvases keep writing one, and
+  // both paths come through this function.
+  //
+  // ponytail: the slug, because the daemon's canvas summary carries no
+  // display name yet (see DaemonCanvasPage's note). Once it does, the real
+  // name goes here and this fallback moves behind it.
+  return { title: facets.title ?? ref, rows }
 }
