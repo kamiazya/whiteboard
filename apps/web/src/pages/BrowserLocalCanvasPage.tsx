@@ -33,6 +33,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/toolti
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
+import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -205,6 +206,11 @@ export function BrowserLocalCanvasPage({
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
   const resolveAlias = useMemo(() => createSnapshotAliasResolver(canvases), [canvases])
+  // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
+  const resolveEmbed = useMarkdownEmbedContent({
+    body: canvasKind === 'markdown' ? (markdownDoc.body ?? '') : '',
+    resolveAlias,
+  })
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -697,6 +703,7 @@ export function BrowserLocalCanvasPage({
                   meta={markdownDoc.coreMeta}
                   resolveAlias={resolveAlias}
                   onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
+                  resolveEmbed={resolveEmbed}
                 />
               </div>
             </div>

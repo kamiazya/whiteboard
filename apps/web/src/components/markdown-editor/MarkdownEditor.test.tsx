@@ -163,6 +163,32 @@ describe('MarkdownEditor', () => {
     expect(onOpenCanvas).toHaveBeenCalledTimes(1)
   })
 
+  it('intercepts browser-local UUID canvas ids too, not only daemon ULIDs', async () => {
+    vi.useFakeTimers()
+    // Browser-local canvases mint crypto.randomUUID() ids; the daemon mints
+    // ULIDs. Both travel through the alias resolver into anchor hrefs.
+    const UUID = '68f94ee9-80fe-4e7e-b1fc-dcf853e26da3'
+    const onOpenCanvas = vi.fn()
+    const { getByTestId } = render(
+      <MarkdownEditor
+        value="See [[Snippet]]."
+        onChange={() => {}}
+        resolveAlias={(alias) => (alias === 'Snippet' ? UUID : null)}
+        onOpenCanvas={onOpenCanvas}
+        previewDebounceMs={150}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    const anchor = getByTestId('markdown-preview-scroll').querySelector(`a[href="${UUID}"]`)
+    expect(anchor).not.toBeNull()
+    if (!anchor) throw new Error('unreachable')
+    const intercepted = !fireEvent.click(anchor)
+    expect(onOpenCanvas).toHaveBeenCalledWith(UUID)
+    expect(intercepted).toBe(true)
+  })
+
   it('renders the core facets as a document header in Read mode', () => {
     const { getByRole, getByTestId } = render(
       <MarkdownEditor

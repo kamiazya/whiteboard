@@ -1,5 +1,5 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { type CSSProperties, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
@@ -13,6 +13,8 @@ export interface PreviewPaneProps {
   theme?: ResolvedTheme
   /** Maps `[[Name]]` aliases to canvas ids; see render-preview.ts. */
   resolveAlias?: AliasResolver
+  /** Resolves `![[embed]]` bodies for inline rendering; see render-preview.ts. */
+  resolveEmbed?: MdastLayoutOptions['resolveEmbed']
 }
 
 /**
@@ -33,10 +35,18 @@ export function PreviewPane({
   background,
   theme = 'light',
   resolveAlias,
+  resolveEmbed,
 }: PreviewPaneProps) {
   const svg = useMemo(
-    () => renderMarkdownPreviewSvg(value, { measure, maxWidth, background, resolveAlias }),
-    [value, measure, maxWidth, background, resolveAlias],
+    () =>
+      renderMarkdownPreviewSvg(value, {
+        measure,
+        maxWidth,
+        background,
+        resolveAlias,
+        resolveEmbed,
+      }),
+    [value, measure, maxWidth, background, resolveAlias, resolveEmbed],
   )
 
   const fill = editorTextFill(theme)

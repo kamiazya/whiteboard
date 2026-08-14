@@ -901,3 +901,27 @@ describe('rounded edges', () => {
     )
   })
 })
+
+describe('embedPlaceholder rendering', () => {
+  it('paints the placeholder title at a baseline INSIDE its box, not at the box top', () => {
+    const svg = renderSceneToSvg({
+      nodes: [
+        {
+          kind: 'embedPlaceholder',
+          bbox: { x: 0, y: 100, w: 200, h: 16 },
+          canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          title: 'Missing note',
+          reason: 'unresolvable',
+        },
+      ],
+    })
+    // SVG <text> y is the BASELINE: emitting the box top paints the glyphs
+    // one line ABOVE the box, colliding with the previous block.
+    const match = /<text x="0" y="([0-9.]+)"/.exec(svg)
+    expect(match).not.toBeNull()
+    const baseline = Number(match?.[1])
+    expect(baseline).toBeGreaterThan(100)
+    expect(baseline).toBeLessThanOrEqual(116)
+    expect(svg).toContain('Missing note')
+  })
+})

@@ -627,3 +627,131 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
     expect(b.bbox.x).toBeGreaterThan(a.bbox.x + a.bbox.w)
   })
 })
+
+describe('layoutMdastBlocks — embed body resolution', () => {
+  const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+  const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
+  const D = '01BX5ZZKBKACTAV9WEVGEMMVS1'
+  type Flow = import('@kamiazya/whiteboard-canvas-model/mdast').MdastFlowContent
+  const para = (text: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'text', value: text }],
+  })
+  const embedPara = (canvasId: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'embed', canvasId }],
+  })
+  const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
+
+  it("lays out a block embed's resolved body under an embedResolved node, advancing the cursor", () => {
+    const root = rootOf([para('before'), embedPara(A), para('after')])
+    const scene = layoutMdastBlocks(root, {
+      ...options,
+      resolveEmbed: (id) =>
+        id === A ? { title: 'Target', root: rootOf([para('embedded body')]) } : undefined,
+    })
+    expect(scene.nodes.map((n) => n.kind)).toEqual(['paragraph', 'embedResolved', 'paragraph'])
+    const embed = scene.nodes[1]
+    if (embed.kind !== 'embedResolved') throw new Error('unreachable')
+    expect(embed.canvasId).toBe(A)
+    expect(embed.children).toHaveLength(1)
+    const inner = embed.children[0]
+    if (inner.kind !== 'paragraph') throw new Error('expected embedded paragraph')
+    expect(inner.runs.map((r) => r.text).join(' ')).toBe('embedded body')
+    // The embedded content occupies real vertical space between its siblings.
+    const [before, , after] = scene.nodes
+    if (before.kind !== 'paragraph' || after.kind !== 'paragraph') throw new Error('unreachable')
+    expect(inner.bbox.y).toBeGreaterThan(before.bbox.y)
+    expect(after.bbox.y).toBeGreaterThan(inner.bbox.y + inner.bbox.h - 1)
+  })
+
+  it('a cyclic embed degrades to a placeholder with reason cycle, never looping', () => {
+    const docs: Record<string, MdastRoot> = {
+      [A]: rootOf([para('in A'), embedPara(B)]),
+      [B]: rootOf([para('in B'), embedPara(A)]),
+    }
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed: (id) => (docs[id] ? { root: docs[id] } : undefined),
+    })
+    const placeholders: string[] = []
+    const visit = (nodes: readonly unknown[]) => {
+      for (const node of nodes as { kind: string; reason?: string; children?: unknown[] }[]) {
+        if (node.kind === 'embedPlaceholder' && node.reason) placeholders.push(node.reason)
+        if (Array.isArray(node.children)) visit(node.children)
+      }
+    }
+    visit(scene.nodes)
+    expect(placeholders).toEqual(['cycle'])
+  })
+
+  it('nesting past the depth cap degrades to a placeholder with reason depthCap', () => {
+    const docs: Record<string, MdastRoot> = {
+      [A]: rootOf([embedPara(B)]),
+      [B]: rootOf([embedPara(C)]),
+      [C]: rootOf([embedPara(D)]),
+      [D]: rootOf([para('too deep')]),
+    }
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed: (id) => (docs[id] ? { root: docs[id] } : undefined),
+    })
+    const reasons: string[] = []
+    const texts: string[] = []
+    const visit = (nodes: readonly unknown[]) => {
+      for (const node of nodes as {
+        kind: string
+        reason?: string
+        text?: string
+        children?: unknown[]
+        runs?: unknown[]
+      }[]) {
+        if (node.kind === 'embedPlaceholder' && node.reason) reasons.push(node.reason)
+        if (node.kind === 'textRun' && node.text) texts.push(node.text)
+        if (Array.isArray(node.children)) visit(node.children)
+        if (Array.isArray(node.runs)) visit(node.runs)
+      }
+    }
+    visit(scene.nodes)
+    expect(reasons).toEqual(['depthCap'])
+    expect(texts).not.toContain('too deep')
+  })
+
+  it('a missing target and a throwing resolver both degrade to unresolvable', () => {
+    const missing = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed: () => undefined,
+    })
+    const throwing = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed: () => {
+        throw new Error('boom')
+      },
+    })
+    for (const scene of [missing, throwing]) {
+      const node = scene.nodes[0]
+      if (node.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+      expect(node.reason).toBe('unresolvable')
+    }
+  })
+
+  it('an inline embed mixed into prose renders the resolved title instead of the raw id', () => {
+    const root: MdastRoot = rootOf([
+      {
+        type: 'paragraph',
+        children: [
+          { type: 'text', value: 'see ' },
+          { type: 'embed', canvasId: A },
+        ],
+      },
+    ])
+    const scene = layoutMdastBlocks(root, {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Target note', root: rootOf([]) } : undefined),
+    })
+    const paragraph = scene.nodes[0]
+    if (paragraph.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Target note'])
+  })
+})

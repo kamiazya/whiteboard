@@ -10,6 +10,8 @@ import { clampAdvance } from '../measure.js'
 import type {
   BlockquoteNode,
   CodeBlockNode,
+  EmbedPlaceholderNode,
+  EmbedResolvedNode,
   HeadingBlockNode,
   LinkProvenance,
   ListBlockNode,
@@ -73,6 +75,35 @@ export interface MdastLayoutOptions {
    * fragment carrying the raw source as escaped text.
    */
   readonly renderMath?: (value: string, displayMode: boolean) => string
+  /**
+   * Resolves an embed target's already-parsed body — the same injected-
+   * resolver class as `renderMath` and spatial-canvas's `resolveFile*`
+   * seams: synchronous, optional, caller-supplied, and TOTAL from this
+   * side (a throw or `undefined` degrades to an `embedPlaceholder`, never
+   * an aborted layout). A paragraph whose sole child is an embed lays the
+   * resolved body out inline under an `embedResolved` node, capped at
+   * `EMBED_DEPTH_CAP` with path-local cycle detection (the embed-recursion
+   * contract); an embed mixed into prose stays a link run, labeled with
+   * `title` when known.
+   */
+  readonly resolveEmbed?: (
+    canvasId: string,
+  ) => { readonly title?: string; readonly root: MdastRoot } | undefined
+}
+
+/** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
+const EMBED_DEPTH_CAP = 3
+
+/** `resolveEmbed` guarded to the never-throw rule. */
+function tryResolveEmbed(
+  options: MdastLayoutOptions,
+  canvasId: string,
+): { readonly title?: string; readonly root: MdastRoot } | undefined {
+  try {
+    return options.resolveEmbed?.(canvasId)
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -313,7 +344,13 @@ function layoutPhrasing(
           )
           break
         case 'embed':
-          emit(child.canvasId, { link: { kind: 'embed', canvasId: child.canvasId } }, currentStyle)
+          // Inline (mixed into prose) an embed stays a link run; the
+          // resolved title is a better label than the raw id when known.
+          emit(
+            tryResolveEmbed(options, child.canvasId)?.title ?? child.canvasId,
+            { link: { kind: 'embed', canvasId: child.canvasId } },
+            currentStyle,
+          )
           break
       }
     }
@@ -328,6 +365,10 @@ function layoutBlock(
   cursor: Cursor,
   options: MdastLayoutOptions,
   depth: number,
+  // canvasIds of the embeds currently being laid out on THIS recursion
+  // path — the embed-recursion cycle/cap contract, threaded rather than
+  // stored on options so sibling embeds never see each other.
+  embedPath: readonly string[] = [],
 ): SceneNode {
   switch (node.type) {
     case 'heading': {
@@ -344,6 +385,12 @@ function layoutBlock(
       return heading
     }
     case 'paragraph': {
+      // A paragraph that IS an embed (its sole child) renders the target's
+      // body as a block; an embed mixed into prose stays an inline run.
+      const only = node.children.length === 1 ? node.children[0] : undefined
+      if (only?.type === 'embed' && options.resolveEmbed !== undefined) {
+        return layoutEmbedBlock(only.canvasId, cursor, options, embedPath)
+      }
       const { runs, lineCount } = layoutPhrasing(node.children, cursor, options, BODY_FONT_SIZE_PX)
       const height = lineCount * BODY_FONT_SIZE_PX
       const paragraph: ParagraphBlockNode = {
@@ -356,7 +403,9 @@ function layoutBlock(
     }
     case 'blockquote': {
       const startY = cursor.y
-      const children = node.children.map((child) => layoutBlock(child, cursor, options, depth))
+      const children = node.children.map((child) =>
+        layoutBlock(child, cursor, options, depth, embedPath),
+      )
       const quote: BlockquoteNode = {
         kind: 'blockquote',
         bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY },
@@ -374,6 +423,7 @@ function layoutBlock(
           cursor,
           options,
           depth + 1,
+          embedPath,
         ),
       )
       const list: ListBlockNode = {
@@ -477,11 +527,12 @@ function layoutListItem(
   cursor: Cursor,
   options: MdastLayoutOptions,
   depth: number,
+  embedPath: readonly string[],
 ): ListItemNode {
   const startY = cursor.y
   const indented: MdastLayoutOptions = { ...options, maxWidth: options.maxWidth - LIST_INDENT_PX }
   const children: (ListItemNode['children'][number] | TextRunNode)[] = item.children.map((child) =>
-    layoutBlock(child, cursor, indented, depth),
+    layoutBlock(child, cursor, indented, depth, embedPath),
   )
   // The marker glyph (bullet or ordinal). Wrapper-RELATIVE like every other
   // child (the listItem renderer translates by its own bbox.x), so the
@@ -514,6 +565,49 @@ function layoutListItem(
     },
     ...(ordinal !== undefined ? { ordinal } : {}),
     ...(item.checked !== null && item.checked !== undefined ? { checked: item.checked } : {}),
+    children,
+  }
+}
+
+/**
+ * Lays out one block-level embed: the resolved target's blocks render
+ * inline under an `embedResolved` node whose children stay in ABSOLUTE
+ * coordinates (no SVG transform, so the listItem/tableCell transform-
+ * boundary set is untouched). Total by construction: a cycle on the
+ * current path, the depth cap, and a missing/throwing resolver each
+ * degrade to an `embedPlaceholder` with the matching reason — mirroring
+ * embed-recursion.ts's contract — so no resolver can loop or abort layout.
+ */
+function layoutEmbedBlock(
+  canvasId: string,
+  cursor: Cursor,
+  options: MdastLayoutOptions,
+  embedPath: readonly string[],
+): EmbedResolvedNode | EmbedPlaceholderNode {
+  const startY = cursor.y
+  const resolved = tryResolveEmbed(options, canvasId)
+  const placeholder = (reason: EmbedPlaceholderNode['reason']): EmbedPlaceholderNode => {
+    const node: EmbedPlaceholderNode = {
+      kind: 'embedPlaceholder',
+      bbox: { x: 0, y: startY, w: options.maxWidth, h: BODY_FONT_SIZE_PX },
+      canvasId,
+      title: resolved?.title ?? canvasId,
+      reason,
+    }
+    cursor.y += BODY_FONT_SIZE_PX + BLOCK_GAP_PX
+    return node
+  }
+  if (embedPath.includes(canvasId)) return placeholder('cycle')
+  if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
+  if (resolved === undefined) return placeholder('unresolvable')
+  const nextPath = [...embedPath, canvasId]
+  const children = resolved.root.children.map((child) =>
+    layoutBlock(child, cursor, options, 0, nextPath),
+  )
+  return {
+    kind: 'embedResolved',
+    bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY },
+    canvasId,
     children,
   }
 }
