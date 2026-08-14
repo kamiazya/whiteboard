@@ -373,6 +373,24 @@ async function main() {
   })
   const mdCanvasId = mdCreated.canvasId
 
+  // A write in the format the document is not in destroys rather than
+  // fails: OKF into the spatial one replaces its nodes, a node into the
+  // markdown one lands beside the text node holding its body.
+  await expectToolError(
+    'wb_document_set',
+    { workspaceId: WORKSPACE_ID, canvasId, markdown: '---\ntype: note\n---\nBody.' },
+    'on a spatial document',
+  )
+  await expectToolError(
+    'wb_node_add',
+    {
+      workspaceId: WORKSPACE_ID,
+      canvasId: mdCanvasId,
+      node: { id: 'stray', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'stray' },
+    },
+    'on a markdown document',
+  )
+
   const importMarkdown = [
     '---',
     'type: issue',

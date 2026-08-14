@@ -10,6 +10,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { DocumentKindMismatchError } from './errors.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
@@ -30,20 +31,6 @@ export const canvasImportOkfOutputSchema = z
   })
   .strict()
 export type CanvasImportOkfOutput = z.infer<typeof canvasImportOkfOutputSchema>
-
-export class DocumentKindMismatchError extends Error {
-  constructor(
-    public readonly canvasId: string,
-    public readonly kind: string,
-  ) {
-    super(
-      `Document ${canvasId} is a ${kind} document, and this writes OKF Markdown. ` +
-        'Its nodes and edges would be replaced by a single text node. Edit a spatial ' +
-        'document through wb_node_patch / wb_edge_patch instead.',
-    )
-    this.name = 'DocumentKindMismatchError'
-  }
-}
 
 export class OkfParseError extends Error {
   constructor(
@@ -78,10 +65,15 @@ export function createCanvasImportOkfTool(deps: ServerDeps) {
       // kind predates them: the write is the only thing that can give it one,
       // and refusing would leave it with no way back (ADR-0009 decision 4).
       const kind = readDocumentKind(doc)
-      if (kind !== undefined && kind !== 'markdown') {
-        throw new DocumentKindMismatchError(input.canvasId, kind)
+      if (kind === undefined) {
+        writeDocumentKind(doc, 'markdown')
+      } else if (kind !== 'markdown') {
+        throw new DocumentKindMismatchError(
+          input.canvasId,
+          kind,
+          'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_node_add / wb_node_patch / wb_edge_patch instead.',
+        )
       }
-      writeDocumentKind(doc, 'markdown')
 
       const { facets, ...coreMeta } = frontmatter
       writeCoreFacets(doc, coreMeta)
