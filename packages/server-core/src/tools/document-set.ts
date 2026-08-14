@@ -16,6 +16,21 @@ import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
 
+/**
+ * Whether a canvas is one this tool could itself have written, and so holds
+ * nothing a markdown write would destroy. A markdown document's stored
+ * content IS a valid spatial canvas — the body lives in one text node — so
+ * "has any node" cannot tell the two apart, and the documents that predate
+ * kinds include both shapes. Matching the exact shape written below keeps
+ * the pre-kind markdown ones editable without letting a diagram through.
+ */
+function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: readonly unknown[] }) {
+  if (canvas.edges.length > 0) return false
+  return (
+    canvas.nodes.length === 0 || (canvas.nodes.length === 1 && canvas.nodes[0]?.id === TEXT_NODE_ID)
+  )
+}
+
 export const documentSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
@@ -65,13 +80,14 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // document it is a destruction rather than an edit. A document with no
       // kind predates them: the write is the only thing that can give it one,
       // and refusing would leave it with no way back (ADR-0009 decision 4) —
-      // but only an empty document has nothing to lose by being declared
-      // markdown. One that already holds a canvas gets its way back from the
-      // spatial side, which declares a kind without discarding anything.
+      // but only a document already in markdown's own shape has nothing to
+      // lose by being declared markdown. One holding a canvas gets its way
+      // back from the spatial side, which declares a kind without discarding
+      // anything.
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
         const existing = readSpatialCanvas(doc)
-        if (existing.nodes.length > 0 || existing.edges.length > 0) {
+        if (!isMarkdownShaped(existing)) {
           throw new DocumentContentLossError(
             input.canvasId,
             `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
