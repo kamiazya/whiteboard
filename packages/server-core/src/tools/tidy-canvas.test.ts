@@ -1,13 +1,19 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { setNodeLock, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  setNodeLock,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
+  seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
+import { DocumentKindMismatchError } from './errors.js'
 import { createTidyCanvasTool } from './tidy-canvas.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -138,5 +144,43 @@ describe('wb_canvas_tidy tool', () => {
     const tool = createTidyCanvasTool(makeDeps(canvasDocStore))
 
     await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow()
+  })
+})
+
+describe('wb_canvas_tidy on a markdown document', () => {
+  test('refuses it, rather than repositioning the node holding its OKF body', async () => {
+    // The description has always said "spatial documents only", and the
+    // spatial-schema parse it credited for that never enforced it: a
+    // markdown document's stored content IS a valid spatial canvas, so it
+    // parsed and tidy went ahead.
+    //
+    // Two nodes, because that is the case where it is not merely untidy but
+    // wrong: tidy returns no moves for a lone node, so a document written by
+    // wb_document_set (exactly one body node) was a silent no-op. A markdown
+    // document predating the format guards, or one the web editor gave a
+    // second node, is the one that got repositioned.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'okf-body', type: 'text', x: 3, y: 7, width: 200, height: 100, text: 'body' },
+          { id: 'stray', type: 'text', x: 211, y: 9, width: 200, height: 100, text: 'stray' },
+        ],
+        edges: [],
+      })
+    })
+    const deps = { canvasDocStore: store, blobStore: {} as never }
+
+    await expect(
+      createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+
+    const { canvas } = await loadCanvasDoc(deps, CANVAS_ID)
+    expect(canvas.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }))).toEqual([
+      { id: 'okf-body', x: 3, y: 7 },
+      { id: 'stray', x: 211, y: 9 },
+    ])
   })
 })
