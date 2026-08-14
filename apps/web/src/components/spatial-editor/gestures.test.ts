@@ -467,6 +467,30 @@ describe('text-edit gesture', () => {
   })
 })
 
+describe('create-closed-node (the rectangle path)', () => {
+  it('creates the same node dblclick-empty does, selects it, and opens NO editor', () => {
+    const c = canvas()
+    const result = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'create-closed-node', point: { x: 300, y: 200 } },
+      { createId: () => 'new-node' },
+    )
+    expect(result.commands).toEqual([
+      {
+        kind: 'create-node',
+        node: { id: 'new-node', type: 'text', text: '', x: 200, y: 150, width: 200, height: 100 },
+      },
+    ])
+    // Selecting it is what gives the new rectangle its handles: without this
+    // it lands on the canvas with nothing to grab, move or delete it by.
+    expect(result.selectedId).toBe('new-node')
+    // The whole difference from a note. `editing-text` here would open the
+    // editor on a shape nobody asked to type into.
+    expect(result.state).toEqual({ kind: 'idle' })
+  })
+})
+
 describe('dblclick-empty (create-node)', () => {
   it('creates a text node centered on the point, selects it, and opens it for typing immediately', () => {
     const c = canvas()

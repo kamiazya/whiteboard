@@ -117,7 +117,13 @@ it('empty space offers the full creation set, anchored at the click point', asyn
 
   // The dock's + menu creation set, repeated "here" (canvas entry appears
   // because the host supplies the reference seam).
-  for (const label of ['Add note here', 'Add link here', 'Add group here', 'Add canvas here']) {
+  for (const label of [
+    'Add note here',
+    'Add rectangle here',
+    'Add link here',
+    'Add group here',
+    'Add canvas here',
+  ]) {
     expect(container.textContent).toContain(label)
   }
 
@@ -128,6 +134,39 @@ it('empty space offers the full creation set, anchored at the click point', asyn
   // Centered on the click point (600,450 screen = canvas at identity view).
   expect(frame.x + frame.width / 2).toBeCloseTo(600, 0)
   expect(frame.y + frame.height / 2).toBeCloseTo(450, 0)
+})
+
+it('Add rectangle here lands on the click point, with no editor over it', async () => {
+  const { Host, latest } = (() => {
+    const l: { canvas: SpatialCanvas } = { canvas: start }
+    function H() {
+      const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+      l.canvas = canvas
+      return (
+        <div style={{ width: 900, height: 700 }}>
+          <SpatialEditor
+            defaultTool="select"
+            canvas={canvas}
+            onChange={(next) => setCanvas(next)}
+            theme="light"
+          />
+        </div>
+      )
+    }
+    return { Host: H, latest: l }
+  })()
+  const { container } = render(<Host />)
+  rightClick(rootOf(container), 600, 450)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  const before = latest.canvas.nodes.length
+  await userEvent.click(page.getByRole('menuitem', { name: 'Add rectangle here' }))
+  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(before + 1))
+  const node = latest.canvas.nodes.at(-1)
+  if (node === undefined) throw new Error('node missing')
+  expect(node.x + node.width / 2).toBeCloseTo(600, 0)
+  expect(node.y + node.height / 2).toBeCloseTo(450, 0)
+  expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull()
 })
 
 it('Escape closes the menu without acting', async () => {
