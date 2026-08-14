@@ -10,7 +10,7 @@ import {
 } from '../test-utils/fake-canvas-doc-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createCanvasExportOkfTool } from './canvas-export-okf.js'
-import { createCanvasImportOkfTool } from './canvas-import-okf.js'
+import { createDocumentSetTool } from './document-set.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -78,19 +78,19 @@ async function setupTools() {
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   const deps = { canvasDocStore: store, blobStore: {} as never }
   return {
-    importOkf: createCanvasImportOkfTool(deps),
+    documentSet: createDocumentSetTool(deps),
     exportOkf: createCanvasExportOkfTool(deps),
   }
 }
 
-describe('wb_document_set -> canvas_export_okf round-trip property', () => {
+describe('wb_document_set -> the OKF exporter round-trip property', () => {
   fcTest.prop([okfDocumentArbitrary], withDefaults({ numRuns: 50 }))(
     'export(import(x)).frontmatter equals x.frontmatter up to canonical facet-key ordering, body verbatim',
     async (doc) => {
-      const { importOkf, exportOkf } = await setupTools()
+      const { documentSet, exportOkf } = await setupTools()
       const markdown = serializeOkf(doc)
 
-      await importOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+      await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
       const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
       expect(result.frontmatter.type).toBe(doc.frontmatter.type)

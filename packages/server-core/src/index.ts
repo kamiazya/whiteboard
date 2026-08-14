@@ -47,19 +47,19 @@ export {
   canvasExportOkfOutputSchema,
   createCanvasExportOkfTool,
 } from './tools/canvas-export-okf.js'
-export type { CanvasImportOkfInput, CanvasImportOkfOutput } from './tools/canvas-import-okf.js'
-export {
-  canvasImportOkfInputSchema,
-  canvasImportOkfOutputSchema,
-  createCanvasImportOkfTool,
-  OkfParseError,
-} from './tools/canvas-import-okf.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
   canvasRenderSvgInputSchema,
   canvasRenderSvgOutputSchema,
   createCanvasRenderSvgTool,
 } from './tools/canvas-render-svg.js'
+export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
+export {
+  createDocumentSetTool,
+  documentSetInputSchema,
+  documentSetOutputSchema,
+  OkfParseError,
+} from './tools/document-set.js'
 export type { EdgeAddInput, EdgeAddOutput } from './tools/edge-add.js'
 export { createEdgeAddTool, edgeAddInputSchema, edgeAddOutputSchema } from './tools/edge-add.js'
 export type { EdgeLockInput, EdgeLockOutput } from './tools/edge-lock.js'

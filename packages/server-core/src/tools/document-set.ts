@@ -15,22 +15,22 @@ import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
 
-export const canvasImportOkfInputSchema = z
+export const documentSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     canvasId: canvasIdSchema,
     markdown: z.string(),
   })
   .strict()
-export type CanvasImportOkfInput = z.infer<typeof canvasImportOkfInputSchema>
+export type DocumentSetInput = z.infer<typeof documentSetInputSchema>
 
-export const canvasImportOkfOutputSchema = z
+export const documentSetOutputSchema = z
   .object({
     canvasId: canvasIdSchema,
     imported: z.literal(true),
   })
   .strict()
-export type CanvasImportOkfOutput = z.infer<typeof canvasImportOkfOutputSchema>
+export type DocumentSetOutput = z.infer<typeof documentSetOutputSchema>
 
 export class OkfParseError extends Error {
   constructor(
@@ -42,14 +42,14 @@ export class OkfParseError extends Error {
   }
 }
 
-export function createCanvasImportOkfTool(deps: ServerDeps) {
+export function createDocumentSetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_set' as const,
     description:
       'Replace the entire content of an existing document from an OKF Markdown string. The document must already exist; core facets, extension facets and the body are all overwritten rather than merged.',
-    inputSchema: canvasImportOkfInputSchema,
-    outputSchema: canvasImportOkfOutputSchema,
-    execute: async (input: CanvasImportOkfInput): Promise<CanvasImportOkfOutput> => {
+    inputSchema: documentSetInputSchema,
+    outputSchema: documentSetOutputSchema,
+    execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
 
       const parsed = parseOkf(input.markdown)

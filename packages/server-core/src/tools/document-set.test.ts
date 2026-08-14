@@ -13,7 +13,7 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createCanvasImportOkfTool } from './canvas-import-okf.js'
+import { createDocumentSetTool } from './document-set.js'
 import { DocumentKindMismatchError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -35,7 +35,7 @@ describe('wb_document_set tool', () => {
   test('imports markdown with facets and body into a new LoroDoc', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     const markdown = [
       '---',
@@ -70,7 +70,7 @@ describe('wb_document_set tool', () => {
   test('imports markdown with empty body (facets only)', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     const markdown = '---\ntype: note\n---\n'
 
@@ -86,7 +86,7 @@ describe('wb_document_set tool', () => {
   test('overwrites existing doc on re-import', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     const v1 = '---\ntype: issue\nfacets:\n  example/1:\n    status: open\n---\nFirst body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: v1 })
@@ -108,7 +108,7 @@ describe('wb_document_set tool', () => {
   test('rejects invalid OKF markdown', async () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: 'no frontmatter' }),
@@ -117,7 +117,7 @@ describe('wb_document_set tool', () => {
 
   test('rejects when canvas is not in workspace', async () => {
     const store = new FakeCanvasDocStore()
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     const markdown = '---\ntype: note\n---\nBody.'
 
@@ -139,7 +139,7 @@ describe('wb_document_set tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     await expect(
       tool.execute({
@@ -158,7 +158,7 @@ describe('wb_document_set tool', () => {
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'markdown'))
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -175,7 +175,7 @@ describe('wb_document_set tool', () => {
     // unwritable through this tool, with no path out.
     const store = new FakeCanvasDocStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    const tool = createCanvasImportOkfTool(makeDeps(store))
+    const tool = createDocumentSetTool(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
