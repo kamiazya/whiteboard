@@ -25,6 +25,7 @@ import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
 import { createFacetSetTool } from './tools/facet-set.js'
+import { createNodeAddTool } from './tools/node-add.js'
 import { createNodeLockTool } from './tools/node-lock.js'
 import { createNodePatchTool } from './tools/node-patch.js'
 import { createTidyCanvasTool } from './tools/tidy-canvas.js'
@@ -129,6 +130,7 @@ export function createServer(deps: ServerDeps) {
     facetSet: createFacetSetTool(deps),
     nodeLock: createNodeLockTool(deps),
     edgeLock: createEdgeLockTool(deps),
+    nodeAdd: createNodeAddTool(deps),
     nodePatch: createNodePatchTool(deps),
     edgePatch: createEdgePatchTool(deps),
     tidyCanvas: createTidyCanvasTool(deps),

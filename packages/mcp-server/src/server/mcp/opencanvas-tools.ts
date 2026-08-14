@@ -85,6 +85,23 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
+    tools.nodeAdd.name,
+    {
+      description: tools.nodeAdd.description,
+      inputSchema: tools.nodeAdd.inputSchema.shape,
+      outputSchema: tools.nodeAdd.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.nodeAdd.inputSchema.parse(args)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.nodeAdd.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.nodePatch.name,
     {
       description: tools.nodePatch.description,

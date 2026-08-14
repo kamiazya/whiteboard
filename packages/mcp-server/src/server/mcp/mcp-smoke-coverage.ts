@@ -33,6 +33,7 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_edge_lock',
   'wb_edge_patch',
   'wb_facet_set',
+  'wb_node_add',
   'wb_node_lock',
   'wb_node_patch',
   'wb_canvas_tidy',
@@ -48,6 +49,7 @@ export const ALL_REGISTERED_TOOLS = [
 
 export const COVERED_TOOLS = [
   'wb_document_set',
+  'wb_node_add',
   'wb_node_lock',
   'wb_canvas_tidy',
   'wb_facet_set',
