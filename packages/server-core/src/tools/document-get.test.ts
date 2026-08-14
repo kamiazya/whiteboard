@@ -1,0 +1,75 @@
+import { LoroDoc } from 'loro-crdt'
+import { describe, expect, it } from 'vitest'
+import type { ServerDeps } from '../server-deps.js'
+import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { wbCanvasCreate } from './canvas-crud.js'
+import { saveDocSnapshot } from './canvas-doc-io.js'
+import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
+
+function makeDeps(): ServerDeps {
+  return { canvasDocStore: createInMemoryCanvasDocStore(), blobStore: {} as never }
+}
+
+async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {
+  const { canvasId } = await wbCanvasCreate(deps, {
+    workspaceId: 'ws',
+    segment: `doc-${kind}`,
+    kind,
+    createWorkspace: true,
+  })
+  return canvasId
+}
+
+describe('wb_document_get reads a document in its own format', () => {
+  it('a markdown document comes back as OKF, with its frontmatter', async () => {
+    const deps = makeDeps()
+    const canvasId = await createDoc(deps, 'markdown')
+
+    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId })
+
+    expect(result.kind).toBe('markdown')
+    expect(result.content).toContain('---')
+    expect(result.frontmatter).toBeDefined()
+  })
+
+  it('a spatial document comes back as JSON Canvas, with no frontmatter', async () => {
+    const deps = makeDeps()
+    const canvasId = await createDoc(deps, 'spatial')
+
+    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId })
+
+    expect(result.kind).toBe('spatial')
+    expect(JSON.parse(result.content)).toMatchObject({ nodes: expect.any(Array) })
+    // Frontmatter is OKF's. A JSON Canvas document has none, and inventing an
+    // empty one would be the same comfortable lie the old placeholder `type`
+    // told (ADR-0009 decision 3).
+    expect(result.frontmatter).toBeUndefined()
+  })
+
+  it('the caller never chooses the format', async () => {
+    // The whole point of decision 4: two documents, same call, different
+    // formats out — decided by what each document is.
+    const deps = makeDeps()
+    const md = await createDoc(deps, 'markdown')
+    const sp = await createDoc(deps, 'spatial')
+    const tool = createDocumentGetTool(deps)
+
+    const a = await tool.execute({ workspaceId: 'ws', canvasId: md })
+    const b = await tool.execute({ workspaceId: 'ws', canvasId: sp })
+
+    expect(a.kind).not.toBe(b.kind)
+  })
+
+  it('a document with no kind is refused, not guessed at', async () => {
+    // Documents predating kinds. The old exporters would have answered
+    // anyway — the OKF one by inventing a placeholder type — which is what
+    // made the missing format invisible.
+    const deps = makeDeps()
+    const canvasId = await createDoc(deps, 'spatial')
+    await saveDocSnapshot(deps, canvasId, new LoroDoc()) // overwrite: no kind
+
+    await expect(
+      createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),
+    ).rejects.toThrow(DocumentKindUnknownError)
+  })
+})

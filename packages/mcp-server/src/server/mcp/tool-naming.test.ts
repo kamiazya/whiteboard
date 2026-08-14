@@ -26,13 +26,13 @@ const ENTITIES = [
 ] as const
 
 /**
- * Deliberately still on their pre-ADR-0009 names. They collapse into one
- * `wb_document_get` that branches on the document's format, and the
- * OpenCanvas document persists no format to branch on — see ADR-0009's
- * Consequences. Emptying this list is part of that work, not a separate
- * cleanup: once the format exists these two stop existing.
+ * Empty, and kept that way on purpose. It held the two exporters that
+ * ADR-0009 could not rename until a document recorded its own format;
+ * wb_document_get replaced them once one did. A future tool that cannot
+ * take its final name yet goes here WITH its reason, rather than being
+ * quietly excluded from the shape check.
  */
-const PENDING_FORMAT_MERGE = ['canvas_export_json_canvas', 'canvas_export_okf'] as const
+const PENDING_FORMAT_MERGE = [] as const
 
 describe('ADR-0009 tool naming', () => {
   it('the pending list names tools that are actually registered', () => {

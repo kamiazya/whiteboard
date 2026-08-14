@@ -122,8 +122,7 @@ const WORKSPACE_ID = 'e2e'
 const EXPECTED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
-  'canvas_export_json_canvas',
-  'canvas_export_okf',
+  'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
   'wb_edge_lock',
@@ -234,18 +233,18 @@ async function main() {
 
   // The lock is editor state, never canvas content: it must not appear in
   // an export. This is the runtime guard for the sidecar-map contract.
-  const exportedWithLocks = await callTool('canvas_export_json_canvas', {
+  const exportedWithLocks = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
     canvasId,
   })
-  const exportedCanvas = JSON.parse(exportedWithLocks.json)
+  const exportedCanvas = JSON.parse(exportedWithLocks.content)
   const leaked = [...exportedCanvas.nodes, ...exportedCanvas.edges].filter(
     (element) => 'locked' in element,
   )
   if (leaked.length > 0) {
     throw new Error(`a lock leaked into the JSON Canvas export: ${JSON.stringify(leaked)}`)
   }
-  console.log('[e2e] canvas_export_json_canvas → no lock leaked into the export')
+  console.log('[e2e] wb_document_get → no lock leaked into the spatial export')
 
   await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
@@ -346,10 +345,20 @@ async function main() {
   }
   console.log(`[e2e] wb_version_restore → ${restored.restoredVersionId}`)
 
-  // wb_document_set → canvas_export_okf round-trip, including the core
+  // wb_document_set → wb_document_get round-trip, including the core
   // facets (type/title/tags) — these are stored via writeCoreFacets, a
   // separate code path from the extension `facets` bucket below, so this is
   // the runtime guard for structuredContent-vs-outputSchema drift on both.
+  // A MARKDOWN document for the OKF round-trip. The spatial one above reads
+  // back as JSON Canvas now, so asking it for frontmatter would be asking a
+  // diagram for its markdown — exactly what wb_document_get stopped doing.
+  const mdCreated = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    segment: 'e2e-okf',
+    kind: 'markdown',
+  })
+  const mdCanvasId = mdCreated.canvasId
+
   const importMarkdown = [
     '---',
     'type: issue',
@@ -365,20 +374,20 @@ async function main() {
   ].join('\n')
   const imported = await callTool('wb_document_set', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    canvasId: mdCanvasId,
     markdown: importMarkdown,
   })
-  if (!imported.imported || imported.canvasId !== canvasId) {
+  if (!imported.imported || imported.canvasId !== mdCanvasId) {
     throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
   console.log('[e2e] wb_document_set → imported')
 
-  const exported = await callTool('canvas_export_okf', {
+  const exported = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    canvasId: mdCanvasId,
   })
-  if (!exported.markdown.includes('Imported body.')) {
-    throw new Error(`canvas_export_okf body mismatch after import: ${exported.markdown}`)
+  if (!exported.content.includes('Imported body.')) {
+    throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
   }
   if (!exported.frontmatter.facets?.['issue/1']) {
     throw new Error(
@@ -394,7 +403,7 @@ async function main() {
       `canvas_export_okf core facets mismatch after import: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
-  console.log('[e2e] canvas_export_okf → round-trip verified (core facets + extension facets)')
+  console.log('[e2e] wb_document_get → round-trip verified (core facets + extension facets)')
 
   console.log('\n[e2e] ALL OK')
 }
