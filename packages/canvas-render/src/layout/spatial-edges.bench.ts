@@ -11,6 +11,7 @@
 // in one sitting, never a committed figure against a fresh run.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { bench, describe } from 'vitest'
+import { clusteredLayout } from '../test-utils/routing-corpus.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 /**
@@ -39,6 +40,18 @@ function gridCanvas(nodeCount: number, edgeCount: number) {
 const sparse = gridCanvas(40, 40)
 const dense = gridCanvas(60, 200)
 
+// The stride canvas above is the WORST case for spatial pruning: every edge
+// spans the whole layout, so 55% of edge pairs survive a bounding-box test.
+// A real document clusters, and so do its edges — measured on these two, 5%
+// and 4%. Both shapes belong here: the stride canvas bounds the damage when
+// pruning cannot help, and these bound the common case, where nearly all of
+// the pair loop's work is rejecting edges that could never have interacted.
+const clustered = clusteredLayout({ clusters: 12, nodesPerCluster: 12, edgesPerCluster: 16 })
+// Deliberately past CROSSING_OPT_MAX_EDGES, where side-choice optimization
+// is skipped entirely today: this is the size an AI-authored canvas reaches,
+// and the number to watch when raising that gate.
+const clusteredLarge = clusteredLayout({ clusters: 24, nodesPerCluster: 12, edgesPerCluster: 16 })
+
 describe('side-choice search', () => {
   bench('assignEdgeAnchors 40 nodes / 40 edges', () => {
     assignEdgeAnchors(sparse.nodes, sparse.edges, 'orthogonal')
@@ -46,6 +59,14 @@ describe('side-choice search', () => {
 
   bench('assignEdgeAnchors 60 nodes / 200 edges', () => {
     assignEdgeAnchors(dense.nodes, dense.edges, 'orthogonal')
+  })
+
+  bench('assignEdgeAnchors clustered 144 nodes / 165 edges', () => {
+    assignEdgeAnchors(clustered.nodes, clustered.edges, 'orthogonal')
+  })
+
+  bench('assignEdgeAnchors clustered 288 nodes / 345 edges (over the opt gate)', () => {
+    assignEdgeAnchors(clusteredLarge.nodes, clusteredLarge.edges, 'orthogonal')
   })
 })
 
