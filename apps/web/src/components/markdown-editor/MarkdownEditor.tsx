@@ -1,8 +1,10 @@
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
+import { type CanvasCoreMeta, canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
@@ -36,6 +38,17 @@ export interface MarkdownEditorProps {
    * display-only; facet editing stays in `CanvasProperties`.
    */
   meta?: CanvasCoreMeta
+  /**
+   * Maps `[[Name]]` aliases to canvas ids for the preview (canvas-codec's
+   * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
+   */
+  resolveAlias?: AliasResolver
+  /**
+   * Called with the target canvas id when a resolved wikiLink is activated
+   * in the preview. The host owns navigation; without it, wikiLink anchors
+   * are inert (their href is a bare ULID, not a URL).
+   */
+  onOpenCanvas?: (canvasId: string) => void
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -105,9 +118,24 @@ export function MarkdownEditor({
   autoFocus = false,
   theme = 'light',
   meta,
+  resolveAlias,
+  onOpenCanvas,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
+
+  // A resolved wikiLink's anchor carries a bare canvas id as its href —
+  // meaningless as a URL, meaningful to the host. Intercept exactly those;
+  // ordinary http(s) anchors keep default browser behavior.
+  const onPreviewClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!onOpenCanvas) return
+    const anchor = event.target instanceof Element ? event.target.closest('a') : null
+    if (!anchor) return
+    const href = anchor.getAttribute('href')
+    if (href === null || !canvasIdSchema.safeParse(href).success) return
+    event.preventDefault()
+    onOpenCanvas(href)
+  }
 
   const [mode, setMode] = useState<MarkdownViewMode>(readStoredViewMode)
   const changeMode = (next: MarkdownViewMode) => {
@@ -267,10 +295,13 @@ export function MarkdownEditor({
           />
         )}
         {effectiveMode !== 'write' && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
+          // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — the interactive element is the anchor inside, which is natively keyboard-activatable
           <div
             ref={previewScrollRef}
             data-testid="markdown-preview-scroll"
             className="min-w-0 flex-1 overflow-auto"
+            onClick={onPreviewClick}
           >
             <div className="mx-auto px-6 py-8" style={{ maxWidth: previewWidth + 48 }}>
               {effectiveMode === 'read' && meta !== undefined && <DocumentHeader meta={meta} />}
@@ -282,6 +313,7 @@ export function MarkdownEditor({
                   maxWidth={previewWidth}
                   measure={resolvedMeasure}
                   theme={theme}
+                  resolveAlias={resolveAlias}
                 />
               )}
             </div>
