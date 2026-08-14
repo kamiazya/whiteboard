@@ -22,6 +22,16 @@ const SHARED_LAYER_PACKAGES = [
   'packages/canvas-viewer',
 ]
 
+/**
+ * Composition roots. Their SOURCE is deliberately unscanned — they are the
+ * packages allowed `node:*`, DOM globals and inversify — and their
+ * third-party surface is open by design, so they cannot join the list above.
+ * Their dependency DIRECTION is still a rule, and it was the one thing
+ * nothing checked: `apps/web` was absent from the map entirely, so a shared
+ * package taking a dependency on it would have passed.
+ */
+const COMPOSITION_ROOTS = ['apps/web', 'packages/mcp-server']
+
 function listTsFiles(dir: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -35,6 +45,17 @@ function listTsFiles(dir: string): string[] {
   }
   return files
 }
+
+describe('composition-root dependency direction', () => {
+  for (const packageDir of COMPOSITION_ROOTS) {
+    it(`${packageDir}/package.json dependency direction is clean`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+      )
+      expect(checkDependencyDirection(manifest)).toHaveLength(0)
+    })
+  }
+})
 
 describe('shared-layer boundary lint (real source coverage)', () => {
   for (const packageDir of SHARED_LAYER_PACKAGES) {
