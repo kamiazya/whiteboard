@@ -412,11 +412,11 @@ export function reduceGesture(
       })
     case 'create-closed-node': {
       const id = createId()
-      return {
+      return withPendingTextCommit(state, {
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node: newTextNodeAt(event.point, id) }],
         selectedId: id,
-      }
+      })
     }
     case 'dblclick-empty':
       return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))

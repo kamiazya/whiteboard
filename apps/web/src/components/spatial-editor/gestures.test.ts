@@ -489,6 +489,24 @@ describe('create-closed-node (the rectangle path)', () => {
     // editor on a shape nobody asked to type into.
     expect(result.state).toEqual({ kind: 'idle' })
   })
+
+  it('commits an open text edit first, exactly as the note path does', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const result = reduceGesture(
+      editing.state,
+      c,
+      { type: 'create-closed-node', point: { x: 10, y: 10 } },
+      { createId: () => 'new-node' },
+    )
+    // Creating something else must not be a way to lose what was typed.
+    expect(result.commands[0]).toMatchObject({ kind: 'set-text', id: 'a' })
+    expect(result.commands.some((cmd) => cmd.kind === 'create-node')).toBe(true)
+  })
 })
 
 describe('dblclick-empty (create-node)', () => {

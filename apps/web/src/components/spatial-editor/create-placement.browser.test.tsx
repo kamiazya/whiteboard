@@ -105,6 +105,30 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
   const centre = soleNodeCentre(latest.canvas)
   expect(centre.x).toBeCloseTo(drop[0], 0)
   expect(centre.y).toBeCloseTo(drop[1], 0)
+
+  // The menu survives the drag and closes on dragend. Closing it any earlier
+  // removes the dragged element mid-drag, which tears the drag session down
+  // in Chromium and means no drop ever arrives.
+  expect(container.querySelector('[data-testid="add-menu"]')).not.toBeNull()
+  fireEvent(entry, dragEvent('dragend'))
+  expect(container.querySelector('[data-testid="add-menu"]')).toBeNull()
+})
+
+it('two rectangles from the menu do not stack on the same spot', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+
+  for (let i = 0; i < 2; i++) {
+    openAddMenu(container)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+  }
+
+  const [first, second] = latest.canvas.nodes
+  if (first === undefined || second === undefined) throw new Error('expected two nodes')
+  // The tap path always resolves to the same viewport-centre point, so
+  // without a free-spot cascade the second one lands exactly on the first
+  // and is indistinguishable from having created nothing.
+  expect({ x: second.x, y: second.y }).not.toEqual({ x: first.x, y: first.y })
 })
 
 it('tapping a menu entry keeps placing it at the viewport centre', () => {

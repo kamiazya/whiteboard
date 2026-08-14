@@ -2366,6 +2366,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       else createGroupAtViewportCenter(point)
     }
 
+    /**
+     * Same cascade as the note path: the tap path always resolves to the one
+     * viewport-centre point, so without it every press stacks an identical
+     * rectangle on the last one and looks like nothing happened.
+     */
+    const createRectangleAtViewportCenter = () => {
+      const preferred = screenToCanvas(viewportCenterScreen(), viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
+        occupied,
+      )
+      createRectangleAt(point)
+      panToShow({
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: NEW_NODE_HEIGHT,
+      })
+    }
+
     const createNodeAtViewportCenter = () => {
       const preferred = screenToCanvas(viewportCenterScreen(), viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
@@ -2706,9 +2728,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
-          onCreateRectangle={() =>
-            createRectangleAt(screenToCanvas(viewportCenterScreen(), viewport))
-          }
+          onCreateRectangle={createRectangleAtViewportCenter}
           onCreateCanvasRef={
             fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
           }
