@@ -19,7 +19,7 @@
  * What these properties do NOT cover, verified by mutation rather than
  * assumed: the SEPARATOR-GEOMETRY defects (a trailing space lost between a
  * wrapped chunk and its next inline sibling; that same space counted
- * twice). Deleting either fix leaves all four properties green, because
+ * twice). Deleting either fix leaves these properties green, because
  * `wrapAndPush` emits one run per word — the token sequence survives
  * intact and only the runs' x positions are wrong. Stating that as a
  * property would need to know which adjacent runs had whitespace between
@@ -220,4 +220,50 @@ describe('layoutMdastBlocks properties', () => {
     const rendered = textRuns(layout(root)).flatMap(({ run }) => tokens(run.text))
     expect(rendered).toStrictEqual(sourceTokens(root))
   })
+
+  // XML — and therefore an SVG <text> element — strips leading/trailing
+  // whitespace and squeezes interior whitespace to one space, so a run
+  // whose TEXT is not already in that collapsed form paints its glyphs
+  // left of where layout measured them ("`code` and" as "codeand").
+  // Generator note: prose text elsewhere in this file never carries
+  // boundary whitespace, so this property pads its own text leaves — an
+  // unpadded generator passes vacuously (mutation-checked).
+  const padArb = fc.constantFrom('', ' ', '  ', '\n')
+  const paddedTextArb = fc.tuple(padArb, proseArb, padArb).map(
+    ([lead, core, trail]): MdastPhrasingContent => ({
+      type: 'text',
+      value: `${lead}${core}${trail}`,
+    }),
+  )
+  const paddedChildrenArb = fc.array(
+    fc.oneof(
+      paddedTextArb,
+      proseArb.map((value): MdastPhrasingContent => ({ type: 'inlineCode', value })),
+      paddedTextArb.map((text): MdastPhrasingContent => ({ type: 'strong', children: [text] })),
+      paddedTextArb.map(
+        (text): MdastPhrasingContent => ({
+          type: 'link',
+          url: 'https://example.com',
+          children: [text],
+        }),
+      ),
+    ),
+    { minLength: 1, maxLength: 4 },
+  )
+  const paddedRootArb = paddedChildrenArb.map((children) =>
+    rootOf([{ type: 'paragraph', children }]),
+  )
+
+  fcTest.prop([paddedRootArb], withDefaults())(
+    'every prose run is XML-collapse-stable (no boundary whitespace, single interior spaces)',
+    (root) => {
+      for (const { run } of textRuns(layout(root))) {
+        // Atomic runs (inline code) keep their source text verbatim by
+        // contract and are exempt.
+        if (run.code === true) continue
+        expect(run.text).not.toBe('')
+        expect(run.text).toBe(run.text.trim().replace(/\s+/g, ' '))
+      }
+    },
+  )
 })

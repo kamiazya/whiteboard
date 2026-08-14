@@ -252,9 +252,19 @@ describe('layoutMdastBlocks — inline cursor', () => {
     expect(second.bbox.y).toBe(third.bbox.y)
 
     // x is a monotonically increasing running cursor, never reset to 0.
+    // Boundary spaces in the source ("plain ", " tail") are cursor
+    // advances, not run characters (XML collapses them inside <text>).
+    const fontSize = first.appearance?.fontSize ?? 0
+    const spaceWidth = measure(' ', {
+      family: 'sans-serif',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: fontSize,
+    }).advanceWidth
     expect(first.bbox.x).toBe(0)
-    expect(second.bbox.x).toBe(first.bbox.x + first.bbox.w)
-    expect(third.bbox.x).toBe(second.bbox.x + second.bbox.w)
+    expect(second.bbox.x).toBeCloseTo(first.bbox.x + first.bbox.w + spaceWidth, 5)
+    expect(third.bbox.x).toBeCloseTo(second.bbox.x + second.bbox.w + spaceWidth, 5)
 
     // No pair of runs overlaps horizontally.
     expect(first.bbox.x + first.bbox.w).toBeLessThanOrEqual(second.bbox.x)
@@ -534,5 +544,86 @@ describe('layoutMdastBlocks — single render path', () => {
     const exportRender = layoutMdastBlocks(root, options)
     expect(preview).toEqual(spatialTextNode)
     expect(spatialTextNode).toEqual(exportRender)
+  })
+})
+
+describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
+  // XML (and therefore SVG <text>) collapses leading/trailing whitespace,
+  // so a run whose TEXT carries a boundary space paints its first glyph a
+  // space-width left of where layout measured it — "`inline code` and"
+  // renders as "inline codeand". Boundary whitespace must be geometry
+  // (cursor advance), never run content.
+  it('emits collapse-stable run text and carries boundary spaces as cursor advances', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'inlineCode', value: 'inline code' },
+            { type: 'text', value: ' and a ' },
+            {
+              type: 'link',
+              url: 'https://example.com',
+              children: [{ type: 'text', value: 'link' }],
+            },
+            { type: 'text', value: ' too.' },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['inline code', 'and a', 'link', 'too.'])
+
+    const [code, andA, link, too] = paragraph.runs
+    const fontSize = code.appearance?.fontSize ?? 0
+    expect(fontSize).toBeGreaterThan(0)
+    const spaceWidth = measure(' ', {
+      family: 'sans-serif',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: fontSize,
+    }).advanceWidth
+    expect(andA.bbox.x).toBeCloseTo(code.bbox.x + code.bbox.w + spaceWidth, 5)
+    expect(link.bbox.x).toBeCloseTo(andA.bbox.x + andA.bbox.w + spaceWidth, 5)
+    expect(too.bbox.x).toBeCloseTo(link.bbox.x + link.bbox.w + spaceWidth, 5)
+  })
+
+  it('collapses interior whitespace sequences to the single space XML will paint', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'kept  double\nsoft' }] }],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['kept double soft'])
+  })
+
+  it('a whitespace-only text node becomes an advance, never an empty run', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'strong', children: [{ type: 'text', value: 'a' }] },
+            { type: 'text', value: ' ' },
+            { type: 'strong', children: [{ type: 'text', value: 'b' }] },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['a', 'b'])
+    const [a, b] = paragraph.runs
+    expect(b.bbox.x).toBeGreaterThan(a.bbox.x + a.bbox.w)
   })
 })

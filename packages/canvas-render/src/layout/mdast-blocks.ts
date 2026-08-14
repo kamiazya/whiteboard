@@ -170,33 +170,25 @@ function layoutPhrasing(
     extra: Partial<TextRunNode>,
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
-    const words = text.split(/\s+/).filter((word) => word.length > 0)
+    // Input arrives collapse-normalized from `emit` (no boundary
+    // whitespace, single-space separated), so a separator is due before
+    // every word except the first — `emit` has already advanced the cursor
+    // for the chunk's own leading space when one existed in the source.
+    const words = text.split(' ')
     const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
-    // `split(/\s+/)` discards this chunk's own leading/trailing whitespace.
-    // mdast represents "prose " + strong("word") as two adjacent phrasing
-    // children, so a trailing space stripped here would otherwise vanish
-    // between this chunk's last word and the next sibling's first run — a
-    // separator is due before the loop's first word in that case exactly
-    // like it is due before every subsequent word in this chunk, so both
-    // cases share the same separator-add-or-wrap logic below (a chunk's
-    // interior words are always whitespace-separated by construction).
-    const chunkHasLeadingSpace = /^\s/.test(text)
     words.forEach((word, index) => {
       const width = measureRunWidth(options.measure, options.fontFamily, word, fontSizePx)
-      const needsSeparator = index === 0 ? chunkHasLeadingSpace : true
-      if (needsSeparator && line.x > 0) {
-        if (line.x + spaceWidth + width > options.maxWidth) {
+      if (line.x > 0) {
+        const separator = index > 0 ? spaceWidth : 0
+        if (line.x + separator + width > options.maxWidth) {
           line.x = 0
           line.index += 1
         } else {
-          line.x += spaceWidth
+          line.x += separator
         }
       }
       pushRun(word, extra, runStyle)
     })
-    if (words.length > 0 && /\s$/.test(text)) {
-      line.x += spaceWidth
-    }
   }
 
   const emit = (
@@ -208,15 +200,35 @@ function layoutPhrasing(
     // in their source text is not a word boundary.
     wrappable = true,
   ) => {
-    if (canWrap && wrappable) {
-      const fullWidth = measureRunWidth(options.measure, options.fontFamily, text, fontSizePx)
-      const overflows = line.x + fullWidth > options.maxWidth
-      if (overflows && /\s/.test(text)) {
-        wrapAndPush(text, extra, runStyle)
-        return
+    if (!wrappable) {
+      pushRun(text, extra, runStyle)
+      return
+    }
+    // XML — and therefore an SVG <text> element — strips leading/trailing
+    // whitespace and squeezes interior whitespace sequences to one space.
+    // A run's text must already be in that collapsed form, with boundary
+    // whitespace carried as CURSOR ADVANCES instead of characters,
+    // otherwise the painted glyphs land a space-width left of where layout
+    // measured them ("`code` and" painting as "codeand"). Atomic runs above
+    // are exempt: their source text is verbatim by contract.
+    const collapsed = text.trim().replace(/\s+/g, ' ')
+    const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
+    // A boundary space at the start of a line is dropped, not advanced —
+    // the same rule wrapAndPush applies to its separators.
+    if (/^\s/.test(text) && line.x > 0) {
+      line.x += spaceWidth
+    }
+    if (collapsed !== '') {
+      const fullWidth = measureRunWidth(options.measure, options.fontFamily, collapsed, fontSizePx)
+      if (canWrap && line.x + fullWidth > options.maxWidth && /\s/.test(collapsed)) {
+        wrapAndPush(collapsed, extra, runStyle)
+      } else {
+        pushRun(collapsed, extra, runStyle)
       }
     }
-    pushRun(text, extra, runStyle)
+    if (/\s$/.test(text)) {
+      line.x += spaceWidth
+    }
   }
 
   /** Walk `nodes`, then stamp `link` provenance onto every run they produced. */
