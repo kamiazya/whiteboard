@@ -1,4 +1,8 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
+import {
+  type AliasResolver,
+  parseMarkdownBody,
+  resolveReferences,
+} from '@kamiazya/whiteboard-canvas-codec'
 import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutMdastBlocks,
@@ -10,6 +14,12 @@ export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
   readonly maxWidth: number
   readonly background?: string
+  /**
+   * Maps `[[Name]]` aliases to canvas ids (canvas-codec's separate
+   * resolution pass over the parsed tree). Absent, only `[[canvas:ULID]]`
+   * references resolve; unresolved aliases stay literal bracket text.
+   */
+  readonly resolveAlias?: AliasResolver
 }
 
 /**
@@ -32,14 +42,22 @@ export interface RenderMarkdownPreviewOptions {
  */
 export function renderMarkdownPreviewSvg(
   value: string,
-  { measure, maxWidth, background }: RenderMarkdownPreviewOptions,
+  { measure, maxWidth, background, resolveAlias }: RenderMarkdownPreviewOptions,
 ): string {
-  return renderSceneToSvg(layoutScene(value, measure, maxWidth), { padding: 8, background })
+  return renderSceneToSvg(layoutScene(value, measure, maxWidth, resolveAlias), {
+    padding: 8,
+    background,
+  })
 }
 
-function layoutScene(value: string, measure: MeasureText, maxWidth: number): Scene {
+function layoutScene(
+  value: string,
+  measure: MeasureText,
+  maxWidth: number,
+  resolveAlias?: AliasResolver,
+): Scene {
   try {
-    return layoutMdastBlocks(parseMarkdownBody(value), {
+    return layoutMdastBlocks(resolveReferences(parseMarkdownBody(value), resolveAlias), {
       measure,
       maxWidth,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,

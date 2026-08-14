@@ -1,5 +1,6 @@
+import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { useMemo } from 'react'
+import { type CSSProperties, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
 import { renderMarkdownPreviewSvg } from './render-preview.js'
@@ -10,6 +11,8 @@ export interface PreviewPaneProps {
   measure: MeasureText
   background?: string
   theme?: ResolvedTheme
+  /** Maps `[[Name]]` aliases to canvas ids; see render-preview.ts. */
+  resolveAlias?: AliasResolver
 }
 
 /**
@@ -29,22 +32,31 @@ export function PreviewPane({
   measure,
   background,
   theme = 'light',
+  resolveAlias,
 }: PreviewPaneProps) {
   const svg = useMemo(
-    () => renderMarkdownPreviewSvg(value, { measure, maxWidth, background }),
-    [value, measure, maxWidth, background],
+    () => renderMarkdownPreviewSvg(value, { measure, maxWidth, background, resolveAlias }),
+    [value, measure, maxWidth, background, resolveAlias],
   )
 
+  const fill = editorTextFill(theme)
   return (
     <div
       data-testid="markdown-preview-pane"
+      className="markdown-preview-pane"
       // `fill` on the host, not in the SVG: canvas-render assigns markdown
       // body runs no fill of their own, so each `<text>` would otherwise take
       // the SVG default — black — on every theme, leaving the dark preview
       // black on near-black. Inheriting from here themes every run at once
       // and keeps color out of the render path, so exported SVG bytes stay
       // independent of whichever theme the viewer happens to be using.
-      style={{ overflow: 'auto', fill: editorTextFill(theme) }}
+      //
+      // `--preview-fill` repeats the same value for the anchor rule in
+      // index.css: Chromium repaints an SVG <a>'s fill with its UA :visited
+      // color and, in visited context, honors only an explicit color value
+      // (var() included) — `inherit` is ignored, so inheritance alone leaves
+      // a visited wikiLink near-invisible.
+      style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

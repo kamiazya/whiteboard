@@ -167,6 +167,20 @@
   }
 
   /*
+   * Chromium repaints an SVG <a>'s fill with its UA :visited color, and in
+   * visited context honors only an EXPLICIT color value — `inherit` and
+   * `currentColor` are ignored (the :visited privacy model). Without this
+   * rule a resolved wikiLink whose target route was ever visited paints
+   * near-invisible dark on the dark theme. `--preview-fill` is set inline
+   * by PreviewPane to the same per-theme value its host `fill` inherits,
+   * so link runs paint exactly like the body text they sit in.
+   */
+  .markdown-preview-pane svg a:link,
+  .markdown-preview-pane svg a:visited {
+    fill: var(--preview-fill);
+  }
+
+  /*
    * One-shot attention echo (ConnectionStatus sync-off entry): an
    * expanding, fading ring behind the chip dot. Compositor props only;
    * a FINITE iteration count at the use site keeps it a pulse that

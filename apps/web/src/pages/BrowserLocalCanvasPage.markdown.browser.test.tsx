@@ -12,7 +12,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
@@ -367,5 +367,71 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       expect(screen.getByTestId('mock-spatial-editor')).toBeInTheDocument()
     })
     expect(spatialMounts).toBeGreaterThan(before)
+  })
+
+  it('a [[Name]] wikiLink resolves against the canvas list and clicking it opens that note', async () => {
+    const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const store = new IndexedDBStore()
+    await store.save({
+      id: TARGET_ID,
+      name: 'Target note',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'markdown' as const,
+    })
+    await store.save({
+      id: SOURCE_ID,
+      name: 'Source note',
+      updatedAt: '2026-05-24T00:00:01.000Z',
+      kind: 'markdown' as const,
+    })
+    await store.setDefaultCanvasId(SOURCE_ID)
+    // The router's pathname is the navigation contract under test; the page
+    // itself shows no raw id anywhere a query could reach.
+    function LocationProbe() {
+      const location = useLocation()
+      return <div data-testid="location-probe">{location.pathname}</div>
+    }
+    render(
+      <>
+        <BrowserLocalCanvasPage store={store} />
+        <LocationProbe />
+      </>,
+    )
+
+    const editable = await waitFor(
+      () => {
+        const el = document.querySelector('[contenteditable="true"]')
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 10_000 },
+    )
+    // focus() instead of click(): the page has TWO role=textbox elements
+    // (the title input and CodeMirror's content), so a click locator on the
+    // contenteditable is ambiguous under playwright's strict mode.
+    editable.focus()
+    // `[[` doubled: userEvent.keyboard's escape for a literal `[`.
+    await userEvent.keyboard('See [[[[Target note]] here.')
+
+    // The debounced preview resolves the alias into an anchor carrying the
+    // target's canvas id.
+    const anchor = await waitFor(
+      () => {
+        const el = document.querySelector(`a[href="${TARGET_ID}"]`)
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 10_000 },
+    )
+    await userEvent.click(anchor)
+
+    // Navigation lands on the target note's route.
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('location-probe').textContent).toBe(`/local/${TARGET_ID}`)
+      },
+      { timeout: 10_000 },
+    )
   })
 })

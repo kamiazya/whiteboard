@@ -7,6 +7,7 @@ import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
+import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
@@ -199,6 +200,11 @@ export function BrowserLocalCanvasPage({
   const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+
+  // [[Name]] resolution for the markdown preview: display names from the
+  // same snapshot list the switcher shows, so a link resolves exactly when
+  // the author can see one unambiguous canvas by that name.
+  const resolveAlias = useMemo(() => createSnapshotAliasResolver(canvases), [canvases])
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -689,6 +695,8 @@ export function BrowserLocalCanvasPage({
                   className="h-full"
                   theme={resolvedTheme}
                   meta={markdownDoc.coreMeta}
+                  resolveAlias={resolveAlias}
+                  onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
                 />
               </div>
             </div>

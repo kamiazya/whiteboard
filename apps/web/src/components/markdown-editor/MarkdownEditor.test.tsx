@@ -131,6 +131,38 @@ describe('MarkdownEditor', () => {
     }
   })
 
+  it('opens a wikiLink target through onOpenCanvas instead of navigating the window', async () => {
+    vi.useFakeTimers()
+    const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const onOpenCanvas = vi.fn()
+    const { getByTestId } = render(
+      <MarkdownEditor
+        value={`See [[canvas:${NOTE_ID}|the plan]] and [external](https://example.com).`}
+        onChange={() => {}}
+        onOpenCanvas={onOpenCanvas}
+        previewDebounceMs={150}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    const preview = getByTestId('markdown-preview-scroll')
+    const wikiAnchor = preview.querySelector(`a[href="${NOTE_ID}"]`)
+    expect(wikiAnchor).not.toBeNull()
+    if (!wikiAnchor) throw new Error('unreachable')
+    const intercepted = !fireEvent.click(wikiAnchor)
+    expect(onOpenCanvas).toHaveBeenCalledWith(NOTE_ID)
+    // preventDefault fired — the SPA never navigates to a bare-ULID URL.
+    expect(intercepted).toBe(true)
+
+    // External links keep default browser behavior and never call the seam.
+    const external = preview.querySelector('a[href="https://example.com"]')
+    expect(external).not.toBeNull()
+    if (!external) throw new Error('unreachable')
+    fireEvent.click(external)
+    expect(onOpenCanvas).toHaveBeenCalledTimes(1)
+  })
+
   it('renders the core facets as a document header in Read mode', () => {
     const { getByRole, getByTestId } = render(
       <MarkdownEditor
