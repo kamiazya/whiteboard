@@ -9,8 +9,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { resolveApiRouteScope } from './route-scope-registry.js'
 // Imported STATICALLY, though nothing here mocks it. As `await import()`
 // inside the test body, the cost of transforming and loading app.ts's whole
 // module graph was charged to the 10s per-test budget — fine on an idle
@@ -19,6 +17,8 @@ import { resolveApiRouteScope } from './route-scope-registry.js'
 // minutes). The test's own work is milliseconds; only the load was slow, so
 // it belongs in the collection phase, which no per-test timeout bounds.
 import { createApp } from '../app.js'
+import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
+import { resolveApiRouteScope } from './route-scope-registry.js'
 
 let tempDir: string
 
