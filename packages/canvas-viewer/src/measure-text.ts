@@ -18,7 +18,7 @@ const ASCENT_RATIO = 0.8
 const DESCENT_RATIO = 0.2
 
 function measureWithContext(
-  ctx: CanvasRenderingContext2D,
+  ctx: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
   text: string,
   font: FontDescriptor,
 ): TextMetrics {
@@ -61,16 +61,37 @@ function fallbackMeasure(text: string, font: FontDescriptor): TextMetrics {
  * implementation). Lazily creates a single offscreen <canvas> 2D context
  * and reuses it across calls.
  */
-export function createBrowserMeasureText(): MeasureText {
-  let context: CanvasRenderingContext2D | null | undefined
+/**
+ * A 2D context to measure in: `<canvas>` on a window, `OffscreenCanvas` on a
+ * worker, which has no `document`.
+ *
+ * Both were verified to return IDENTICAL metrics in Chromium for the same
+ * registered face — that parity is what allows layout to move off the main
+ * thread at all, and `layout-worker-parity.browser.test.tsx` is the guard
+ * that keeps it true. A realm that can produce neither falls back to the
+ * ratio estimate, exactly as before.
+ */
+type MeasuringContext = Pick<CanvasRenderingContext2D, 'font' | 'measureText'>
 
-  const getContext = (): CanvasRenderingContext2D | null => {
-    if (context !== undefined) return context
-    try {
-      context = document.createElement('canvas').getContext('2d')
-    } catch {
-      context = null
+function createMeasuringContext(): MeasuringContext | null {
+  try {
+    if (typeof document !== 'undefined') {
+      return document.createElement('canvas').getContext('2d')
     }
+    if (typeof OffscreenCanvas !== 'undefined') {
+      return new OffscreenCanvas(1, 1).getContext('2d') as MeasuringContext | null
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+export function createBrowserMeasureText(): MeasureText {
+  let context: MeasuringContext | null | undefined
+
+  const getContext = (): MeasuringContext | null => {
+    if (context === undefined) context = createMeasuringContext()
     return context
   }
 

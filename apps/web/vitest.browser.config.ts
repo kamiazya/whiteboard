@@ -26,6 +26,16 @@ export default defineConfig({
         __dirname,
         '../../packages/canvas-viewer/src/scene.ts',
       ),
+      // The layout worker imports these two rather than the barrel, which
+      // re-exports React components whose graphs touch `document`.
+      '@kamiazya/whiteboard-canvas-viewer/font-loading': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/font-loading.ts',
+      ),
+      '@kamiazya/whiteboard-canvas-viewer/measure-text': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/measure-text.ts',
+      ),
       // Resolve canvas-viewer from source so tests run before `pnpm build`.
       '@kamiazya/whiteboard-canvas-viewer': resolve(
         __dirname,
