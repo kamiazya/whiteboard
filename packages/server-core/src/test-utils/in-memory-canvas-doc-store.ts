@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   CanvasDocStore,
+  DeleteDocInput,
   DocRef,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -47,6 +48,9 @@ export function createInMemoryCanvasDocStore(): CanvasDocStore {
       const stored = snapshots.get(docRefKey(_input.docRef))
       if (!stored) return null
       return { frontier: structuredClone(stored.frontier) } as ReadFrontierResult
+    },
+    async deleteDoc(input: DeleteDocInput): Promise<void> {
+      snapshots.delete(docRefKey(input.docRef))
     },
   }
 }

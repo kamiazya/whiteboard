@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   CanvasDocStore,
+  DeleteDocInput,
   Frontier,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -111,5 +112,9 @@ export class InMemoryCanvasDocStore implements CanvasDocStore {
       return null
     }
     return { frontier: cloneBytes(record.frontier) }
+  }
+
+  async deleteDoc(input: DeleteDocInput): Promise<void> {
+    this.docs.delete(docRefKey(input.docRef))
   }
 }

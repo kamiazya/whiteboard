@@ -40,7 +40,12 @@ type AppendDeltasOp = {
   newFrontier: Uint8Array
 }
 
-type Op = SaveSnapshotOp | AppendDeltasOp
+type DeleteDocOp = {
+  type: 'deleteDoc'
+  docRefIndex: number
+}
+
+type Op = SaveSnapshotOp | AppendDeltasOp | DeleteDocOp
 
 function buildSnapshotArgs(chunkByteArrays: Uint8Array[]): {
   manifest: SnapshotManifest
@@ -62,9 +67,11 @@ async function applyOp(store: CanvasDocStore, op: Op): Promise<void> {
   if (op.type === 'saveSnapshot') {
     const { manifest, chunks } = buildSnapshotArgs(op.chunkByteArrays)
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: op.frontier })
-  } else {
+  } else if (op.type === 'appendDeltas') {
     const deltaBatch: DeltaBatch = { updates: op.updates, newFrontier: op.newFrontier }
     await store.appendDeltas({ docRef, deltaBatch })
+  } else {
+    await store.deleteDoc({ docRef })
   }
 }
 
@@ -98,6 +105,14 @@ const opArbitrary: fc.Arbitrary<Op> = fc.oneof(
     docRefIndex: fc.integer({ min: 0, max: DOC_REFS.length - 1 }),
     updates: fc.array(fc.uint8Array({ maxLength: 5 }), { minLength: 1, maxLength: 3 }),
     newFrontier: fc.uint8Array({ maxLength: 5 }),
+  }),
+  // Deleting is generated alongside the writes rather than only after them:
+  // what a partial delete leaves behind (an orphan frontier, a delta run with
+  // no snapshot) is only observable when a later op reads or rewrites the
+  // same docKey.
+  fc.record({
+    type: fc.constant('deleteDoc' as const),
+    docRefIndex: fc.integer({ min: 0, max: DOC_REFS.length - 1 }),
   }),
 )
 

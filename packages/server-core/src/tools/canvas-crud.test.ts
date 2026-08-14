@@ -238,6 +238,27 @@ describe('wbCanvasDelete', () => {
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
+  it('deletes the stored document, not only its place in the tree', async () => {
+    // Removing the tree node makes the document unreachable, which reads as
+    // deleted and leaves its snapshot behind for good. Nothing else ever
+    // refers to that id again, so the bytes are unreferenced rather than
+    // merely orphaned — and deletion is how a resolved item is closed, so
+    // the store grows once per completed piece of work.
+    const deps = makeDeps()
+    const created = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      segment: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
+    const docRef = { kind: 'canvas', canvasId: created.canvasId } as const
+    expect(await deps.canvasDocStore.loadSnapshot({ docRef })).not.toBeNull()
+
+    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
+
+    expect(await deps.canvasDocStore.loadSnapshot({ docRef })).toBeNull()
+  })
+
   it('throws CanvasNotFoundError when deleting a non-existent canvasId', async () => {
     const deps = makeDeps()
     await expect(
