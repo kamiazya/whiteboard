@@ -177,6 +177,16 @@ export function useWorkerScene(
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [inputs, offloadable])
 
+  // Started at MOUNT, not on the first edit. The worker's module load and its
+  // font registration are one-time costs, and paying them inside the first
+  // edit made that edit 353ms against 94ms synchronous — the worst possible
+  // moment, since it is also a user's first impression of the canvas. Warming
+  // it while they are still reading brings that edit back to the steady state.
+  useEffect(() => {
+    if (!offloadable || fontDegraded.current) return
+    workerRef.current ??= createLayoutWorker()
+  }, [offloadable])
+
   useEffect(() => () => workerRef.current?.terminate(), [])
 
   return synchronous ?? rendered
