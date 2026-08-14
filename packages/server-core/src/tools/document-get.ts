@@ -8,8 +8,8 @@ import { readDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
-import { createCanvasExportJsonCanvasTool } from './canvas-export-json-canvas.js'
-import { createCanvasExportOkfTool } from './canvas-export-okf.js'
+import { exportJsonCanvas } from './export-json-canvas.js'
+import { exportOkf } from './export-okf.js'
 
 const documentGetInputSchema = z
   .object({
@@ -78,13 +78,13 @@ export function createDocumentGetTool(deps: ServerDeps) {
         throw new DocumentKindUnknownError(input.canvasId)
       }
       if (kind === 'markdown') {
-        const { markdown, frontmatter } = await createCanvasExportOkfTool(deps).execute({
+        const { markdown, frontmatter } = await exportOkf(deps, {
           workspaceId: input.workspaceId,
           canvasId: input.canvasId,
         })
         return { kind, content: markdown, frontmatter }
       }
-      const { json } = await createCanvasExportJsonCanvasTool(deps).execute({
+      const { json } = await exportJsonCanvas(deps, {
         workspaceId: input.workspaceId,
         canvasId: input.canvasId,
         ...(input.options ? { options: input.options } : {}),

@@ -17,7 +17,6 @@ import {
   listCanvasesInputSchema,
 } from './tools/canvas-crud.schemas.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
-import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { createDocumentSetTool } from './tools/document-set.js'
@@ -25,6 +24,7 @@ import { createEdgeAddTool } from './tools/edge-add.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
+import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodeAddTool } from './tools/node-add.js'
 import { createNodeLockTool } from './tools/node-lock.js'
@@ -103,9 +103,8 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
-  const canvasExportOkfTool = createCanvasExportOkfTool(deps)
   app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId/okf', async (c) => {
-    const parsed = canvasExportOkfInputSchema.safeParse({
+    const parsed = exportOkfInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
       canvasId: c.req.param('canvasId'),
     })
@@ -113,7 +112,7 @@ export function createServer(deps: ServerDeps) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
     try {
-      const result = await canvasExportOkfTool.execute(parsed.data)
+      const result = await exportOkf(deps, parsed.data)
       return c.json(result, 200)
     } catch (err) {
       // A tree node whose doc was never written (created but never

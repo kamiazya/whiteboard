@@ -8,9 +8,9 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { createCanvasExportJsonCanvasTool } from './canvas-export-json-canvas.js'
-import { createCanvasExportOkfTool } from './canvas-export-okf.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
+import { exportJsonCanvas } from './export-json-canvas.js'
+import { exportOkf } from './export-okf.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -33,26 +33,25 @@ async function setupTools() {
   const deps = makeDeps(store)
   return {
     store,
+    deps,
     documentSet: createDocumentSetTool(deps),
-    exportOkf: createCanvasExportOkfTool(deps),
-    exportJson: createCanvasExportJsonCanvasTool(deps),
   }
 }
 
 describe('wb_document_set -> OKF export composed round-trip', () => {
   test('preserves body text through the LoroDoc persistence layer', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     const markdown = '---\ntype: note\n---\n# Title\n\nBody text.'
     await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
 
-    const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     expect(result.markdown).toContain('# Title\n\nBody text.')
   })
 
   test('preserves core facets (type/title/tags/view) through the LoroDoc persistence layer', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     const markdown = [
       '---',
@@ -70,7 +69,7 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     ].join('\n')
     await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
 
-    const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     expect(result.frontmatter.type).toBe('note')
     expect(result.frontmatter.title).toBe(
@@ -82,7 +81,7 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
   })
 
   test('preserves facets with arbitrary domain keys through the LoroDoc persistence layer', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     const markdown = [
       '---',
@@ -96,13 +95,13 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     ].join('\n')
     await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
 
-    const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     expect(result.frontmatter.facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
   })
 
   test('an empty (facets-only) body round-trips to an empty body', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
@@ -110,17 +109,17 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       markdown: '---\ntype: note\n---\n',
     })
 
-    const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     expect(result.markdown.endsWith('---\n')).toBe(true)
   })
 
   test('re-import after export is idempotent: the second import produces the same LoroDoc state', async () => {
-    const { store, documentSet, exportOkf } = await setupTools()
+    const { store, documentSet, deps } = await setupTools()
 
     const markdown = '---\ntype: note\nfacets:\n  kanban/1:\n    status: todo\n---\nOriginal body.'
     await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
-    const exported = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
@@ -140,7 +139,7 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
 
 describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () => {
   test('the imported body appears as a text node in the exported (extended) JSON Canvas', async () => {
-    const { documentSet, exportJson } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
@@ -148,7 +147,7 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
       markdown: '---\ntype: note\n---\nHello from OKF.',
     })
 
-    const result = await exportJson.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
     const parsed = JSON.parse(result.json)
 
     expect(parsed.nodes).toHaveLength(1)
@@ -156,7 +155,7 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
   })
 
   test('the exported (strict) JSON Canvas has no x-whiteboard extensions', async () => {
-    const { documentSet, exportJson } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
@@ -164,7 +163,7 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
       markdown: '---\ntype: note\n---\nHello.',
     })
 
-    const result = await exportJson.execute({
+    const result = await exportJsonCanvas(deps, {
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       options: { strict: true },
@@ -177,27 +176,27 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
 
 describe('the JSON Canvas exporter output re-parses as valid JSON Canvas', () => {
   test('parseSpatial succeeds on the exported (extended) JSON', async () => {
-    const { documentSet, exportJson } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nRe-parse me.',
     })
-    const result = await exportJson.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
 
     expect(parseSpatial(result.json).ok).toBe(true)
   })
 
   test('parseSpatial succeeds on the exported (strict) JSON', async () => {
-    const { documentSet, exportJson } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nRe-parse me too.',
     })
-    const result = await exportJson.execute({
+    const result = await exportJsonCanvas(deps, {
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       options: { strict: true },
@@ -209,7 +208,7 @@ describe('the JSON Canvas exporter output re-parses as valid JSON Canvas', () =>
 
 describe('error paths do not silently produce corrupt output', () => {
   test('import_okf with no frontmatter rejects before any export is attempted', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     await expect(
       documentSet.execute({
@@ -222,12 +221,12 @@ describe('error paths do not silently produce corrupt output', () => {
     // No snapshot was ever saved, so the composed export attempt surfaces a
     // clean not-found error rather than reading corrupt/partial state.
     await expect(
-      exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
   test('a non-yaml-safe facet value (YAML .nan) imports but rejects on export, never silently exported', async () => {
-    const { documentSet, exportOkf } = await setupTools()
+    const { documentSet, deps } = await setupTools()
 
     // parseOkf's frontmatter schema only validates facet KEYS, not values
     // (extensionFacetsSchema stores values as z.unknown()) — the yaml-safe
@@ -239,25 +238,23 @@ describe('error paths do not silently produce corrupt output', () => {
     await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
 
     await expect(
-      exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
     ).rejects.toThrow(/yaml-safe/)
   })
 
   test('export_okf on a canvas with no stored snapshot surfaces a clean error', async () => {
     const deps = makeDeps(new FakeCanvasDocStore())
-    const exportTool = createCanvasExportOkfTool(deps)
 
     await expect(
-      exportTool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
   test('export_json_canvas on a canvas with no stored snapshot surfaces a clean error', async () => {
     const deps = makeDeps(new FakeCanvasDocStore())
-    const exportJsonTool = createCanvasExportJsonCanvasTool(deps)
 
     await expect(
-      exportJsonTool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 })

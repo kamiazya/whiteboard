@@ -15,7 +15,7 @@
 // barrel instead of importing a shared-layer package it is not allowed to
 // depend on directly (see .claude/rules/architecture-map.md).
 export {
-  canvasExportOkfOutputSchema as canvasOkfV1ResponseSchema,
+  exportOkfOutputSchema as canvasOkfV1ResponseSchema,
   listCanvasesOutputSchema as listCanvasesV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
@@ -31,7 +31,7 @@ export type { DaemonPingResponse, RuntimeVerifyResponse } from './runtime.js'
 export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime.js'
 
 import type {
-  canvasExportOkfOutputSchema as _canvasOkfV1ResponseSchema,
+  exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
   listCanvasesOutputSchema as _listCanvasesV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { z as _z } from 'zod'
