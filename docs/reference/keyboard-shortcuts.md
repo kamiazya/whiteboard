@@ -89,11 +89,15 @@ on screen. The same four moves sit in a node's right-click menu under
 |---|---|
 | `Shift + 1` | Zoom to fit all content |
 | `Shift + 2` | Zoom to the selection |
+| `+` / `-` | Zoom in or out one step, about the middle of the view |
 | `Cmd/Ctrl` + scroll | Zoom under the pointer |
 | Scroll / two-finger drag | Pan |
+| Double-click / double-tap in Hand mode | Zoom in on the point you pressed |
 
-In Hand mode the dock shows zoom out, the current zoom (click to reset to
-100%), zoom in, and zoom to fit.
+The dock carries one view control — **zoom to fit** — and it is there in
+every tool. There is no zoom percentage anywhere: what you can ask for is
+to see everything, or to get closer to something, and the magnification
+between those two is not a number you have to manage.
 
 ## History
 

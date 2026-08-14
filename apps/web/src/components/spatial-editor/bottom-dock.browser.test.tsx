@@ -49,17 +49,26 @@ it('the dock keeps history and tools in ONE single-row container that fits a pho
   expect(tops.size).toBe(1)
 })
 
-it('hand mode swaps history for the zoom cluster and still fits a phone width in one row', () => {
+it('the dock is the same in every mode, and still fits a phone width in one row', () => {
   const { container } = renderAt(375)
   const host = container.firstElementChild as HTMLElement
   const palette = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
+  const widthIn = (mode: string) => {
+    fireEvent.click(palette.querySelector(`[data-testid="${mode}-tool-button"]`) as HTMLElement)
+    return Math.round(palette.getBoundingClientRect().width)
+  }
 
-  fireEvent.click(palette.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
-  expect(container.querySelector('[data-testid="history-cluster"]')).toBeNull()
-  expect(palette.querySelector('[data-testid="zoom-reset-button"]')).not.toBeNull()
+  // Entering hand mode exchanges nothing: the history cluster and the lone
+  // view control (zoom to fit) are in the dock whatever is armed, so the
+  // dock's width cannot depend on the mode.
+  const widths = ['hand', 'select', 'connect'].map(widthIn)
+  expect(new Set(widths).size).toBe(1)
+  for (const mode of ['hand', 'select', 'connect']) {
+    fireEvent.click(palette.querySelector(`[data-testid="${mode}-tool-button"]`) as HTMLElement)
+    expect(container.querySelector('[data-testid="history-cluster"]')).not.toBeNull()
+    expect(palette.querySelector('[data-testid="zoom-fit-button"]')).not.toBeNull()
+  }
 
-  // The wider zoom cluster (4 controls incl. the % readout) must not push
-  // the dock past the phone edge or wrap it to a second row.
   const hostRect = host.getBoundingClientRect()
   const dockRect = palette.getBoundingClientRect()
   expect(dockRect.left).toBeGreaterThanOrEqual(hostRect.left)

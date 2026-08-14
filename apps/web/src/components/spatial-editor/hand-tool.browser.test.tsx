@@ -65,6 +65,16 @@ function drag(root: HTMLElement, from: [number, number], to: [number, number]) {
   })
 }
 
+/** Two presses on the same spot inside the double-press window. */
+function doublePress(root: HTMLElement, at: [number, number]) {
+  const r = root.getBoundingClientRect()
+  const point = { clientX: r.left + at[0], clientY: r.top + at[1] }
+  for (const pointerId of [1, 2]) {
+    fireEvent.pointerDown(root, { button: 0, pointerId, ...point })
+    fireEvent.pointerUp(root, { pointerId, ...point })
+  }
+}
+
 it('hand is the DEFAULT tool and sits leftmost in the tool group', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
@@ -115,50 +125,105 @@ it('hand mode suppresses the long-press context menu — navigation only', () =>
   expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
 })
 
-it('hand mode swaps the leading history cluster for zoom controls; select mode swaps back', () => {
+it('the dock does NOT swap by mode: the host history cluster stays in hand mode too', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
-  // Hand (default): view-only mode — zoom controls, no host history.
-  expect(container.querySelector('[data-testid="host-leading"]')).toBeNull()
-  for (const id of ['zoom-out-button', 'zoom-reset-button', 'zoom-in-button', 'zoom-fit-button'])
-    expect(container.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
+  // Hand is the default. Navigation is not a mode's property, so nothing in
+  // the dock is exchanged for entering it.
+  expect(container.querySelector('[data-testid="host-leading"]')).not.toBeNull()
 
   fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
   expect(container.querySelector('[data-testid="host-leading"]')).not.toBeNull()
-  expect(container.querySelector('[data-testid="zoom-in-button"]')).toBeNull()
 })
 
-it('zoom controls: in/out change the scale, reset returns to 100%, zoom-to-fit frames content in the middle', () => {
+it('the dock carries zoom-to-fit in every mode, and no zoom percentage anywhere', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
-  const vt = () =>
-    (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
-  const zoomOf = (transform: string) => Number(/scale\(([\d.]+)\)/.exec(transform)?.[1])
+  const fit = () => container.querySelector('[data-testid="zoom-fit-button"]')
 
-  fireEvent.click(container.querySelector('[data-testid="zoom-in-button"]') as HTMLElement)
-  expect(zoomOf(vt())).toBeGreaterThan(1)
-  const label = container.querySelector('[data-testid="zoom-reset-button"]') as HTMLElement
-  expect(label.textContent).not.toBe('100%')
+  expect(fit()).not.toBeNull()
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  expect(fit()).not.toBeNull()
 
-  fireEvent.click(label)
-  expect(zoomOf(vt())).toBe(1)
-  expect(label.textContent).toBe('100%')
+  // The magnification itself is an implementation coordinate, not something
+  // a person asks for: only "see everything" and "get closer" are offered.
+  for (const id of ['zoom-in-button', 'zoom-out-button', 'zoom-reset-button'])
+    expect(container.querySelector(`[data-testid="${id}"]`)).toBeNull()
 
-  fireEvent.click(container.querySelector('[data-testid="zoom-out-button"]') as HTMLElement)
-  expect(zoomOf(vt())).toBeLessThan(1)
-
-  // Center: the lone node's box (100,100 200x80) centers on the 800x600 root.
-  fireEvent.click(container.querySelector('[data-testid="zoom-fit-button"]') as HTMLElement)
+  // Fit frames the lone node (100,100 200x80) in the middle of the 800x600 root.
+  fireEvent.click(fit() as HTMLElement)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
   const svgRect = (
     container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
   ).getBoundingClientRect()
-  const cx = svgRect.x + svgRect.width / 2 - r.x
-  const cy = svgRect.y + svgRect.height / 2 - r.y
-  expect(Math.abs(cx - r.width / 2)).toBeLessThan(2)
-  expect(Math.abs(cy - r.height / 2)).toBeLessThan(2)
+  expect(Math.abs(svgRect.x + svgRect.width / 2 - r.x - r.width / 2)).toBeLessThan(2)
+  expect(Math.abs(svgRect.y + svgRect.height / 2 - r.y - r.height / 2)).toBeLessThan(2)
+})
+
+it('hand mode: a double press zooms in and holds the pressed canvas point still', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  const zoomOf = () => Number(/scale\(([\d.]+)\)/.exec(transformOf(container))?.[1])
+
+  // The point pressed is a corner of the node, not the viewport centre —
+  // a zoom that ignored the anchor would move it.
+  const at: [number, number] = [120, 140]
+  const svgRectBefore = (
+    container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
+  ).getBoundingClientRect()
+
+  doublePress(root, at)
+
+  expect(zoomOf()).toBeGreaterThan(1)
+  const svgRectAfter = (
+    container.querySelector('[data-testid="viewport-transform"] svg rect') as SVGRectElement
+  ).getBoundingClientRect()
+  // The canvas point under the press keeps its screen position: the node's
+  // offset from the press point scales, but the press point itself does not move.
+  const beforeOffset = svgRectBefore.x - (r.left + at[0])
+  const afterOffset = svgRectAfter.x - (r.left + at[0])
+  expect(afterOffset / beforeOffset).toBeCloseTo(zoomOf(), 1)
+
+  // Navigation only: nothing was created or changed.
+  expect(latest.commands).toEqual([])
+})
+
+it('step zoom is reachable from the keyboard, in every mode', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const zoom = () => Number(/scale\(([\d.]+)\)/.exec(transformOf(container))?.[1])
+
+  // The double press that gets closer is a pointer gesture, and the wheel
+  // needs a pointing device. Without these keys a keyboard-only or
+  // switch-access user can reach no magnification but "fit".
+  root.focus()
+  fireEvent.keyDown(root, { key: '+', code: 'Equal', shiftKey: true })
+  expect(zoom()).toBeGreaterThan(1)
+  fireEvent.keyDown(root, { key: '-', code: 'Minus' })
+  fireEvent.keyDown(root, { key: '-', code: 'Minus' })
+  expect(zoom()).toBeLessThan(1)
+
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  const before = zoom()
+  fireEvent.keyDown(root, { key: '+', code: 'Equal', shiftKey: true })
+  expect(zoom()).toBeGreaterThan(before)
+})
+
+it('select mode keeps its own double press: it creates a note', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+
+  doublePress(root, [400, 300])
+
+  expect(latest.commands).toContain('create-node')
+  expect(Number(/scale\(([\d.]+)\)/.exec(transformOf(container))?.[1])).toBe(1)
 })
 
 it('switching tools closes an open context menu — no edit affordance survives into hand mode', () => {

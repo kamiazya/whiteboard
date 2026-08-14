@@ -16,6 +16,8 @@ import type { EditorTool } from './ToolPalette.js'
 
 export type ShortcutId =
   | 'toggle-lock'
+  | 'zoom-in'
+  | 'zoom-out'
   | 'zoom-to-fit'
   | 'zoom-to-selection'
   | 'select-all'
@@ -79,6 +81,24 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     shift: true,
     display: 'Shift+1',
     description: 'Zoom to fit all content',
+  },
+  // Step zoom exists ONLY here. The dock offers "see everything" and the
+  // pointer gets closer by double-pressing in hand mode or by the wheel —
+  // neither of which a keyboard-only or switch-access user can perform, and
+  // fit-to-content is not a magnification they can choose. Unmodified +/-
+  // rather than Cmd+= : that combination is the browser's own page zoom,
+  // which is a different function and not ours to take.
+  {
+    id: 'zoom-in',
+    keys: ['+', '='],
+    display: '+',
+    description: 'Zoom in',
+  },
+  {
+    id: 'zoom-out',
+    keys: ['-'],
+    display: '-',
+    description: 'Zoom out',
   },
   {
     id: 'zoom-to-selection',
