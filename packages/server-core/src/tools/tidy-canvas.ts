@@ -5,11 +5,11 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
-import { readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
+import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
-import { PatchValidationError } from './errors.js'
+import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const tidyCanvasInputSchema = z
@@ -37,12 +37,25 @@ export function createTidyCanvasTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_tidy' as const,
     description:
-      'Re-lay-out the spatial canvas. Spatial documents only — it parses through the spatial schema and rejects anything else.',
+      'Re-lay-out the spatial canvas. Spatial documents only — a markdown document is refused rather than having the node holding its body repositioned.',
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+
+      // A markdown document stores its OKF body in a text node, so its
+      // content parses as a perfectly valid spatial canvas and the schema
+      // gate below cannot tell the two apart. Unlike wb_node_add this does
+      // not declare a kind for a document that has none: repositioning what
+      // is already there is no evidence of what the document is.
+      if (readDocumentKind(doc) === 'markdown') {
+        throw new DocumentKindMismatchError(
+          input.canvasId,
+          'markdown',
+          'This re-lays-out a spatial canvas, and its only node holds its OKF body. Edit its body through wb_body_patch.',
+        )
+      }
 
       // Locks bind agents exactly as they bind the editor: a locked node is
       // a fixed obstacle tidy routes around, never a participant it moves.
