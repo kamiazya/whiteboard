@@ -404,6 +404,35 @@ paths:
       paying once on a committed change and never on a frame someone is
       dragging through, so a canvas past the gate drags exactly as fast as
       before and picks up its regional repair on drop.
+    - **Batch (Jacobi) side-choice evaluation is MEASURED AND DEFERRED, not
+      untried.** The search adopts one improvement at a time and re-bases
+      before the next edge (Gauss-Seidel), which is inherently sequential —
+      the reason a GPU cannot help it, and the real prerequisite behind any
+      WebGPU/SIMD plan. (Float determinism is NOT that blocker: integer or
+      fixed-point arithmetic is bit-exact on a GPU, and this package's cost
+      model is already integer-quantized by `COST_QUANTUM`.) The batch form
+      scores every trial edge against ONE base configuration, so a round is
+      order-independent and parallelisable, then adopts the non-conflicting
+      subset. Sound multi-adoption needs more than disjoint touched sets: a
+      pair spanning two proposals changes score and neither proposal costed
+      it, so their BOUNDING BOXES must be disjoint too — then every such pair
+      scores zero on both sides and the batch equals sequential adoption
+      exactly.
+      Measured over the corpus: batch needs 6 rounds to converge (12 is
+      identical), and at 6 it MATCHES sequential on avoidable-ink violations
+      (29) while beating it on crossings (473 vs 500) and ink (2169 vs 2192).
+      At the same 2-round budget it is far worse (47 violations, 611
+      crossings) — the extra rounds are how it pays for re-basing less often.
+      The cost is +36% layout time single-threaded (4471ms vs 3287ms over the
+      corpus). That is the whole finding: batch is quality-competitive and
+      strictly more work on one thread, and its extra work is exactly the
+      work a parallel executor could absorb.
+      Deferred rather than shipped because `canvas-render` is a shared-layer
+      package with no worker, no SIMD path, and no `navigator.gpu` (a DOM
+      global this layer forbids) — so today it would buy a 36% regression for
+      a few percent of crossings. Revisit when a composition root can supply a
+      parallel executor through a seam, which is a larger design than the
+      search itself.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
       FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam
