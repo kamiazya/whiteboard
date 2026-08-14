@@ -140,9 +140,9 @@ describe('routing quality across the synthetic corpus', () => {
       violations: { 'own-endpoint': 35, foreign: 17, degenerate: 0 },
       interiorInk: 3545,
       borderInk: 1147,
-      bends: 8484,
+      bends: 8486,
       crossings: 647,
-      length: 1362640,
+      length: 1362776,
     })
   })
 })

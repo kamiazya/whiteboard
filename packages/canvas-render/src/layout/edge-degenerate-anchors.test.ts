@@ -42,22 +42,45 @@ function interiorInk(path: readonly { x: number; y: number }[], n: SpatialNode):
 }
 
 describe('coincident anchors', () => {
-  // n1 sits directly under n0, sharing the y = 40 boundary.
+  // n1 sits directly under n0, sharing the y = 40 boundary. Their fan-out
+  // spans meet at one point, so bottom-to-top has no distance to travel.
   const nodes = [node('n0', 17, 0, 60, 40), node('n1', 0, 40, 60, 40)]
-  const edges: CanvasEdge[] = [{ id: 'e', fromNode: 'n0', toNode: 'n1' }]
 
-  const routed = () => {
+  const routeWith = (edge: CanvasEdge) => {
+    const edges = [edge]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
-    return routeEdge(nodes, edges[0] as CanvasEdge, 'orthogonal', anchors.get('e'))
+    return routeEdge(nodes, edge, 'orthogonal', anchors.get(edge.id))
   }
 
-  it('draws nothing rather than a spike through both boxes', () => {
-    const { path } = routed()
-    expect(path.map((p) => `${p.x},${p.y}`)).toEqual(['38.5,40', '38.5,40'])
+  it('routes around the side that has room instead of vanishing', () => {
+    // The boxes are flush on ONE axis; the other has space. An edge someone
+    // drew must not disappear because the pair the ranking preferred happens
+    // to be degenerate.
+    const routed = routeWith({ id: 'e', fromNode: 'n0', toNode: 'n1' })
+    expect({ from: routed.fromSide, to: routed.toSide }).toEqual({ from: 'left', to: 'left' })
+    expect(routed.path.map((p) => `${p.x},${p.y}`)).toEqual(['17,20', '-3,20', '-3,60', '0,60'])
   })
 
   it('leaves no ink inside either box', () => {
-    const { path } = routed()
+    const { path } = routeWith({ id: 'e', fromNode: 'n0', toNode: 'n1' })
+    for (const n of nodes) {
+      expect({ node: n.id, ink: interiorInk(path, n) }).toEqual({ node: n.id, ink: 0 })
+    }
+  })
+
+  it('draws the shared point, not a spike, when authored sides force the collision', () => {
+    // Naming both sides is a request for that geometry. The re-siding above
+    // deliberately leaves it alone, so the router still has to handle a pair
+    // with no distance in it — and its answer is nothing, not 20px into one
+    // box and 40px back through both.
+    const { path } = routeWith({
+      id: 'e',
+      fromNode: 'n0',
+      toNode: 'n1',
+      fromSide: 'bottom',
+      toSide: 'top',
+    })
+    expect(path.map((p) => `${p.x},${p.y}`)).toEqual(['38.5,40', '38.5,40'])
     for (const n of nodes) {
       expect({ node: n.id, ink: interiorInk(path, n) }).toEqual({ node: n.id, ink: 0 })
     }
