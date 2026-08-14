@@ -14,7 +14,7 @@ pnpm install
 pnpm exec playwright install --with-deps chromium
 ```
 
-CI and the release workflow assume Playwright-managed Chromium. Set `WHITEBOARD_CHROME_PATH` only when you specifically want to drive a system Chrome.
+This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.
 
 ## Bundled skills install
 
