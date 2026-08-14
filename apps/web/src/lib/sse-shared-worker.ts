@@ -79,15 +79,69 @@ function queueReplicaWork(work: () => unknown): void {
   replicaQueue = replicaQueue.then(work, work).catch(() => undefined)
 }
 
+/**
+ * Keyed by ORIGIN and document, never by document alone.
+ *
+ * A document id is minted by one daemon and nothing makes it unique across
+ * two of them, so a replica keyed on the id alone would let two configured
+ * origins share state — and, through the fan-out below, let one origin's edit
+ * reach the other's tabs. Every other piece of worker state is already
+ * origin-scoped; this keeps the replica from being the exception.
+ *
+ * `\n` separates because it cannot occur in an origin.
+ */
+const replicaKey = (baseUrl: string, doc: string) => `${baseUrl}\n${doc}`
+
 const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
 
-function replicaFor(doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {
+function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {
   if (loro === undefined) return undefined
-  const existing = replicas.get(doc)
+  const key = replicaKey(baseUrl, doc)
+  const existing = replicas.get(key)
   if (existing !== undefined) return existing
   const created = new loro.LoroDoc()
-  replicas.set(doc, created)
+  replicas.set(key, created)
   return created
+}
+
+/**
+ * The replica's own hub subscription, one per origin+document, refcounted by
+ * the ports interested in it.
+ *
+ * It is separate from the ports' subscriptions because the replica belongs to
+ * the WORKER, not to any tab: feeding it from each port's own listener meant
+ * one daemon frame queued one WASM import per subscribed tab, all but the
+ * first of them merging bytes the replica already had, and all of them ahead
+ * of that tab's real work on the single replica queue.
+ *
+ * Refcounted rather than permanent because the hub closes a document's daemon
+ * subscription when its last listener leaves — a feed that never released
+ * would keep every document ever opened subscribed for the life of the worker.
+ */
+const replicaFeeds = new Map<string, { off: () => void; ports: number }>()
+
+function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  const existing = replicaFeeds.get(key)
+  if (existing !== undefined) {
+    existing.ports += 1
+    return
+  }
+  const off = hub.subscribe(doc, {
+    onUpdate: (bytes) => importIntoReplica(baseUrl, doc, bytes),
+    onMessage: () => {},
+  })
+  replicaFeeds.set(key, { off, ports: 1 })
+}
+
+function releaseReplicaFeed(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  const feed = replicaFeeds.get(key)
+  if (feed === undefined) return
+  feed.ports -= 1
+  if (feed.ports > 0) return
+  replicaFeeds.delete(key)
+  feed.off()
 }
 
 interface PortState {
@@ -125,25 +179,35 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function importIntoReplica(doc: string, bytes: Uint8Array): void {
+function importIntoReplica(baseUrl: string, doc: string, bytes: Uint8Array): void {
   queueReplicaWork(() => {
     // Total by construction: a frame this replica cannot merge (a truncated
     // update, a future format) must not take the worker down for every tab
     // and every other document. The daemon remains the source it can re-sync
     // from.
     try {
-      replicaFor(doc)?.import(bytes)
+      replicaFor(baseUrl, doc)?.import(bytes)
     } catch {
       return
     }
   })
 }
 
-/** To every port subscribed to `doc`, except the one that sent the work. */
-function broadcastAuthorityUpdate(doc: string, update: Uint8Array, from: MessagePort): void {
+/**
+ * To every port subscribed to `doc` ON THE SAME ORIGIN, except the one that
+ * sent the work. Two daemons can mint the same document id, and a tab paired
+ * with one of them must never be handed the other's edits.
+ */
+function broadcastAuthorityUpdate(
+  baseUrl: string,
+  doc: string,
+  update: Uint8Array,
+  from: MessagePort,
+): void {
   const encoded = toBase64(update)
   for (const [target, state] of ports) {
     if (target === from) continue
+    if (state.baseUrl !== baseUrl) continue
     if (!state.subscriptions.has(doc)) continue
     target.postMessage({ type: 'authority-update', doc, update: encoded })
   }
@@ -163,6 +227,17 @@ function handle(port: MessagePort, raw: unknown): void {
     if (existing?.baseUrl === msg.baseUrl) {
       hubFor(msg.baseUrl)
       return
+    }
+    // Re-pointing a port at a DIFFERENT origin is the other case, and the old
+    // record's claims have to be released before it is dropped: the handles
+    // live in the map about to be replaced, so anything still held there could
+    // never be released again — a document subscribed on the daemon and a
+    // replica fed forever, for a port that has moved on.
+    if (existing) {
+      for (const [doc, off] of existing.subscriptions) {
+        off()
+        releaseReplicaFeed(existing.baseUrl, doc)
+      }
     }
     ports.set(port, { baseUrl: msg.baseUrl, subscriptions: new Map() })
     hubFor(msg.baseUrl)
@@ -186,7 +261,7 @@ function handle(port: MessagePort, raw: unknown): void {
       // An empty snapshot for a document nobody has opened yet is the right
       // answer, not an error: forking from empty and letting the daemon fill
       // it in is the same path a first-ever open already takes.
-      const snapshot = replicaFor(msg.doc)?.export({ mode: 'snapshot' })
+      const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
       if (snapshot === undefined) return
       port.postMessage({ type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
     })
@@ -195,7 +270,7 @@ function handle(port: MessagePort, raw: unknown): void {
 
   if (msg.type === 'push') {
     queueReplicaWork(() => {
-      const replica = replicaFor(msg.doc)
+      const replica = replicaFor(state.baseUrl, msg.doc)
       if (replica === undefined) return
       const before = replica.version()
       try {
@@ -208,19 +283,21 @@ function handle(port: MessagePort, raw: unknown): void {
       // broadcast. Loro merges are idempotent, but a broadcast is not free.
       const merged = replica.export({ mode: 'update', from: before })
       if (merged.byteLength === 0) return
-      broadcastAuthorityUpdate(msg.doc, merged, port)
+      broadcastAuthorityUpdate(state.baseUrl, msg.doc, merged, port)
     })
     return
   }
 
   if (msg.type === 'subscribe') {
     if (state.subscriptions.has(msg.doc)) return
+    retainReplicaFeed(hub, state.baseUrl, msg.doc)
     const off = hub.subscribe(msg.doc, {
       onUpdate: (bytes) => {
-        // Into the replica first, then relayed verbatim. Both, for now: the
-        // raw frame is what today's clients consume, and the replica is what
-        // forks will. One of the two goes away once every client has moved.
-        importIntoReplica(msg.doc, bytes)
+        // Relay only. The replica is fed by its own subscription above, once
+        // per document rather than once per tab watching it. Both paths carry
+        // the same frame for now: the raw one is what today's clients consume
+        // and the replica is what forks will, and one of the two goes away
+        // once every client has moved.
         port.postMessage({ type: 'update', doc: msg.doc, update: toBase64(bytes) })
       },
       onMessage: (text) => {
@@ -238,6 +315,7 @@ function handle(port: MessagePort, raw: unknown): void {
   if (!off) return
   off()
   state.subscriptions.delete(msg.doc)
+  releaseReplicaFeed(state.baseUrl, msg.doc)
 }
 
 // Typed locally rather than via `/// <reference lib="webworker" />`: that

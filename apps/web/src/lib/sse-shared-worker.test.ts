@@ -359,10 +359,22 @@ describe('authority replica', () => {
   // same sequence works in a real browser (see the browser test beside this).
   // Chasing that difference would be debugging the polyfill, not the worker.
 
-  // NOT covered anywhere yet, and worth saying so: that a DAEMON frame lands
-  // in the replica (not only in the relay). jsdom can feed a daemon frame,
-  // through MSW, but cannot observe the replica — every snapshot-request that
-  // follows replica work stops being answered under the polyfill. The browser
-  // test can observe the replica but has no daemon to feed it. Both halves
-  // exist only in an E2E against a real daemon, which is where this belongs.
+  // NOT covered anywhere yet, and worth saying so: anything about a DAEMON
+  // frame reaching the replica (rather than only the relay). That is one
+  // claim about arrival — the frame lands in the replica at all — and one
+  // about multiplicity: the replica takes its own hub subscription per
+  // document, so N tabs watching one document cost ONE import per frame
+  // rather than N.
+  //
+  // Neither is observable at either layer, and for opposite reasons. jsdom
+  // can feed a daemon frame through MSW but cannot observe the replica: every
+  // snapshot-request that follows replica work stops being answered under the
+  // polyfill. The browser test can observe the replica but has no daemon to
+  // feed it, and its two ports are two tabs of one worker only THERE — which
+  // is the very thing the multiplicity claim is about. Both halves meet only
+  // in an E2E against a real daemon, which is where this belongs.
+  //
+  // What IS pinned, above: that the feed is released. Dropping the release
+  // turns the sibling `unsubscribe` cases red, because the hub keeps a
+  // document subscribed on the daemon while any listener remains.
 })

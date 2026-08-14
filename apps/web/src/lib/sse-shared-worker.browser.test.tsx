@@ -115,6 +115,51 @@ it('carries one port push to another port of the same worker', async () => {
   expect(echoedToSender).not.toHaveBeenCalled()
 }, 30_000)
 
+it('keeps two daemon origins that share a document id apart', async () => {
+  // Every other piece of worker state — the hub, the credential, the port's
+  // own record — is keyed by origin, so a replica keyed by document alone is
+  // the one place two configured daemons would meet. Document ids are minted
+  // per daemon and nothing makes them globally unique, which is the whole
+  // reason the rest of this file bothers.
+  const NAME = 'whiteboard-sse-origin-test'
+  const a = openPort(NAME)
+  const b = openPort(NAME)
+  const doc = `w/origins-${Date.now()}`
+
+  a.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  a.postMessage({ type: 'subscribe', doc })
+  b.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:2', token: 't' })
+  b.postMessage({ type: 'subscribe', doc })
+
+  const leaked = vi.fn()
+  b.addEventListener('message', (e: MessageEvent) => {
+    if ((e.data as { type?: string }).type === 'authority-update') leaked()
+  })
+
+  const tab = new LoroDoc()
+  tab.getMap('m').set('k', 'origin-a-only')
+  tab.commit()
+  a.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+  const snapshot = await new Promise<string>((resolve, reject) => {
+    b.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; snapshot?: string }
+      if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
+    })
+    // Ordering is guaranteed rather than raced: replica work runs on one
+    // queue, so this snapshot is answered strictly after the push above. A
+    // shared replica would therefore have to show the leak, not merely be
+    // able to.
+    b.postMessage({ type: 'snapshot-request', doc })
+    setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
+  })
+
+  const forked = new LoroDoc()
+  forked.import(decode(snapshot))
+  expect(forked.getMap('m').size).toBe(0)
+  expect(leaked).not.toHaveBeenCalled()
+}, 30_000)
+
 it('hands a later tab a snapshot that already contains an earlier push', async () => {
   // The round trip a replica exists to remove: without it this snapshot would
   // be empty until the daemon echoed the work back.
