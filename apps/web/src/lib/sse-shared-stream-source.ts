@@ -39,6 +39,30 @@ export function createSharedSseStreamSource(
 
   const listeners = new Map<string, Set<DocListener>>()
   const port = worker.port
+
+  // A module worker that fails to LOAD does not throw above — construction
+  // succeeds and the failure arrives here instead. Without this the port is a
+  // hole: every subscribe posts into it, nothing ever answers, and the caller
+  // never learns it should have opened its own stream. That is a silent hang,
+  // which is strictly worse than the missing cross-tab sharing the null return
+  // degrades to.
+  //
+  // Verified as reachable-in-principle rather than observed: `type: 'module'`
+  // shared workers load in Chromium, WebKit and Firefox (see
+  // sse-shared-worker.browser.test.tsx), so today this fires only for a
+  // missing chunk or a CSP refusal. It stays because a source of truth behind
+  // this worker would make a silent hole much more expensive than it is now.
+  worker.onerror = () => {
+    // Tell whoever is watching that they are not connected — the UI reads this
+    // to stop claiming a live daemon.
+    for (const set of listeners.values()) {
+      for (const listener of set) listener.onConnectionChange?.(false)
+    }
+    listeners.clear()
+    // Evicted, so the next creation for this origin builds a fresh worker
+    // rather than handing out the dead one from the cache forever.
+    sources.delete(baseUrl)
+  }
   port.onmessage = (e: MessageEvent) => {
     const parsed = sseWorkerEventSchema.safeParse(e.data)
     if (!parsed.success) return
