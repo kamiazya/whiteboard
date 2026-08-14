@@ -63,7 +63,10 @@ jobs:
             return 1
           }
 
-          ids=$(gh api "repos/$REPO/deployments?environment=preview-web&per_page=100" --jq '.[].id')
+          # --paginate: the environment accumulates records faster than PRs
+          # close (deploy-preview.yml mints one per push to main), so a single
+          # 100-record page can miss this PR's records entirely.
+          ids=$(gh api --paginate "repos/$REPO/deployments?environment=preview-web&per_page=100" --jq '.[].id')
           released=0
           skipped=0
           for id in $ids; do

@@ -1,0 +1,183 @@
+# Daily retention sweep for PR/branch preview deployments, on both sides:
+#
+#   1. Cloudflare Pages: preview deployments are never auto-deleted by
+#      Cloudflare, so every PR push leaves a live, publicly reachable
+#      <hash>.kamiazya-whiteboard.pages.dev URL serving an old bundle forever.
+#      This job deletes preview deployments whose branch no longer has an open
+#      PR, and trims superseded (non-newest) deployments of branches that do.
+#      The `latest` alias (main) keeps only its newest deployment. Production
+#      deployments are never touched (env filter + client-side check).
+#
+#   2. GitHub deployment records: deploy-preview.yml mints a preview-web
+#      record per push to main, and preview-cleanup.yml (PR close) can miss
+#      records. This job is the backstop that prunes everything not matching
+#      an open PR's alias, keeping only the newest `latest` record.
+#
+# Cloudflare deletion lives HERE, on trusted refs (schedule/dispatch run the
+# default-branch definition), rather than in preview-cleanup.yml: that
+# workflow is pull_request-triggered and deliberately carries no Cloudflare
+# secrets, so PR-controlled context never runs near a deploy token.
+name: Preview Retention
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-retention
+  cancel-in-progress: false
+
+jobs:
+  cloudflare:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    # The Cloudflare secrets are scoped to this environment. Binding it mints
+    # a deployment record for this run; the github-records job below deletes
+    # it again (no environment_url is attached, which marks it prunable).
+    environment:
+      name: preview-web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PROJECT: kamiazya-whiteboard
+    steps:
+      - name: Delete stale Cloudflare preview deployments
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Cloudflare secrets unavailable; skipping"
+            exit 0
+          fi
+
+          # Branch names are untrusted (PR authors choose them): sanitized to
+          # [a-z0-9-] with the same rules preview-pr-deploy.yml uses, so they
+          # match the --branch labels it deployed with.
+          keep_branches="latest"
+          while IFS= read -r raw; do
+            label=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+            [ -n "$label" ] && keep_branches="$keep_branches $label"
+          done < <(gh pr list -R "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          echo "keeping newest deployment for branches: $keep_branches"
+
+          cf() {
+            curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$@"
+          }
+
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/deployments"
+
+          # Snapshot all preview deployments (newest first), then decide.
+          rows_file=$(mktemp)
+          page=1
+          while :; do
+            resp=$(cf "$base?env=preview&page=$page&per_page=25")
+            ok=$(printf '%s' "$resp" | jq -r '.success')
+            if [ "$ok" != "true" ]; then
+              printf '%s\n' "$resp" | jq -r '.errors' >&2
+              exit 1
+            fi
+            n=$(printf '%s' "$resp" | jq -r '.result | length')
+            [ "$n" -eq 0 ] && break
+            printf '%s' "$resp" | jq -r \
+              '.result[] | select(.environment == "preview") | [.id, (.deployment_trigger.metadata.branch // "")] | @tsv' \
+              >> "$rows_file"
+            page=$((page+1))
+          done
+          total=$(wc -l < "$rows_file" | tr -d ' ')
+          echo "preview deployments found: $total"
+
+          deleted=0
+          kept=0
+          failed=0
+          seen_branches=" "
+          while IFS=$'\t' read -r id branch; do
+            keep=false
+            for k in $keep_branches; do
+              if [ "$branch" = "$k" ]; then
+                # newest-first listing: keep only the first hit per branch
+                case "$seen_branches" in
+                  *" $branch "*) ;;
+                  *) keep=true; seen_branches="$seen_branches$branch " ;;
+                esac
+              fi
+            done
+            if $keep; then
+              kept=$((kept+1))
+              continue
+            fi
+            # force=true: aliased deployments refuse deletion otherwise.
+            resp=$(cf -X DELETE "$base/$id?force=true")
+            if [ "$(printf '%s' "$resp" | jq -r '.success')" = "true" ]; then
+              deleted=$((deleted+1))
+            else
+              failed=$((failed+1))
+              printf 'failed to delete %s: %s\n' "$id" "$(printf '%s' "$resp" | jq -c '.errors')" >&2
+            fi
+          done < "$rows_file"
+          rm -f "$rows_file"
+          echo "cloudflare: deleted=$deleted kept=$kept failed=$failed (of $total)"
+          [ "$failed" -eq 0 ]
+
+  github-records:
+    # Runs after the cloudflare job so it also prunes the deployment record
+    # that job's environment binding just minted.
+    needs: cloudflare
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Prune stale preview-web deployment records
+        run: |
+          set -euo pipefail
+          keep_urls=""
+          while IFS= read -r raw; do
+            label=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+            [ -n "$label" ] && keep_urls="$keep_urls https://$label.kamiazya-whiteboard.pages.dev"
+          done < <(gh pr list -R "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          latest_url="https://latest.kamiazya-whiteboard.pages.dev"
+          echo "keeping records under:$keep_urls + newest $latest_url"
+
+          kept_latest=0
+          deleted=0
+          kept=0
+          ids=$(gh api --paginate "repos/$REPO/deployments?environment=preview-web&per_page=100" --jq '.[].id')
+          for id in $ids; do
+            url=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].environment_url // empty' 2>/dev/null || true)
+            keep=false
+            if [ -n "$url" ]; then
+              for k in $keep_urls; do
+                case "$url" in "$k"|"$k"/*) keep=true ;; esac
+              done
+              if [ "$url" = "$latest_url" ] && [ "$kept_latest" -eq 0 ]; then
+                keep=true
+                kept_latest=1
+              fi
+            fi
+            if $keep; then
+              kept=$((kept+1))
+              continue
+            fi
+            # Most old records are already auto-inactivated; try DELETE first
+            # and only fall back to the inactive+DELETE two-step. 404s mean a
+            # concurrent cleanup already removed it — fine either way.
+            if gh api --method DELETE "repos/$REPO/deployments/$id" >/dev/null 2>&1; then
+              deleted=$((deleted+1))
+              continue
+            fi
+            gh api --method POST "repos/$REPO/deployments/$id/statuses" -f state=inactive >/dev/null 2>&1 || true
+            if gh api --method DELETE "repos/$REPO/deployments/$id" >/dev/null 2>&1; then
+              deleted=$((deleted+1))
+            fi
+          done
+          echo "github records: deleted=$deleted kept=$kept"
