@@ -193,7 +193,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     expect(getDataDir()).toBe(resolve(dir))
   })
 
-  it('hands the registry the resolved-absolute dir even when --data-dir is relative', async () => {
+  it('hands the registry the resolved-absolute dir even when --data-dir is relative', async (ctx) => {
     // A relative --data-dir resolves against cwd, and runDaemonRun creates it.
     // Pointing at `./something` would therefore plant a directory in whatever
     // cwd the suite runs from — the repo root — and because the daemon never
@@ -202,7 +202,12 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     // relative, so it still exercises the resolve(), but nothing lands here.
     const absolute = join(tmpdir(), `daemon-run-rel-${Date.now()}`)
     const rel = relative(process.cwd(), absolute)
-    expect(isAbsolute(rel)).toBe(false)
+    // No relative path exists between two volumes, and path.relative() answers
+    // with an absolute one instead — reachable on Windows when TEMP sits on a
+    // different drive than the checkout. The case this test pins is then
+    // unreachable, so skip rather than assert something false about the
+    // platform; the containment rule below is what must hold either way.
+    if (isAbsolute(rel)) ctx.skip()
     expect(resolve(rel).startsWith(process.cwd())).toBe(false)
     const outcome = await runDaemonRun({
       host: '127.0.0.1',
