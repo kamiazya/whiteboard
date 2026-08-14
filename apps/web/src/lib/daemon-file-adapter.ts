@@ -10,7 +10,7 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readCoreFacets, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
@@ -36,15 +36,17 @@ export function createDaemonFileAdapter({
   return {
     isImageRef,
 
-    async loadCanvas(ref) {
+    async loadDocument(ref) {
       try {
         const res = await daemonFetch(`${canvasPath(ref)}/snapshot`)
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))
-        return readSpatialCanvas(doc) as SpatialCanvas
+        // One snapshot, both reads: the doc used to be discarded after the
+        // canvas read, which is why facets needed no second request.
+        return { canvas: readSpatialCanvas(doc) as SpatialCanvas, facets: readCoreFacets(doc) }
       } catch (err) {
-        log.warn('referenced canvas load failed', { ref, err })
+        log.warn('referenced document load failed', { ref, err })
         return undefined
       }
     },

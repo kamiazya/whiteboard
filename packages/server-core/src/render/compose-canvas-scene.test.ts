@@ -1,69 +1,115 @@
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { routeEdge } from '@kamiazya/whiteboard-canvas-render'
-import { describe, expect, test } from 'vitest'
 import {
-  composeCanvasScene,
-  computeCanvasDimensions,
-  translateNode,
-} from './compose-canvas-scene.js'
+  assignEdgeAnchors,
+  createSpatialTheme,
+  layoutSpatialCanvas,
+  routeEdge,
+} from '@kamiazya/whiteboard-canvas-render'
+import { afterEach, describe, expect, test } from 'vitest'
+import { setLogSink } from '../log.js'
+import { composeCanvasScene } from './compose-canvas-scene.js'
 import { fallbackMeasureText } from './fallback-measure.js'
 
-describe('translateNode', () => {
-  test('translates a shape node bbox like other leaf scene nodes', () => {
-    const translated = translateNode(
-      { kind: 'shape', bbox: { x: 5, y: 6, w: 40, h: 30 }, radius: 4 },
-      10,
-      20,
-    )
-
-    expect(translated).toEqual({ kind: 'shape', bbox: { x: 15, y: 26, w: 40, h: 30 }, radius: 4 })
-  })
+afterEach(() => {
+  // `sink` is module-level state in log.ts, shared across every test file
+  // that imports it in the same worker — restore the no-op default so a
+  // sink installed here never leaks into another file's assertions.
+  setLogSink(() => {})
 })
 
 describe('composeCanvasScene', () => {
-  test('translates a text node body by its own (x, y)', () => {
+  test('a file node produces a visible chrome shape, and edges route through the shared anchor-assignment pass', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'n1', type: 'text', x: 10, y: 20, width: 100, height: 50, text: 'hello world' },
+        { id: 'a', type: 'file', x: 0, y: 0, width: 100, height: 60, file: 'notes/a.md' },
+        { id: 'b', type: 'group', x: 300, y: 0, width: 100, height: 60 },
+        { id: 'c', type: 'group', x: 300, y: 300, width: 100, height: 60 },
       ],
-      edges: [],
+      edges: [
+        { id: 'e1', fromNode: 'a', toNode: 'b' },
+        { id: 'e2', fromNode: 'a', toNode: 'c' },
+      ],
     }
 
     const scene = composeCanvasScene(canvas, fallbackMeasureText)
 
-    expect(scene.nodes).toHaveLength(1)
-    const [paragraph] = scene.nodes
-    if (!('bbox' in paragraph)) throw new Error('expected a bbox-carrying scene node')
-    expect(paragraph.kind).toBe('paragraph')
-    expect(paragraph.bbox.x).toBe(10)
-    expect(paragraph.bbox.y).toBe(20)
+    // (a) the file node emits a `kind: 'shape'` scene node at its own bbox.
+    const fileChrome = scene.nodes.find(
+      (n) =>
+        n.kind === 'shape' &&
+        n.bbox.x === 0 &&
+        n.bbox.y === 0 &&
+        n.bbox.w === 100 &&
+        n.bbox.h === 60,
+    )
+    expect(fileChrome).toBeDefined()
+
+    // (b) each routed edge matches routeEdge + assignEdgeAnchors run together
+    // over the whole edge set — the anchor fan-out/side-optimization pass
+    // that a per-edge `routeEdge` call (with no anchors) never runs. The
+    // theme's edge appearance is merged on top, matching what
+    // layoutSpatialCanvas's own composeEdge does.
+    const style = canvas['x-whiteboard']?.edgeRouting?.style
+    const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, style)
+    const theme = createSpatialTheme({ mode: 'light' })
+    const edgeNodes = scene.nodes.filter((n) => n.kind === 'edge')
+    expect(edgeNodes).toHaveLength(2)
+    for (const edge of canvas.edges) {
+      const routed = routeEdge(canvas.nodes, edge, style, anchors.get(edge.id))
+      const appearance = theme.resolveEdge(edge)
+      const expected = appearance === undefined ? routed : { ...routed, appearance }
+      const actual = edgeNodes.find((n) => n.kind === 'edge' && n.id === edge.id)
+      expect(actual).toEqual(expected)
+    }
   })
 
-  test('degrades a file/link/group node to a placeholder box at its own bbox', () => {
+  test('is a pure delegate to layoutSpatialCanvas with the pinned MCP injection set (parity)', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'n1', type: 'file', x: 5, y: 6, width: 40, height: 30, file: 'a.png' },
-        { id: 'n2', type: 'link', x: 1, y: 2, width: 10, height: 10, url: 'https://example.com' },
-        { id: 'n3', type: 'group', x: 0, y: 0, width: 200, height: 200 },
+        { id: 'text', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello **world**' },
+        { id: 'file', type: 'file', x: 200, y: 0, width: 100, height: 60, file: 'a.png' },
+        {
+          id: 'link',
+          type: 'link',
+          x: 0,
+          y: 200,
+          width: 80,
+          height: 40,
+          url: 'https://example.com',
+        },
+        {
+          id: 'group',
+          type: 'group',
+          x: 400,
+          y: 400,
+          width: 200,
+          height: 200,
+          label: 'a group',
+        },
       ],
-      edges: [],
+      edges: [
+        { id: 'e1', fromNode: 'text', toNode: 'file', label: 'goes to' },
+        { id: 'e2', fromNode: 'file', toNode: 'group' },
+      ],
     }
 
-    const scene = composeCanvasScene(canvas, fallbackMeasureText)
+    const actual = composeCanvasScene(canvas, fallbackMeasureText)
+    const expected = layoutSpatialCanvas(canvas, {
+      measure: fallbackMeasureText,
+      parseBody: parseMarkdownBody,
+      appearance: createSpatialTheme({ mode: 'light' }),
+    })
 
-    expect(scene.nodes).toHaveLength(3)
-    for (const [index, node] of canvas.nodes.entries()) {
-      const sceneNode = scene.nodes[index]
-      if (!('bbox' in sceneNode)) throw new Error('expected a bbox-carrying scene node')
-      expect(sceneNode.kind).toBe('group')
-      expect(sceneNode.bbox).toEqual({ x: node.x, y: node.y, w: node.width, h: node.height })
-    }
+    expect(actual).toEqual(expected)
   })
 
-  test('a malformed text body degrades to a placeholder instead of throwing', () => {
-    // An unbalanced/invalid fence-like construct that the closed mdast
-    // subset's schema rejects after remark parses it into a shape
-    // mdastRootSchema does not accept.
+  test('HTML embedded in a text body renders as a literal rawHtml run instead of throwing', () => {
+    // canvas-model's mdast subset accepts a raw `html` node verbatim (see
+    // package-canvas-model.md) — parseMarkdownBody is total over any string
+    // a real editor can produce, so this is not the failure path (that one
+    // needs an actually-unrecognized node kind, exercised below via a node
+    // with a type outside the closed union).
     const canvas: SpatialCanvas = {
       nodes: [
         {
@@ -79,36 +125,53 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    expect(() => composeCanvasScene(canvas, fallbackMeasureText)).not.toThrow()
+    const scene = composeCanvasScene(canvas, fallbackMeasureText)
+
+    const literalRun = scene.nodes.find(
+      (n) => n.kind === 'rawHtml' && n.value === '<div><span></div>',
+    )
+    expect(literalRun).toBeDefined()
   })
 
-  test('edge scene nodes are not translated a second time on top of routeEdge', () => {
+  test('reports a degradation through getLogger, without changing the returned scene', () => {
+    // A node `type` outside the closed union — unreachable through the
+    // schema-validated store path, but canvas-render's own defensive branch
+    // (spatial-canvas.ts) still degrades it to chrome-only and reports it,
+    // which is what this pins.
+    const canvas = {
+      nodes: [{ id: 'n1', type: 'bogus', x: 0, y: 0, width: 100, height: 50 }],
+      edges: [],
+    } as unknown as SpatialCanvas
+
+    const sceneWithoutSink = composeCanvasScene(canvas, fallbackMeasureText)
+
+    const records: unknown[] = []
+    setLogSink((record) => records.push(record))
+    const sceneWithSink = composeCanvasScene(canvas, fallbackMeasureText)
+
+    expect(records).toEqual([
+      {
+        scope: 'compose-canvas-scene',
+        level: 'warning',
+        msg: 'unrecognized spatial node kind; emitting chrome only',
+        data: { nodeId: 'n1', type: 'bogus' },
+      },
+    ])
+    // Being told is observability-only — the callback must never change
+    // what was rendered.
+    expect(sceneWithSink).toEqual(sceneWithoutSink)
+  })
+
+  test('is deterministic across repeated calls', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'group', x: 0, y: 0, width: 50, height: 50 },
-        { id: 'b', type: 'group', x: 200, y: 200, width: 50, height: 50 },
+        { id: 'n1', type: 'text', x: 10, y: 20, width: 100, height: 50, text: 'hello world' },
       ],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      edges: [],
     }
 
-    const scene = composeCanvasScene(canvas, fallbackMeasureText)
-    const edgeNode = scene.nodes.find((n) => n.kind === 'edge')
-    const expected = routeEdge(canvas.nodes, canvas.edges[0])
-
-    expect(edgeNode).toEqual(expected)
-  })
-})
-
-describe('computeCanvasDimensions', () => {
-  test('returns a zero-sized default for an empty canvas', () => {
-    expect(computeCanvasDimensions([])).toEqual({ width: 0, height: 0 })
-  })
-
-  test('returns the union bounding box over multiple nodes', () => {
-    const dims = computeCanvasDimensions([
-      { id: 'a', type: 'group', x: 0, y: 0, width: 50, height: 50 },
-      { id: 'b', type: 'group', x: 100, y: 100, width: 50, height: 50 },
-    ])
-    expect(dims).toEqual({ width: 150, height: 150 })
+    expect(composeCanvasScene(canvas, fallbackMeasureText)).toEqual(
+      composeCanvasScene(canvas, fallbackMeasureText),
+    )
   })
 })

@@ -129,10 +129,10 @@ describe('createDaemonFileAdapter', () => {
       slug: SLUG,
     })
 
-    const loaded = await adapter.loadCanvas('sibling')
+    const loaded = await adapter.loadDocument('sibling')
 
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/canvas/${WS}/sibling/snapshot`)
-    expect(loaded?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
+    expect(loaded?.canvas?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
   })
 
   it('resolves an unreachable referenced canvas to undefined', async () => {
@@ -146,7 +146,7 @@ describe('createDaemonFileAdapter', () => {
       slug: SLUG,
     })
 
-    await expect(adapter.loadCanvas('sibling')).resolves.toBeUndefined()
+    await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
   })
 
   it('percent-encodes a slug on its way into the path', async () => {
@@ -158,7 +158,7 @@ describe('createDaemonFileAdapter', () => {
       slug: SLUG,
     })
 
-    await adapter.loadCanvas('a b')
+    await adapter.loadDocument('a b')
 
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/canvas/${WS}/a%20b/snapshot`)
   })

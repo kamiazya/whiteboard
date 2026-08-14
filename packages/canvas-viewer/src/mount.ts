@@ -12,6 +12,8 @@ export interface MountCanvasViewerOptions {
   width?: number
   height?: number
   testId?: string
+  /** Accessible name for the rendered canvas; see CanvasViewerProps.label. */
+  label?: string
   // Hand-off seam for embedding hosts (e.g. an MCP Apps widget iframe) to
   // receive postMessage traffic without this package owning any bridge
   // protocol. Registered on `window`, unbound by dispose(). Receives the
@@ -80,6 +82,7 @@ export function mountCanvasViewer(
         width: opts.width,
         height: opts.height,
         testId: opts.testId,
+        label: opts.label,
       }),
     )
   })

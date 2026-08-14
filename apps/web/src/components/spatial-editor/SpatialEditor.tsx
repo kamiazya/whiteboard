@@ -66,6 +66,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-model'
 import type {
   EdgeSides,
+  FacetCardData,
   MeasureText,
   SpatialPresetKey,
   TextMetrics,
@@ -94,14 +95,11 @@ import {
   useRef,
   useState,
 } from 'react'
+import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import {
-  extractClipboardFragment,
-  parseClipboardText,
-  remintClipboardFragment,
-} from '../../lib/clipboard-fragment.js'
+import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
-import type { AlignableBox, BoxMove } from './align.js'
+import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
   type CanvasPickerState,
@@ -111,7 +109,7 @@ import {
 import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
-import { applyCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
@@ -142,6 +140,20 @@ import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
+import {
+  fileNodeDefaults,
+  GROUP_FRAME_HEIGHT,
+  GROUP_FRAME_WIDTH,
+  groupEnclosure,
+  groupNodeDefaults,
+  IMAGE_NODE_HEIGHT,
+  IMAGE_NODE_WIDTH,
+  imageNodeDefaults,
+  LINK_NODE_HEIGHT,
+  linkNodeDefaults,
+  resolveSpawnPoint,
+  textNodeDefaults,
+} from './node-factories.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import {
@@ -156,13 +168,15 @@ import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
-  canvasToScreen,
-  clampZoom,
+  type ContainerSize,
   fitViewportToBoxes,
+  frameViewport,
   IDENTITY_VIEWPORT,
   type Point,
   panBy,
+  panToShowTarget,
   screenToCanvas,
+  contentBounds as unionContentBounds,
   type Viewport,
   viewportTransformCss,
   zoomAt,
@@ -239,12 +253,22 @@ export interface SpatialEditorProps {
    */
   readonly theme?: ResolvedTheme
   /**
-   * The tool active on mount. Defaults to 'hand' — the product opens in
-   * navigation mode (user decision 2026-08-08): a plain drag pans and no
-   * press can select, move, or edit until the user switches to Select.
-   * Tests exercising editing flows pass 'select' explicitly.
+   * The tool active on mount. Pages resolve it from the canvas's own shape
+   * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
+   * ready to place, one with content opens in navigation mode so a plain
+   * drag pans instead of moving someone's work. Defaults to 'hand' for
+   * callers that express no preference; tests exercising editing flows pass
+   * 'select' explicitly.
    */
   readonly defaultTool?: EditorTool
+  /**
+   * The tool this canvas should open in, resolved by the page only once its
+   * document has loaded (the node count that decides it is not known at
+   * mount). Applied exactly once, and never over a choice the user already
+   * made with the palette — an opening preference must not reach in and
+   * change the mode someone is working in.
+   */
+  readonly initialTool?: EditorTool
   /**
    * Node ids the user has locked. Lock is HOST state — it lives in the
    * Loro doc's sidecar map, not in the canvas value — so it arrives as a
@@ -283,6 +307,7 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
   /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
   readonly resolveFileImage?: (
     file: string,
@@ -337,9 +362,6 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  */
 const DOUBLE_PRESS_WINDOW_MS = 400
 
-/** Duplicated copies land offset by this much, cascading on repeat. */
-const DUPLICATE_OFFSET_PX = 16
-
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const FRAME_MARGIN_PX = 24
 const ZOOM_WHEEL_FACTOR = 1.1
@@ -387,6 +409,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       testId = DEFAULT_TEST_ID,
       theme = 'light',
       defaultTool = 'hand',
+      initialTool,
       lockedNodeIds,
       lockedEdgeIds,
       onToggleEdgeLock,
@@ -395,6 +418,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileFacets,
       resolveFileImage,
       onAddImage,
       isImageFileRef,
@@ -441,6 +465,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // arms object-first click-A, click-B edge creation. Creation is
     // deliberately NOT a mode — the palette's Add note works in every mode.
     const [tool, setTool] = useState<EditorTool>(defaultTool)
+    const toolChosenByUserRef = useRef(false)
+    const initialToolAppliedRef = useRef(false)
+    useEffect(() => {
+      if (initialTool === undefined) return
+      if (initialToolAppliedRef.current || toolChosenByUserRef.current) return
+      initialToolAppliedRef.current = true
+      setTool(initialTool)
+    }, [initialTool])
     const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
     /**
      * Additional selected node ids beyond the reducer's single primary
@@ -598,25 +630,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const byFile = new Map(fileRefOptions.map((option) => [option.file, option.label]))
       return (file: string) => byFile.get(file)
     }, [fileRefOptions])
+    // ONE object for every render path below (committed scene, drag ghost,
+    // drag-static backdrop, resize preview). Four hand-listed copies is how a
+    // seam ends up wired into the committed render and missing from the drag
+    // overlay, which reads as content vanishing mid-gesture.
+    const fileSeamOptions = useMemo(
+      () => ({
+        resolveFileLabel,
+        resolveFileCanvas,
+        expandFileNode,
+        resolveFileImage,
+        resolveFileFacets,
+      }),
+      [resolveFileLabel, resolveFileCanvas, expandFileNode, resolveFileImage, resolveFileFacets],
+    )
     const { svg, bounds, scene } = useMemo(
       () =>
         renderCanvasToSvg(canvas, {
           measure: resolvedMeasure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         }),
-      [
-        canvas,
-        resolvedMeasure,
-        theme,
-        resolveFileLabel,
-        resolveFileCanvas,
-        expandFileNode,
-        resolveFileImage,
-      ],
+      [canvas, resolvedMeasure, theme, fileSeamOptions],
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
@@ -714,10 +749,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {
           measure: resolvedMeasure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         },
       )
       return {
@@ -734,10 +766,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedNodeIds,
       resolvedMeasure,
       theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
+      fileSeamOptions,
     ])
 
     /**
@@ -774,10 +803,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const rendered = renderCanvasToSvg(base, {
         measure: resolvedMeasure,
         theme,
-        resolveFileLabel,
-        resolveFileCanvas,
-        expandFileNode,
-        resolveFileImage,
+        ...fileSeamOptions,
       })
       const metricsCache = new Map<string, TextMetrics>()
       const measure: MeasureText = (text, font) => {
@@ -806,10 +832,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedNodeIds,
       resolvedMeasure,
       theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
+      fileSeamOptions,
     ])
 
     useImperativeHandle(
@@ -1008,24 +1031,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {
           measure: dragStatic.measure,
           theme,
-          resolveFileLabel,
-          resolveFileCanvas,
-          expandFileNode,
-          resolveFileImage,
+          ...fileSeamOptions,
         },
       )
       return { svg: rendered.svg, bounds: rendered.bounds }
-    }, [
-      gestureState,
-      dragPreview,
-      dragStatic,
-      canvas,
-      theme,
-      resolveFileLabel,
-      resolveFileCanvas,
-      expandFileNode,
-      resolveFileImage,
-    ])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
 
     /**
      * How far a snap guide extends, in canvas space: across all content plus
@@ -1739,20 +1749,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
-     * The selected nodes as align/distribute inputs, read from canvasRef so
-     * a menu action never computes against a stale render closure. Locked
-     * nodes cannot be in a selection (see the pruning effect above), so they
-     * are absent here too — neither moved nor counted toward the bounds.
-     */
-    const selectedAlignableBoxes = (): AlignableBox[] => {
-      if (selection === undefined) return []
-      const ids = new Set([selection.id, ...extraIds])
-      return canvasRef.current.nodes
-        .filter((node) => ids.has(node.id))
-        .map(({ id, x, y, width, height }) => ({ id, x, y, width, height }))
-    }
-
-    /**
      * Applies a set of moves as ONE batch command — an align is one user
      * action and must undo as one step. An empty move list (already aligned)
      * emits nothing rather than an empty history entry, matching
@@ -1779,37 +1775,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (selection === undefined) return false
       const current = canvasRef.current
       const fragment = extractClipboardFragment(current, new Set([selection.id, ...extraIds]))
-      if (fragment.nodes.length === 0) return false
-      const existingIds = new Set([
-        ...current.nodes.map((node) => node.id),
-        ...current.edges.map((edge) => edge.id),
-      ])
-      const reminted = remintClipboardFragment(
+      const command = buildFragmentInsertCommand(
+        current,
         fragment,
         () => createId?.() ?? crypto.randomUUID(),
-        existingIds,
       )
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: [
-          ...reminted.nodes.map(
-            (node) =>
-              ({
-                kind: 'create-node',
-                node: {
-                  ...node,
-                  x: node.x + DUPLICATE_OFFSET_PX,
-                  y: node.y + DUPLICATE_OFFSET_PX,
-                },
-              }) as const,
-          ),
-          ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
-        ],
-      }
+      if (command === undefined) return false
       const running = applyCommand(current, command)
       if (running === current) return false
       onChange(running, command)
-      const remintedIds = reminted.nodes.map((node) => node.id)
+      const remintedIds =
+        command.kind === 'batch'
+          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
+          : []
       if (remintedIds.length > 0) {
         applySelection({ type: 'set-members', ids: remintedIds })
         setSelectedEdgeId(null)
@@ -1852,15 +1830,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** A note carrying pasted foreign text, at the viewport center. */
     const createTextNodeAtViewportCenter = (text: string): void => {
       const point = screenToCanvas(viewportCenterScreen(), viewport)
-      const node: SpatialNode = {
-        id: createId?.() ?? crypto.randomUUID(),
-        type: 'text',
-        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
-        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: NEW_NODE_HEIGHT,
-        text,
-      }
+      const node = textNodeDefaults(createId?.() ?? crypto.randomUUID(), point, text)
       const command: EditorCommand = { kind: 'create-node', node }
       const running = applyCommand(canvasRef.current, command)
       if (running === canvasRef.current) return
@@ -1886,41 +1856,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
       at?: Point,
     ): boolean => {
-      if (fragment.nodes.length === 0) return false
       const current = canvasRef.current
-      const existingIds = new Set([
-        ...current.nodes.map((node) => node.id),
-        ...current.edges.map((edge) => edge.id),
-      ])
-      const reminted = remintClipboardFragment(
+      const command = buildFragmentInsertCommand(
+        current,
         fragment,
         () => createId?.() ?? crypto.randomUUID(),
-        existingIds,
+        at,
       )
-      let dx = DUPLICATE_OFFSET_PX
-      let dy = DUPLICATE_OFFSET_PX
-      if (at !== undefined) {
-        const minX = Math.min(...reminted.nodes.map((node) => node.x))
-        const minY = Math.min(...reminted.nodes.map((node) => node.y))
-        const maxX = Math.max(...reminted.nodes.map((node) => node.x + node.width))
-        const maxY = Math.max(...reminted.nodes.map((node) => node.y + node.height))
-        dx = Math.round(at.x - (minX + maxX) / 2)
-        dy = Math.round(at.y - (minY + maxY) / 2)
-      }
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: [
-          ...reminted.nodes.map(
-            (node) =>
-              ({ kind: 'create-node', node: { ...node, x: node.x + dx, y: node.y + dy } }) as const,
-          ),
-          ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
-        ],
-      }
+      if (command === undefined) return false
       const running = applyCommand(current, command)
       if (running === current) return false
       onChange(running, command)
-      const remintedIds = reminted.nodes.map((node) => node.id)
+      const remintedIds =
+        command.kind === 'batch'
+          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
+          : []
       if (remintedIds.length > 0) {
         applySelection({ type: 'set-members', ids: remintedIds })
         setSelectedEdgeId(null)
@@ -2339,23 +2289,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    /** Union of the given nodes' boxes, or undefined when there is none. */
-    const contentBounds = (ids?: ReadonlySet<string>) => {
-      let minX = Number.POSITIVE_INFINITY
-      let minY = Number.POSITIVE_INFINITY
-      let maxX = Number.NEGATIVE_INFINITY
-      let maxY = Number.NEGATIVE_INFINITY
-      for (const { id, box } of boxes) {
-        if (ids !== undefined && !ids.has(id)) continue
-        if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) continue
-        minX = Math.min(minX, box.x)
-        minY = Math.min(minY, box.y)
-        maxX = Math.max(maxX, box.x + box.width)
-        maxY = Math.max(maxY, box.y + box.height)
-      }
-      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return undefined
-      return { minX, minY, maxX, maxY }
-    }
+    const containerSizeOf = (root: HTMLDivElement | null): ContainerSize | null =>
+      root === null ? null : { width: root.clientWidth, height: root.clientHeight }
 
     /**
      * Frames the given content: pans so its center sits at the viewport
@@ -2366,29 +2301,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * and stays inside the viewport module's own [MIN_ZOOM, MAX_ZOOM].
      */
     const frameContent = (ids?: ReadonlySet<string>) => {
-      const bounds = contentBounds(ids)
+      const bounds = unionContentBounds(boxes, ids)
       if (bounds === undefined) return false
-      const root = rootRef.current
-      const center = viewportCenterScreen()
-      const contentCenter = {
-        x: (bounds.minX + bounds.maxX) / 2,
-        y: (bounds.minY + bounds.maxY) / 2,
-      }
-      const width = Math.max(1, bounds.maxX - bounds.minX)
-      const height = Math.max(1, bounds.maxY - bounds.minY)
-      setViewport((vp) => {
-        let zoom = vp.zoom
-        if (root !== null) {
-          const usableWidth = Math.max(1, root.clientWidth - FRAME_MARGIN_PX * 2)
-          const usableHeight = Math.max(1, root.clientHeight - FRAME_MARGIN_PX * 2)
-          zoom = clampZoom(Math.min(1, usableWidth / width, usableHeight / height))
-        }
-        return {
-          zoom,
-          x: contentCenter.x - center.x / zoom,
-          y: contentCenter.y - center.y / zoom,
-        }
-      })
+      const containerSize = containerSizeOf(rootRef.current)
+      setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX))
       return true
     }
 
@@ -2415,31 +2331,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       })
     }
 
-    /** Link nodes are label-only chrome — a note-height box would be mostly
-     * empty, so they get a shorter default. */
-    const LINK_NODE_HEIGHT = 60
     const createLinkAtViewportCenter = (url: string, at?: Point) => {
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point =
-        at ?? findFreeSpot(preferred, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }, occupied)
+      const point = resolveSpawnPoint(
+        at,
+        preferred,
+        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        occupied,
+      )
       const id =
         createId?.() ??
         (typeof crypto !== 'undefined' && 'randomUUID' in crypto
           ? crypto.randomUUID()
           : String(Math.random()))
-      const node: SpatialNode = {
-        id,
-        type: 'link',
-        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
-        y: Math.round(point.y - LINK_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: LINK_NODE_HEIGHT,
-        url,
-      }
+      const node = linkNodeDefaults(id, point, url)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],
@@ -2458,18 +2367,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point =
-        at ?? findFreeSpot(preferred, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }, occupied)
+      const point = resolveSpawnPoint(
+        at,
+        preferred,
+        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        occupied,
+      )
       const id = newId()
-      const node: SpatialNode = {
-        id,
-        type: 'file',
-        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
-        y: Math.round(point.y - LINK_NODE_HEIGHT / 2),
-        width: NEW_NODE_WIDTH,
-        height: LINK_NODE_HEIGHT,
-        file,
-      }
+      const node = fileNodeDefaults(id, point, file)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],
@@ -2481,9 +2386,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
-    /** Default frame for a created image node; the picture letterboxes into it. */
-    const IMAGE_NODE_WIDTH = 240
-    const IMAGE_NODE_HEIGHT = 180
     const imageInputRef = useRef<HTMLInputElement | null>(null)
     /** When set, the next picked image becomes this group's background instead of a new node. */
     const pendingBackgroundGroupIdRef = useRef<string | null>(null)
@@ -2496,19 +2398,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point =
-        at ??
-        findFreeSpot(preferred, { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT }, occupied)
+      const point = resolveSpawnPoint(
+        at,
+        preferred,
+        { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT },
+        occupied,
+      )
       const id = newId()
-      const node: SpatialNode = {
-        id,
-        type: 'file',
-        x: Math.round(point.x - IMAGE_NODE_WIDTH / 2),
-        y: Math.round(point.y - IMAGE_NODE_HEIGHT / 2),
-        width: IMAGE_NODE_WIDTH,
-        height: IMAGE_NODE_HEIGHT,
-        file,
-      }
+      const node = imageNodeDefaults(id, point, file)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],
@@ -2545,29 +2442,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * zoom) so it sits centered — creation is always visible feedback.
      */
     const panToShow = (box: Box) => {
-      const root = rootRef.current
-      if (root === null) return
-      const topLeft = canvasToScreen({ x: box.x, y: box.y }, viewport)
-      const bottomRight = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, viewport)
-      const fits =
-        topLeft.x >= 0 &&
-        topLeft.y >= 0 &&
-        bottomRight.x <= root.clientWidth &&
-        bottomRight.y <= root.clientHeight
-      if (fits) return
-      const centerX = box.x + box.width / 2
-      const centerY = box.y + box.height / 2
-      setViewport((vp) => ({
-        ...vp,
-        x: centerX - root.clientWidth / 2 / vp.zoom,
-        y: centerY - root.clientHeight / 2 / vp.zoom,
-      }))
+      const containerSize = containerSizeOf(rootRef.current)
+      if (containerSize === null) return
+      setViewport((vp) => panToShowTarget(box, vp, containerSize) ?? vp)
     }
-
-    const GROUP_FRAME_WIDTH = 320
-    const GROUP_FRAME_HEIGHT = 200
-    /** Padding between a grouped selection's bounds and its new frame. */
-    const GROUP_PADDING_PX = 24
 
     const newId = () =>
       createId?.() ??
@@ -2581,62 +2459,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
       const preferred = screenToCanvas(centerScreen, viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point =
-        at ??
-        findFreeSpot(preferred, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }, occupied)
+      const point = resolveSpawnPoint(
+        at,
+        preferred,
+        { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
+        occupied,
+      )
       const id = newId()
+      const node = groupNodeDefaults(id, point)
       applyResult({
         state: { kind: 'idle' },
-        commands: [
-          {
-            kind: 'create-group',
-            node: {
-              id,
-              type: 'group',
-              x: Math.round(point.x - GROUP_FRAME_WIDTH / 2),
-              y: Math.round(point.y - GROUP_FRAME_HEIGHT / 2),
-              width: GROUP_FRAME_WIDTH,
-              height: GROUP_FRAME_HEIGHT,
-            },
-          },
-        ],
+        commands: [{ kind: 'create-group', node }],
         selectedId: id,
       })
       // Creation selects the new node EXCLUSIVELY — set-primary alone would
       // keep the old extras riding along into the next move/delete.
       applySelection({ type: 'collapse-extras' })
-      panToShow({
-        x: Math.round(point.x - GROUP_FRAME_WIDTH / 2),
-        y: Math.round(point.y - GROUP_FRAME_HEIGHT / 2),
-        width: GROUP_FRAME_WIDTH,
-        height: GROUP_FRAME_HEIGHT,
-      })
+      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
     /** Frames the current multi-selection: enclosing box + padding. */
     const groupSelection = (memberIds: readonly string[]) => {
       const members = canvasRef.current.nodes.filter((n) => memberIds.includes(n.id))
-      if (members.length === 0) return
-      const minX = Math.min(...members.map((n) => n.x)) - GROUP_PADDING_PX
-      const minY = Math.min(...members.map((n) => n.y)) - GROUP_PADDING_PX
-      const maxX = Math.max(...members.map((n) => n.x + n.width)) + GROUP_PADDING_PX
-      const maxY = Math.max(...members.map((n) => n.y + n.height)) + GROUP_PADDING_PX
+      const frame = groupEnclosure(members)
+      if (frame === undefined) return
       const id = newId()
       applyResult({
         state: { kind: 'idle' },
-        commands: [
-          {
-            kind: 'create-group',
-            node: {
-              id,
-              type: 'group',
-              x: minX,
-              y: minY,
-              width: maxX - minX,
-              height: maxY - minY,
-            },
-          },
-        ],
+        commands: [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
         selectedId: id,
       })
       applySelection({ type: 'collapse-extras' })
@@ -2813,6 +2663,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           tool={tool}
           onToolChange={(next) => {
             setTool(next)
+            toolChosenByUserRef.current = true
+            // A stated preference outranks the canvas-shape guess on the
+            // next open in this tab.
+            writeLastTool(next)
             // A context menu is an edit affordance of the mode it was
             // opened in — switching tools (especially into view-only hand
             // mode) must not leave it floating.
@@ -2880,7 +2734,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             applyResult={applyResult}
             isEdgeLocked={isEdgeLocked}
             onToggleEdgeLock={onToggleEdgeLock}
-            edgeLockEnabled={edgeLockEnabled}
             setEdgeLabelEditId={setEdgeLabelEditId}
             setSelectedEdgeId={setSelectedEdgeId}
             setGroupLabelEditId={setGroupLabelEditId}
@@ -2895,10 +2748,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             imageInputRef={imageInputRef}
             pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
             isLocked={isLocked}
-            lockEnabled={lockEnabled}
             onToggleNodeLock={onToggleNodeLock}
             applyBoxMoves={applyBoxMoves}
-            selectedAlignableBoxes={selectedAlignableBoxes}
             extraIds={extraIds}
             selectedId={selectedId}
             groupSelection={groupSelection}

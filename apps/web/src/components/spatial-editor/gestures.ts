@@ -25,7 +25,8 @@
  * requested gesture, matching every text editor's click-away-commits
  * behavior (and this component's own blur-commits convention in
  * `TextNodeEditor`). Escape (`cancel-text-edit`) remains the only explicit
- * discard.
+ * discard, and it discards the whole node when the node existed only to
+ * hold that edit.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
@@ -72,6 +73,13 @@ interface EditTextSnapshot {
   readonly kind: 'editing-text'
   readonly nodeId: string
   readonly pendingText: string
+  /**
+   * The node came into existence to hold this edit (double-click on empty
+   * canvas, the + menu). Cancelling such an edit has nothing to revert TO,
+   * so the node goes with it — an empty box the user has to clean up is
+   * debris, not a discarded edit.
+   */
+  readonly createdForEdit?: boolean
 }
 
 interface IdleSnapshot {
@@ -347,7 +355,7 @@ function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureRe
     text: '',
   }
   return {
-    state: { kind: 'editing-text', nodeId: id, pendingText: '' },
+    state: { kind: 'editing-text', nodeId: id, pendingText: '', createdForEdit: true },
     commands: [{ kind: 'create-node', node }],
     selectedId: id,
   }
@@ -376,6 +384,13 @@ export function reduceGesture(
       return reduceCanvasReplaced(state, event.canvas, event.origin ?? 'local')
     case 'pointercancel':
     case 'cancel-text-edit':
+      if (state.kind === 'editing-text' && state.createdForEdit === true) {
+        return {
+          state: { kind: 'idle' },
+          commands: [{ kind: 'delete-node', id: state.nodeId }],
+          selectedId: null,
+        }
+      }
       return idle
     case 'pointerdown-empty':
       return withPendingTextCommit(state, {

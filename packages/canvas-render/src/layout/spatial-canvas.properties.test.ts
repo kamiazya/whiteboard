@@ -5,7 +5,7 @@ import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import { layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
+import { type FacetCardData, layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 
@@ -131,6 +131,63 @@ describe('layoutSpatialCanvas properties (PBT)', () => {
       const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, options), { padding: 4 })
       const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, options), { padding: 4 })
       expect(svgA).toBe(svgB)
+    },
+  )
+})
+
+/**
+ * A fixed (not fc-generated) resolver keyed off `spatialNodeArb`'s file
+ * pool: deterministic per file, so the property below exercises every
+ * `composeFileFacets` path (usable card, degrades-to-nothing, no match)
+ * across generated canvases without needing its own arbitrary.
+ */
+function fakeResolveFileFacets(file: string): FacetCardData | undefined {
+  if (file === 'a.md') {
+    return {
+      title: 'Card',
+      rows: [
+        { label: 'type', value: 'note' },
+        { label: 'tags', value: 'x, y' },
+      ],
+    }
+  }
+  if (file === 'notes/b.md') {
+    // No usable content: degrades to the plain chrome+label rendering.
+    return { rows: [] }
+  }
+  return undefined
+}
+
+describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
+  const optionsWithFacets = {
+    measure,
+    parseBody: fakeParseBody,
+    appearance,
+    resolveFileFacets: fakeResolveFileFacets,
+  }
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'a resolving facet resolver never throws and renders identically twice (determinism)',
+    (canvas) => {
+      const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, optionsWithFacets), { padding: 8 })
+      const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, optionsWithFacets), { padding: 8 })
+      expect(svgA).toBe(svgB)
+    },
+  )
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'an installed-but-silent resolver changes nothing (additivity)',
+    (canvas) => {
+      const withNoOpSeam = layoutSpatialCanvas(canvas, {
+        ...optionsWithFacets,
+        resolveFileFacets: () => undefined,
+      })
+      const withoutSeam = layoutSpatialCanvas(canvas, {
+        measure,
+        parseBody: fakeParseBody,
+        appearance,
+      })
+      expect(withNoOpSeam).toEqual(withoutSeam)
     },
   )
 })

@@ -485,6 +485,8 @@ describe('dblclick-empty (create-node)', () => {
       kind: 'editing-text',
       nodeId: 'new-node',
       pendingText: '',
+      // The node exists only for this edit — cancelling takes it with it.
+      createdForEdit: true,
     })
   })
 
@@ -513,6 +515,8 @@ describe('dblclick-empty (create-node)', () => {
       kind: 'editing-text',
       nodeId: 'new-node',
       pendingText: '',
+      // The node exists only for this edit — cancelling takes it with it.
+      createdForEdit: true,
     })
   })
 })
@@ -609,5 +613,59 @@ describe('multi-selection resize', () => {
 
   it('emits nothing when the drag ended where it began', () => {
     expect(dragSouthEastBy(0, 0).commands).toEqual([])
+  })
+})
+
+describe('cancel-text-edit removes a node that only existed for the cancelled edit', () => {
+  const empty = (): SpatialCanvas => ({ nodes: [], edges: [] })
+
+  it('deletes the just-created node — nothing was typed, so nothing should remain', () => {
+    const created = reduceGesture(
+      createIdleState(),
+      empty(),
+      { type: 'dblclick-empty', point: { x: 40, y: 40 } },
+      { createId: () => 'n-new' },
+    )
+    expect(created.commands).toEqual([expect.objectContaining({ kind: 'create-node' })])
+
+    const withNode: SpatialCanvas = {
+      nodes: [{ id: 'n-new', type: 'text', x: 0, y: 0, width: 160, height: 90, text: '' }],
+      edges: [],
+    }
+    const cancelled = reduceGesture(created.state, withNode, { type: 'cancel-text-edit' })
+    expect(cancelled.state).toEqual({ kind: 'idle' })
+    expect(cancelled.commands).toEqual([{ kind: 'delete-node', id: 'n-new' }])
+    expect(cancelled.selectedId).toBeNull()
+  })
+
+  it('keeps an existing node — cancel reverts the edit, it does not delete', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const cancelled = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
+    expect(cancelled.commands).toEqual([])
+    const node = c.nodes[0]
+    expect(node?.type === 'text' ? node.text : undefined).toBe('hi')
+  })
+
+  it('keeps a created node whose text was committed', () => {
+    const created = reduceGesture(
+      createIdleState(),
+      { nodes: [], edges: [] },
+      { type: 'dblclick-empty', point: { x: 10, y: 10 } },
+      { createId: () => 'n-typed' },
+    )
+    const typed = reduceGesture(
+      created.state,
+      { nodes: [], edges: [] },
+      {
+        type: 'commit-text-edit',
+        text: 'hello',
+      },
+    )
+    expect(typed.commands).toEqual([{ kind: 'set-text', id: 'n-typed', text: 'hello' }])
   })
 })

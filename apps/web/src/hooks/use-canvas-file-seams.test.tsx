@@ -5,10 +5,10 @@
  * same-instance guard, URL revocation) are subtle enough that a second
  * hand-written copy is exactly what should not happen.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { type CanvasFileAdapter, useCanvasFileSeams } from './use-canvas-file-seams.js'
+import { type CanvasFileAdapter, toFacetCard, useCanvasFileSeams } from './use-canvas-file-seams.js'
 
 const canvasWith = (...files: string[]): SpatialCanvas => ({
   nodes: files.map((file, i) => ({
@@ -31,7 +31,7 @@ const embedded = (text: string): SpatialCanvas => ({
 function makeAdapter(overrides: Partial<CanvasFileAdapter> = {}) {
   const adapter: CanvasFileAdapter = {
     isImageRef: (file) => file.startsWith('asset:'),
-    loadCanvas: vi.fn(async (ref: string) => embedded(ref)),
+    loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),
     storeImage: vi.fn(async () => 'asset:new'),
     ...overrides,
@@ -69,8 +69,8 @@ describe('useCanvasFileSeams', () => {
 
     await waitFor(() => expect(result.current.resolveFileImage('asset:pic')).toBeDefined())
     expect(result.current.resolveFileImage('asset:pic')).toEqual({ href: 'blob:asset:pic' })
-    expect(adapter.loadCanvas).toHaveBeenCalledWith('sibling')
-    expect(adapter.loadCanvas).not.toHaveBeenCalledWith('asset:pic')
+    expect(adapter.loadDocument).toHaveBeenCalledWith('sibling')
+    expect(adapter.loadDocument).not.toHaveBeenCalledWith('asset:pic')
     expect(adapter.loadImageUrl).not.toHaveBeenCalledWith('sibling')
   })
 
@@ -83,15 +83,15 @@ describe('useCanvasFileSeams', () => {
       { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
     )
     await waitFor(() => expect(result.current.resolveFileCanvas('other')).toBeDefined())
-    expect(adapter.loadCanvas).toHaveBeenCalledTimes(1)
+    expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
 
     // Same stamp, new map identity: a re-render must not re-fetch.
     rerender({ stampOf: new Map([['other', 'v1']]) })
-    expect(adapter.loadCanvas).toHaveBeenCalledTimes(1)
+    expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
 
     // Moved stamp: the referenced canvas was edited elsewhere.
     rerender({ stampOf: new Map([['other', 'v2']]) })
-    await waitFor(() => expect(adapter.loadCanvas).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(2))
   })
 
   it('does not spin when every image load fails', async () => {
@@ -145,5 +145,123 @@ describe('useCanvasFileSeams', () => {
 
     expect(result.current.isImageFileRef('asset:pic')).toBe(true)
     expect(result.current.isImageFileRef('sibling')).toBe(false)
+  })
+})
+
+describe('toFacetCard', () => {
+  it('maps a type-only facet set to a titled card with one row', () => {
+    expect(toFacetCard({ type: 'note' })).toEqual({
+      title: 'note',
+      rows: [{ label: 'type', value: 'note' }],
+    })
+  })
+
+  it('prefers the facet title over the type for the heading', () => {
+    expect(toFacetCard({ type: 'note', title: 'Spec' })).toEqual({
+      title: 'Spec',
+      rows: [{ label: 'type', value: 'note' }],
+    })
+  })
+
+  it('joins tags into one row and omits the row when there are none', () => {
+    expect(toFacetCard({ type: 'note', tags: ['a', 'b'] })?.rows).toEqual([
+      { label: 'type', value: 'note' },
+      { label: 'tags', value: 'a, b' },
+    ])
+    expect(toFacetCard({ type: 'note', tags: [] })?.rows).toEqual([
+      { label: 'type', value: 'note' },
+    ])
+  })
+
+  it('renders no row for facets the card deliberately does not show', () => {
+    // `view` selects a template; it is not content. Unknown root keys are
+    // preserved by the model but have no agreed presentation.
+    // `readCoreFacets` returns core facets PLUS `facetsRaw`, so the extra key
+    // really does arrive at runtime even though the parameter narrows it away.
+    const facets = { type: 'note', view: 'kanban/1', facetsRaw: { owner: 'x' } } as CoreFacets
+    const card = toFacetCard(facets)
+    expect(card?.rows).toEqual([{ label: 'type', value: 'note' }])
+  })
+
+  it('has no card for a document with no readable facets', () => {
+    expect(toFacetCard(undefined)).toBeUndefined()
+  })
+})
+
+describe('useCanvasFileSeams facets', () => {
+  it('resolves core facets once the document has been pre-fetched', async () => {
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async (ref: string) => ({
+        canvas: embedded(ref),
+        facets: { type: 'note', title: 'Spec', tags: ['x'] },
+      })),
+    })
+    const { result } = renderHook(() =>
+      useCanvasFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
+    )
+
+    expect(result.current.resolveFileFacets('other')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveFileFacets('other')).toBeDefined())
+    expect(result.current.resolveFileFacets('other')?.title).toBe('Spec')
+  })
+
+  it('keeps a facet-only document cached even though it has no canvas', async () => {
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async () => ({ facets: { type: 'note' } })),
+    })
+    const { result } = renderHook(() =>
+      useCanvasFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map() }),
+    )
+
+    await waitFor(() => expect(result.current.resolveFileFacets('doc')).toBeDefined())
+    expect(result.current.resolveFileCanvas('doc')).toBeUndefined()
+  })
+
+  it('has no card for a document that loads without facets', async () => {
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
+    })
+    const { result } = renderHook(() =>
+      useCanvasFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
+    )
+
+    await waitFor(() => expect(result.current.resolveFileCanvas('other')).toBeDefined())
+    expect(result.current.resolveFileFacets('other')).toBeUndefined()
+  })
+
+  it('settles at one load for a reference that has no staleness stamp', async () => {
+    // The write normalises a missing stamp to '' while the compare read the
+    // raw `undefined`, so a dangling reference never matched its own recorded
+    // stamp and reloaded on every render.
+    const adapter = makeAdapter()
+    const canvas = canvasWith('dangling')
+    const { rerender } = renderHook(() =>
+      useCanvasFileSeams({ canvas, adapter, stampOf: new Map() }),
+    )
+
+    await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
+    rerender()
+    rerender()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useCanvasFileSeams empty canvases', () => {
+  it('has nothing to embed for a document whose canvas has no nodes', async () => {
+    // A markdown document reads back this way; an empty miniature outranks
+    // the facet card and shows less than it would.
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async () => ({
+        canvas: { nodes: [], edges: [] },
+        facets: { type: 'note' },
+      })),
+    })
+    const { result } = renderHook(() =>
+      useCanvasFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map() }),
+    )
+
+    await waitFor(() => expect(result.current.resolveFileFacets('note')).toBeDefined())
+    expect(result.current.resolveFileCanvas('note')).toBeUndefined()
   })
 })

@@ -35,7 +35,16 @@ paths:
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
   one implementation shared by Node/browser/Workers.
 - `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
-  Zod-schematized output of this package.
+  Zod-schematized output of this package. It reports one entry per
+  ADDRESSABLE node — the chrome shapes carrying a document `id` — because
+  the reader's only way to act on what it sees is a tool that takes a node
+  id. Content laid out inside a node (its text runs, a facet card's rows)
+  carries a bbox too but is deliberately excluded: reporting it made a
+  three-node canvas answer with six entries, each "contained in" another,
+  and none of the extra three could be acted on. A scene with no identified
+  shape at all (hand-built, a fragment) keeps the older behaviour of taking
+  every bbox-carrying node named by position — there is nothing better to
+  name them by, and the alternative is answering with nothing.
 
 ## What does NOT belong here
 
@@ -301,18 +310,67 @@ paths:
       existing function. `layout/edge-rules.ts` implements the PREFERENCE
       half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
-      gap-valid-opposing-before-invalid, and incumbent-wins-ties;
-      `composeSidePairs` is the composition `rankedSidePairs`
-      (`layout/spatial-edges.ts`) wraps, and `shouldAdoptCandidate` is the
-      incumbent-wins-ties predicate `optimizeSideChoices` consults. The
-      PENALTY half (`pairScore`/`selfScore`'s cost-tuple terms, still inline
-      in `spatial-edges.ts`) is a named follow-up, "penalty-rules-extraction".
-    - **Facet-driven rendering rides the injected-resolver pattern**
-      (a future `resolveFileFacets`, same seam class as
-      `resolveFileCanvas`/`resolveFileImage`), and export stays a pure
-      function of the canvas snapshot by default — resolving another
-      document's live facet state into exported bytes is opt-in, exactly
-      parallel to the style opt-in above.
+      gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
+      incumbent-wins-ties; `composeSidePairs` is the composition
+      `rankedSidePairs` (`layout/spatial-edges.ts`) wraps, and
+      `shouldAdoptCandidate` is the incumbent-wins-ties predicate
+      `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
+      same-side U-hook candidate whose DEPARTURE side border runs through
+      the target's strict interior (group frames excluded via
+      `fullyContains`) behind one that does not — this is what makes the
+      optimizer's ALREADY-CORRECT scoring of a clean same-side route
+      reachable in one improving hop instead of several: the defect was in
+      candidate ORDER, not the search budget, so `CROSSING_OPT_MAX_PASSES`
+      stays 2. The PENALTY half is `PENALTY_RULES`: overlap-and-intrusion
+      (tier 0, collinear overlap plus self-retrace/body-intrusion),
+      illegibility (tier 1), crossings (tier 2), endpoint-body-ink (tier 3,
+      self-only — a routed segment STRICTLY BETWEEN a rect's two borders,
+      priced against the edge's OWN endpoint rects since `foreignBodies`
+      deliberately excludes them for the tunnel check), border-tracing
+      (tier 4, self-only — the border complement: a segment collinear with
+      AND overlapping a node's own border, `nodeBorders` including the
+      path's own endpoint rects unlike `foreignBodies`), path-reversal
+      (tier 5) and realized-bends (tier 6, self-only and deliberately
+      last).
+      border-tracing sits BELOW crossings rather than adjacent to
+      overlap-and-intrusion: it is evaluated against the optimizer's
+      unaligned TRIAL paths (`computeAnchorsFor`'s pre-`slideAlongSide`
+      representation, used only for candidate ranking), whose unaligned
+      anchor placement can coincidentally trace a bystander's extended
+      border for a real stretch — a false signal a genuine crossing never
+      produces (verified against `edge-lane-rank.test.ts`'s sweep-rank pin:
+      tier 1 placement adopted a route with a real crossing over a
+      crossing-free one). endpoint-body-ink sits below border-tracing for
+      the same trial-path-artifact reason. `pairScore`/`selfPenalty`
+      (`spatial-edges.ts`) compose over the list, and every cost-tuple
+      helper (`ConfigCost` shape, `addCost`, `lessCost`,
+      `hasRepairableProblem`) derives from the declared tiers, so a new
+      penalty rule is one list entry, never a new slot threaded by hand.
+    - **Facet-driven rendering rides the injected-resolver pattern.**
+      Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
+      FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam
+      class as `resolveFileCanvas`/`resolveFileImage` — synchronous,
+      optional, caller-supplied, total (a throw or `undefined` degrades to
+      the plain chrome+label rendering rather than aborting layout).
+      `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
+      string; value: string }> }`) is plain TS, not Zod — it never crosses a
+      process boundary; the caller maps its own facet data
+      (`coreFacetsSchema` and friends) into it in-process, and this package
+      learns nothing about what a facet MEANS. `composeFileFacets` is
+      checked LAST in the file-node pre-pass — after `composeFileImage` and
+      `composeFileEmbed` — so a resolved image or canvas embed always
+      outranks a facet card, and the card in turn always outranks the plain
+      label it replaces. Card text goes through `layoutMdastBlocks`
+      (`heading`+`paragraph` blocks only, never `list`/`table`, to stay out
+      of the `subtreeOffsetX` transform-boundary class); content that
+      overflows the node's padded box is truncated at whole-block
+      granularity with no "more" affordance (ponytail: that needs a
+      focusable DOM-overlay/keyboard treatment this pure-geometry package
+      cannot own — upgrade path is an editor-side overlay in a later
+      slice). No consumer passes the seam yet — export stays a pure
+      function of the canvas snapshot by default, exactly parallel to the
+      style opt-in above; wiring `apps/web` to paint a card on a real screen
+      is a separate, later increment.
 
 ## Conventions
 
@@ -363,6 +421,25 @@ paths:
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+- `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
+  answer to "did that rule change help overall". Four reported defects were
+  each pinned by the one canvas that exposed it, which could never say
+  whether a fix moved the failure somewhere nobody had looked. It holds one
+  invariant — no routed line runs strictly inside a node body it could have
+  gone around — strictly over the named corpus, and COUNTS violations over
+  2000 deterministic synthetic layouts, split by which search should have
+  stopped each: `own-endpoint` (invisible to `bestCandidate`, since
+  `routeEdge` drops both endpoint nodes from its obstacle list),
+  `foreign` (`bestCandidate`'s last fallback returning the shortest BLOCKED
+  candidate when none of its six is clear), `degenerate` (coincident
+  anchors). The exemption is `routeEdge`'s own: a rect STRICTLY containing
+  an anchor cannot be routed around; a rect merely touched on its border
+  can. The counts are pinned EXACTLY, not as a ceiling, so an improvement is
+  as loud as a regression — they are a debt figure whose target is three
+  zeroes, at which point the aggregate becomes the strict property. Metrics
+  live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
+  (the `reversal-count.ts` independent-oracle contract); layouts live in
+  `src/test-utils/routing-corpus.ts`.
 
 ## Common mistakes (append as review finds them)
 

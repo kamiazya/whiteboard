@@ -190,3 +190,12 @@ describe('CanvasListView — branded empty state', () => {
     expect(screen.getByText('No canvases yet')).toBeTruthy()
   })
 })
+
+describe('CanvasListView empty state — says what this is', () => {
+  it('names the product and what a canvas is for, not just its own emptiness', () => {
+    renderList({ rows: [] })
+    // Someone who arrived from a link has no other page to learn from.
+    expect(screen.getByText(/notes.*connect|connect.*notes/i)).toBeTruthy()
+    expect(screen.getByText(/stays in this browser|on your (device|machine)/i)).toBeTruthy()
+  })
+})

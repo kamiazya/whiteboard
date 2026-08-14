@@ -210,12 +210,26 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
 }
 
 /**
- * Only nodes that carry a `bbox` participate in the digest — a resolved
- * edge is a path, not an area, so it has no bounding box to contribute to
- * overlap/containment/cluster/free-region derivation.
+ * What the digest reports as a "node".
+ *
+ * When the scene came from a spatial canvas, that is exactly the chrome
+ * shapes — the boxes a reader can address by id. Everything else with a
+ * bbox is CONTENT laid out inside one of them (a node's text runs, a card's
+ * rows), and reporting those alongside was actively misleading: a
+ * three-node canvas answered with six entries, every one of which was
+ * "contained in" another, and none of the extra three could be acted on.
+ *
+ * A scene with no identified shape at all is not a canvas projection — a
+ * hand-built scene, a fragment — and keeps the previous behaviour of taking
+ * every bbox-carrying node, named by position. There is nothing better to
+ * name them by, and the alternative is answering with nothing.
  */
-function collectTopLevelBoxes(scene: Scene): BoundingBox[] {
-  return scene.nodes.flatMap((node) => (node.kind === 'edge' ? [] : [node.bbox]))
+function collectEntries(scene: Scene): { readonly id?: string; readonly bbox: BoundingBox }[] {
+  const identified = scene.nodes.flatMap((node) =>
+    node.kind === 'shape' && node.id !== undefined ? [{ id: node.id, bbox: node.bbox }] : [],
+  )
+  if (identified.length > 0) return identified
+  return scene.nodes.flatMap((node) => (node.kind === 'edge' ? [] : [{ bbox: node.bbox }]))
 }
 
 /**
@@ -225,10 +239,9 @@ function collectTopLevelBoxes(scene: Scene): BoundingBox[] {
  * in the same canonical order.
  */
 export function sceneDigest(scene: Scene): SceneDigest {
-  const boxes = collectTopLevelBoxes(scene)
-  const entries: DigestEntry[] = boxes.map((bbox, index) => ({
-    id: `n${index}`,
-    bbox,
+  const entries: DigestEntry[] = collectEntries(scene).map((entry, index) => ({
+    id: entry.id ?? `n${index}`,
+    bbox: entry.bbox,
     z: index,
   }))
 

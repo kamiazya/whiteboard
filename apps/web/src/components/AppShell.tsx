@@ -60,7 +60,11 @@ export function AppShell({ daemon }: { daemon: boolean }) {
       <span className="min-w-0 flex-1" />
       <button
         type="button"
-        aria-label="Settings"
+        // The dot is the only thing on the shell that can read as an alarm.
+        // Naming its cause turns it from "did I break something?" into a
+        // task the user can choose to do.
+        aria-label={nudge ? 'Settings — a setup step is waiting' : 'Settings'}
+        title={nudge ? 'Settings — a setup step is waiting' : 'Settings'}
         data-testid="shell-settings"
         onClick={() =>
           navigate(settingsPath(), {

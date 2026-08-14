@@ -2,15 +2,26 @@ import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteb
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
+  addCost,
+  bendCount,
+  COST_QUANTUM,
   composeSidePairs,
   facingLaneWindow,
+  fullyContains,
+  hasRepairableProblem,
+  interiorInkThrough,
+  lessCost,
   oppositeSide,
   type Point,
+  pairPenalty,
   type Rect,
   type Side,
   SLIDE_CORNER_INSET_PX,
+  selfPenalty,
   shouldAdoptCandidate,
+  zeroPenalty,
 } from './edge-rules.js'
+import { routeOnGrid } from './grid-route.js'
 
 function rectOf(node: SpatialNode): Rect {
   return { x: node.x, y: node.y, w: node.width, h: node.height }
@@ -48,15 +59,6 @@ function sidePoint(rect: Rect, side: Side): Point {
 function strictlyInside(rect: Rect, point: Point): boolean {
   return (
     point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
-  )
-}
-
-function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
   )
 }
 
@@ -129,9 +131,8 @@ function deriveDefaultSides(
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
     return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
   }
-  // Ranking is geometric only; occlusion then adjusts each end
-  // independently from the chosen pair (an occluded end moves to its next
-  // exposed side alone, rather than dragging the other end with it).
+  // Ranking is geometric only; occlusion then moves an end that is buried
+  // under a neighbour to its next exposed side.
   const best = pairs[0]!
   const pick = (rect: Rect, primary: Side, mirror: readonly [Side, Side, Side, Side]): Side => {
     const candidates = [primary, ...mirror.filter((sd) => sd !== primary)]
@@ -139,10 +140,24 @@ function deriveDefaultSides(
   }
   const fromMirror = facingSides(dx, dy)
   const toMirror = fromMirror.map(oppositeSide) as unknown as readonly [Side, Side, Side, Side]
-  return {
-    fromSide: pick(fromRect, best.fromSide, fromMirror),
-    toSide: pick(toRect, best.toSide, toMirror),
+  const fromSide = pick(fromRect, best.fromSide, fromMirror)
+  // partner-follows-moved-end: an arrival is chosen as the partner of a
+  // particular departure, so when occlusion moves the departure the arrival
+  // is left describing a pair that no longer exists — `left->bottom` with
+  // the departure pushed to `top` becomes `top->bottom`, a combination the
+  // ranking never proposed and which reaches the target's far side the long
+  // way round. The coherent partner is the one on the axis the departure did
+  // NOT take: leaving horizontally arrives on the vertical facing side, and
+  // leaving vertically arrives on the horizontal one. Only the orphaned half
+  // is replaced — an arrival occlusion never touched keeps its own choice.
+  const horizontal = (side: Side) => side === 'left' || side === 'right'
+  const { h, v } = {
+    h: dx >= 0 ? ('right' as Side) : ('left' as Side),
+    v: dy >= 0 ? ('bottom' as Side) : ('top' as Side),
   }
+  const partnerSide =
+    fromSide === best.fromSide ? best.toSide : oppositeSide(horizontal(fromSide) ? v : h)
+  return { fromSide, toSide: pick(toRect, partnerSide, toMirror) }
 }
 
 /** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
@@ -496,37 +511,32 @@ function computeAnchorsFor(
   return anchors
 }
 
-/** Quarter-pixel quantization: every cost term is integral, so candidate
- * comparison is exact integer arithmetic — no float tie can differ between
- * platforms. */
-const COST_QUANTUM = 4
-
-type ConfigCost = readonly [overlap: number, illegible: number, crossings: number, bends: number]
-
-function lessCost(a: ConfigCost, b: ConfigCost): boolean {
-  if (a[0] !== b[0]) return a[0] < b[0]
-  if (a[1] !== b[1]) return a[1] < b[1]
-  if (a[2] !== b[2]) return a[2] < b[2]
-  return a[3] < b[3]
-}
+/**
+ * The routing cost of a configuration as a lexicographic integer tuple, one
+ * slot per PENALTY_RULES tier (edge-rules.ts): total collinear axis-aligned
+ * overlap length (a parallel overlap has no crossing point, so a line jump
+ * cannot express it — heaviest; an edge RETRACING its own ink counts here
+ * too, via `selfPenalty`), crossings too close to a segment end to render
+ * their jump arc, total crossings, then total REALIZED bends. Bends sit
+ * last and the optimizer's short-circuit ignores them (`hasRepairableProblem`):
+ * they only break ties between configurations that already tie on every
+ * visibility problem — the abstract pair ranking (L before Z) can lie once
+ * obstacles force the L into a staircase, and this term is what corrects
+ * it. Length stays out of the cost entirely, governed by the per-edge pair
+ * ranking. `ConfigCost`'s length and slot order are DERIVED from
+ * PENALTY_RULES (edge-rules.ts's `zeroPenalty`/`pairPenalty`/`selfPenalty`),
+ * never hardcoded here.
+ */
+type ConfigCost = readonly number[]
 
 /**
- * Global legibility cost of a routed configuration, as a lexicographic
- * integer tuple: total collinear axis-aligned overlap length (a parallel
- * overlap has no crossing point, so a line jump cannot express it —
- * heaviest; an edge RETRACING its own ink counts here too, via
- * `selfScore`), crossings too close to a segment end to render their jump
- * arc, total crossings, then total REALIZED bends. Bends sit last and the
- * optimizer's short-circuit ignores them: they only break ties between
- * configurations that already tie on every visibility problem — the
- * abstract pair ranking (L before Z) can lie once obstacles force the L
- * into a staircase, and this term is what corrects it. Length stays out
- * of the cost entirely, governed by the per-edge pair ranking.
+ * `pairScore`'s composition over PENALTY_RULES: sums the SHARED narrow
+ * phase over every segment pair — the same function the initial sweep
+ * calls, so the incremental trial path and the broad-phase build cannot
+ * drift (see edge-crossing-sweep.ts) — then maps the summed triple into
+ * the declared tiers.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
-  // Sums the SHARED narrow phase over every segment pair — the same
-  // function the initial sweep calls, so the incremental trial path and
-  // the broad-phase build cannot drift (see edge-crossing-sweep.ts).
   let overlap = 0
   let illegible = 0
   let crossings = 0
@@ -538,62 +548,7 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
       crossings += c
     }
   }
-  return [overlap, illegible, crossings, 0]
-}
-
-/**
- * Per-edge quality of ONE routed path, in the heaviest slot: collinear
- * overlap with ITSELF (adjacent retraces included — the doubled-line
- * arrival a facing-away side produces when the connector overshoots the
- * entry stub through the node body) plus the length of any segment
- * TUNNELLING through a bystander node's raw body — a line through a node
- * reads as though it connects that node, which no line jump can express,
- * so it outranks even an edge crossing. Realized bend count sits last.
- */
-function selfScore(path: readonly Point[], foreignBodies: readonly Rect[]): ConfigCost {
-  const q = (n: number) => Math.round(n * COST_QUANTUM)
-  let overlap = 0
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1] as Point
-    const b = path[i] as Point
-    for (const r of foreignBodies) {
-      // Axis-aligned intrusion length, boundary grazing excluded: an
-      // anchor ON a neighbour's border or a segment riding the margin
-      // band is bestCandidate's business, not a tunnel.
-      const minX = Math.max(Math.min(a.x, b.x), r.x)
-      const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
-      const minY = Math.max(Math.min(a.y, b.y), r.y)
-      const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
-      if (maxX <= minX && maxY <= minY) continue
-      if (a.y === b.y && a.y > r.y && a.y < r.y + r.h && maxX > minX) {
-        overlap += q(maxX - minX)
-      } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w && maxY > minY) {
-        overlap += q(maxY - minY)
-      }
-    }
-  }
-  for (let i = 1; i < path.length; i++) {
-    for (let j = i + 1; j < path.length; j++) {
-      const a1 = path[i - 1] as Point
-      const a2 = path[i] as Point
-      const b1 = path[j - 1] as Point
-      const b2 = path[j] as Point
-      if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
-        const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
-        const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
-        if (hi > lo) overlap += hi - lo
-      } else if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
-        const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
-        const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
-        if (hi > lo) overlap += hi - lo
-      }
-    }
-  }
-  return [overlap, 0, 0, bendCount(path)]
-}
-
-function addCost(a: ConfigCost, b: ConfigCost, sign: 1 | -1): ConfigCost {
-  return [a[0] + sign * b[0], a[1] + sign * b[1], a[2] + sign * b[2], a[3] + sign * b[3]]
+  return pairPenalty([overlap, illegible, crossings])
 }
 
 /**
@@ -653,32 +608,95 @@ function optimizeSideChoices(
   // the anchor groups it left and joined) re-route and re-score their
   // pairs — everything else is carried over. This is what keeps a trial
   // O(affected * E) instead of O(E^2).
+  // Same edge, same anchors, same obstacles -> same path. A trial re-sides
+  // ONE edge, but that recomputes the anchor groups it leaves and joins, so
+  // the same (edge, anchor) combination comes back around repeatedly:
+  // measured at 60 nodes / 200 edges, 296 of 854 routings were repeats of an
+  // identical call, one combination recurring nine times. `nodes` and
+  // `style` are fixed for the whole call, so they are not part of the key —
+  // and the cache lives only as long as this call, so a later layout of a
+  // moved canvas never sees a stale path.
+  const routeCache = new Map<string, readonly Point[]>()
+  const anchorKey = (edge: CanvasEdge, a: EdgeAnchorPair | undefined) =>
+    `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}`
+  const routeCached = (edge: CanvasEdge, a: EdgeAnchorPair | undefined): readonly Point[] => {
+    const key = anchorKey(edge, a)
+    const hit = routeCache.get(key)
+    if (hit !== undefined) return hit
+    const path = routeEdge(nodes, edge, style, a).path
+    routeCache.set(key, path)
+    return path
+  }
+
+  // Axis-aligned bounds per routed path, kept beside `paths`. Two edges
+  // whose bounds are disjoint cannot overlap, cross, or sit illegibly close
+  // to each other, so the pair scores zero without looking at a single
+  // segment. `buildPairwiseScores` already prunes the FULL build this way
+  // (200 edges in ~1.6ms); the per-trial update did not, and comparing one
+  // re-routed edge against all 200 by brute force is where the search spent
+  // most of its time.
+  const boundsOf = (path: readonly Point[]): Rect => {
+    let minX = Number.POSITIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+    for (const point of path) {
+      if (point.x < minX) minX = point.x
+      if (point.x > maxX) maxX = point.x
+      if (point.y < minY) minY = point.y
+      if (point.y > maxY) maxY = point.y
+    }
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+  }
+  // Inflated by one quantum so a pair that merely touches still reaches the
+  // exact scorer: the broad phase must never be tighter than the thing it
+  // is standing in for.
+  const boundsOverlap = (a: Rect, b: Rect): boolean =>
+    a.x - COST_QUANTUM <= b.x + b.w &&
+    b.x - COST_QUANTUM <= a.x + a.w &&
+    a.y - COST_QUANTUM <= b.y + b.h &&
+    b.y - COST_QUANTUM <= a.y + a.h
+
   let current = new Map(initial)
   let anchors = computeAnchorsFor(nodes, edges, current, false)
-  let paths: (readonly Point[])[] = edges.map(
-    (e) => routeEdge(nodes, e, style, anchors.get(e.id)).path,
-  )
+  let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
+  let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
   const foreignBodiesFor = edges.map((e) =>
     nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
   )
-  const selfCosts: ConfigCost[] = paths.map((path, i) => selfScore(path, foreignBodiesFor[i]!))
-  let currentCost: ConfigCost = [0, 0, 0, 0]
+  // Every node's border, INCLUDING an edge's own endpoints — border-tracing
+  // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
+  // check which must exclude the edge's endpoints.
+  const nodeBorders = nodes.map(rectOf)
+  // Each edge's OWN endpoint rects (from, to) only — endpoint-body-ink's
+  // interior check, unlike border-tracing's outline check above, needs to
+  // know which two of nodeBorders belong to THIS edge.
+  const endpointRectsFor = edges.map((e) =>
+    [byId.get(e.fromNode), byId.get(e.toNode)]
+      .filter((n): n is SpatialNode => n !== undefined)
+      .map(rectOf),
+  )
+  const selfCosts: ConfigCost[] = paths.map((path, i) =>
+    selfPenalty(path, foreignBodiesFor[i]!, nodeBorders, endpointRectsFor[i]),
+  )
+  let currentCost: ConfigCost = zeroPenalty()
   for (const self of selfCosts) currentCost = addCost(currentCost, self, 1)
   // Sweep-and-prune instead of the O(E^2) double loop: identical scores
   // by construction (same narrow phase, canonical pair order), sparse for
   // non-interacting pairs — evaluateTrial already zero-defaults absent
   // keys.
   for (const [key, [o, il, c]] of buildPairwiseScores(paths)) {
-    const score: ConfigCost = [o, il, c, 0]
+    const score: ConfigCost = pairPenalty([o, il, c])
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
-  // The bend term (index 3) is deliberately ABSENT from the short-circuit:
-  // a canvas with no overlap and no crossings is healthy, and reshuffling
-  // it purely to shave bends is churn, not repair.
-  if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+  // The realized-bends tier is deliberately ABSENT from the short-circuit
+  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
+  // crossings is healthy, and reshuffling it purely to shave bends is
+  // churn, not repair.
+  if (!hasRepairableProblem(currentCost)) return current
 
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
@@ -686,6 +704,7 @@ function optimizeSideChoices(
     cost: ConfigCost
     anchors: ReadonlyMap<string, EdgeAnchorPair>
     paths: (readonly Point[])[]
+    bounds: Rect[]
     touched: number[]
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
@@ -696,16 +715,23 @@ function optimizeSideChoices(
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
     }
     const trialPaths = paths.slice()
+    const trialBounds = bounds.slice()
     for (const i of touched) {
-      trialPaths[i] = routeEdge(nodes, edges[i]!, style, trialAnchors.get(edges[i]!.id)).path
+      trialPaths[i] = routeCached(edges[i]!, trialAnchors.get(edges[i]!.id))
+      trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
     let cost = currentCost
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
-      const next = selfScore(trialPaths[i]!, foreignBodiesFor[i]!)
-      cost = addCost(cost, selfCosts[i] ?? [0, 0, 0, 0], -1)
+      const next = selfPenalty(
+        trialPaths[i]!,
+        foreignBodiesFor[i]!,
+        nodeBorders,
+        endpointRectsFor[i],
+      )
+      cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
       cost = addCost(cost, next, 1)
       selfUpdates.set(i, next)
     }
@@ -718,13 +744,33 @@ function optimizeSideChoices(
         // A pair between two touched edges is visited once thanks to the
         // updates map; a pair with an untouched edge reuses its cached path.
         if (touchedSet.has(j) && j < i) continue
+        if (!boundsOverlap(trialBounds[lo]!, trialBounds[hi]!)) {
+          // Scores zero. Subtract whatever this pair used to cost and leave
+          // the key absent — every reader already zero-defaults an absent
+          // key — rather than paying for the segment sweep and two cost
+          // tuples to arrive at the same answer.
+          const prior = matrix.get(key)
+          if (prior !== undefined) {
+            cost = addCost(cost, prior, -1)
+            updates.set(key, zeroPenalty())
+          }
+          continue
+        }
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        cost = addCost(cost, matrix.get(key) ?? [0, 0, 0, 0], -1)
+        cost = addCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
         cost = addCost(cost, next, 1)
         updates.set(key, next)
       }
     }
-    return { cost, anchors: trialAnchors, paths: trialPaths, touched, updates, selfUpdates }
+    return {
+      cost,
+      anchors: trialAnchors,
+      paths: trialPaths,
+      bounds: trialBounds,
+      touched,
+      updates,
+      selfUpdates,
+    }
   }
 
   const candidatesFor = (edge: CanvasEdge): SidePair[] => {
@@ -737,6 +783,9 @@ function optimizeSideChoices(
     const toRect = rectOf(toNode)
     const fromCenter = centerOf(fromRect)
     const toCenter = centerOf(toRect)
+    // The same-side U-hook fallback (for when every ranked-vocabulary pair
+    // crosses, overlaps, or retraces) comes from rankedSidePairs' last rule,
+    // `u-hook-span-exposed-first` — one producer, not a second list here.
     const pairs = rankedSidePairs(
       toCenter.x - fromCenter.x,
       toCenter.y - fromCenter.y,
@@ -744,18 +793,8 @@ function optimizeSideChoices(
       toRect,
       () => 0,
     )
-    // U-pairs (both ends on the SAME compass side) are outside the ranked
-    // vocabulary — the initial heuristic never wants them — but they are
-    // exactly what hooks OVER everything when every ranked pair crosses,
-    // overlaps, or retraces, and what a pair of overlapping nodes needs to
-    // arrive without doubling back. Offered last: the optimizer only
-    // adopts one on a strict cost decrease.
-    const uPairs = (['top', 'right', 'bottom', 'left'] as const).map((side) => ({
-      fromSide: side as Side,
-      toSide: side as Side,
-    }))
     const seen = new Set<string>()
-    return [...pairs, ...uPairs]
+    return pairs
       .map((pair) => ({
         fromSide: edge.fromSide ?? pair.fromSide,
         toSide: edge.toSide ?? pair.toSide,
@@ -789,8 +828,9 @@ function optimizeSideChoices(
       .map((edge, i) => ({ edge, i, cost: contribution(i) }))
       // An edge with no overlap, no illegibility, and no crossings has
       // nothing to repair — reshuffling it to shave bends is churn, the
-      // same judgement the whole-config short-circuit makes.
-      .filter((r) => r.cost[0] > 0 || r.cost[1] > 0 || r.cost[2] > 0)
+      // same judgement the whole-config short-circuit makes
+      // (hasRepairableProblem, edge-rules.ts).
+      .filter((r) => hasRepairableProblem(r.cost))
       .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
       .slice(0, TRIAL_BUDGET_EDGES)
       // Document order within the budget keeps adoption sequencing stable.
@@ -816,13 +856,14 @@ function optimizeSideChoices(
           currentCost = evaluated.cost
           anchors = evaluated.anchors
           paths = evaluated.paths
+          bounds = evaluated.bounds
           for (const [key, score] of evaluated.updates) matrix.set(key, score)
           for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
           improved = true
           break
         }
       }
-      if (currentCost[0] === 0 && currentCost[1] === 0 && currentCost[2] === 0) return current
+      if (!hasRepairableProblem(currentCost)) return current
     }
     if (!improved) break
   }
@@ -954,21 +995,6 @@ const pathLength = (path: readonly Point[]) =>
  * that actually occur (a node or two sitting between two others). A denser
  * search belongs behind the routing-style setting, not in the default path.
  */
-/** Direction changes along a polyline, ignoring repeated/collinear points. */
-function bendCount(path: readonly Point[]): number {
-  let bends = 0
-  let lastDir: string | undefined
-  for (let i = 1; i < path.length; i++) {
-    const dx = Math.sign((path[i] as Point).x - (path[i - 1] as Point).x)
-    const dy = Math.sign((path[i] as Point).y - (path[i - 1] as Point).y)
-    if (dx === 0 && dy === 0) continue
-    const dir = `${dx},${dy}`
-    if (lastDir !== undefined && dir !== lastDir) bends++
-    lastDir = dir
-  }
-  return bends
-}
-
 /**
  * The best candidate by a two-tier clearance ranking, shortest first:
  * clear of the inflated obstacles (full margin kept), else clear of the
@@ -986,16 +1012,28 @@ function bestCandidate(
   candidates: readonly Point[][],
   inflated: readonly Rect[],
   raw: readonly Rect[],
+  endpointRects: readonly Rect[] = [],
 ): Point[] {
-  const byLength = [...candidates].sort((a, b) => {
-    const byLen = pathLength(a) - pathLength(b)
-    if (Math.abs(byLen) > 1e-6) return byLen
-    return bendCount(a) - bendCount(b)
-  })
+  // Scored once per candidate, not once per comparison: this runs per edge
+  // on every layout, inside an optimizer that reroutes the whole edge set
+  // several times.
+  const scored = candidates.map((path) => ({
+    path,
+    ink: interiorInkThrough(path, endpointRects),
+    length: pathLength(path),
+    bends: bendCount(path),
+  }))
+  const ranked = scored
+    .sort((a, b) => {
+      if (a.ink !== b.ink) return a.ink - b.ink
+      if (Math.abs(a.length - b.length) > 1e-6) return a.length - b.length
+      return a.bends - b.bends
+    })
+    .map((c) => c.path)
   return (
-    byLength.find((path) => pathIsClear(path, inflated)) ??
-    byLength.find((path) => pathIsClear(path, raw)) ??
-    (byLength[0] as Point[])
+    ranked.find((path) => pathIsClear(path, inflated)) ??
+    ranked.find((path) => pathIsClear(path, raw)) ??
+    (ranked[0] as Point[])
   )
 }
 
@@ -1169,7 +1207,7 @@ function withoutRepeats(path: readonly Point[]): Point[] {
  * edge around a region that is not there.
  */
 function routeOrthogonal(
-  start: Point,
+  startAnchor: Point,
   end: Point,
   fromSide: Side,
   toSide: Side,
@@ -1180,6 +1218,7 @@ function routeOrthogonal(
   inflated: readonly Rect[],
   raw: readonly Rect[],
 ): Point[] {
+  let start = startAnchor
   // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
   // often share one tangent coordinate — anchors are renderer-chosen
   // defaults, so sliding one end along its side buys a single straight
@@ -1227,27 +1266,78 @@ function routeOrthogonal(
       }
     }
   }
+  const toNormal = outwardNormal(toSide)
+  // An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so
+  // an approach shorter than this leaves the arrow with no line behind it —
+  // it reads as a marker stuck to the box rather than an edge arriving at
+  // it. Two arrow-lengths gives the head its own run plus the same again of
+  // plain line.
+  const MIN_APPROACH_PX = 20
+  // Perpendicular pairs take their corner from the DEPARTURE anchor's
+  // tangent coordinate, so the approach is only as long as that anchor is
+  // far from the arrival side. Sliding the departure along its own side
+  // lengthens it without adding a corner; a side with no room to slide
+  // keeps the anchor and falls through to the stub-and-elbow path.
+  if (fromSide !== toSide && fromSide !== oppositeSide(toSide)) {
+    const approach = toNormal.x * (start.x - end.x) + toNormal.y * (start.y - end.y)
+    if (approach > 0 && approach < MIN_APPROACH_PX) {
+      const shortfall = MIN_APPROACH_PX - approach
+      const slid = slideAlongSide(start, fromRect, fromSide, {
+        x: start.x + toNormal.x * shortfall,
+        y: start.y + toNormal.y * shortfall,
+      })
+      if (slid !== undefined) start = slid
+    }
+  }
   const exit = stubFrom(start, fromSide, fromDepth)
   const entry = stubFrom(end, toSide, toDepth)
-  const between = (middles: readonly Point[]) =>
-    withoutRepeats([start, exit, ...middles, entry, end])
+  // The arrival stub exists so the last segment reaches the anchor from
+  // OUTSIDE its side. When the elbow already sits outside, on the arrival
+  // axis, the stub only buys a detour past the anchor and back — a 20px
+  // excursion that reads as a hook and reverses direction on that axis.
+  // The DEPARTURE stub is never dropped the same way: its depth is what
+  // separates edges sharing one side into distinct corridors.
+  const arrivesFromOutside = (point: Point) =>
+    toNormal.x * (point.x - end.x) + toNormal.y * (point.y - end.y) > 0 &&
+    (toNormal.x === 0 ? point.x === end.x : point.y === end.y)
+  const between = (middles: readonly Point[]) => {
+    const last = middles[middles.length - 1]
+    const approach = last !== undefined && arrivesFromOutside(last) ? [] : [entry]
+    return withoutRepeats([start, exit, ...middles, ...approach, end])
+  }
 
+  const endpointRects = [fromRect, toRect]
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
-  if (elbows.some((path) => pathIsClear(path, inflated))) {
-    return bestCandidate(elbows, inflated, raw)
+  // An elbow is good enough to stop here only if it is clear of the FOREIGN
+  // obstacles AND puts no ink inside its own endpoints. Testing foreign
+  // clearance alone returned an elbow that tunnelled straight through the
+  // target's body without ever generating a detour — the endpoint rects are
+  // not obstacles, so nothing reported the route as blocked.
+  if (
+    elbows.some(
+      (path) => pathIsClear(path, inflated) && interiorInkThrough(path, endpointRects) === 0,
+    )
+  ) {
+    return bestCandidate(elbows, inflated, raw, endpointRects)
   }
 
   // Detours are needed when the paths this style actually travels are
   // blocked — which the direct diagonal cannot answer, since an orthogonal
   // edge never travels it. Two obstacles can sit on the two elbows while
   // leaving that diagonal clear.
-  const region = unionRect(
-    inflated.filter((rect) =>
-      elbows.some((path) =>
-        path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
-      ),
-    ),
-  )
+  //
+  // An endpoint body the elbows cut through joins the region for the same
+  // reason a foreign body does: it is what the route has to get around. It
+  // can never be an obstacle for the CLEARANCE test — every route has to
+  // reach a point on it — but it is a perfectly good thing to steer past.
+  const crossedBy = (rect: Rect) =>
+    elbows.some((path) =>
+      path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
+    )
+  const region = unionRect([
+    ...inflated.filter(crossedBy),
+    ...endpointRects.filter((rect) => elbows.some((path) => interiorInkThrough(path, [rect]) > 0)),
+  ])
   const candidates =
     region === undefined
       ? elbows
@@ -1255,7 +1345,18 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  return bestCandidate(candidates, inflated, raw)
+  const enumerated = bestCandidate(candidates, inflated, raw, endpointRects)
+  if (interiorInkThrough(enumerated, endpointRects) === 0 && pathIsClear(enumerated, raw)) {
+    return enumerated
+  }
+  // Nothing enumerated works, so pay for a real search. It runs between the
+  // STUBS, not the anchors, so the perpendicular departure and arrival the
+  // rest of this function guarantees survive it — the grid only decides what
+  // happens in between.
+  const searched = routeOnGrid(exit, entry, [...raw, ...endpointRects], OBSTACLE_CLEARANCE_PX)
+  return searched === undefined
+    ? enumerated
+    : bestCandidate([enumerated, between(searched.slice(1, -1))], inflated, raw, endpointRects)
 }
 
 /**
