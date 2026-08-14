@@ -17,6 +17,7 @@ const tmp = withTempDataDir('whiteboard-restore-test-')
 
 const { createRestoreRouter } = await import('./restore.js')
 const { clearCache } = await import('../../store/doc-cache.js')
+const { saveCanvas, getCanvasKind } = await import('../../store/canvas-store.js')
 const { createCanvasRouter } = await import('../canvas.js')
 // Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
 // documented cycle workaround for canvas.ts's dynamic import.
@@ -140,5 +141,76 @@ describe('restore router (real node counts)', () => {
     expect(restoreBody.elementCount).toBe(countAliveNodes(finalTargetDoc))
     // And it must be the real (non-zero) count, not the retired stub's 0.
     expect(restoreBody.elementCount).toBeGreaterThan(0)
+  })
+})
+
+describe('restore router (kind propagation)', () => {
+  beforeEach(() => {
+    clearCache()
+  })
+
+  afterEach(() => {
+    clearCache()
+  })
+
+  it("stamps the source's kind on a brand-new target so it opens in the right editor", async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    // A markdown document: its OKF body is a text node, so the restored
+    // content alone cannot say which editor should open it.
+    await saveCanvas('session1', 'note-a', new LoroDoc(), { kind: 'markdown' })
+    await app.request('/api/canvas/session1/note-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: nodesModelDocUpdate(['okf-body']),
+    })
+    const saveRes = await app.request('/api/workspaces/session1/canvases/note-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const { version } = (await saveRes.json()) as { version: { id: string } }
+
+    const restoreRes = await app.request(
+      `/api/workspaces/session1/canvases/note-a/versions/${version.id}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSlug: 'note-restored' }),
+      },
+    )
+    expect(restoreRes.status).toBe(200)
+    expect(await getCanvasKind('session1', 'note-restored')).toBe('markdown')
+  })
+
+  it('leaves an unrecorded kind unrecorded on the target instead of stamping spatial', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    // The /update path creates the row without a kind, exactly as every
+    // document predating kinds was created. Copying a guess here would be
+    // worse than copying the gap: the target keeps it forever, and a
+    // markdown document restored as spatial opens in the wrong editor.
+    await app.request('/api/canvas/session1/unknown-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: nodesModelDocUpdate(['n1']),
+    })
+    expect(await getCanvasKind('session1', 'unknown-a')).toBeNull()
+
+    const saveRes = await app.request('/api/workspaces/session1/canvases/unknown-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const { version } = (await saveRes.json()) as { version: { id: string } }
+
+    const restoreRes = await app.request(
+      `/api/workspaces/session1/canvases/unknown-a/versions/${version.id}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSlug: 'unknown-restored' }),
+      },
+    )
+    expect(restoreRes.status).toBe(200)
+    expect(await getCanvasKind('session1', 'unknown-restored')).toBeNull()
   })
 })
