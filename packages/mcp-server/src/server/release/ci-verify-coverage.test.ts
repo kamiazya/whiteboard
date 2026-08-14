@@ -64,4 +64,17 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
       expect.arrayContaining(['check', 'test-unit', 'test-jsdom', 'test-browser']),
     )
   })
+
+  // Which browser CI runs is not a detail: local runs use Playwright's Chromium
+  // and CI pins the runner's system Chrome, so the browser is a variable
+  // whenever a browser test passes in one place and fails in the other. The
+  // setup doc claimed the opposite for a while, which is the worst version of
+  // this — a contributor matching their machine to the doc diverges from CI.
+  it('the setup doc names the system-Chrome pin CI actually uses', () => {
+    const chromePin = text.match(/WHITEBOARD_CHROME_PATH:\s*(\S+)/)
+    expect(chromePin, 'ci.yml must pin a browser for the browser jobs').not.toBeNull()
+    const doc = readFileSync(join(ROOT, 'docs/contributing/development.md'), 'utf-8')
+    expect(doc).toContain(chromePin![1])
+    expect(doc).not.toContain('CI and the release workflow assume Playwright-managed Chromium')
+  })
 })
