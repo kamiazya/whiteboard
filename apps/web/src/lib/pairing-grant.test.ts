@@ -193,6 +193,58 @@ describe('consumeGrantFragment', () => {
     expect(JSON.parse(String(init.body)).nonce).toMatch(/^[A-Za-z0-9_-]{20,}$/)
   })
 
+  // The stash holds a PKCE verifier and decides where the code is redeemed, so
+  // a daemonBaseUrl that is not a bare origin must never reach fetch(): the
+  // exchange POSTs the verifier and the single-use code to whatever that value
+  // names. sessionStorage is same-origin-writable and is cloned into windows
+  // this page opens, so "nobody can put a bad value there" is not an argument
+  // this code gets to make.
+  it.each([
+    ['a URL carrying a path', 'https://evil.example/collect'],
+    ['a URL carrying a query', 'https://evil.example?x=1'],
+    ['credentials in the authority', 'https://user:pw@evil.example'],
+    ['not a URL at all', 'not-a-url'],
+    ['an empty string', ''],
+  ])('refuses to exchange when daemonBaseUrl is %s', async (_label, daemonBaseUrl) => {
+    const { storage } = makeStorage({
+      'whiteboard:pairing-transaction': JSON.stringify({
+        state: 'st-1',
+        codeVerifier: 'verifier',
+        daemonBaseUrl,
+      }),
+    })
+    const fetchFn = vi.fn(async () => Response.json({ token: 'tok' }))
+
+    const result = await consumeGrantFragment({
+      hash: '#wb-grant=the-code&state=st-1',
+      sessionStorage: storage,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+
+    expect(result).toEqual({ status: 'error', detail: 'corrupt pairing transaction' })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('refuses to exchange when the stashed codeVerifier is empty', async () => {
+    const { storage } = makeStorage({
+      'whiteboard:pairing-transaction': JSON.stringify({
+        state: 'st-1',
+        codeVerifier: '',
+        daemonBaseUrl: DAEMON,
+      }),
+    })
+    const fetchFn = vi.fn(async () => Response.json({ token: 'tok' }))
+
+    const result = await consumeGrantFragment({
+      hash: '#wb-grant=the-code&state=st-1',
+      sessionStorage: storage,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+
+    expect(result).toEqual({ status: 'error', detail: 'corrupt pairing transaction' })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
   it('rejects a state mismatch without exchanging anything', async () => {
     const { storage } = makeStorage({
       'whiteboard:pairing-transaction': JSON.stringify({
