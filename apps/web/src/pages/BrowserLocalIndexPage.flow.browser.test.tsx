@@ -78,9 +78,15 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
     // contentDOM identity — not .cm-editor containment — is what real
     // keyboard-event delivery depends on; containment can pass while focus
     // still sits on another in-flight descendant and race the first keys.
-    await waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    // 10s, like the neighbouring waits: this one covers navigation, mount and
+    // autofocus against a real browser, and testing-library's 1s default
+    // expires under CI load with focus still on <body>.
+    await waitFor(
+      () => {
+        expect(document.activeElement).toBe(editable)
+      },
+      { timeout: 10_000 },
+    )
     await userEvent.keyboard('# From the list')
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
