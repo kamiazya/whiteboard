@@ -46,13 +46,15 @@ export type DeleteDocumentInput = z.infer<typeof deleteDocumentInputSchema>
  * document's bytes and knows nothing about where that document sits. This
  * one owns placement and is the only thing that assigns a `canvasId`.
  *
- * **Every mutating operation is atomic against concurrent callers in the same
- * workspace, and each either fully applies or does not apply at all.** Path
- * uniqueness is the entire mechanism enforcing sibling uniqueness here, so an
- * implementation that checks a path and then writes it as two separable steps
- * can satisfy this interface and still produce duplicates, and one that
- * rewrites a subtree without the same guarantee can leave a hierarchy half
- * moved. Neither is observable through the types, which is why it is stated.
+ * **Mutating operations are serialized per workspace, and each takes effect as
+ * one indivisible operation or has no effect at all.** Path uniqueness is the
+ * entire mechanism enforcing sibling uniqueness here, so an implementation
+ * that checks a path and then writes it as two separable steps can satisfy
+ * this interface and still produce duplicates, and one that rewrites a subtree
+ * without the same guarantee can leave a hierarchy half moved. Neither is
+ * observable through the types, which is why it is stated — and stated as
+ * serialization rather than as bare "atomicity", which would leave the
+ * observable ordering to each implementation and make the guarantee untestable.
  */
 export interface DocumentIndex {
   /**
@@ -64,9 +66,16 @@ export interface DocumentIndex {
   createDocument(input: CreateDocumentInput): Promise<DocumentEntry>
   resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null>
   /**
-   * Ordered by path. A hierarchical listing is the point of this index, and
-   * leaving the order to whatever a store's rows happen to come back in would
-   * put a storage detail in front of a user.
+   * Ordered by path, compared SEGMENT BY SEGMENT — not as whole strings.
+   * A hierarchical listing is the point of this index, and leaving the order
+   * to whatever a store's rows come back in would put a storage detail in
+   * front of a user.
+   *
+   * Which comparison is not a detail: `-` (0x2D) sorts before `/` (0x2F), so
+   * comparing whole strings puts `a-b` between `a` and its own child `a/b`
+   * and splits a subtree apart. Segment-wise gives `a`, `a/b`, `a-b`, keeping
+   * every subtree contiguous, which is the only order a tree can be rendered
+   * from without re-sorting.
    */
   listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]>
   /**
@@ -79,6 +88,14 @@ export interface DocumentIndex {
    * even though `c` is free. The move is rejected whole in that case — a
    * partial move would silently merge two hierarchies, and the caller asked
    * to relocate one.
+   *
+   * Also fails when `to` is inside `from`'s own subtree (`a` to `a/b`). The
+   * produced paths do not actually collide there — prefix replacement keeps
+   * distinct suffixes distinct — so this is a deliberate refusal rather than
+   * a consequence of the rule above: the result would be a document nested
+   * under a path derived from itself, which no caller means to ask for, and
+   * whether the subtree's own paths count as "taken" during its own move is
+   * a question better refused than answered.
    */
   moveDocument(input: MoveDocumentInput): Promise<void>
   /**
