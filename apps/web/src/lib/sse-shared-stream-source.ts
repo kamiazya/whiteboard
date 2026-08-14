@@ -78,6 +78,10 @@ export function createSharedSseStreamSource(
       for (const l of set) l.onConnectionChange?.(evt.connected)
       return
     }
+    // The authority replica's own traffic. This source consumes the raw daemon
+    // frames above; the fork-based client that consumes these is a separate
+    // seam, and answering them here would deliver every update twice.
+    if (evt.type === 'snapshot' || evt.type === 'authority-update') return
     for (const l of set) l.onMessage(evt.raw)
   }
   port.start()

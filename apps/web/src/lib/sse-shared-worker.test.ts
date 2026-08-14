@@ -18,6 +18,7 @@
  * worse than none.
  */
 import '@vitest/web-worker'
+import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -314,4 +315,54 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
 
     await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
   })
+})
+
+/**
+ * The worker's replica of a document: the piece that makes tab, worker and
+ * daemon one mechanism instead of three. A tab does not adopt this doc — it
+ * forks, keeping its own peer and therefore its own undo stack, and exchanges
+ * updates with it exactly the way the worker exchanges with the daemon.
+ */
+describe('authority replica', () => {
+  // Single-port only, on purpose. The polyfill builds a fresh worker context
+  // per `new SharedWorker` (see this file's header), so anything about two
+  // ports meeting in one worker would pass or fail here for reasons that say
+  // nothing about a browser. That half lives in the browser test beside it.
+  const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+  const nextMessage = (port: MessagePort, type: string) =>
+    new Promise<Record<string, unknown>>((resolve) => {
+      const onMessage = (e: MessageEvent) => {
+        if ((e.data as { type?: string }).type !== type) return
+        port.removeEventListener('message', onMessage)
+        resolve(e.data as Record<string, unknown>)
+      }
+      port.addEventListener('message', onMessage)
+      port.start()
+    })
+
+  it('answers a document nobody has opened with an empty snapshot, not an error', async () => {
+    const port = connect()
+    const doc = nextDoc()
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    const reply = nextMessage(port, 'snapshot')
+    port.postMessage({ type: 'snapshot-request', doc })
+
+    // Forkable is the property that matters: forking from empty and letting
+    // the daemon fill it in is the same path a first-ever open takes.
+    const forked = new LoroDoc()
+    forked.import(decode((await reply).snapshot as string))
+    expect(forked.getMap('anything').size).toBe(0)
+  })
+
+  // A `push` followed by a snapshot-request is NOT tested here: under the
+  // polyfill the port stops delivering anything at all after a push, while the
+  // same sequence works in a real browser (see the browser test beside this).
+  // Chasing that difference would be debugging the polyfill, not the worker.
+
+  // NOT covered anywhere yet, and worth saying so: that a DAEMON frame lands
+  // in the replica (not only in the relay). jsdom can feed a daemon frame,
+  // through MSW, but cannot observe the replica — every snapshot-request that
+  // follows replica work stops being answered under the polyfill. The browser
+  // test can observe the replica but has no daemon to feed it. Both halves
+  // exist only in an E2E against a real daemon, which is where this belongs.
 })

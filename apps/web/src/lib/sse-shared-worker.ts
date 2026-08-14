@@ -10,9 +10,69 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
-import { SseStreamHub } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
+import { fromBase64, SseStreamHub } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
+
+/**
+ * The worker's own replica of each subscribed document.
+ *
+ * It exists so the consistency question — what has arrived, in what order — is
+ * answered where the daemon stream is read, once, instead of separately in
+ * every tab. A tab forks from this rather than adopting it: Loro scopes undo
+ * to a peer and will not revert another peer's operations, so tabs sharing one
+ * peer would share one undo stack.
+ *
+ * Nothing here interprets the document. The replica merges opaque update bytes
+ * and answers with opaque update bytes, which is why this file needs no
+ * canvas-workspace and stays as light as the stream multiplexer it grew from.
+ */
+/**
+ * Loro is imported DYNAMICALLY, and that is load-bearing rather than a style
+ * choice. It is a WASM module, so a static import makes this whole module's
+ * evaluation asynchronous — and a shared worker's `onconnect` must be
+ * installed synchronously, or a tab that connects while the WASM is still
+ * initialising is simply lost. Making it static broke every existing browser
+ * test in this file at once, which is how cheaply that failure hides: nothing
+ * throws, the port just never answers.
+ *
+ * Replica work is therefore queued behind `loroReady` instead of running
+ * inline. The stream relay above does not wait for it — a tab reading raw
+ * daemon frames keeps working whether or not the replica ever loads.
+ */
+type LoroModule = typeof import('loro-crdt')
+let loro: LoroModule | undefined
+const loroReady: Promise<LoroModule> = import('loro-crdt').then((module) => {
+  loro = module
+  return module
+})
+
+/**
+ * Every replica operation, in arrival order.
+ *
+ * Without this each handler awaited `loroReady` independently and resumed in
+ * whatever order their microtasks happened to settle — a push followed
+ * immediately by a snapshot-request answered from the state BEFORE the push,
+ * which is the one ordering guarantee a client has any right to expect from
+ * something calling itself an authority.
+ */
+let replicaQueue: Promise<unknown> = loroReady
+function queueReplicaWork<T>(work: () => T | Promise<T>): Promise<T> {
+  const next = replicaQueue.then(work, work)
+  replicaQueue = next.catch(() => undefined)
+  return next
+}
+
+const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
+
+function replicaFor(doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {
+  if (loro === undefined) return undefined
+  const existing = replicas.get(doc)
+  if (existing !== undefined) return existing
+  const created = new loro.LoroDoc()
+  replicas.set(doc, created)
+  return created
+}
 
 interface PortState {
   baseUrl: string
@@ -49,6 +109,30 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+function importIntoReplica(doc: string, bytes: Uint8Array): Promise<void> {
+  return queueReplicaWork(() => {
+    // Total by construction: a frame this replica cannot merge (a truncated
+    // update, a future format) must not take the worker down for every tab
+    // and every other document. The daemon remains the source it can re-sync
+    // from.
+    try {
+      replicaFor(doc)?.import(bytes)
+    } catch {
+      return
+    }
+  })
+}
+
+/** To every port subscribed to `doc`, except the one that sent the work. */
+function broadcastAuthorityUpdate(doc: string, update: Uint8Array, from: MessagePort): void {
+  const encoded = toBase64(update)
+  for (const [target, state] of ports) {
+    if (target === from) continue
+    if (!state.subscriptions.has(doc)) continue
+    target.postMessage({ type: 'authority-update', doc, update: encoded })
+  }
+}
+
 function handle(port: MessagePort, raw: unknown): void {
   const parsed = sseWorkerRequestSchema.safeParse(raw)
   if (!parsed.success) return
@@ -81,10 +165,46 @@ function handle(port: MessagePort, raw: unknown): void {
     return
   }
 
+  if (msg.type === 'snapshot-request') {
+    void queueReplicaWork(() => {
+      // An empty snapshot for a document nobody has opened yet is the right
+      // answer, not an error: forking from empty and letting the daemon fill
+      // it in is the same path a first-ever open already takes.
+      const snapshot = replicaFor(msg.doc)?.export({ mode: 'snapshot' })
+      if (snapshot === undefined) return
+      port.postMessage({ type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
+    })
+    return
+  }
+
+  if (msg.type === 'push') {
+    void queueReplicaWork(() => {
+      const replica = replicaFor(msg.doc)
+      if (replica === undefined) return
+      const before = replica.version()
+      try {
+        replica.import(fromBase64(msg.update))
+      } catch {
+        return
+      }
+      // Only what the replica did not already have travels onward, so a tab
+      // re-pushing work another tab already delivered costs one import and no
+      // broadcast. Loro merges are idempotent, but a broadcast is not free.
+      const merged = replica.export({ mode: 'update', from: before })
+      if (merged.byteLength === 0) return
+      broadcastAuthorityUpdate(msg.doc, merged, port)
+    })
+    return
+  }
+
   if (msg.type === 'subscribe') {
     if (state.subscriptions.has(msg.doc)) return
     const off = hub.subscribe(msg.doc, {
       onUpdate: (bytes) => {
+        // Into the replica first, then relayed verbatim. Both, for now: the
+        // raw frame is what today's clients consume, and the replica is what
+        // forks will. One of the two goes away once every client has moved.
+        void importIntoReplica(msg.doc, bytes)
         port.postMessage({ type: 'update', doc: msg.doc, update: toBase64(bytes) })
       },
       onMessage: (text) => {

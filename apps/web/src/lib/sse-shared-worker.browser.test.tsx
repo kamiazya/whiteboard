@@ -14,12 +14,14 @@
  * three via Playwright), so a failure here means this app's chunk, not the
  * browser.
  *
- * Cross-tab SHARING is still not asserted, and deliberately: the worker
- * exposes no observable that distinguishes "one worker, two ports" from "two
- * workers" without adding a test-only seam to production — which is the exact
- * trade this file's jsdom sibling already refuses to make.
+ * Cross-port fan-out IS asserted here, and can only be asserted here: the
+ * jsdom polyfill builds a fresh worker context per construction, so two ports
+ * there are two workers. The authority replica gave the worker its first
+ * observable that separates the two — a push through one port reaching
+ * another — so the gap that sibling documents closes at this layer.
  */
-import { expect, it } from 'vitest'
+import { LoroDoc } from 'loro-crdt'
+import { expect, it, vi } from 'vitest'
 import { sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 it('loads as a module shared worker and answers a subscribe', async () => {
@@ -57,4 +59,89 @@ it('loads as a module shared worker and answers a subscribe', async () => {
   expect(parsed.success).toBe(true)
   if (!parsed.success) return
   expect(parsed.data.type).toBe('status')
+}, 30_000)
+
+const b64 = (bytes: Uint8Array) => {
+  let out = ''
+  for (const byte of bytes) out += String.fromCharCode(byte)
+  return btoa(out)
+}
+const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+
+const openPort = (name: string) => {
+  const worker = new SharedWorker(new URL('./sse-shared-worker.js', import.meta.url), {
+    type: 'module',
+    name,
+  })
+  worker.port.start()
+  return worker.port
+}
+
+it('carries one port push to another port of the same worker', async () => {
+  // Two constructions, one worker — the property the polyfill cannot express,
+  // and the whole basis for a replica that several tabs share.
+  const NAME = 'whiteboard-sse-fanout-test'
+  const a = openPort(NAME)
+  const b = openPort(NAME)
+  const doc = `w/fanout-${Date.now()}`
+
+  for (const port of [a, b]) {
+    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+    port.postMessage({ type: 'subscribe', doc })
+  }
+
+  const echoedToSender = vi.fn()
+  a.addEventListener('message', (e: MessageEvent) => {
+    if ((e.data as { type?: string }).type === 'authority-update') echoedToSender()
+  })
+  const arrived = new Promise<string>((resolve, reject) => {
+    b.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; update?: string }
+      if (data.type === 'authority-update' && data.update !== undefined) resolve(data.update)
+    })
+    setTimeout(() => reject(new Error('no authority-update reached the second port')), 10_000)
+  })
+
+  const tab = new LoroDoc()
+  tab.getMap('m').set('k', 'from-port-a')
+  tab.commit()
+  a.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+  const forked = new LoroDoc()
+  forked.import(decode(await arrived))
+  expect(forked.getMap('m').get('k')).toBe('from-port-a')
+  // Echoing to the sender would make every edit a round trip through the tab
+  // that made it, which is the cost the fork model exists to avoid.
+  expect(echoedToSender).not.toHaveBeenCalled()
+}, 30_000)
+
+it('hands a later tab a snapshot that already contains an earlier push', async () => {
+  // The round trip a replica exists to remove: without it this snapshot would
+  // be empty until the daemon echoed the work back.
+  const NAME = 'whiteboard-sse-snapshot-test'
+  const port = openPort(NAME)
+  const doc = `w/snapshot-${Date.now()}`
+  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  port.postMessage({ type: 'subscribe', doc })
+
+  const tab = new LoroDoc()
+  tab.getMap('m').set('k', 'already-there')
+  tab.commit()
+  port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+  const snapshot = await new Promise<string>((resolve, reject) => {
+    port.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; snapshot?: string }
+      if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
+    })
+    // Queued behind the push, which is the ordering the worker serialises its
+    // replica work to guarantee — a snapshot answered from before the push
+    // would be an authority that contradicts what it was just told.
+    port.postMessage({ type: 'snapshot-request', doc })
+    setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
+  })
+
+  const forked = new LoroDoc()
+  forked.import(decode(snapshot))
+  expect(forked.getMap('m').get('k')).toBe('already-there')
 }, 30_000)
