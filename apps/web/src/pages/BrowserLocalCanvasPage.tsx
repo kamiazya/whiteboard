@@ -688,6 +688,7 @@ export function BrowserLocalCanvasPage({
                   autoFocus
                   className="h-full"
                   theme={resolvedTheme}
+                  meta={markdownDoc.coreMeta}
                 />
               </div>
             </div>

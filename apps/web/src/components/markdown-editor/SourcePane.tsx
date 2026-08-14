@@ -2,10 +2,10 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
-import { useEffect, useRef } from 'react'
+import { type RefObject, useEffect, useRef } from 'react'
 import { minimalChange } from './minimal-change.js'
 
 // Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
@@ -65,12 +65,26 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.processingInstruction, class: 'cm-md-marker' },
 ])
 
+/**
+ * Imperative surface the toolbar drives. Kept to commands that need the
+ * live `EditorView` (selection, focus) — everything else flows through the
+ * controlled `value`/`onChange` pair.
+ */
+export interface SourcePaneApi {
+  wrapSelection: (delimiter: string) => void
+  focus: () => void
+}
+
 export interface SourcePaneProps {
   value: string
   onChange: (next: string) => void
   className?: string
   /** Focus the editor as soon as it mounts (fresh-note flows). */
   autoFocus?: boolean
+  /** Shown while the document is empty. */
+  placeholderText?: string
+  /** Receives the imperative API while the view is mounted, null after. */
+  apiRef?: RefObject<SourcePaneApi | null>
 }
 
 /**
@@ -79,7 +93,14 @@ export interface SourcePaneProps {
  * kitchen sink (line numbers, search panel, etc.): this is an editing
  * surface for a markdown canvas, not a general-purpose IDE.
  */
-export function SourcePane({ value, onChange, className, autoFocus = false }: SourcePaneProps) {
+export function SourcePane({
+  value,
+  onChange,
+  className,
+  autoFocus = false,
+  placeholderText,
+  apiRef,
+}: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   // Always holds the latest onChange without forcing the effect below to
@@ -117,12 +138,28 @@ export function SourcePane({ value, onChange, className, autoFocus = false }: So
         // Prose, not code: long paragraphs soft-wrap instead of growing a
         // horizontal scrollbar.
         EditorView.lineWrapping,
+        ...(placeholderText !== undefined ? [placeholder(placeholderText)] : []),
         // Fill the host pane instead of sizing to content: without a
         // bounded height the scroller never scrolls and the pane collapses
         // to its padding inside a flex row.
+        //
+        // Prose, so the writing surface reads like the app, not a terminal:
+        // the scroller inherits the app font (CodeMirror's default is
+        // monospace) — which is also what makes index.css's `.cm-md-code`
+        // mono rule meaningful — and the content is a centered, bounded
+        // column (~70ch) like every serious writing surface, instead of
+        // lines that stretch across a widescreen pane.
         EditorView.theme({
-          '&': { height: '100%', width: '100%' },
-          '.cm-scroller': { overflow: 'auto' },
+          '&': { height: '100%', width: '100%', fontSize: '15px' },
+          '&.cm-focused': { outline: 'none' },
+          '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.7' },
+          '.cm-content': {
+            maxWidth: '70ch',
+            margin: '0 auto',
+            padding: '24px 0 120px',
+            caretColor: 'var(--foreground)',
+          },
+          '.cm-line': { padding: '0 24px' },
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -133,11 +170,21 @@ export function SourcePane({ value, onChange, className, autoFocus = false }: So
     })
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
+    if (apiRef) {
+      apiRef.current = {
+        wrapSelection: (delimiter) => {
+          wrapSelectionWith(delimiter)({ state: view.state, dispatch: view.dispatch })
+          view.focus()
+        },
+        focus: () => view.focus(),
+      }
+    }
     if (autoFocus) view.focus()
 
     return () => {
       view.destroy()
       viewRef.current = null
+      if (apiRef) apiRef.current = null
     }
     // Intentionally created once per mount — external `value` changes are
     // reconciled below, not by recreating the view.
