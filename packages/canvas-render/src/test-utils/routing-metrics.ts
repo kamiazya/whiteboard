@@ -153,3 +153,21 @@ export function crossings(paths: readonly (readonly MetricPoint[])[]): number {
   }
   return count
 }
+
+/**
+ * The arrowhead is drawn ON the final segment and is `ARROW_LENGTH` long, so
+ * a shorter final segment paints an arrow with no line under it — it reads as
+ * a marker stuck to the box rather than an edge arriving at it. Reported as a
+ * length so a caller can decide its own floor.
+ */
+export function finalSegmentLength(path: readonly MetricPoint[]): number {
+  const end = path[path.length - 1]
+  const before = path[path.length - 2]
+  return end === undefined || before === undefined ? 0 : segmentLength(before, end)
+}
+
+/** Total drawn length. Zero means the edge is INVISIBLE — nothing is painted
+ * and no arrowhead can be oriented, so a reader cannot tell the edge exists. */
+export function drawnLength(path: readonly MetricPoint[]): number {
+  return pathLength(path)
+}

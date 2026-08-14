@@ -57,8 +57,12 @@ describe('coincident anchors', () => {
     // drew must not disappear because the pair the ranking preferred happens
     // to be degenerate.
     const routed = routeWith({ id: 'e', fromNode: 'n0', toNode: 'n1' })
-    expect({ from: routed.fromSide, to: routed.toSide }).toEqual({ from: 'left', to: 'left' })
-    expect(routed.path.map((p) => `${p.x},${p.y}`)).toEqual(['17,20', '-3,20', '-3,60', '0,60'])
+    expect({ from: routed.fromSide, to: routed.toSide }).toEqual({ from: 'right', to: 'right' })
+    expect(routed.path.map((p) => `${p.x},${p.y}`)).toEqual(['77,20', '97,20', '97,60', '60,60'])
+    // The arrowhead is 10px and is drawn ON the final segment; the left-side
+    // route this replaced arrived with 3px of line under a 10px arrow.
+    const [beforeTail, tail] = routed.path.slice(-2)
+    expect(Math.hypot(tail!.x - beforeTail!.x, tail!.y - beforeTail!.y)).toBeGreaterThanOrEqual(10)
   })
 
   it('leaves no ink inside either box', () => {

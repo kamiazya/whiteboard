@@ -931,7 +931,12 @@ function anchorsWithoutCoincidentEnds(
     // target, and "first clean one" alone accepted a four-bend loop around
     // both boxes when a short hop up the shared side was available. Clean is
     // the requirement; shortest-and-straightest picks among the clean.
-    let best: { pair: SidePair; bends: number; length: number } | undefined
+    // Three tiers, because they are not equally important and treating them
+    // as one filter made an edge vanish: a candidate that is clean AND has
+    // runway is best, a clean one without runway still beats an ugly one, and
+    // ANY visible route beats the collided pair. Visibility is the
+    // requirement; the rest is preference.
+    let best: { pair: SidePair; tier: number; bends: number; length: number } | undefined
     for (const pair of candidates) {
       const sided: SidePair = {
         fromSide: edge.fromSide ?? pair.fromSide,
@@ -942,12 +947,28 @@ function anchorsWithoutCoincidentEnds(
       const trialAnchors = computeAnchorsFor(nodes, edges, trial, align, pins)
       if (coincides(trialAnchors, edge.id)) continue
       const { path } = routeEdge(nodes, edge, style, trialAnchors.get(edge.id))
-      if (interiorInkThrough(path, [fromRect, toRect]) > 0) continue
-      const scored = { pair: sided, bends: bendCount(path), length: pathLength(path) }
+      // The arrowhead is drawn ON the final segment; a shorter one paints an
+      // arrow with no line under it. Re-siding is choosing this route from
+      // scratch, so it can decline the ones that arrive with no runway.
+      const tail = path[path.length - 1]
+      const beforeTail = path[path.length - 2]
+      const runway =
+        tail === undefined || beforeTail === undefined
+          ? 0
+          : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
+      const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
+      const scored = {
+        pair: sided,
+        tier: clean && runway >= ARROW_RUNWAY_PX ? 0 : clean ? 1 : 2,
+        bends: bendCount(path),
+        length: pathLength(path),
+      }
       if (
         best === undefined ||
-        scored.bends < best.bends ||
-        (scored.bends === best.bends && scored.length < best.length)
+        scored.tier < best.tier ||
+        (scored.tier === best.tier &&
+          (scored.bends < best.bends ||
+            (scored.bends === best.bends && scored.length < best.length)))
       ) {
         best = scored
       }
@@ -1000,6 +1021,10 @@ export function assignEdgeAnchors(
   }
   return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
 }
+
+/** An arrowhead's own length: a final segment shorter than this paints an
+ * arrow with no line under it (see edge-arrows.ts's ARROW_LENGTH). */
+const ARROW_RUNWAY_PX = 10
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
