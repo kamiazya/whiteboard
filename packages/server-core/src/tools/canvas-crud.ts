@@ -63,7 +63,7 @@ export async function wbCanvasCreate(
   }
 
   const canvasId = generateCanvasId()
-  tree.createNode(canvasId, input.segment, parentId)
+  tree.createNode(canvasId, input.segment, parentId, undefined, input.name)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
 
   // Persist the document, not only its place in the tree. Creation used to
@@ -84,7 +84,12 @@ export async function wbCanvasGet(
   const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
   const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
   const alias = tree.resolveAlias(node.id)
-  return { canvasId: node.canvasId, segment: node.segment, alias: alias ?? node.segment }
+  return {
+    canvasId: node.canvasId,
+    segment: node.segment,
+    alias: alias ?? node.segment,
+    ...(node.displayName === undefined ? {} : { name: node.displayName }),
+  }
 }
 
 export async function wbCanvasList(
@@ -103,6 +108,7 @@ export async function wbCanvasList(
       canvasId: node.canvasId,
       segment: node.segment,
       alias: tree.resolveAlias(node.id) ?? node.segment,
+      ...(node.displayName === undefined ? {} : { name: node.displayName }),
     })),
   }
 }

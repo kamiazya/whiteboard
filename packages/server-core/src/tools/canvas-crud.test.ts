@@ -300,3 +300,73 @@ async function loadTreeForAssertions(deps: ServerDeps) {
   const { loadWorkspaceTree } = await import('./workspace-tree-io.js')
   return loadWorkspaceTree(deps.canvasDocStore, 'ws-1')
 }
+
+describe('document name', () => {
+  // ADR-0009: the name lives in the workspace, not in the document's content.
+  // Until this, creation took a `segment` only — a slug — so a document had
+  // no name of its own and every reader fell back to showing the slug.
+  it('creation accepts a name and the listing returns it', async () => {
+    const deps = makeDeps()
+    const { canvasId } = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      segment: 'release-plan',
+      kind: 'markdown',
+      createWorkspace: true,
+      name: 'リリース計画 2026',
+    })
+
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+
+    expect(canvases).toEqual([
+      { canvasId, segment: 'release-plan', alias: 'release-plan', name: 'リリース計画 2026' },
+    ])
+  })
+
+  it('omits the name entirely when none was given, rather than echoing the segment', async () => {
+    // A reader that wants a fallback can choose one; a listing that invents
+    // `name: 'release-plan'` takes that choice away and reads as if someone
+    // typed the slug as the title.
+    const deps = makeDeps()
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      segment: 'release-plan',
+      kind: 'markdown',
+      createWorkspace: true,
+    })
+
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+
+    expect(canvases[0]).not.toHaveProperty('name')
+  })
+
+  it('a name is free text, not a second segment', async () => {
+    const deps = makeDeps()
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      segment: 'plan',
+      kind: 'markdown',
+      createWorkspace: true,
+      name: 'Release plan 2026 / v2 (draft)',
+    })
+
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+
+    expect(canvases[0]?.name).toBe('Release plan 2026 / v2 (draft)')
+    expect(canvases[0]?.segment).toBe('plan')
+  })
+
+  it('wbCanvasGet returns the name too', async () => {
+    const deps = makeDeps()
+    const { canvasId } = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      segment: 'doc',
+      kind: 'markdown',
+      createWorkspace: true,
+      name: 'Doc one',
+    })
+
+    await expect(wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId })).resolves.toMatchObject({
+      name: 'Doc one',
+    })
+  })
+})
