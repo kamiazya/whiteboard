@@ -172,6 +172,7 @@ import {
   ToolPalette,
 } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
+import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
   fitViewportToBoxes,
@@ -659,14 +660,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }),
       [resolveFileLabel, resolveFileCanvas, expandFileNode, resolveFileImage, resolveFileFacets],
     )
-    const { svg, bounds, scene } = useMemo(
-      () =>
-        renderCanvasToSvg(canvas, {
-          measure: resolvedMeasure,
-          theme,
-          ...fileSeamOptions,
-        }),
-      [canvas, resolvedMeasure, theme, fileSeamOptions],
+    // The COMMITTED scene, laid out in a worker when it can be. The drag
+    // layers below keep their own synchronous paths: a gesture already has a
+    // fast route through carried-side caching, and a round trip per frame
+    // would be the wrong trade there. This is the path that blocks on every
+    // node added and every drag dropped.
+    const { svg, bounds, scene } = useWorkerScene(
+      canvas,
+      { measure: resolvedMeasure, theme },
+      fileSeamOptions,
+      fileRefOptions,
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a

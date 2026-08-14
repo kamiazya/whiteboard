@@ -6,20 +6,17 @@
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type {
-  BoundingBox,
-  FacetCardData,
-  MeasureText,
-  Scene,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { FacetCardData, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
-  renderSceneToSvg,
   SPATIAL_THEME_GEOMETRY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
+import { type RenderedCanvas, renderCanvasToSvgWith } from './scene-render-core.js'
+
+export type { RenderedCanvas } from './scene-render-core.js'
 
 export interface RenderCanvasOptions {
   readonly measure: MeasureText
@@ -37,12 +34,6 @@ export interface RenderCanvasOptions {
   ) => { readonly href: string; readonly alt?: string } | undefined
   /** Passed through to layout: the referenced document's facets as card content. */
   readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
-}
-
-export interface RenderedCanvas {
-  readonly svg: string
-  readonly bounds: BoundingBox
-  readonly scene: Scene
 }
 
 /**
@@ -70,21 +61,5 @@ export function renderCanvasToSvg(
   canvas: SpatialCanvas,
   options: RenderCanvasOptions,
 ): RenderedCanvas {
-  const scene = layoutSpatialCanvas(canvas, {
-    measure: options.measure,
-    parseBody: parseMarkdownBody,
-    appearance: createEditorAppearance(options.theme ?? 'light'),
-    resolveFileLabel: options.resolveFileLabel,
-    resolveFileCanvas: options.resolveFileCanvas,
-    expandFileNode: options.expandFileNode,
-    resolveFileImage: options.resolveFileImage,
-    resolveFileFacets: options.resolveFileFacets,
-  })
-  const bounds = sceneBounds(scene)
-  const svg = renderSceneToSvg(scene, {
-    width: bounds.w,
-    height: bounds.h,
-    viewBox: bounds,
-  })
-  return { svg, bounds, scene }
+  return renderCanvasToSvgWith(canvas, { ...options, parseBody: parseMarkdownBody })
 }

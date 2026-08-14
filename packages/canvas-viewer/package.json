@@ -16,6 +16,10 @@
       "types": "./src/font-loading.ts",
       "import": "./src/font-loading.ts"
     },
+    "./measure-text": {
+      "types": "./src/measure-text.ts",
+      "import": "./src/measure-text.ts"
+    },
     "./scene": {
       "types": "./src/scene.ts",
       "import": "./src/scene.ts"

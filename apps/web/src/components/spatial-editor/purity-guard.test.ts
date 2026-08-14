@@ -83,9 +83,25 @@ describe('file seams reach every render path', () => {
     // is silent: content that renders committed and vanishes mid-gesture.
     const source = modules['./SpatialEditor.tsx'] as string
     expect(source.match(/const fileSeamOptions = useMemo\(/g) ?? []).toHaveLength(1)
-    const renderCalls = (source.match(/renderCanvasToSvg\(/g) ?? []).length
-    const spreads = (source.match(/\.\.\.fileSeamOptions/g) ?? []).length
-    expect(spreads).toBe(renderCalls)
+    // Two entry points build scenes now, not one: the committed path goes
+    // through `useWorkerScene` (which lays out in a worker and falls back to
+    // `renderCanvasToSvg` itself), while the gesture overlays still call the
+    // synchronous builder directly. Counting only one of them would let a
+    // seam go missing from the other — which is the whole failure this pins.
+    // Stated as the property rather than a count: every call that builds a
+    // scene must receive the SHARED seam object. It is spread into an options
+    // literal at the synchronous call sites and passed whole at the worker
+    // one (that hook memoizes on its identity, so spreading there would
+    // rebuild the options every render and defeat it) — counting one spelling
+    // would miss the other, and counting both matched dependency arrays too.
+    const callsWithoutSeams = [...source.matchAll(/renderCanvasToSvg\(|useWorkerScene\(/g)]
+      .map((match) => ({
+        at: match.index ?? 0,
+        window: source.slice(match.index ?? 0, (match.index ?? 0) + 300),
+      }))
+      .filter((call) => !call.window.includes('fileSeamOptions'))
+      .map((call) => source.slice(call.at, call.at + 60))
+    expect(callsWithoutSeams, 'scene-building calls not given the shared seam object').toEqual([])
     // A seam named at a call site instead of inside the shared object is the
     // regression this pins.
     expect(source).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveFileCanvas,/)

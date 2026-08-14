@@ -34,22 +34,42 @@ function notifyReady(): void {
   for (const callback of readySubscribers) callback()
 }
 
+/**
+ * The document's face set on a window, the worker global's on a worker.
+ *
+ * A worker has no `document`, and checking for one is how this module used to
+ * decide it was not in a browser at all — which is right up until layout runs
+ * off the main thread, where returning 'degraded' means the worker measures
+ * with fallback metrics while the window measures with the real face. Two
+ * different scenes for the same canvas is worse than a slow one, and it is
+ * the same divergence class font.ts's doc comment exists to prevent.
+ *
+ * `document` is checked first because a window has both: `document.fonts` is
+ * the one that governs what a `HTMLCanvasElement` 2D context measures.
+ */
+function resolveFontFaceSet(): FontFaceSet | undefined {
+  if (typeof document !== 'undefined' && document.fonts !== undefined) return document.fonts
+  return (globalThis as { fonts?: FontFaceSet }).fonts
+}
+
+/** Whether this realm can register the vendored face at all. */
+export function canLoadViewerFont(): boolean {
+  return typeof FontFace !== 'undefined' && resolveFontFaceSet() !== undefined
+}
+
 async function loadViewerFont(generation: number): Promise<ViewerFontStatus> {
-  // Totality: an environment with no FontFace constructor or no
-  // document.fonts (a non-browser test runner, or a browser lacking the
-  // API) degrades instead of throwing — the caller always gets a value.
-  if (
-    typeof FontFace === 'undefined' ||
-    typeof document === 'undefined' ||
-    document.fonts === undefined
-  ) {
+  // Totality: an environment with no FontFace constructor and no face set (a
+  // non-browser test runner, or a browser lacking the API) degrades instead
+  // of throwing — the caller always gets a value.
+  const faceSet = resolveFontFaceSet()
+  if (typeof FontFace === 'undefined' || faceSet === undefined) {
     return 'degraded'
   }
 
   let face: FontFace
   try {
     face = new FontFace(VIEWER_FONT_FAMILY, `url(${robotoFontUrl})`)
-    document.fonts.add(face)
+    faceSet.add(face)
   } catch {
     return 'degraded'
   }
