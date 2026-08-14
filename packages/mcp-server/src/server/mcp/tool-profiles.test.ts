@@ -7,6 +7,7 @@ import { TOOL_PROFILES } from './tool-profiles.js'
 // client a misleading approval-policy hint for a tool that no longer exists.
 const ACTIVE_TOOL_NAMES = [
   'wb_facet_set',
+  'wb_node_add',
   'wb_node_lock',
   'wb_node_patch',
   'wb_edge_lock',
