@@ -45,6 +45,12 @@ export function describeDocumentIndexConformance(
       await expect(
         index.createDocument({ workspaceId: 'never-created', path: 'plan', kind: 'spatial' }),
       ).rejects.toThrow(WorkspaceNotFoundError)
+      // A second attempt, because refusing is not the same as not creating:
+      // an implementation can materialize the workspace as a side effect and
+      // still throw, and then only the SECOND call reveals it by succeeding.
+      await expect(
+        index.createDocument({ workspaceId: 'never-created', path: 'plan-2', kind: 'spatial' }),
+      ).rejects.toThrow(WorkspaceNotFoundError)
     })
   })
 
