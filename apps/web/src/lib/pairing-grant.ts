@@ -18,6 +18,8 @@
  */
 
 import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { z } from 'zod'
+import { bareOriginSchema } from '../runtime-config.js'
 import {
   createChallengeNonce,
   getPinnedIdentity,
@@ -28,6 +30,18 @@ import {
 
 const TRANSACTION_KEY = 'whiteboard:pairing-transaction'
 const GRANT_FRAGMENT_PREFIX = '#wb-grant='
+
+// The stash survives a top-level navigation and is same-origin writable, so it
+// re-enters this module as untrusted input however it left. `daemonBaseUrl` is
+// the load-bearing field: the exchange POSTs the PKCE verifier and the
+// single-use code to it, so it reuses runtime-config's bareOriginSchema rather
+// than a looser string check — a value with a path, query or credentials is not
+// an origin this app ever wrote, and must not be one it redeems against.
+const pairingTransactionSchema = z.object({
+  state: z.string().min(1),
+  codeVerifier: z.string().min(1),
+  daemonBaseUrl: bareOriginSchema,
+})
 
 interface StorageLike {
   getItem(key: string): string | null
@@ -125,19 +139,17 @@ export async function consumeGrantFragment({
   if (rawTransaction === null) {
     return { status: 'error', detail: 'no pairing transaction in progress' }
   }
-  let transaction: { state?: unknown; codeVerifier?: unknown; daemonBaseUrl?: unknown }
+  let parsedTransaction: unknown
   try {
-    transaction = JSON.parse(rawTransaction)
+    parsedTransaction = JSON.parse(rawTransaction)
   } catch {
     return { status: 'error', detail: 'corrupt pairing transaction' }
   }
-  if (
-    typeof transaction.state !== 'string' ||
-    typeof transaction.codeVerifier !== 'string' ||
-    typeof transaction.daemonBaseUrl !== 'string'
-  ) {
+  const validated = pairingTransactionSchema.safeParse(parsedTransaction)
+  if (!validated.success) {
     return { status: 'error', detail: 'corrupt pairing transaction' }
   }
+  const transaction = validated.data
   if (fragment.state !== transaction.state) {
     return { status: 'error', detail: 'pairing state mismatch' }
   }
