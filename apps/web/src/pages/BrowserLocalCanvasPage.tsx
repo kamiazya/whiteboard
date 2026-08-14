@@ -595,6 +595,10 @@ export function BrowserLocalCanvasPage({
     ) : (
       <CanvasProperties
         inline
+        // A facet is OKF frontmatter and this branch is the SPATIAL canvas,
+        // which has none to hold one (ADR-0009 decision 3) — wb_facet_set
+        // refuses to write them here, so the editor does not offer them.
+        showFacets={false}
         key={canvasId ?? 'no-canvas'}
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}

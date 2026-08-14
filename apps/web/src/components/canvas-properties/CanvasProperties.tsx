@@ -13,6 +13,18 @@ export interface CanvasPropertiesProps {
    */
   inline?: boolean
   readonly meta: CanvasCoreMeta
+  /**
+   * Whether this document can hold facets at all. A facet is OKF frontmatter
+   * (ADR-0009 decision 3) and a JSON Canvas document has none, so a spatial
+   * canvas passes `false` and gets no disclosure — the server refuses to
+   * write facets there, and offering the editor would make the same claim
+   * in the UI that the server just stopped honouring.
+   *
+   * The title is unaffected: it is the document's NAME, a workspace concern
+   * (decision 2), which this editor still keeps in core meta for
+   * browser-local canvases.
+   */
+  readonly showFacets?: boolean
   readonly onChange: (next: CanvasCoreMeta) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
@@ -59,6 +71,7 @@ const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'
  */
 export function CanvasProperties({
   inline = false,
+  showFacets = true,
   meta,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
@@ -127,28 +140,30 @@ export function CanvasProperties({
             inline ? 'text-sm' : 'text-base'
           }`}
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setOpen((current) => !current)}
-              aria-label="Properties"
-              aria-expanded={open}
-              aria-controls={`${suggestionsId}-disclosure`}
-              className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
-            >
-              <Info aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Properties</TooltipContent>
-        </Tooltip>
+        {showFacets && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setOpen((current) => !current)}
+                aria-label="Properties"
+                aria-expanded={open}
+                aria-controls={`${suggestionsId}-disclosure`}
+                className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
+              >
+                <Info aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Properties</TooltipContent>
+          </Tooltip>
+        )}
         {settings}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}
       </div>
 
-      {open && (
+      {showFacets && open && (
         <div
           id={`${suggestionsId}-disclosure`}
           className={
