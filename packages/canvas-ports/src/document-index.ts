@@ -76,6 +76,13 @@ export interface DocumentIndex {
    * and splits a subtree apart. Segment-wise gives `a`, `a/b`, `a-b`, keeping
    * every subtree contiguous, which is the only order a tree can be rendered
    * from without re-sorting.
+   *
+   * Segment-wise alone still leaves two choices, so both are fixed here:
+   * segments compare by Unicode code point (`a/10` before `a/2`, since `1`
+   * precedes `2` — NOT natural/numeric collation, which would reorder them
+   * and is locale-shaped), and a path sorts before every path it prefixes
+   * (`x` before `x/y`). Descendants-first would also keep subtrees
+   * contiguous, so it has to be ruled out rather than left to the example.
    */
   listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]>
   /**
@@ -92,10 +99,16 @@ export interface DocumentIndex {
    * Also fails when `to` is inside `from`'s own subtree (`a` to `a/b`). The
    * produced paths do not actually collide there — prefix replacement keeps
    * distinct suffixes distinct — so this is a deliberate refusal rather than
-   * a consequence of the rule above: the result would be a document nested
-   * under a path derived from itself, which no caller means to ask for, and
-   * whether the subtree's own paths count as "taken" during its own move is
-   * a question better refused than answered.
+   * a consequence of the rule above: without it, whether the moving subtree's
+   * own paths count as "taken" during its own move is left to each
+   * implementation, and two of them would disagree observably.
+   *
+   * This is a real limitation, not a meaningless case being tidied away:
+   * `a` to `a/archive` is a coherent "wrap this subtree in a new level"
+   * reorganisation. It is refused because the exemption rule that would
+   * permit it is intricate and nothing needs it yet. A restructuring flow
+   * that wants it should get its own operation rather than an exception
+   * carved into this one.
    */
   moveDocument(input: MoveDocumentInput): Promise<void>
   /**
