@@ -1015,6 +1015,117 @@ function anchorsWithoutCoincidentEnds(
   return computeAnchorsFor(nodes, edges, repaired, align, pins)
 }
 
+/**
+ * Side choices for a canvas of ANY size: `optimizeSideChoices` directly when
+ * the edge set fits its gate, otherwise the same search run over spatial
+ * REGIONS of the canvas.
+ *
+ * Past `CROSSING_OPT_MAX_EDGES` the search used to be skipped wholesale, and
+ * "skipped" is not a small loss — measured on a 345-edge clustered canvas, one
+ * avoidable-ink violation per edge, against 29 across the entire small corpus.
+ * A canvas that big is exactly what an AI-authored document grows into, so the
+ * size where quality stops mattering is not the size where it stops being
+ * affordable.
+ *
+ * Regions work because interaction is local: on a canvas with any locality at
+ * all, 4-5% of edge pairs survive a bounding-box test (55% on the deliberately
+ * pathological stride canvas the bench also carries). Two edges in
+ * well-separated regions were never going to be scored against each other
+ * anyway, so optimizing region by region gives up little and costs
+ * `regions * cost(regionSize)` instead of `cost(E)` — linear in the canvas
+ * rather than super-linear.
+ *
+ * What it gives up, stated plainly: a crossing between edges assigned to two
+ * different regions is never priced. Edges are grouped along a Morton curve
+ * through their midpoints, so neighbours in space are neighbours in the
+ * ordering and a split falls between clusters far more often than through one,
+ * but nothing guarantees that.
+ */
+function optimizeAcrossRegions(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle,
+  initial: ReadonlyMap<string, SidePair>,
+  locked?: ReadonlySet<string>,
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+): ReadonlyMap<string, SidePair> {
+  const bothRuns = (
+    regionEdges: readonly CanvasEdge[],
+    seed: ReadonlyMap<string, SidePair>,
+  ): ReadonlyMap<string, SidePair> => {
+    const unaligned = optimizeSideChoices(nodes, regionEdges, style, seed, locked)
+    return optimizeSideChoices(nodes, regionEdges, style, unaligned, locked, true, pins)
+  }
+
+  if (edges.length <= CROSSING_OPT_MAX_EDGES) return bothRuns(edges, initial)
+
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const midpoints = edges.map((edge) => {
+    const from = byId.get(edge.fromNode)
+    const to = byId.get(edge.toNode)
+    if (from === undefined || to === undefined) return { x: 0, y: 0 }
+    const a = centerOf(rectOf(from))
+    const b = centerOf(rectOf(to))
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  })
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const m of midpoints) {
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue
+    minX = Math.min(minX, m.x)
+    minY = Math.min(minY, m.y)
+    maxX = Math.max(maxX, m.x)
+    maxY = Math.max(maxY, m.y)
+  }
+  // A degenerate extent (every midpoint on one point, or none finite) leaves
+  // every key 0; the sort then falls back to document order, which is still
+  // a total, deterministic grouping.
+  const spanX = Number.isFinite(minX) ? Math.max(maxX - minX, 1) : 1
+  const spanY = Number.isFinite(minY) ? Math.max(maxY - minY, 1) : 1
+  const originX = Number.isFinite(minX) ? minX : 0
+  const originY = Number.isFinite(minY) ? minY : 0
+  const GRID = 1024
+  const interleave = (v: number) => {
+    // Spread 10 bits so x and y can be woven into one 20-bit key.
+    let x = v & 0x3ff
+    x = (x | (x << 16)) & 0x030000ff
+    x = (x | (x << 8)) & 0x0300f00f
+    x = (x | (x << 4)) & 0x030c30c3
+    x = (x | (x << 2)) & 0x09249249
+    return x
+  }
+  const mortonOf = (m: Point) => {
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return 0
+    const gx = Math.min(GRID - 1, Math.max(0, Math.floor(((m.x - originX) / spanX) * (GRID - 1))))
+    const gy = Math.min(GRID - 1, Math.max(0, Math.floor(((m.y - originY) / spanY) * (GRID - 1))))
+    return interleave(gx) | (interleave(gy) << 1)
+  }
+  const ordered = edges
+    .map((edge, i) => ({ edge, i, key: mortonOf(midpoints[i] as Point) }))
+    // Document order breaks key ties, so the grouping is a total function of
+    // the canvas — two layouts of the same canvas never split it differently.
+    .sort((a, b) => a.key - b.key || a.i - b.i)
+
+  // Even-sized regions rather than cap-sized ones: cost grows super-linearly
+  // inside a region, so two regions of 173 beat one of 200 plus one of 145.
+  const regionCount = Math.ceil(edges.length / CROSSING_OPT_MAX_EDGES)
+  const regionSize = Math.ceil(edges.length / regionCount)
+  const settled = new Map(initial)
+  for (let start = 0; start < ordered.length; start += regionSize) {
+    const regionEdges = ordered.slice(start, start + regionSize).map((entry) => entry.edge)
+    if (regionEdges.length < 2) continue
+    const seed = new Map<string, SidePair>()
+    for (const edge of regionEdges) {
+      const pair = settled.get(edge.id)
+      if (pair !== undefined) seed.set(edge.id, pair)
+    }
+    for (const [id, pair] of bothRuns(regionEdges, seed)) settled.set(id, pair)
+  }
+  return settled
+}
+
 export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
@@ -1045,15 +1156,19 @@ export function assignEdgeAnchors(
     // disagree with what the committed render will pick, and the drop
     // then visibly re-sides an edge the preview never showed that way.
     let liveSides: ReadonlyMap<string, SidePair> = merged
+    // The live-drag path keeps the hard gate the committed path no longer
+    // needs. Regional optimization is worth several hundred ms once, when a
+    // change is committed; it is not worth it on a frame someone is dragging
+    // through, and this branch exists precisely to serve those frames. A
+    // canvas past the gate drags exactly as fast as it does today and picks
+    // up its regional repair on drop.
     if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
-      liveSides = optimizeSideChoices(nodes, edges, style, merged, locked)
-      liveSides = optimizeSideChoices(nodes, edges, style, liveSides, locked, true, sideOverrides)
+      liveSides = optimizeAcrossRegions(nodes, edges, style, merged, locked, sideOverrides)
     }
     return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, style, true, sideOverrides)
   }
-  if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
-    sides = optimizeSideChoices(nodes, edges, style, sides)
-    sides = optimizeSideChoices(nodes, edges, style, sides, undefined, true)
+  if (edges.length >= 2) {
+    sides = optimizeAcrossRegions(nodes, edges, style, sides)
   }
   return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
 }

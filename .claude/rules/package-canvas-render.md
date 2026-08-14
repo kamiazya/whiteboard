@@ -375,6 +375,35 @@ paths:
       then the same loop reusing unchanged paths (4.5x). What made it
       affordable was reusing the search's OWN incremental trial machinery
       instead of writing a second scorer beside it.
+    - **Past the optimizer's edge gate the search runs over spatial REGIONS,
+      not over nothing.** `CROSSING_OPT_MAX_EDGES` (200) used to skip
+      side-choice optimization wholesale, which is not a small loss: measured
+      on a 345-edge clustered canvas, 331 avoidable-ink violations — one per
+      edge — against 29 across the ~4400 edges of the entire small corpus.
+      That is the size an AI-authored document reaches, so the size where
+      optimization stops being affordable is not the size where quality stops
+      mattering. `optimizeAcrossRegions` groups edges along a Morton curve
+      through their midpoints, chunks them into even regions of at most the
+      gate, and runs the ordinary two-run search per region. It works because
+      interaction is LOCAL: 4-5% of edge pairs survive a bounding-box test on
+      the clustered bench cases (55% on the deliberately pathological stride
+      canvas). What it gives up, stated plainly: a crossing between edges in
+      two different regions is never priced. Result on that canvas —
+      violations 331 -> 183, interior ink 42623 -> 21001, border ink
+      889 -> 554, at 12ms -> 622ms. Nothing at or under the gate changes, by
+      construction (one region, same two runs, same seed).
+      Region size is `CROSSING_OPT_MAX_EDGES` itself rather than a second
+      knob, deliberately. The measured curve on that canvas is 200 -> 183
+      violations, 120 -> 158, 80 -> 122, with time rising 1023 -> 1184 ->
+      1481ms: SMALLER regions buy quality, because `TRIAL_BUDGET_EDGES`
+      applies per region, so the real knob is total trial budget and the
+      region size is only how it is spent. Tuning it against one synthetic
+      canvas would make that canvas the convention by accident; the curve is
+      recorded here so the next person can move it on evidence.
+      **The live-drag path keeps the hard gate.** Several hundred ms is worth
+      paying once on a committed change and never on a frame someone is
+      dragging through, so a canvas past the gate drags exactly as fast as
+      before and picks up its regional repair on drop.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
       FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam

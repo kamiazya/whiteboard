@@ -223,12 +223,12 @@ describe('routing quality past the side-choice optimizer gate', () => {
       length: Math.round(length),
     }).toEqual({
       edges: 345,
-      violations: 331,
-      interiorInk: 42623,
-      borderInk: 889,
-      bends: 633,
-      crossings: 782,
-      length: 274487,
+      violations: 183,
+      interiorInk: 21001,
+      borderInk: 554,
+      bends: 658,
+      crossings: 752,
+      length: 274428,
     })
   }, 120_000)
 })
