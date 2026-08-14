@@ -42,3 +42,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0007](0007-canvas-identity-and-store-split.md) | Canvas identity and the daemon's two-store split | Accepted |
 | [ADR-0008](0008-slug-derivation-and-rename.md) | Slug derivation, rename, and sibling uniqueness | Accepted |
 | [ADR-0009](0009-mcp-tool-naming.md) | The Document model, and `wb_<entity>_<action>` tool naming | Accepted — decisions 3-4 not yet implementable |
+| [ADR-0010](0010-one-writer-per-fact.md) | One writer per fact, and SQLite as a derived index | Proposed |
