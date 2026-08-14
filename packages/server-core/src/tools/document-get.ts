@@ -46,8 +46,10 @@ export class DocumentKindUnknownError extends Error {
   constructor(public readonly canvasId: string) {
     super(
       `Document ${canvasId} records no kind, so there is no format to read it as. ` +
-        'Documents created before kinds existed are affected; recreate it, or set its content ' +
-        'through wb_document_set, which writes a kind.',
+        'Documents created before kinds existed are affected. Editing one records a kind: ' +
+        'wb_node_add / wb_node_patch / wb_edge_patch record it as spatial and keep what it holds, ' +
+        'and wb_document_set records it as markdown — which replaces its content, so it is ' +
+        'refused unless the document is empty.',
     )
     this.name = 'DocumentKindUnknownError'
   }

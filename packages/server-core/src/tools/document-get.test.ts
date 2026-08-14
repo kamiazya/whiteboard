@@ -71,5 +71,14 @@ describe('wb_document_get reads a document in its own format', () => {
     await expect(
       createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),
     ).rejects.toThrow(DocumentKindUnknownError)
+
+    // The way out has to name the spatial path. A document that predates
+    // kinds is far more likely to be spatial than markdown — that was the
+    // only kind then — and wb_document_set replaces content rather than
+    // declaring a kind over it, so recommending it alone points the reader
+    // at the one action that would destroy what they are trying to read.
+    await expect(
+      createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),
+    ).rejects.toThrow(/wb_node_add/)
   })
 })

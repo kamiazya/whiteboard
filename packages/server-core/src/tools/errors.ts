@@ -21,6 +21,23 @@ export class DocumentKindMismatchError extends Error {
   }
 }
 
+/**
+ * Thrown when a write would discard content rather than edit it. A document
+ * that records no kind is declared by the first write that reaches it — but
+ * only when there is nothing to lose. `DocumentKindMismatchError` is what
+ * normally refuses a destructive write, and an absent kind is precisely the
+ * case it cannot judge.
+ */
+export class DocumentContentLossError extends Error {
+  constructor(
+    public readonly canvasId: string,
+    detail: string,
+  ) {
+    super(`Document ${canvasId} records no kind and is not empty. ${detail}`)
+    this.name = 'DocumentContentLossError'
+  }
+}
+
 /** Thrown when a patch tool targets a canvas that has no saved snapshot yet. */
 export class CanvasDocNotFoundError extends Error {
   constructor(public readonly canvasId: string) {

@@ -14,7 +14,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createDocumentSetTool } from './document-set.js'
-import { DocumentKindMismatchError } from './errors.js'
+import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -184,5 +184,35 @@ describe('wb_document_set tool', () => {
     })
 
     expect(readDocumentKind(await loadDoc(store, CANVAS_ID))).toBe('markdown')
+  })
+
+  test('a document predating kinds that holds nodes is refused, not flattened', async () => {
+    // The healing above is safe because an empty document has nothing to
+    // lose. A pre-kind document that holds a diagram does: this write
+    // replaces a spatial canvas outright, and the mismatch guard that
+    // normally refuses that is skipped for exactly this document, because
+    // its kind is absent rather than wrong.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'diagram' }],
+        edges: [],
+      })
+    })
+    const tool = createDocumentSetTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        markdown: '---\ntype: note\n---\nBody.',
+      }),
+    ).rejects.toThrow(DocumentContentLossError)
+
+    const doc = await loadDoc(store, CANVAS_ID)
+    expect(readSpatialCanvas(doc).nodes).toHaveLength(1)
+    // Refused, so still undeclared — the spatial path is what declares it.
+    expect(readDocumentKind(doc)).toBeUndefined()
   })
 })

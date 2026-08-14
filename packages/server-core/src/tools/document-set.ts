@@ -2,6 +2,7 @@ import { parseOkf } from '@kamiazya/whiteboard-canvas-codec'
 import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import {
   readDocumentKind,
+  readSpatialCanvas,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
@@ -10,7 +11,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
-import { DocumentKindMismatchError } from './errors.js'
+import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
@@ -63,9 +64,20 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // The write below replaces the whole spatial canvas, so on a spatial
       // document it is a destruction rather than an edit. A document with no
       // kind predates them: the write is the only thing that can give it one,
-      // and refusing would leave it with no way back (ADR-0009 decision 4).
+      // and refusing would leave it with no way back (ADR-0009 decision 4) —
+      // but only an empty document has nothing to lose by being declared
+      // markdown. One that already holds a canvas gets its way back from the
+      // spatial side, which declares a kind without discarding anything.
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
+        const existing = readSpatialCanvas(doc)
+        if (existing.nodes.length > 0 || existing.edges.length > 0) {
+          throw new DocumentContentLossError(
+            input.canvasId,
+            `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
+              'Edit it through wb_node_add / wb_node_patch / wb_edge_patch, which records it as spatial and keeps them.',
+          )
+        }
         writeDocumentKind(doc, 'markdown')
       } else if (kind !== 'markdown') {
         throw new DocumentKindMismatchError(
