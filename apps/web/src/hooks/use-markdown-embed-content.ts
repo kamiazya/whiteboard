@@ -64,6 +64,18 @@ export function useMarkdownEmbedContent({
   // resolver returning undefined without re-fetching the same id forever.
   const [cache, setCache] = useState<ReadonlyMap<string, MarkdownEmbedEntry | null>>(new Map())
   const inflight = useRef<Set<string>>(new Set())
+  // Unmount-scoped, NOT effect-scoped: a keystroke re-runs the effect while
+  // a load is in flight, and the new pass skips that id as inflight — so if
+  // the old pass's completion were cancelled per-effect, the result would
+  // be dropped with nothing left to ever re-fire it (the stuck-placeholder
+  // bug). A completed load is valid whenever the component still lives.
+  const unmounted = useRef(false)
+  useEffect(
+    () => () => {
+      unmounted.current = true
+    },
+    [],
+  )
 
   useEffect(() => {
     // The wanted set is the closure over what has already loaded: each
@@ -75,7 +87,6 @@ export function useMarkdownEmbedContent({
       if (entry === null) continue
       for (const id of collectEmbedIds(entry.root)) wanted.add(id)
     }
-    let cancelled = false
     for (const id of wanted) {
       if (cache.has(id) || inflight.current.has(id)) continue
       inflight.current.add(id)
@@ -86,7 +97,7 @@ export function useMarkdownEmbedContent({
         })
         .then((source) => {
           inflight.current.delete(id)
-          if (cancelled) return
+          if (unmounted.current) return
           let entry: MarkdownEmbedEntry | null = null
           if (source !== undefined) {
             try {
@@ -103,9 +114,6 @@ export function useMarkdownEmbedContent({
           }
           setCache((prev) => new Map(prev).set(id, entry))
         })
-    }
-    return () => {
-      cancelled = true
     }
   }, [body, resolveAlias, cache, load])
 

@@ -65,6 +65,31 @@ describe('useMarkdownEmbedContent', () => {
     expect(load).toHaveBeenCalledTimes(1)
   })
 
+  it('a load that resolves after further typing still lands in the cache', async () => {
+    // The stuck-placeholder bug: a keystroke re-runs the effect while the
+    // load is in flight; the new pass skips the id as inflight, and the OLD
+    // pass's result must not be dropped — nothing would ever re-fire it.
+    let release: (value: { body: string } | undefined) => void = () => {}
+    const gate = new Promise<{ body: string } | undefined>((resolve) => {
+      release = resolve
+    })
+    const load = vi.fn(() => gate)
+    const { result, rerender } = renderHook(
+      ({ body }: { body: string }) => useMarkdownEmbedContent({ body, load }),
+      { initialProps: { body: `![[canvas:${B}]]\n` } },
+    )
+    await waitFor(() => {
+      expect(load).toHaveBeenCalledTimes(1)
+    })
+    // A keystroke lands while the load is still in flight.
+    rerender({ body: `![[canvas:${B}]]\nx` })
+    release({ body: 'late but wanted' })
+    await waitFor(() => {
+      expect(result.current(B)).toBeDefined()
+    })
+    expect(JSON.stringify(result.current(B)?.root)).toContain('late but wanted')
+  })
+
   it('a body without embeds loads nothing', async () => {
     const load = vi.fn(async () => undefined)
     renderHook(() => useMarkdownEmbedContent({ body: 'plain [[wikiLink]] prose', load }))
