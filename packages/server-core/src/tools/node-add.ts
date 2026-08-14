@@ -4,10 +4,11 @@ import {
   spatialNodeSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
+import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
-import { PatchValidationError } from './errors.js'
+import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const nodeAddInputSchema = z
@@ -58,6 +59,21 @@ export function createNodeAddTool(deps: ServerDeps) {
     execute: async (input: NodeAddInput): Promise<NodeAddOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+
+      // A markdown document keeps its OKF body in a text node, so a node
+      // added beside it is content no OKF projection can represent. A
+      // document with no kind predates them and this write declares it, the
+      // same way an OKF write declares a markdown one.
+      const kind = readDocumentKind(doc)
+      if (kind === undefined) {
+        writeDocumentKind(doc, 'spatial')
+      } else if (kind !== 'spatial') {
+        throw new DocumentKindMismatchError(
+          input.canvasId,
+          kind,
+          'This adds a JSON Canvas node, and its only node holds its OKF body. Write its content through wb_document_set, or its body through wb_body_patch.',
+        )
+      }
 
       if (canvas.nodes.some((existing) => existing.id === input.node.id)) {
         throw new NodeAlreadyExistsError(input.canvasId, input.node.id)

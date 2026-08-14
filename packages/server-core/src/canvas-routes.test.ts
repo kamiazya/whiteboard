@@ -140,7 +140,7 @@ describe('canvas OKF read route', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ segment: 'doc-a', kind: 'markdown', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
     await tools.canvasImportOkf.execute({

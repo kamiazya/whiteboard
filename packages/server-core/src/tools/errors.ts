@@ -1,4 +1,25 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import type { z } from 'zod'
+
+/**
+ * Thrown when a write is in a format the document is not in.
+ *
+ * A document's kind decides which writes make sense on it, and the two
+ * content writes overlap on the same stored structure — a markdown
+ * document keeps its OKF body in a spatial text node — so an unguarded
+ * cross-format write does not fail, it destroys. `detail` carries the
+ * per-tool consequence and the tool to use instead.
+ */
+export class DocumentKindMismatchError extends Error {
+  constructor(
+    public readonly canvasId: string,
+    public readonly kind: CanvasKind,
+    detail: string,
+  ) {
+    super(`Document ${canvasId} is a ${kind} document. ${detail}`)
+    this.name = 'DocumentKindMismatchError'
+  }
+}
 
 /** Thrown when a patch tool targets a canvas that has no saved snapshot yet. */
 export class CanvasDocNotFoundError extends Error {
