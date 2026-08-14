@@ -7,12 +7,13 @@ import {
 } from '../../shared/api-contracts/runtime.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
+import { isAuthorized } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/canvas-store.js'
-import { isAuthorized, isAuthorizedOAuthGrant, isAuthorizedPairingOrigin } from './auth.js'
+import { isAuthorizedOAuthGrant, isAuthorizedPairingOrigin } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
 
 // /api/runtime/verify is public and does an Ed25519 sign per call, so cap

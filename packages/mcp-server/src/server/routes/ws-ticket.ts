@@ -14,9 +14,9 @@
 
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import type { WsTicketStore } from '../security/ws-ticket-store.js'
-import { parseBearerAuthorizationHeader } from './auth.js'
 
 const mintWsTicketResponseSchema = z.object({
   ticket: z.string().min(1),

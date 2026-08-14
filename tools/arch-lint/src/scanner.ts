@@ -43,23 +43,66 @@ function isNodeBuiltinSpecifier(specifier: string): boolean {
   return NODE_BUILTIN_NAMES.has(rootPackage) || specifier.startsWith('node:')
 }
 
+export interface ModuleSpecifierReference {
+  readonly specifier: string
+  // Whole edge is erased at emit and carries no runtime value: a whole-
+  // declaration `import type`/`export type`, or a named-import/export list
+  // whose specifiers are ALL inline-`type`. Syntactic, not semantic — an
+  // un-annotated named import of an interface still reads as a value edge
+  // (see cycle-check.ts, which is the consumer that cares about this field).
+  readonly typeOnly: boolean
+  readonly line: number
+}
+
 /**
  * Every place a module specifier can appear in source text: a static
  * `import`/`export ... from`, or a dynamic `import(...)` call. Missing any
  * one of these would let a banned import back in through a form the AST
  * walk never visits.
  */
-function collectModuleSpecifiers(sourceFile: ts.SourceFile): { specifier: string; line: number }[] {
-  const specifiers: { specifier: string; line: number }[] = []
+export function collectModuleSpecifiers(sourceFile: ts.SourceFile): ModuleSpecifierReference[] {
+  const specifiers: ModuleSpecifierReference[] = []
+
+  function isImportClauseTypeOnly(clause: ts.ImportClause): boolean {
+    if (clause.isTypeOnly) return true
+    // A default import (`import Foo, { type X } from`) is always a value,
+    // regardless of the named bindings beside it.
+    if (clause.name !== undefined) return false
+    const bindings = clause.namedBindings
+    if (bindings === undefined) return false
+    // `import * as ns from` is a value edge.
+    if (ts.isNamespaceImport(bindings)) return false
+    return bindings.elements.length > 0 && bindings.elements.every((el) => el.isTypeOnly)
+  }
+
+  function isExportDeclarationTypeOnly(node: ts.ExportDeclaration): boolean {
+    if (node.isTypeOnly) return true
+    const clause = node.exportClause
+    if (clause === undefined || ts.isNamespaceExport(clause)) return false
+    return clause.elements.length > 0 && clause.elements.every((el) => el.isTypeOnly)
+  }
 
   function visit(node: ts.Node): void {
     if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      ts.isImportDeclaration(node) &&
       node.moduleSpecifier !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      specifiers.push({ specifier: node.moduleSpecifier.text, line: line + 1 })
+      const typeOnly = node.importClause !== undefined && isImportClauseTypeOnly(node.importClause)
+      specifiers.push({ specifier: node.moduleSpecifier.text, typeOnly, line: line + 1 })
+    }
+    if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+      specifiers.push({
+        specifier: node.moduleSpecifier.text,
+        typeOnly: isExportDeclarationTypeOnly(node),
+        line: line + 1,
+      })
     }
     if (
       ts.isCallExpression(node) &&
@@ -68,7 +111,9 @@ function collectModuleSpecifiers(sourceFile: ts.SourceFile): { specifier: string
       ts.isStringLiteral(node.arguments[0])
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      specifiers.push({ specifier: node.arguments[0].text, line: line + 1 })
+      // A dynamic `import()` call always evaluates the target module, so it
+      // is a value edge by construction — there is no `import type(...)`.
+      specifiers.push({ specifier: node.arguments[0].text, typeOnly: false, line: line + 1 })
     }
     ts.forEachChild(node, visit)
   }

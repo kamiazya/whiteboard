@@ -27,7 +27,7 @@
 //     secrets and host internals.
 
 import type { MiddlewareHandler } from 'hono'
-import { isAuthorized } from '../routes/auth.js'
+import { isAuthorized } from './bearer-token.js'
 
 // The scope vocabulary as a runtime array, not just a type: anything that
 // needs to validate an externally-supplied scope string against this
