@@ -6,13 +6,22 @@
  * It is defined independently of the four category arrays below so that the
  * meta-property test can verify category completeness without self-reference.
  *
- * When adding or removing a tool:
- *   1. Update ALL_REGISTERED_TOOLS.
- *   2. Add the tool to exactly one of the four category arrays.
- *   3. The property test (tool-structured-content.property.test.ts) will fail
- *      if the categories do not cover ALL_REGISTERED_TOOLS exactly.
- *   4. The smoke (mcp-e2e-checkpoint.mjs / smoke-impl.ts) will fail if tools/list no longer
- *      matches ALL_REGISTERED_TOOLS.
+ * Adding or removing a tool touches four places, and each is checked against
+ * the one below it rather than against a copy of itself:
+ *   1. ALL_REGISTERED_TOOLS here — compared to a REAL server's tools/list by
+ *      the mcp-smoke checkpoint (mcp-e2e-checkpoint.smoke-impl.ts), so this
+ *      is the list that is held to reality rather than to another list.
+ *   2. Exactly one of the category arrays below — the property test
+ *      (tool-structured-content.property.test.ts) fails if the categories do
+ *      not partition ALL_REGISTERED_TOOLS exactly.
+ *   3. TOOL_PROFILES (tool-profiles.ts) — tool-naming.test.ts fails if it
+ *      does not cover ALL_REGISTERED_TOOLS exactly. A registered tool with
+ *      no profile silently downgrades to MUTATING with its name as its title.
+ *   4. EXPECTED_TOOLS in scripts/smoke/mcp-e2e-smoke.mjs. Deliberately a
+ *      separate copy: that smoke drives the server as a subprocess, so
+ *      importing this list would make it agree with itself instead of
+ *      catching packaging drift. It is a plain .mjs script and cannot import
+ *      this module anyway.
  *
  * Category meanings:
  *   COVERED_TOOLS       — exercised end-to-end in the smoke (success path).
