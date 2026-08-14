@@ -22,6 +22,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     profile: MUTATING_IDEMPOTENT,
     title: 'Set the OKF frontmatter facets of a document',
   },
+  wb_edge_add: { profile: MUTATING, title: 'Connect two nodes on the spatial canvas' },
   wb_node_add: { profile: MUTATING, title: 'Add a node to the spatial canvas' },
   wb_node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch a node on the spatial canvas' },
   wb_edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch an edge on the spatial canvas' },

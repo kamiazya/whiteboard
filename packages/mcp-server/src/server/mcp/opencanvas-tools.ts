@@ -153,6 +153,23 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
+    tools.edgeAdd.name,
+    {
+      description: tools.edgeAdd.description,
+      inputSchema: tools.edgeAdd.inputSchema.shape,
+      outputSchema: tools.edgeAdd.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.edgeAdd.inputSchema.parse(args)
+      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+        tools.edgeAdd.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.edgePatch.name,
     {
       description: tools.edgePatch.description,

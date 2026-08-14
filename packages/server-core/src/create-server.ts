@@ -21,6 +21,7 @@ import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/c
 import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createDocumentGetTool } from './tools/document-get.js'
+import { createEdgeAddTool } from './tools/edge-add.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { CanvasDocNotFoundError } from './tools/errors.js'
@@ -132,6 +133,7 @@ export function createServer(deps: ServerDeps) {
     edgeLock: createEdgeLockTool(deps),
     nodeAdd: createNodeAddTool(deps),
     nodePatch: createNodePatchTool(deps),
+    edgeAdd: createEdgeAddTool(deps),
     edgePatch: createEdgePatchTool(deps),
     tidyCanvas: createTidyCanvasTool(deps),
     bodyPatch: createBodyPatchTool(deps),
