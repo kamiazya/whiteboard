@@ -192,6 +192,28 @@ it('hand mode: a double press zooms in and holds the pressed canvas point still'
   expect(latest.commands).toEqual([])
 })
 
+it('step zoom is reachable from the keyboard, in every mode', () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const zoom = () => Number(/scale\(([\d.]+)\)/.exec(transformOf(container))?.[1])
+
+  // The double press that gets closer is a pointer gesture, and the wheel
+  // needs a pointing device. Without these keys a keyboard-only or
+  // switch-access user can reach no magnification but "fit".
+  root.focus()
+  fireEvent.keyDown(root, { key: '+', code: 'Equal', shiftKey: true })
+  expect(zoom()).toBeGreaterThan(1)
+  fireEvent.keyDown(root, { key: '-', code: 'Minus' })
+  fireEvent.keyDown(root, { key: '-', code: 'Minus' })
+  expect(zoom()).toBeLessThan(1)
+
+  fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
+  const before = zoom()
+  fireEvent.keyDown(root, { key: '+', code: 'Equal', shiftKey: true })
+  expect(zoom()).toBeGreaterThan(before)
+})
+
 it('select mode keeps its own double press: it creates a note', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

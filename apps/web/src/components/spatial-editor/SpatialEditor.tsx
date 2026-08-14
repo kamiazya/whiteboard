@@ -210,6 +210,8 @@ const SNAP_GRID_CANVAS_PX = 20
  * back out is one press on zoom-to-fit rather than N reverse taps.
  */
 const DOUBLE_PRESS_ZOOM_FACTOR = 2
+/** One keyboard step of zoom — finer than the double press, which jumps. */
+const STEP_ZOOM_FACTOR = 1.25
 /** Press-pairing key for hand mode, where no node identity is involved. */
 const HAND_PRESS_KEY = 'hand'
 const MINIMAP_WIDTH_PX = 160
@@ -1943,6 +1945,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       switch (id) {
         case 'toggle-lock':
           return toggleSelectionLock()
+        case 'zoom-in':
+          return stepZoom(STEP_ZOOM_FACTOR)
+        case 'zoom-out':
+          return stepZoom(1 / STEP_ZOOM_FACTOR)
         case 'zoom-to-fit':
           return frameContent()
         case 'zoom-to-selection':
@@ -2248,6 +2254,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
+    /** Keyboard zoom: about the viewport centre, since there is no pointer. */
+    const stepZoom = (factor: number): boolean => {
+      setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
+      return true
+    }
+
     /** Root-local screen point at the middle of the visible canvas. */
     const viewportCenterScreen = () => {
       const root = rootRef.current
