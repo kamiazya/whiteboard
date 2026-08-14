@@ -8,25 +8,25 @@ import type { ServerDeps } from '../server-deps.js'
 
 /**
  * OKF-Markdown is a single-document format (frontmatter + body); a spatial
- * canvas can have many independently-positioned text nodes. This tool
+ * canvas can have many independently-positioned text nodes. This
  * targets only the FIRST text node found (or an empty body when none
  * exists) — a real "canvas -> OKF" mapping for a full multi-node spatial
  * canvas is deferred to a future slice once the OKF-vs-spatial duality is
  * resolved in canvas-workspace.
  *
  * `CanvasDocStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
- * field is accepted for API symmetry with workspace-scoped tools and as a
+ * field is accepted for API symmetry with the workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */
-export const canvasExportOkfInputSchema = z
+export const exportOkfInputSchema = z
   .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
   .strict()
-export type CanvasExportOkfInput = z.infer<typeof canvasExportOkfInputSchema>
+export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
 
-export const canvasExportOkfOutputSchema = z
+export const exportOkfOutputSchema = z
   .object({ markdown: z.string(), frontmatter: okfMarkdownFrontmatterSchema })
   .strict()
-export type CanvasExportOkfOutput = z.infer<typeof canvasExportOkfOutputSchema>
+export type ExportOkfOutput = z.infer<typeof exportOkfOutputSchema>
 
 /**
  * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has
@@ -37,28 +37,26 @@ export type CanvasExportOkfOutput = z.infer<typeof canvasExportOkfOutputSchema>
  * spatial-only canvas that never went through `wb_document_set`). Once a
  * doc has stored core meta (via `writeCoreFacets`), that stored `type`
  * (and `title`/`tags`/`view`/`facetsRaw`) is echoed back instead — this is
- * what makes the `wb_document_set` -> `canvas_export_okf` round-trip
+ * what makes the `wb_document_set` -> OKF export round-trip
  * faithful.
  */
 const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
 
-export function createCanvasExportOkfTool(deps: ServerDeps) {
-  return {
-    name: 'canvas_export_okf' as const,
-    description: 'Serialise a document as OKF Markdown (YAML frontmatter plus body).',
-    inputSchema: canvasExportOkfInputSchema,
-    outputSchema: canvasExportOkfOutputSchema,
-    async execute(input: CanvasExportOkfInput): Promise<CanvasExportOkfOutput> {
-      const { doc, canvas } = await loadSpatialCanvas(deps, input.canvasId)
-      const coreMeta = readCoreFacets(doc)
-      const facets = readFacets(doc)
-      const body = canvas.nodes.find((node) => node.type === 'text')?.text ?? ''
-      const frontmatter: OkfMarkdownFrontmatter = {
-        ...(coreMeta ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
-        facets,
-      }
-      const markdown = serializeOkf({ frontmatter, body })
-      return { markdown, frontmatter }
-    },
+/**
+ * Serialise a document as OKF Markdown (YAML frontmatter plus body).
+ *
+ * Not an MCP tool: `wb_document_get` chooses this projection for a markdown
+ * document, and the `/okf` route reaches it directly for the workspace tree.
+ */
+export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
+  const { doc, canvas } = await loadSpatialCanvas(deps, input.canvasId)
+  const coreMeta = readCoreFacets(doc)
+  const facets = readFacets(doc)
+  const body = canvas.nodes.find((node) => node.type === 'text')?.text ?? ''
+  const frontmatter: OkfMarkdownFrontmatter = {
+    ...(coreMeta ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
+    facets,
   }
+  const markdown = serializeOkf({ frontmatter, body })
+  return { markdown, frontmatter }
 }

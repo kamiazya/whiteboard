@@ -2,7 +2,7 @@ import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-wor
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
-import { createCanvasExportOkfTool } from './canvas-export-okf.js'
+import { exportOkf } from './export-okf.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -11,7 +11,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
   return { canvasDocStore, blobStore: {} as never }
 }
 
-describe('canvas_export_okf tool', () => {
+describe('exportOkf', () => {
   test('exports the first text node body with facets from the doc', async () => {
     const store = new FakeCanvasDocStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
@@ -21,9 +21,10 @@ describe('canvas_export_okf tool', () => {
       })
       writeFacets(doc, { 'kanban/1': { status: 'todo' } })
     })
-    const tool = createCanvasExportOkfTool(makeDeps(store))
-
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(makeDeps(store), {
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+    })
 
     expect(result.markdown.startsWith('---\n')).toBe(true)
     expect(result.markdown).toContain('hello')
@@ -38,18 +39,20 @@ describe('canvas_export_okf tool', () => {
         edges: [],
       })
     })
-    const tool = createCanvasExportOkfTool(makeDeps(store))
-
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(makeDeps(store), {
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+    })
 
     expect(result.markdown.endsWith('---\n')).toBe(true)
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
-    const tool = createCanvasExportOkfTool(makeDeps(new FakeCanvasDocStore()))
-
-    await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow(
-      CanvasNotFoundError,
-    )
+    await expect(
+      exportOkf(makeDeps(new FakeCanvasDocStore()), {
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+      }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 })

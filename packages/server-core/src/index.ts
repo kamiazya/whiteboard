@@ -32,21 +32,6 @@ export {
 } from './tools/canvas-crud.schemas.js'
 export type { CanvasDigestInput } from './tools/canvas-digest.js'
 export { canvasDigestInputSchema, createCanvasDigestTool } from './tools/canvas-digest.js'
-export type {
-  CanvasExportJsonCanvasInput,
-  CanvasExportJsonCanvasOutput,
-} from './tools/canvas-export-json-canvas.js'
-export {
-  canvasExportJsonCanvasInputSchema,
-  canvasExportJsonCanvasOutputSchema,
-  createCanvasExportJsonCanvasTool,
-} from './tools/canvas-export-json-canvas.js'
-export type { CanvasExportOkfInput, CanvasExportOkfOutput } from './tools/canvas-export-okf.js'
-export {
-  canvasExportOkfInputSchema,
-  canvasExportOkfOutputSchema,
-  createCanvasExportOkfTool,
-} from './tools/canvas-export-okf.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
   canvasRenderSvgInputSchema,
@@ -84,6 +69,21 @@ export {
   NotATextNodeError,
   PatchValidationError,
 } from './tools/errors.js'
+export type {
+  ExportJsonCanvasInput,
+  ExportJsonCanvasOutput,
+} from './tools/export-json-canvas.js'
+export {
+  exportJsonCanvas,
+  exportJsonCanvasInputSchema,
+  exportJsonCanvasOutputSchema,
+} from './tools/export-json-canvas.js'
+export type { ExportOkfInput, ExportOkfOutput } from './tools/export-okf.js'
+export {
+  exportOkf,
+  exportOkfInputSchema,
+  exportOkfOutputSchema,
+} from './tools/export-okf.js'
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
 export { generateCanvasId } from './tools/generate-canvas-id.js'
