@@ -178,11 +178,11 @@ describe('routing quality across the synthetic corpus', () => {
     }).toEqual({
       violations: { 'own-endpoint': 35, foreign: 17, degenerate: 0 },
       interiorInk: 3545,
-      borderInk: 1147,
-      bends: 8486,
-      crossings: 647,
-      length: 1362776,
-      shortArrowRunway: 209,
+      borderInk: 1056,
+      bends: 8452,
+      crossings: 636,
+      length: 1358532,
+      shortArrowRunway: 212,
     })
   })
 })

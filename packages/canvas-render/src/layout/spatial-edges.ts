@@ -663,9 +663,21 @@ function optimizeSideChoices(
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
-  const foreignBodiesFor = edges.map((e) =>
-    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
-  )
+  // A rect that FULLY CONTAINS one of this edge's endpoints (a group frame
+  // around its member) is not an obstacle: every route out of the contained
+  // node crosses it, so there is nothing to route around. `routeEdge` has
+  // always excluded them; the SEARCH did not, so it priced ink the router
+  // could not avoid and could be talked into a detour to "save" it — the
+  // same predicate `deriveDefaultSides`'s occlusion filter already uses.
+  const foreignBodiesFor = edges.map((e) => {
+    const endpoints = [byId.get(e.fromNode), byId.get(e.toNode)]
+      .filter((n): n is SpatialNode => n !== undefined)
+      .map(rectOf)
+    return nodes
+      .filter((n) => n.id !== e.fromNode && n.id !== e.toNode)
+      .map(rectOf)
+      .filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
+  })
   // Every node's border, INCLUDING an edge's own endpoints — border-tracing
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
   // check which must exclude the edge's endpoints.
