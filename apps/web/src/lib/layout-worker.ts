@@ -29,7 +29,7 @@
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
-import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
+import { FONT_DEGRADED, type LayoutRequest, type LayoutResponse } from './layout-worker-protocol.js'
 
 const measure = createBrowserMeasureText()
 
@@ -43,7 +43,17 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
   const request = event.data
   if (request.type !== 'layout') return
   try {
-    await fontReady
+    // Verified present in Chromium, WebKit and Firefox — but Playwright's
+    // WebKit is not Safari, and a browser version that lacks a worker
+    // `FontFaceSet` would measure with a system font and produce a scene that
+    // disagrees with an export of the same canvas. Refusing is the only safe
+    // answer: the caller lays it out on the main thread, where the face is
+    // known to be loaded.
+    if ((await fontReady) !== 'loaded') {
+      const response: LayoutResponse = { type: 'failed', id: request.id, reason: FONT_DEGRADED }
+      self.postMessage(response)
+      return
+    }
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const bodies = new Map(request.bodies.map((b) => [b.text, b.mdast]))
     let missing: string | undefined

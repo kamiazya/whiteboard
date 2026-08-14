@@ -30,6 +30,7 @@ import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {
   canLayoutInWorker,
   type FileRefLabel,
+  FONT_DEGRADED,
   type LayoutRequest,
   type LayoutResponse,
   type ParsedBody,
@@ -110,6 +111,8 @@ export function useWorkerScene(
   )
 
   const workerRef = useRef<Worker | null>(null)
+  /** Latched: a realm that cannot load the face never will within a session. */
+  const fontDegraded = useRef(false)
   const requestRef = useRef(0)
   const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
@@ -128,6 +131,11 @@ export function useWorkerScene(
       shownFor.current = inputs
       return
     }
+    if (fontDegraded.current) {
+      shownFor.current = inputs
+      setRendered(renderNow())
+      return
+    }
     workerRef.current ??= createLayoutWorker()
     const worker = workerRef.current
     if (worker === null) {
@@ -143,6 +151,14 @@ export function useWorkerScene(
       if (response.id !== requestRef.current) return
       worker.removeEventListener('message', onMessage)
       shownFor.current = inputs
+      if (response.type === 'failed' && response.reason === FONT_DEGRADED) {
+        fontDegraded.current = true
+        // Not a transient failure: this realm cannot measure text the way the
+        // main thread does, so every later request would be wrong the same
+        // way. Retire the worker and stay synchronous for the session.
+        worker.terminate()
+        workerRef.current = null
+      }
       setRendered(response.type === 'laid-out' ? response : renderNow())
     }
     worker.addEventListener('message', onMessage)

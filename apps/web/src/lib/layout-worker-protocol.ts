@@ -64,6 +64,15 @@ export type LayoutResponse =
     }
 
 /**
+ * Why a worker refused. `font-degraded` is the one worth distinguishing: it
+ * means this realm could not register the vendored face, so the worker would
+ * measure with a system font and hand back a scene that disagrees with what an
+ * export of the same canvas produces. Wrong pixels are not a slower frame, so
+ * the caller must stop asking rather than retry.
+ */
+export const FONT_DEGRADED = 'font-degraded'
+
+/**
  * Whether a canvas's render options can cross the wire at all.
  *
  * The four function seams below are supplied by a host page. None of the

@@ -19,6 +19,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { FONT_DEGRADED, type LayoutResponse } from '../../lib/layout-worker-protocol.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -96,4 +97,45 @@ it('lays a heavy canvas out in the worker and keeps painting while it does', asy
   // free thread produces and far above what a blocked one can: measured at 2
   // frames with offloading disabled.
   expect(frames).toBeGreaterThan(5)
+}, 40_000)
+
+/**
+ * A realm that cannot register the vendored face measures text with a system
+ * font, so its scene disagrees with an export of the same canvas — wrong
+ * pixels, not a slow frame. The worker refuses instead, and this pins what the
+ * editor does with that refusal: renders the canvas correctly anyway, and
+ * stops asking. Worker `FontFaceSet` support was verified in Chromium, WebKit
+ * and Firefox, but Playwright's WebKit is not Safari, so the refusal path is
+ * reachable in the field and cannot go untested.
+ */
+it('falls back and stays synchronous when the worker cannot load the font', async () => {
+  const RealWorker = globalThis.Worker
+  let constructed = 0
+  class RefusingWorker extends EventTarget {
+    constructor() {
+      super()
+      constructed += 1
+    }
+    postMessage(request: { id: number }) {
+      const response: LayoutResponse = { type: 'failed', id: request.id, reason: FONT_DEGRADED }
+      queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: response })))
+    }
+    terminate() {}
+  }
+  globalThis.Worker = RefusingWorker as unknown as typeof Worker
+
+  const { container } = render(<Host />)
+  screen.getByTestId('edit').click()
+
+  // The content is right despite the refusal — this is the "costs
+  // responsiveness, never content" guarantee.
+  await vi.waitFor(() => expect(container.textContent ?? '').toContain('second'))
+
+  screen.getByTestId('edit').click()
+  await vi.waitFor(() => expect(container.textContent ?? '').toContain('second'))
+
+  globalThis.Worker = RealWorker
+  // Latched after the first refusal: a realm that cannot load the face never
+  // will, so re-spawning a worker per edit would be pure waste.
+  expect(constructed).toBe(1)
 }, 40_000)
