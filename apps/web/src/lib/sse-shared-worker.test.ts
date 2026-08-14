@@ -24,27 +24,40 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 const BASE = 'http://127.0.0.1:3099'
 
-let streamOpens = 0
+/**
+ * Never reset between tests. Ids have to stay unique for the LIFETIME of the
+ * file, not per test: leftover workers keep their streams open across the
+ * reset, so a per-test counter hands a live stream's id to a new one and the
+ * two collide in `pushByStream`.
+ */
+let streamSeq = 0
 let subscribeBodies: string[] = []
 let subscribeAuth: (string | null)[] = []
 let messageBodies: string[] = []
-let openedStreamIds: string[] = []
-let pushFrame: ((frame: string) => void) | null = null
+/**
+ * Keyed by stream id, NOT a single "most recent" handle. Workers from earlier
+ * tests cannot be terminated and keep opening streams of their own, so a lone
+ * `pushFrame` variable points at whichever stream opened last — frequently
+ * somebody else's. A test then pushes its frame into a stream no port of its
+ * own is listening to and waits for a message that will never arrive. That is
+ * the load-dependent failure this file kept producing: under a full parallel
+ * suite the leftover workers get more wall-clock to interleave.
+ */
+const pushByStream = new Map<string, (frame: string) => void>()
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
-    streamOpens += 1
+    streamSeq += 1
     // The daemon mints the id and announces it on the stream; a client cannot
     // choose one, which is what keeps it from naming another client's stream.
-    const id = `server-${streamOpens}`
-    openedStreamIds.push(id)
+    const id = `server-${streamSeq}`
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const enc = new TextEncoder()
         controller.enqueue(
           enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
         )
-        pushFrame = (f) => controller.enqueue(enc.encode(f))
+        pushByStream.set(id, (f) => controller.enqueue(enc.encode(f)))
       },
     })
     return new HttpResponse(stream, {
@@ -66,12 +79,10 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 beforeEach(() => {
-  streamOpens = 0
   subscribeBodies = []
   subscribeAuth = []
   messageBodies = []
-  openedStreamIds = []
-  pushFrame = null
+  pushByStream.clear()
 })
 afterEach(() => server.resetHandlers())
 
@@ -94,10 +105,35 @@ function connect(): MessagePort {
 // under a full parallel suite. Wait on the observable instead.
 const until = (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true))
 
+/** The index of the subscribe that first announced `doc`, or -1. */
+const subscribeIndexFor = (doc: string) =>
+  subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
+
 /** The Authorization header of the subscribe that first announced `doc`. */
 const authFor = (doc: string): string | null | undefined => {
-  const i = subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
+  const i = subscribeIndexFor(doc)
   return i === -1 ? undefined : subscribeAuth[i]
+}
+
+/**
+ * The stream the worker announced `doc` on. Every assertion in this file goes
+ * through a document the test itself minted, because that is the only handle
+ * that cannot belong to a leftover worker — counting global stream opens or
+ * reaching for "the first id" reads another test's traffic as this one's.
+ */
+const streamIdFor = (doc: string): string | undefined => {
+  const i = subscribeIndexFor(doc)
+  if (i === -1) return undefined
+  return JSON.parse(subscribeBodies[i] as string).streamId as string
+}
+
+/** Pushes a frame into the stream that carries `doc`, never "the last one". */
+const pushTo = (doc: string, frame: string) => {
+  const id = streamIdFor(doc)
+  if (id === undefined) throw new Error(`no stream announced ${doc} yet`)
+  const push = pushByStream.get(id)
+  if (push === undefined) throw new Error(`stream ${id} is not open`)
+  push(frame)
 }
 /**
  * A real window in which a wrongly-forwarded message could arrive, for
@@ -111,13 +147,15 @@ describe('sse-shared-worker', () => {
     // The whole reason this lives in a worker: six HTTP/1.1 connections per
     // origin is the budget, and a stream per canvas would spend it on sync.
     const port = connect()
+    const docs = [nextDoc(), nextDoc(), nextDoc()]
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
-    port.postMessage({ type: 'subscribe', doc: nextDoc() })
-    port.postMessage({ type: 'subscribe', doc: nextDoc() })
-    port.postMessage({ type: 'subscribe', doc: nextDoc() })
-    await until(() => subscribeBodies.length >= 3)
+    for (const doc of docs) port.postMessage({ type: 'subscribe', doc })
+    await until(() => docs.every((doc) => streamIdFor(doc) !== undefined))
 
-    expect(streamOpens).toBe(1)
+    // One stream for the three, asserted as the three sharing an id rather
+    // than as a global open count: the count also sees streams belonging to
+    // workers this test did not create and cannot stop.
+    expect(new Set(docs.map(streamIdFor)).size).toBe(1)
   })
 
   it('forwards only the subscribed document, not every frame on the stream', async () => {
@@ -131,19 +169,20 @@ describe('sse-shared-worker', () => {
     const doc = nextDoc()
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
     port.postMessage({ type: 'subscribe', doc })
-    await until(() => pushFrame !== null && subscribeBodies.length >= 1)
+    await until(() => streamIdFor(doc) !== undefined)
 
     // The unsubscribed frame is pushed alone and given a real window to be
     // wrongly forwarded in. Sending both at once would prove nothing: they
     // would land in the same parser call, so the assertion would hold whether
     // or not the addressing worked.
-    pushFrame?.(
+    pushTo(
+      doc,
       `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: btoa('\x09') })}\n\n`,
     )
     await settle()
     expect(seen).toEqual([])
 
-    pushFrame?.(`event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
+    pushTo(doc, `event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
     await until(() => seen.length >= 1)
 
     expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
@@ -157,13 +196,13 @@ describe('sse-shared-worker', () => {
     const doc = nextDoc()
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
     port.postMessage({ type: 'subscribe', doc })
-    await until(() => openedStreamIds.length >= 1)
+    await until(() => streamIdFor(doc) !== undefined)
 
     port.postMessage({ type: 'control', doc, message: { type: 'client_ready' } })
 
     await until(() => messageBodies.some((b) => b.includes(doc)))
     const body = JSON.parse(messageBodies.find((b) => b.includes(doc)) as string)
-    expect(body.streamId).toBe(openedStreamIds[0])
+    expect(body.streamId).toBe(streamIdFor(doc))
     expect(body.message).toEqual({ type: 'client_ready' })
   })
 
@@ -196,7 +235,7 @@ describe('sse-shared-worker', () => {
     const doc = nextDoc()
     port.postMessage({ type: 'init', baseUrl: BASE, token: 'old' })
     port.postMessage({ type: 'subscribe', doc })
-    await until(() => subscribeBodies.length >= 1)
+    await until(() => subscribeIndexFor(doc) !== -1)
 
     port.postMessage({ type: 'init', baseUrl: BASE, token: 'new' })
     port.postMessage({ type: 'unsubscribe', doc })
@@ -204,13 +243,54 @@ describe('sse-shared-worker', () => {
     await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
   })
 
+  // The hazard every assertion in this file is written around, made explicit
+  // and deterministic. A SharedWorker cannot be terminated, so a worker from an
+  // earlier test is still running and can open its stream at any moment —
+  // including between this test's own connect and its assertion. Standing one
+  // up on purpose is the only way to reproduce that ordering on demand;
+  // waiting for it to happen by luck under load is what made these tests flake
+  // in CI and pass in isolation.
+  // The hazard every assertion in this file is written around, made explicit
+  // and deterministic. A SharedWorker cannot be terminated, so a worker from an
+  // earlier test is still running and can open a stream at any moment —
+  // including AFTER this test has opened its own. Order matters: a leftover
+  // worker opening first is harmless, because anything keyed on "the most
+  // recent stream" still lands on ours. It is the LATER open that breaks it,
+  // and that is the ordering a full parallel suite produces and an isolated
+  // run does not, which is exactly why these tests passed alone and failed in
+  // CI. Standing the neighbour up on purpose is the only way to reproduce it
+  // on demand.
+  it('keeps routing to its own stream when another worker opens one later', async () => {
+    const port = connect()
+    const doc = nextDoc()
+    const seen: unknown[] = []
+    port.onmessage = (e) => {
+      if ((e.data as { type?: string }).type !== 'status') seen.push(e.data)
+    }
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    // The leftover worker, opening its stream after ours.
+    const neighbour = connect()
+    const neighbourDoc = nextDoc()
+    neighbour.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    neighbour.postMessage({ type: 'subscribe', doc: neighbourDoc })
+    await until(() => streamIdFor(neighbourDoc) !== undefined)
+    expect(streamIdFor(doc)).not.toBe(streamIdFor(neighbourDoc))
+
+    pushTo(doc, `event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
+    await until(() => seen.length >= 1)
+    expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
+  })
+
   it('takes a document back off the stream once it is unsubscribed', async () => {
     const port = connect()
     const doc = nextDoc()
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
     port.postMessage({ type: 'subscribe', doc })
-    await until(() => subscribeBodies.length >= 1)
-    expect(subscribeBodies.some((x) => x.includes('unsubscribe'))).toBe(false)
+    await until(() => subscribeIndexFor(doc) !== -1)
+    expect(subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`))).toBe(false)
 
     port.postMessage({ type: 'unsubscribe', doc })
 
