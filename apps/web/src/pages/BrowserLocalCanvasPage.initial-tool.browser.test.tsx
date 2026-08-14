@@ -55,7 +55,7 @@ describe('initial tool follows the canvas shape (real browser)', () => {
     // fixture — is what the next mount reads. Radix menus need real pointer
     // events (trigger opens on pointerdown, items select on pointerup).
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add note' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
     // The new node's inline editor opens focused; commit it by clicking away.
     await userEvent.click(screen.getByTestId('spatial-editor-container'))
     await waitFor(

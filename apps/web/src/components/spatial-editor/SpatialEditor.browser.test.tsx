@@ -72,7 +72,7 @@ async function addNoteViaMenu() {
     .getByTestId('add-button')
     .element()
     .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  const item = page.getByRole('menuitem', { name: 'Add note' })
+  const item = page.getByRole('menuitem', { name: 'Note' })
   await expect.element(item).toBeInTheDocument()
   await item.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
@@ -1298,7 +1298,7 @@ describe('SpatialEditor (browser)', () => {
     // button's click — the bug that made this button do nothing in the
     // running app while this test stayed green.
     await userEvent.click(page.getByTestId('add-button'))
-    await userEvent.click(page.getByRole('menuitem', { name: 'Add note' }))
+    await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]

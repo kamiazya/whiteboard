@@ -70,7 +70,7 @@ it('picking an image via the + menu stores it and renders an <image> in the node
 
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   const item = [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
-    (b) => b.getAttribute('aria-label') === 'Add image',
+    (b) => b.getAttribute('aria-label') === 'Image',
   ) as HTMLElement
   expect(item).toBeDefined()
   fireEvent.click(item)
@@ -136,7 +136,7 @@ it('without the storage seam, image affordances hide and non-image drops are ign
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   expect(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].some(
-      (b) => b.getAttribute('aria-label') === 'Add image',
+      (b) => b.getAttribute('aria-label') === 'Image',
     ),
   ).toBe(false)
 })

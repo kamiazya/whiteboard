@@ -41,7 +41,6 @@ import {
   Scissors,
   SendToBack,
   Sparkles,
-  Square,
   SquareDashed,
   StickyNote,
   Tag,
@@ -55,6 +54,7 @@ import { alignableBoxesOf, alignBoxes, distributeBoxes } from './align.js'
 import type { FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
+import { CREATION_LABELS } from './creation-labels.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { Point } from './viewport.js'
 
@@ -95,8 +95,6 @@ export interface CanvasContextMenuProps {
   readonly setGroupLabelEditId: (id: string | null) => void
   readonly pasteClipboard: (at?: Point) => boolean
   readonly createNodeAt: (point: Point) => void
-  /** Places a text node nobody typed into — no editor opens. */
-  readonly createRectangleAt: (point: Point) => void
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly fileRefOptions?: readonly FileRefOption[]
@@ -135,7 +133,6 @@ export function CanvasContextMenu({
   setGroupLabelEditId,
   pasteClipboard,
   createNodeAt,
-  createRectangleAt,
   createGroupAtViewportCenter,
   setLinkDialog,
   fileRefOptions,
@@ -374,36 +371,31 @@ export function CanvasContextMenu({
                 ]
               : []),
             {
-              label: 'Add note here',
+              label: CREATION_LABELS.note,
               icon: <StickyNote />,
               onSelect: () => createNodeAt(contextMenu.point),
             },
             {
-              label: 'Add rectangle here',
-              icon: <Square />,
-              onSelect: () => createRectangleAt(contextMenu.point),
-            },
-            {
-              label: 'Add link here',
+              label: CREATION_LABELS.link,
               icon: <Link />,
               onSelect: () => setLinkDialog({ mode: 'create', point: contextMenu.point }),
             },
             {
-              label: 'Add group here',
+              label: CREATION_LABELS.group,
               icon: <Frame />,
               onSelect: () => createGroupAtViewportCenter(contextMenu.point),
             },
           ]
           if (fileRefOptions !== undefined) {
             emptyItems.push({
-              label: 'Add canvas here',
+              label: CREATION_LABELS.document,
               icon: <FileBox />,
               onSelect: () => setCanvasPicker({ mode: 'create', point: contextMenu.point }),
             })
           }
           if (onAddImage !== undefined) {
             emptyItems.push({
-              label: 'Add image here',
+              label: CREATION_LABELS.image,
               icon: <ImageIcon />,
               onSelect: () => {
                 pendingImagePointRef.current = contextMenu.point

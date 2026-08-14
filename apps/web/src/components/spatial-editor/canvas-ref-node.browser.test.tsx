@@ -69,7 +69,7 @@ it('Add canvas opens the picker and picking creates a file node with that refere
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   fireEvent.click(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].find(
-      (b) => b.getAttribute('aria-label') === 'Add canvas',
+      (b) => b.getAttribute('aria-label') === 'Document',
     ) as HTMLElement,
   )
   await expect.element(page.getByTestId('canvas-picker-dialog')).toBeInTheDocument()
@@ -148,7 +148,7 @@ it('without host seams, neither the Add canvas button nor file follow-affordance
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
   expect(
     [...container.querySelectorAll('[data-testid="add-menu"] [role="menuitem"]')].some(
-      (b) => b.getAttribute('aria-label') === 'Add canvas',
+      (b) => b.getAttribute('aria-label') === 'Document',
     ),
   ).toBe(false)
   await userEvent.keyboard('{Escape}')

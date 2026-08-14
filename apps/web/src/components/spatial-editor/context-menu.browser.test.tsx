@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { CREATION_LABELS } from './creation-labels.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -82,7 +83,7 @@ it('right-clicking empty space offers creation at that point', async () => {
   rightClick(rootOf(container), 600, 450)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add note here' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
 
   expect(commands).toContain('create-node')
   await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
@@ -117,56 +118,24 @@ it('empty space offers the full creation set, anchored at the click point', asyn
 
   // The dock's + menu creation set, repeated "here" (canvas entry appears
   // because the host supplies the reference seam).
+  // Image is absent because this host supplies no image storage seam; the
+  // rest is the whole creation set, in the same words the dock uses.
   for (const label of [
-    'Add note here',
-    'Add rectangle here',
-    'Add link here',
-    'Add group here',
-    'Add canvas here',
+    CREATION_LABELS.note,
+    CREATION_LABELS.link,
+    CREATION_LABELS.group,
+    CREATION_LABELS.document,
   ]) {
     expect(container.textContent).toContain(label)
   }
 
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add group here' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
   await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
   const frame = latest.canvas.nodes.find((n) => n.type === 'group')
   if (frame === undefined) throw new Error('frame missing')
   // Centered on the click point (600,450 screen = canvas at identity view).
   expect(frame.x + frame.width / 2).toBeCloseTo(600, 0)
   expect(frame.y + frame.height / 2).toBeCloseTo(450, 0)
-})
-
-it('Add rectangle here lands on the click point, with no editor over it', async () => {
-  const { Host, latest } = (() => {
-    const l: { canvas: SpatialCanvas } = { canvas: start }
-    function H() {
-      const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-      l.canvas = canvas
-      return (
-        <div style={{ width: 900, height: 700 }}>
-          <SpatialEditor
-            defaultTool="select"
-            canvas={canvas}
-            onChange={(next) => setCanvas(next)}
-            theme="light"
-          />
-        </div>
-      )
-    }
-    return { Host: H, latest: l }
-  })()
-  const { container } = render(<Host />)
-  rightClick(rootOf(container), 600, 450)
-  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
-
-  const before = latest.canvas.nodes.length
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add rectangle here' }))
-  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(before + 1))
-  const node = latest.canvas.nodes.at(-1)
-  if (node === undefined) throw new Error('node missing')
-  expect(node.x + node.width / 2).toBeCloseTo(600, 0)
-  expect(node.y + node.height / 2).toBeCloseTo(450, 0)
-  expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull()
 })
 
 it('Escape closes the menu without acting', async () => {
@@ -233,7 +202,7 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
-  expect(container.textContent).not.toContain('Add note here')
+  expect(container.textContent).not.toContain('Note')
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Edit label' }))
   await vi.waitFor(() =>

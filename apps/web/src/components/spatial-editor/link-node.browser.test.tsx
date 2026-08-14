@@ -85,7 +85,7 @@ it('Add link opens the URL dialog and a valid submit creates a link node', async
   const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add link' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Link' }))
   await expect.element(page.getByTestId('link-url-dialog')).toBeInTheDocument()
 
   const input = container.querySelector('[data-testid="link-url-dialog"] input') as HTMLInputElement
@@ -110,7 +110,7 @@ it('an invalid URL cannot be submitted', async () => {
   const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add link' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Link' }))
   const input = container.querySelector('[data-testid="link-url-dialog"] input') as HTMLInputElement
   await userEvent.fill(input, 'not a url')
 
@@ -207,7 +207,7 @@ it('a javascript: URL is neither followable nor accepted by the dialog', async (
 
   // And the dialog refuses to mint one in the first place.
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
-  await userEvent.click(page.getByRole('menuitem', { name: 'Add link' }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Link' }))
   const input = container.querySelector('[data-testid="link-url-dialog"] input') as HTMLInputElement
   await userEvent.fill(input, 'javascript:alert(1)')
   const ok = [...container.querySelectorAll('button')].find(

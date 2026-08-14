@@ -36,7 +36,7 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     render(<Host onCanvas={(c) => (latest = c)} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add note' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
     const editor = await screen.findByRole('textbox')
     await waitFor(() => expect(latest.nodes).toHaveLength(1))
 
@@ -51,7 +51,7 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     render(<Host onCanvas={(c) => (latest = c)} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add note' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
     const editor = await screen.findByRole('textbox')
     await userEvent.type(editor, 'kept')
     // Commit, then reopen the SAME node and cancel: the node survives.

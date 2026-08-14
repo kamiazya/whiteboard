@@ -52,7 +52,7 @@ describe('Add button (creation menu)', () => {
     expect(button.getAttribute('aria-haspopup')).toBe('menu')
 
     fireEvent.click(button)
-    const item = getByRole('menuitem', { name: 'Add note' })
+    const item = getByRole('menuitem', { name: 'Note' })
     fireEvent.click(item)
     expect(onChange).toHaveBeenCalled()
     const command = onChange.mock.calls[0][1] as { kind: string }

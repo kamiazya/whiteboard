@@ -39,30 +39,26 @@ function soleNodeCentre(canvas: SpatialCanvas) {
   return { x: node.x + node.width / 2, y: node.y + node.height / 2 }
 }
 
-it('Add rectangle creates an empty node and leaves the editor closed', () => {
+it('Group creates a frame and leaves no editor open', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
   openAddMenu(container)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
 
   expect(latest.canvas.nodes).toHaveLength(1)
-  const node = latest.canvas.nodes[0]
-  // A rectangle is not a new node type — JSON Canvas has none, and the
-  // x-whiteboard extension is deliberately not an escape hatch for new
-  // visual primitives. It is a text node nobody typed into.
-  expect(node?.type).toBe('text')
-  expect(node?.type === 'text' ? node.text : 'unset').toBe('')
-  // The one behavioural difference from Add note: no editor opens.
+  expect(latest.canvas.nodes[0]?.type).toBe('group')
+  // Group is the creation that needs no typing, which is what makes it the
+  // one these placement tests drive: no editor to dismiss between steps.
   expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull()
 })
 
-it('Add note still opens its editor — the rectangle path did not change it', () => {
+it('Note opens its editor immediately', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
   openAddMenu(container)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Add note' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Note' }))
 
   expect(container.querySelector('[data-testid="text-node-editor"]')).not.toBeNull()
 })
@@ -74,7 +70,7 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
   const r = root.getBoundingClientRect()
 
   openAddMenu(container)
-  const entry = screen.getByRole('menuitem', { name: 'Add rectangle' })
+  const entry = screen.getByRole('menuitem', { name: 'Group' })
   // Real DragEvents, not fireEvent's synthesised ones: `dataTransfer` is
   // read-only on a DragEvent, so an assigned property never reaches the
   // handler and the drag silently carries nothing.
@@ -88,7 +84,7 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
   fireEvent(entry, dragEvent('dragstart'))
   // The kind rides in the MIME type — `types` survives protected mode, the
   // data does not (see CREATE_DRAG_MIME_PREFIX).
-  expect([...dataTransfer.types]).toContain('application/x-whiteboard-create+rectangle')
+  expect([...dataTransfer.types]).toContain('application/x-whiteboard-create+group')
 
   // Well away from the viewport centre (400,300 in root-local pixels).
   const drop: [number, number] = [640, 120]
@@ -114,13 +110,13 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
   expect(container.querySelector('[data-testid="add-menu"]')).toBeNull()
 })
 
-it('two rectangles from the menu do not stack on the same spot', () => {
+it('two creations from the menu do not stack on the same spot', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
   for (let i = 0; i < 2; i++) {
     openAddMenu(container)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
   }
 
   const [first, second] = latest.canvas.nodes
@@ -136,7 +132,7 @@ it('tapping a menu entry keeps placing it at the viewport centre', () => {
   const { container } = render(<Host />)
 
   openAddMenu(container)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
 
   const centre = soleNodeCentre(latest.canvas)
   expect(centre.x).toBeCloseTo(400, 0)
@@ -150,11 +146,12 @@ it('creating repeatedly does not move the viewport while the screen has room', (
     (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
   const before = transform()
 
-  // Four is well within what an 800x600 view holds at 200x100 per node —
-  // enough to prove the point without making this the suite's heaviest file.
+  // Notes, not group frames: four 200x100 notes fit an 800x600 view with
+  // room to spare, which is the condition this pins. Opening the menu blurs
+  // the previous note's editor, which commits it — no dismissal needed.
   for (let i = 0; i < 4; i++) {
     openAddMenu(container)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Note' }))
   }
 
   // Making something is not a request to go somewhere: the canvas under the
@@ -170,7 +167,7 @@ it('nothing is ever parked under the dock', () => {
 
   for (let i = 0; i < 5; i++) {
     openAddMenu(container)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add rectangle' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
   }
 
   const rootRect = root.getBoundingClientRect()
