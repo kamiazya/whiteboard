@@ -189,3 +189,35 @@ describe('CanvasProperties inline variant (merged header row)', () => {
     expect(disclosure.className).toContain('absolute')
   })
 })
+
+describe('a spatial document has no facets to edit', () => {
+  // ADR-0009 decision 3: a facet is OKF frontmatter, and a JSON Canvas
+  // document has none to hold one. The server refuses to write facets there;
+  // offering the editor is the same claim made in the UI.
+  it('offers no properties disclosure', () => {
+    render(<CanvasProperties meta={meta()} onChange={vi.fn()} showFacets={false} />)
+
+    expect(screen.queryByRole('button', { name: /properties/i })).toBeNull()
+  })
+
+  it('still shows the title, which is the workspace name and not a facet', () => {
+    // The name is a workspace concern (ADR-0009 decision 2) that this editor
+    // still keeps in core meta for browser-local canvases. Hiding the facet
+    // disclosure must not take the name with it.
+    render(
+      <CanvasProperties
+        meta={meta({ title: 'Architecture' })}
+        onChange={vi.fn()}
+        showFacets={false}
+      />,
+    )
+
+    expect(textboxValue(/title/i)).toBe('Architecture')
+  })
+
+  it('a markdown document keeps the disclosure', () => {
+    render(<CanvasProperties meta={meta()} onChange={vi.fn()} />)
+
+    expect(screen.queryByRole('button', { name: /properties/i })).not.toBeNull()
+  })
+})
