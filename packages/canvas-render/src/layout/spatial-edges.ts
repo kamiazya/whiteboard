@@ -1567,6 +1567,28 @@ function routeOrthogonal(
       if (slid !== undefined) start = slid
     }
   }
+  // Same-side pairs get their approach from the depth of the SHARED corridor,
+  // which is measured from the departure anchor — so an arrival box that
+  // reaches further out than the departure box eats into it, and one that
+  // reaches further than the stub is deep leaves the corridor arriving from
+  // inside. Deepening the corridor to clear the arrival anchor by a full
+  // approach is the same-side analogue of the departure slide above: it buys
+  // the runway without adding a bend, because the corridor is a segment the
+  // route already draws.
+  if (fromSide === toSide) {
+    const arrivalOvershoot = toNormal.x * (end.x - start.x) + toNormal.y * (end.y - start.y)
+    const approach = fromDepth - arrivalOvershoot
+    // Only the band where the corridor clears the arrival anchor but by less
+    // than an approach. Deeper than that (`approach <= 0`) the corridor
+    // arrives from inside, the arrival stub is kept below, and that stub IS
+    // the runway — deepening those turns a sound route into a long detour
+    // around the outside of a box that reaches far further out than its
+    // partner. Inside the band the correction is bounded by MIN_APPROACH_PX,
+    // so the corridor never moves more than one approach.
+    if (approach > 0 && approach < MIN_APPROACH_PX) {
+      fromDepth = arrivalOvershoot + MIN_APPROACH_PX
+    }
+  }
   const exit = stubFrom(start, fromSide, fromDepth)
   const entry = stubFrom(end, toSide, toDepth)
   // The arrival stub exists so the last segment reaches the anchor from
