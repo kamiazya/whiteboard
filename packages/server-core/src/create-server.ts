@@ -18,9 +18,9 @@ import {
 } from './tools/canvas-crud.schemas.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
-import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createDocumentGetTool } from './tools/document-get.js'
+import { createDocumentSetTool } from './tools/document-set.js'
 import { createEdgeAddTool } from './tools/edge-add.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
@@ -140,7 +140,7 @@ export function createServer(deps: ServerDeps) {
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasDigest: createCanvasDigestTool(deps),
     documentGet: createDocumentGetTool(deps),
-    canvasImportOkf: createCanvasImportOkfTool(deps),
+    documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),

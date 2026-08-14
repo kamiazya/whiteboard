@@ -143,7 +143,7 @@ describe('canvas OKF read route', () => {
       body: JSON.stringify({ segment: 'doc-a', kind: 'markdown', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
-    await tools.canvasImportOkf.execute({
+    await tools.documentSet.execute({
       workspaceId: 'ws-1',
       canvasId: created.canvasId,
       markdown: '---\ntype: note\ntitle: Doc A\n---\n\nHello tree',

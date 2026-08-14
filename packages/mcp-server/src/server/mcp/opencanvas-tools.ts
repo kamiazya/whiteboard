@@ -314,16 +314,16 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   registerToolWithAnnotations(
     server,
-    tools.canvasImportOkf.name,
+    tools.documentSet.name,
     {
-      description: tools.canvasImportOkf.description,
-      inputSchema: tools.canvasImportOkf.inputSchema.shape,
-      outputSchema: tools.canvasImportOkf.outputSchema,
+      description: tools.documentSet.description,
+      inputSchema: tools.documentSet.inputSchema.shape,
+      outputSchema: tools.documentSet.outputSchema,
     },
     async (args) => {
-      const parsed = tools.canvasImportOkf.inputSchema.parse(args)
+      const parsed = tools.documentSet.inputSchema.parse(args)
       const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
-        tools.canvasImportOkf.execute(parsed),
+        tools.documentSet.execute(parsed),
       )
       return structuredJsonResult(result)
     },
