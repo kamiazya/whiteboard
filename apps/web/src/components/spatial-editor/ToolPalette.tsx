@@ -33,6 +33,7 @@ import {
   MousePointer2,
   Plus,
   Spline,
+  Square,
   StickyNote,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -41,12 +42,37 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 export type EditorTool = 'select' | 'hand' | 'connect'
 
+/**
+ * Drag payload for placing a creation where it is dropped: the kind travels
+ * in the MIME TYPE, not in the data.
+ *
+ * Two reasons it is shaped this way. A custom type rather than `text/plain`,
+ * because the canvas already turns foreign text drops into notes and the two
+ * must not be confused. And the kind in the type rather than in the value,
+ * because a drag data store is in protected mode for everything except
+ * `dragstart` — `getData` reads back empty at the drop, while `types` stays
+ * readable throughout.
+ */
+export const CREATE_DRAG_MIME_PREFIX = 'application/x-whiteboard-create+'
+
+/** The kind carried by a drag, or null when the drag is not one of ours. */
+export function draggedCreation(types: readonly string[]): DraggableCreation | null {
+  const type = types.find((t) => t.startsWith(CREATE_DRAG_MIME_PREFIX))
+  if (type === undefined) return null
+  const kind = type.slice(CREATE_DRAG_MIME_PREFIX.length)
+  return kind === 'note' || kind === 'rectangle' || kind === 'group' ? kind : null
+}
+/** Creations that place directly, so a drop point is all they need. */
+export type DraggableCreation = 'note' | 'rectangle' | 'group'
+
 interface ToolPaletteProps {
   /** Host-supplied controls (undo/redo/versions) docked as the leading group. */
   readonly leading?: ReactNode
   readonly onCreateNode: () => void
   readonly onCreateLink: () => void
   readonly onCreateGroup: () => void
+  /** Creates a text node nobody typed into, at the viewport center. */
+  readonly onCreateRectangle: () => void
   /** Absent when the host supplies no canvas listing — the entry hides. */
   readonly onCreateCanvasRef?: () => void
   /** Absent when the host supplies no image storage — the entry hides. */
@@ -63,6 +89,12 @@ interface AddMenuEntry {
   readonly label: string
   readonly icon: ReactNode
   readonly onSelect: () => void
+  /**
+   * Present when the entry can be dragged onto the canvas to choose its
+   * place. Absent for entries that open a dialog or a picker first — there
+   * is nothing to place until that returns.
+   */
+  readonly drag?: DraggableCreation
 }
 
 export function ToolPalette({
@@ -70,6 +102,7 @@ export function ToolPalette({
   onCreateNode,
   onCreateLink,
   onCreateGroup,
+  onCreateRectangle,
   onCreateCanvasRef,
   onCreateImage,
   tool,
@@ -106,6 +139,13 @@ export function ToolPalette({
       label: 'Add note',
       icon: <StickyNote aria-hidden="true" className="size-4" />,
       onSelect: onCreateNode,
+      drag: 'note',
+    },
+    {
+      label: 'Add rectangle',
+      icon: <Square aria-hidden="true" className="size-4" />,
+      onSelect: onCreateRectangle,
+      drag: 'rectangle',
     },
     {
       label: 'Add link',
@@ -116,6 +156,7 @@ export function ToolPalette({
       label: 'Add group',
       icon: <Frame aria-hidden="true" className="size-4" />,
       onSelect: onCreateGroup,
+      drag: 'group',
     },
     ...(onCreateCanvasRef !== undefined
       ? [
@@ -268,6 +309,18 @@ export function ToolPalette({
               role="menuitem"
               aria-label={entry.label}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+              // Tapping keeps the viewport-center placement; dragging hands
+              // the choice of place to the person making the thing, which is
+              // what stops the view jumping to wherever the center happened
+              // to be. Both paths stay — a drag is not reachable one-handed
+              // on every device, and the keyboard has only the tap.
+              draggable={entry.drag !== undefined}
+              onDragStart={(e) => {
+                if (entry.drag === undefined) return
+                e.dataTransfer.setData(`${CREATE_DRAG_MIME_PREFIX}${entry.drag}`, entry.drag)
+                e.dataTransfer.effectAllowed = 'copy'
+                setAddOpen(false)
+              }}
               onClick={() => {
                 setAddOpen(false)
                 entry.onSelect()
