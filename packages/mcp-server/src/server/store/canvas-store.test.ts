@@ -381,9 +381,14 @@ describe('getCanvasKind', () => {
     expect(await getCanvasKind('session1', 'note')).toBe('markdown')
   })
 
-  it('defaults to spatial when saveCanvas was called without a kind option', async () => {
+  it('reports an unrecorded kind as unknown rather than guessing spatial', async () => {
+    // Its only callers stamp the answer onto a restored canvas's row, so a
+    // guess here is not a display default — it is written down, and a
+    // markdown document that predates kinds becomes permanently spatial,
+    // opened by the wrong editor. Both callers already omit a null kind,
+    // which copies the source's real state, unknown included.
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    expect(await getCanvasKind('session1', 'canvas-a')).toBe('spatial')
+    expect(await getCanvasKind('session1', 'canvas-a')).toBeNull()
   })
 })
 

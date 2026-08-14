@@ -296,9 +296,16 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
   })
 }
 
-// Returns null when the canvas does not exist, so callers can distinguish
-// "no such canvas" from a stored-but-unset kind (which the null-column
-// back-compat default in listCanvases resolves to 'spatial').
+// Null for both "no such canvas" and "the canvas records no kind" — its
+// callers want the same thing from either, which is to stamp nothing.
+//
+// This deliberately does NOT resolve an unset kind to 'spatial' the way
+// listCanvases does. The difference is what the answer is used for: a list
+// renders a badge, while this feeds a WRITE onto a restored canvas's row.
+// A guess that gets stored outlives the guess — a markdown document that
+// predates kinds would become permanently spatial and open in the wrong
+// editor, which is the exact failure the callers' comments say they are
+// copying the source's kind to avoid.
 export async function getCanvasKind(workspaceId: string, slug: string): Promise<CanvasKind | null> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
@@ -309,8 +316,7 @@ export async function getCanvasKind(workspaceId: string, slug: string): Promise<
     .where('workspaceId', '=', workspaceId)
     .where('slug', '=', slug)
     .executeTakeFirst()
-  if (!row) return null
-  return row.kind ?? 'spatial'
+  return row?.kind ?? null
 }
 
 export interface CompactResult {
