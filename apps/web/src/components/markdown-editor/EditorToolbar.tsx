@@ -1,5 +1,5 @@
-import { Bold, BookOpen, Code, Columns2, Italic, PenLine } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Bold, BookOpen, Code, Columns2, Italic, PenLine } from 'lucide-react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -58,7 +58,7 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   return (
     <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
-      <div className="flex items-center gap-0.5" role="group" aria-label="Formatting">
+      <fieldset className="flex items-center gap-0.5" aria-label="Formatting">
         {FORMAT_ACTIONS.map(({ label, delimiter, icon: Icon, shortcut }) => (
           <Tooltip key={label}>
             <TooltipTrigger asChild>
@@ -79,7 +79,7 @@ export function EditorToolbar({
             <TooltipContent>{shortcut === '' ? label : `${label} ${shortcut}`}</TooltipContent>
           </Tooltip>
         ))}
-      </div>
+      </fieldset>
 
       <div className="ml-auto flex items-center gap-3">
         <span
@@ -88,9 +88,8 @@ export function EditorToolbar({
         >
           {wordCount === 1 ? '1 word' : `${wordCount} words`}
         </span>
-        <div
+        <fieldset
           className="bg-muted flex items-center gap-0.5 rounded-lg p-0.5"
-          role="group"
           aria-label="View mode"
         >
           {MODE_OPTIONS.map(({ mode: option, label, icon: Icon }) => {
@@ -118,7 +117,7 @@ export function EditorToolbar({
               </Tooltip>
             )
           })}
-        </div>
+        </fieldset>
       </div>
     </div>
   )

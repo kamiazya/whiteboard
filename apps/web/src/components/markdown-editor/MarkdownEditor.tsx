@@ -14,7 +14,7 @@ import { cn } from '../../lib/utils.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { PreviewPane } from './PreviewPane.js'
-import { type SourcePaneApi, SourcePane } from './SourcePane.js'
+import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 
 export interface MarkdownEditorProps {
