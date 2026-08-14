@@ -45,21 +45,40 @@ export type DeleteDocumentInput = z.infer<typeof deleteDocumentInputSchema>
  * It is deliberately separate from `CanvasDocStore`, which owns a single
  * document's bytes and knows nothing about where that document sits. This
  * one owns placement and is the only thing that assigns a `canvasId`.
+ *
+ * **Every mutating operation is atomic against concurrent callers in the same
+ * workspace, and each either fully applies or does not apply at all.** Path
+ * uniqueness is the entire mechanism enforcing sibling uniqueness here, so an
+ * implementation that checks a path and then writes it as two separable steps
+ * can satisfy this interface and still produce duplicates, and one that
+ * rewrites a subtree without the same guarantee can leave a hierarchy half
+ * moved. Neither is observable through the types, which is why it is stated.
  */
 export interface DocumentIndex {
   /**
    * Fails if the path is taken. Creating never silently adopts an existing
    * document, because the caller that wanted a new one would otherwise
-   * start writing into somebody else's.
+   * start writing into somebody else's. Claiming the path and assigning the
+   * `canvasId` is one step, not a check followed by a write.
    */
   createDocument(input: CreateDocumentInput): Promise<DocumentEntry>
   resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null>
+  /**
+   * Ordered by path. A hierarchical listing is the point of this index, and
+   * leaving the order to whatever a store's rows happen to come back in would
+   * put a storage detail in front of a user.
+   */
   listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]>
   /**
    * Moves a document, and with it every descendant — `a/b` moving to `c`
    * takes `a/b/d` to `c/d`, because a descendant's path is defined by its
-   * ancestors' and nothing else records the relationship. Fails if the
-   * destination is taken.
+   * ancestors' and nothing else records the relationship.
+   *
+   * Fails if **any** path the move would produce is already taken, not only
+   * `to` itself: moving `a` to `c` collides when `a/d` and `c/d` both exist
+   * even though `c` is free. The move is rejected whole in that case — a
+   * partial move would silently merge two hierarchies, and the caller asked
+   * to relocate one.
    */
   moveDocument(input: MoveDocumentInput): Promise<void>
   /**
