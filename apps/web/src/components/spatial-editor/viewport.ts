@@ -197,9 +197,12 @@ export interface ViewportOcclusion {
 
 /** How far one axis must move so [start,end] lands inside [min,max]. */
 function shiftToReveal(start: number, end: number, min: number, max: number): number {
-  // Too big to reveal whole — center it, because every pan leaves some of it
-  // off-screen and the middle is the least arbitrary choice.
-  if (end - start > max - min) return (start + end) / 2 - (min + max) / 2
+  // Centre whenever both margins cannot be honoured at once. Only ONE edge
+  // is corrected below, so a box within a margin of the full extent would
+  // otherwise be pushed clear of one edge and left hanging past the other —
+  // still under the dock, by up to PAN_MARGIN_PX. Centring reveals any box
+  // that fits at all, so no clamp is needed after it.
+  if (end - start > max - min - 2 * PAN_MARGIN_PX) return (start + end) / 2 - (min + max) / 2
   if (start < min + PAN_MARGIN_PX) return start - (min + PAN_MARGIN_PX)
   if (end > max - PAN_MARGIN_PX) return end - (max - PAN_MARGIN_PX)
   return 0

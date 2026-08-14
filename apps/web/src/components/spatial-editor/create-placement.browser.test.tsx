@@ -177,7 +177,6 @@ it('nothing is ever parked under the dock', () => {
   const dockTop = dock.getBoundingClientRect().top - rootRect.top
   const zoom = Number(/scale\(([\d.]+)\)/.exec(transformOfRoot(container))?.[1] ?? 1)
   const offset = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(transformOfRoot(container))
-  const panX = Number(offset?.[1] ?? 0)
   const panY = Number(offset?.[2] ?? 0)
   for (const node of latest.canvas.nodes) {
     const screenBottom = (node.y + node.height) * zoom + panY
@@ -185,10 +184,8 @@ it('nothing is ever parked under the dock', () => {
     // A node whose whole body is above the dock strip, or scrolled off the
     // top, is fine — the failure being pinned is a node sitting IN the strip.
     if (screenTop > rootRect.height) continue
-    expect({ id: node.id, screenBottom }).toEqual({ id: node.id, screenBottom: screenBottom })
     expect(screenBottom).toBeLessThanOrEqual(dockTop)
   }
-  expect(panX).toBeDefined()
 })
 
 function transformOfRoot(container: HTMLElement): string {

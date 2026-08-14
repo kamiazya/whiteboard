@@ -199,6 +199,22 @@ describe('panToShowTarget', () => {
     expect(next.y).toBeCloseTo(540 + 40 + PAN_MARGIN_PX - (containerSize.height - 80), 0)
   })
 
+  it('reveals a box whose size is within a margin of the visible extent — both edges, not one', () => {
+    // The band the one-edge-at-a-time shift used to miss: tall enough that
+    // honouring the top margin pushes the bottom back under the dock, but
+    // still small enough to fit. A node landing 2px under the strip is the
+    // exact thing the pan exists to prevent.
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const container = { width: 800, height: 280 }
+    const box = { x: 100, y: -100, width: 100, height: 200 }
+    const next = panToShowTarget(box, vp, container, { bottom: 70 })
+    if (next === undefined) throw new Error('expected a pan')
+    const top = canvasToScreen({ x: box.x, y: box.y }, next)
+    const bottom = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, next)
+    expect(top.y).toBeGreaterThanOrEqual(0)
+    expect(bottom.y).toBeLessThanOrEqual(container.height - 70)
+  })
+
   it('centers on an axis the box cannot fit on, since no pan can reveal all of it', () => {
     const vp = { x: 0, y: 0, zoom: 1 }
     const box = { x: 0, y: 0, width: 100, height: 2000 }
