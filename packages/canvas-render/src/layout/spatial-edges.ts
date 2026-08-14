@@ -342,12 +342,14 @@ function computeAnchorsFor(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   sides: ReadonlyMap<string, SidePair>,
-  // Alignment applies only to FINAL anchors, never inside the optimizer's
-  // trials: sliding anchors mid-optimization changes trial costs, which
-  // shifts side-choice equilibria on multi-edge canvases in ways the
-  // ranking never anticipated (observed: a bystander edge re-siding onto a
-  // worse face). Post-processing settled sides keeps the optimizer's
-  // decisions identical and only straightens the pairs it already chose.
+  // Alignment never varies WITHIN one optimizer run: sliding anchors
+  // mid-optimization changes trial costs, which shifts side-choice
+  // equilibria on multi-edge canvases in ways the ranking never anticipated
+  // (observed: a bystander edge re-siding onto a worse face). The search
+  // proper therefore runs entirely unaligned, and `assignEdgeAnchors` hands
+  // its settled configuration back through a SECOND, entirely aligned run —
+  // see `optimizeSideChoices`'s own `align` parameter. Each run is internally
+  // consistent, so neither can oscillate.
   align = true,
   // Committed anchor state to pin verbatim (live-drag bystanders): the
   // pinned ends still COUNT toward their group's fan-out fractions, so a
@@ -590,6 +592,21 @@ function optimizeSideChoices(
   // carried ones still get the same optimization the committed render
   // applies, so mid-drag and post-drop agree.
   locked?: ReadonlySet<string>,
+  // Whether trials are scored against ALIGNED anchors — the geometry that
+  // will actually be drawn. The search proper runs unaligned (`false`): the
+  // comment on `computeAnchorsFor`'s own `align` records why, and it still
+  // holds. The cost is that a configuration can score clean in unaligned
+  // trial space and acquire real defects once the final pass aligns it —
+  // measured on a reported canvas, an edge settled on a route scoring
+  // `[0,0,0,0,267,3,5]` after alignment while a candidate already in its
+  // ranked list scored `[0,0,0,0,0,1,3]`, strictly better on every tier and
+  // never adopted, because the search saw neither number. So the settled
+  // configuration is handed back through this same search ONCE with
+  // `align: true`. That is not the rejected mid-search alignment: costs
+  // move only BETWEEN the two runs, never during either, so neither run's
+  // equilibrium can oscillate.
+  align = false,
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
@@ -658,14 +675,26 @@ function optimizeSideChoices(
     b.y - COST_QUANTUM <= a.y + a.h
 
   let current = new Map(initial)
-  let anchors = computeAnchorsFor(nodes, edges, current, false)
+  let anchors = computeAnchorsFor(nodes, edges, current, align, pins)
   let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
-  const foreignBodiesFor = edges.map((e) =>
-    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
-  )
+  // A rect that FULLY CONTAINS one of this edge's endpoints (a group frame
+  // around its member) is not an obstacle: every route out of the contained
+  // node crosses it, so there is nothing to route around. `routeEdge` has
+  // always excluded them; the SEARCH did not, so it priced ink the router
+  // could not avoid and could be talked into a detour to "save" it — the
+  // same predicate `deriveDefaultSides`'s occlusion filter already uses.
+  const foreignBodiesFor = edges.map((e) => {
+    const endpoints = [byId.get(e.fromNode), byId.get(e.toNode)]
+      .filter((n): n is SpatialNode => n !== undefined)
+      .map(rectOf)
+    return nodes
+      .filter((n) => n.id !== e.fromNode && n.id !== e.toNode)
+      .map(rectOf)
+      .filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
+  })
   // Every node's border, INCLUDING an edge's own endpoints — border-tracing
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
   // check which must exclude the edge's endpoints.
@@ -709,7 +738,7 @@ function optimizeSideChoices(
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
   } => {
-    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, false)
+    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, align, pins)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
@@ -813,7 +842,12 @@ function optimizeSideChoices(
   // actually look bad still improve. At or under the full size every edge
   // iterates in document order, bit-identical to the unbounded loop.
   const trialEdgesForPass = (): readonly CanvasEdge[] => {
-    if (edges.length <= FULL_OPT_MAX_EDGES) return edges
+    // The aligned run is a REPAIR pass over an already-settled
+    // configuration, so it always takes the ranked-and-filtered list at
+    // every size: an edge with nothing wrong with it has nothing for this
+    // pass to fix, and trying candidates for it is the whole of the pass's
+    // cost with none of its benefit.
+    if (!align && edges.length <= FULL_OPT_MAX_EDGES) return edges
     const contribution = (i: number): ConfigCost => {
       let cost = selfCosts[i]!
       for (let j = 0; j < edges.length; j++) {
@@ -1013,11 +1047,13 @@ export function assignEdgeAnchors(
     let liveSides: ReadonlyMap<string, SidePair> = merged
     if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
       liveSides = optimizeSideChoices(nodes, edges, style, merged, locked)
+      liveSides = optimizeSideChoices(nodes, edges, style, liveSides, locked, true, sideOverrides)
     }
     return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, style, true, sideOverrides)
   }
   if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
     sides = optimizeSideChoices(nodes, edges, style, sides)
+    sides = optimizeSideChoices(nodes, edges, style, sides, undefined, true)
   }
   return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
 }

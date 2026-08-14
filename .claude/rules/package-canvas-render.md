@@ -333,19 +333,48 @@ paths:
       (tier 5) and realized-bends (tier 6, self-only and deliberately
       last).
       border-tracing sits BELOW crossings rather than adjacent to
-      overlap-and-intrusion: it is evaluated against the optimizer's
-      unaligned TRIAL paths (`computeAnchorsFor`'s pre-`slideAlongSide`
-      representation, used only for candidate ranking), whose unaligned
-      anchor placement can coincidentally trace a bystander's extended
-      border for a real stretch — a false signal a genuine crossing never
-      produces (verified against `edge-lane-rank.test.ts`'s sweep-rank pin:
-      tier 1 placement adopted a route with a real crossing over a
-      crossing-free one). endpoint-body-ink sits below border-tracing for
-      the same trial-path-artifact reason. `pairScore`/`selfPenalty`
+      overlap-and-intrusion: the SEARCH evaluates it against unaligned TRIAL
+      paths (`computeAnchorsFor`'s pre-`slideAlongSide` representation),
+      whose unaligned anchor placement can coincidentally trace a
+      bystander's extended border for a real stretch — a false signal a
+      genuine crossing never produces (verified against
+      `edge-lane-rank.test.ts`'s sweep-rank pin: tier 1 placement adopted a
+      route with a real crossing over a crossing-free one).
+      endpoint-body-ink sits below border-tracing for the same
+      trial-path-artifact reason. Both tiers are re-read against REAL
+      geometry by the aligned second run described below, which is where a
+      border trace that survives into the drawn route gets repaired. `pairScore`/`selfPenalty`
       (`spatial-edges.ts`) compose over the list, and every cost-tuple
       helper (`ConfigCost` shape, `addCost`, `lessCost`,
       `hasRepairableProblem`) derives from the declared tiers, so a new
       penalty rule is one list entry, never a new slot threaded by hand.
+    - **The side-choice search runs TWICE, and only the second run sees the
+      geometry that gets drawn.** `optimizeSideChoices` scores its trials
+      from unaligned anchors, because varying alignment *within* a run moves
+      trial costs mid-search and shifts side-choice equilibria (a bystander
+      edge was observed re-siding onto a worse face). The price is that a
+      configuration can score clean in trial space and acquire real defects
+      the instant the final pass aligns it — a reported canvas settled on a
+      route scoring `[0,0,0,0,267,3,5]` aligned, while a candidate already
+      in its own ranked list scored `[0,0,0,0,0,1,3]`; the search adopted
+      neither number because it saw neither. So `assignEdgeAnchors` hands
+      the settled configuration back through the SAME search once more with
+      `align: true`. Alignment is constant within each run, so neither can
+      oscillate — the rejected variant was alignment that varied *during* a
+      run, which is a different thing. The second run is a REPAIR pass, so
+      it always takes the worst-offender edge list at every canvas size
+      (the unaligned run keeps its exact full-iteration behaviour at or
+      under `FULL_OPT_MAX_EDGES`): an edge with nothing wrong with it has
+      nothing for the pass to fix. It costs roughly 2x layout time on a
+      pathological 200-edge canvas (measured 190ms -> 405ms; 46ms -> 78ms at
+      40 edges) and buys own-endpoint violations 35 -> 14, crossings
+      647 -> 500, interior ink 3545 -> 2192. Both passes matter: one pass
+      leaves `foreign` violations WORSE than not running it at all. Two
+      earlier shapes of this same idea were measured and discarded — a
+      bespoke repair loop scoring whole configurations (13x layout time),
+      then the same loop reusing unchanged paths (4.5x). What made it
+      affordable was reusing the search's OWN incremental trial machinery
+      instead of writing a second scorer beside it.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
       FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam
@@ -455,7 +484,13 @@ paths:
   CONTAINS an edge's endpoint (a group enclosing its members) can never
   be routed around — every detour still has to reach the point inside
   it — so it must be excluded from the obstacle set, or the router falls
-  back to a garbage shortest-detour around the whole frame.
+  back to a garbage shortest-detour around the whole frame. This applies
+  to the COST MODEL as much as to the router: `optimizeSideChoices`'s
+  `foreignBodiesFor` used to omit the `fullyContains` filter `routeEdge`
+  applies, so the search priced ink through a group frame the router had
+  correctly ignored, and could be talked into a dogleg to "save" ink no
+  route could avoid. A cost model that disagrees with the router about
+  what an obstacle is will trade real quality for an imaginary saving.
 - Adding a second producer for geometry that is both drawn and consumed
   elsewhere (hit-testing, bounds) instead of sharing one decomposition —
   the curved-edge highlight/hit mismatch was exactly this drift.
