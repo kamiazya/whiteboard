@@ -39,13 +39,26 @@ import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
  * Replica work is therefore queued behind `loroReady` instead of running
  * inline. The stream relay above does not wait for it — a tab reading raw
  * daemon frames keeps working whether or not the replica ever loads.
+ *
+ * A load that never arrives resolves to `undefined` rather than rejecting.
+ * Degrading is the only sound answer for a worker no tab can restart: the
+ * relay keeps working, `replicaFor` answers nothing, and the replica-backed
+ * messages go unanswered instead of taking down every document in the worker.
+ * Rejecting is also observably wrong — a shared worker outlives the page that
+ * started it, so a chunk still loading when the environment goes away turns
+ * into an unhandled rejection charged to whoever is left, which is how this
+ * first showed up: 2094 tests passing and the run failing anyway on four
+ * rejections raised after teardown.
  */
 type LoroModule = typeof import('loro-crdt')
 let loro: LoroModule | undefined
-const loroReady: Promise<LoroModule> = import('loro-crdt').then((module) => {
-  loro = module
-  return module
-})
+const loroReady: Promise<LoroModule | undefined> = import('loro-crdt').then(
+  (module) => {
+    loro = module
+    return module
+  },
+  () => undefined,
+)
 
 /**
  * Every replica operation, in arrival order.
@@ -57,10 +70,13 @@ const loroReady: Promise<LoroModule> = import('loro-crdt').then((module) => {
  * something calling itself an authority.
  */
 let replicaQueue: Promise<unknown> = loroReady
-function queueReplicaWork<T>(work: () => T | Promise<T>): Promise<T> {
-  const next = replicaQueue.then(work, work)
-  replicaQueue = next.catch(() => undefined)
-  return next
+function queueReplicaWork(work: () => unknown): void {
+  // Returns nothing on purpose. Every caller here fires and forgets, so a
+  // promise handed back would be a rejection nobody handles the moment any
+  // work throws — the same shape as the load rejection above, and just as
+  // invisible until a run fails with every test passing. Swallowing belongs
+  // here rather than at four call sites that would each have to remember.
+  replicaQueue = replicaQueue.then(work, work).catch(() => undefined)
 }
 
 const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
@@ -109,8 +125,8 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function importIntoReplica(doc: string, bytes: Uint8Array): Promise<void> {
-  return queueReplicaWork(() => {
+function importIntoReplica(doc: string, bytes: Uint8Array): void {
+  queueReplicaWork(() => {
     // Total by construction: a frame this replica cannot merge (a truncated
     // update, a future format) must not take the worker down for every tab
     // and every other document. The daemon remains the source it can re-sync
@@ -166,7 +182,7 @@ function handle(port: MessagePort, raw: unknown): void {
   }
 
   if (msg.type === 'snapshot-request') {
-    void queueReplicaWork(() => {
+    queueReplicaWork(() => {
       // An empty snapshot for a document nobody has opened yet is the right
       // answer, not an error: forking from empty and letting the daemon fill
       // it in is the same path a first-ever open already takes.
@@ -178,7 +194,7 @@ function handle(port: MessagePort, raw: unknown): void {
   }
 
   if (msg.type === 'push') {
-    void queueReplicaWork(() => {
+    queueReplicaWork(() => {
       const replica = replicaFor(msg.doc)
       if (replica === undefined) return
       const before = replica.version()
@@ -204,7 +220,7 @@ function handle(port: MessagePort, raw: unknown): void {
         // Into the replica first, then relayed verbatim. Both, for now: the
         // raw frame is what today's clients consume, and the replica is what
         // forks will. One of the two goes away once every client has moved.
-        void importIntoReplica(msg.doc, bytes)
+        importIntoReplica(msg.doc, bytes)
         port.postMessage({ type: 'update', doc: msg.doc, update: toBase64(bytes) })
       },
       onMessage: (text) => {
