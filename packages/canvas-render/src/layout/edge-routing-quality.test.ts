@@ -19,6 +19,8 @@ import {
   bends,
   borderInk,
   crossings,
+  drawnLength,
+  finalSegmentLength,
   interiorInk,
   type MetricRect,
   pathLength,
@@ -68,6 +70,39 @@ function avoidableInk(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[
   return found
 }
 
+/**
+ * The arrowhead's own length. An edge whose final segment is shorter paints
+ * an arrow with no line under it.
+ */
+const ARROW_LENGTH_PX = 10
+
+describe('an edge is always visible', () => {
+  // The strictest thing the corpus can say, and it is true today, so it is a
+  // hard invariant rather than a counted debt: an edge someone drew must
+  // never render as nothing. A zero-length path paints no line AND cannot
+  // orient an arrowhead, so a reader cannot tell the edge exists — which is
+  // indistinguishable from the canvas having lost it.
+  //
+  // This exists because a fix for a degenerate case very nearly shipped that
+  // way: two boxes touching exactly put both anchors on one point, and
+  // collapsing the route to that point removed the wrong drawing by removing
+  // the drawing.
+  // A deliberate sweep over the whole corpus, like the aggregate below: it
+  // routes every edge of 2005 layouts, so it needs a budget that reflects
+  // the work rather than the 5s default a unit test gets.
+  it('draws something for every edge in every layout', { timeout: 60_000 }, () => {
+    const invisible: { layout: string; edge: string }[] = []
+    for (const testCase of [...ROUTING_CORPUS, ...syntheticLayouts(2000)]) {
+      const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'orthogonal')
+      for (const edge of testCase.edges) {
+        const { path } = routeEdge(testCase.nodes, edge, 'orthogonal', anchors.get(edge.id))
+        if (drawnLength(path) === 0) invisible.push({ layout: testCase.name, edge: edge.id })
+      }
+    }
+    expect(invisible).toEqual([])
+  })
+})
+
 describe('routing quality', () => {
   it.each(
     ROUTING_CORPUS.map((c) => [c.name, c] as const),
@@ -113,6 +148,8 @@ describe('routing quality across the synthetic corpus', () => {
     let bendCount = 0
     let crossingCount = 0
     let length = 0
+    // Arrowheads drawn on a segment shorter than the arrow itself.
+    let shortRunway = 0
     for (const testCase of syntheticLayouts(2000)) {
       for (const v of avoidableInk(testCase.nodes, testCase.edges)) {
         violations[v.kind]++
@@ -126,6 +163,7 @@ describe('routing quality across the synthetic corpus', () => {
       for (const path of paths) {
         bendCount += bends(path)
         length += pathLength(path)
+        if (finalSegmentLength(path) < ARROW_LENGTH_PX) shortRunway++
         for (const n of testCase.nodes) border += borderInk(path, rectOf(n))
       }
     }
@@ -136,13 +174,15 @@ describe('routing quality across the synthetic corpus', () => {
       bends: bendCount,
       crossings: crossingCount,
       length: Math.round(length),
+      shortArrowRunway: shortRunway,
     }).toEqual({
-      violations: { 'own-endpoint': 35, foreign: 17, degenerate: 2 },
-      interiorInk: 3625,
+      violations: { 'own-endpoint': 35, foreign: 17, degenerate: 0 },
+      interiorInk: 3545,
       borderInk: 1147,
-      bends: 8484,
+      bends: 8486,
       crossings: 647,
-      length: 1362720,
+      length: 1362776,
+      shortArrowRunway: 209,
     })
   })
 })

@@ -870,6 +870,117 @@ function optimizeSideChoices(
   return current
 }
 
+/**
+ * Anchors for `sides`, with any edge whose two ends landed on the SAME point
+ * re-sided onto a face that has room.
+ *
+ * Boxes that touch exactly produce that collision: flush-stacked nodes wired
+ * bottom-to-top share the corner their fan-out spans meet at. The pair is
+ * geometrically fine — the sides do face each other — and there is simply no
+ * distance between them, so the route degenerates and the edge disappears.
+ * An edge someone drew deliberately must not vanish, and the boxes are only
+ * flush on ONE axis: the other one has space to route through, which is a
+ * side CHOICE, not something the router can invent once the sides are fixed.
+ *
+ * Only the collided edges are re-sided, and an edge whose sides were
+ * authored is left exactly as authored — a user who names both sides has
+ * asked for that geometry, degenerate or not (routeOrthogonal still declines
+ * to draw a spike for it).
+ */
+function anchorsWithoutCoincidentEnds(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  sides: ReadonlyMap<string, SidePair>,
+  style: EdgeRoutingStyle,
+  align: boolean,
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+): ReadonlyMap<string, EdgeAnchorPair> {
+  const coincides = (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string): boolean => {
+    const a = anchors.get(id)
+    return a?.from !== undefined && a.to !== undefined && a.from.x === a.to.x && a.from.y === a.to.y
+  }
+  const anchors = computeAnchorsFor(nodes, edges, sides, align, pins)
+  const collided = edges.filter(
+    (edge) =>
+      edge.fromNode !== edge.toNode &&
+      (edge.fromSide === undefined || edge.toSide === undefined) &&
+      coincides(anchors, edge.id),
+  )
+  if (collided.length === 0) return anchors
+
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const repaired = new Map(sides)
+  for (const edge of collided) {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) continue
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    const fromCenter = centerOf(fromRect)
+    const toCenter = centerOf(toRect)
+    const candidates = rankedSidePairs(
+      toCenter.x - fromCenter.x,
+      toCenter.y - fromCenter.y,
+      fromRect,
+      toRect,
+      () => 0,
+    )
+    // Every candidate is scored, not just the first that qualifies. Two
+    // predicates are needed and neither alone is enough: "not coincident"
+    // alone accepted a pair that reached the far side straight THROUGH the
+    // target, and "first clean one" alone accepted a four-bend loop around
+    // both boxes when a short hop up the shared side was available. Clean is
+    // the requirement; shortest-and-straightest picks among the clean.
+    // Three tiers, because they are not equally important and treating them
+    // as one filter made an edge vanish: a candidate that is clean AND has
+    // runway is best, a clean one without runway still beats an ugly one, and
+    // ANY visible route beats the collided pair. Visibility is the
+    // requirement; the rest is preference.
+    let best: { pair: SidePair; tier: number; bends: number; length: number } | undefined
+    for (const pair of candidates) {
+      const sided: SidePair = {
+        fromSide: edge.fromSide ?? pair.fromSide,
+        toSide: edge.toSide ?? pair.toSide,
+      }
+      const trial = new Map(repaired)
+      trial.set(edge.id, sided)
+      const trialAnchors = computeAnchorsFor(nodes, edges, trial, align, pins)
+      if (coincides(trialAnchors, edge.id)) continue
+      const { path } = routeEdge(nodes, edge, style, trialAnchors.get(edge.id))
+      // The arrowhead is drawn ON the final segment; a shorter one paints an
+      // arrow with no line under it. Re-siding is choosing this route from
+      // scratch, so it can decline the ones that arrive with no runway.
+      const tail = path[path.length - 1]
+      const beforeTail = path[path.length - 2]
+      const runway =
+        tail === undefined || beforeTail === undefined
+          ? 0
+          : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
+      const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
+      const scored = {
+        pair: sided,
+        tier: clean && runway >= ARROW_RUNWAY_PX ? 0 : clean ? 1 : 2,
+        bends: bendCount(path),
+        length: pathLength(path),
+      }
+      if (
+        best === undefined ||
+        scored.tier < best.tier ||
+        (scored.tier === best.tier &&
+          (scored.bends < best.bends ||
+            (scored.bends === best.bends && scored.length < best.length)))
+      ) {
+        best = scored
+      }
+    }
+    if (best !== undefined) repaired.set(edge.id, best.pair)
+    // No candidate reaches it cleanly: keep the collided pair. routeOrthogonal
+    // draws the shared point rather than a spike, so the worst case is an
+    // invisible edge, never a wrong one.
+  }
+  return computeAnchorsFor(nodes, edges, repaired, align, pins)
+}
+
 export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
@@ -903,13 +1014,17 @@ export function assignEdgeAnchors(
     if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
       liveSides = optimizeSideChoices(nodes, edges, style, merged, locked)
     }
-    return computeAnchorsFor(nodes, edges, liveSides, true, sideOverrides)
+    return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, style, true, sideOverrides)
   }
   if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES) {
     sides = optimizeSideChoices(nodes, edges, style, sides)
   }
-  return computeAnchorsFor(nodes, edges, sides)
+  return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
 }
+
+/** An arrowhead's own length: a final segment shorter than this paints an
+ * arrow with no line under it (see edge-arrows.ts's ARROW_LENGTH). */
+const ARROW_RUNWAY_PX = 10
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
@@ -1219,6 +1334,18 @@ function routeOrthogonal(
   raw: readonly Rect[],
 ): Point[] {
   let start = startAnchor
+  // Boxes that touch exactly can put both anchors on the same point — two
+  // flush-stacked nodes wired bottom-to-top land on the shared corner of
+  // their fan-out spans. There is no distance to route: the connection IS
+  // that point. Everything below assumes a direction to leave and arrive
+  // along, and with none it built a stub each way, drawing a spike 20px
+  // into one box and 40px back through both.
+  //
+  // ponytail: this draws nothing rather than the wrong thing. A VISIBLE
+  // connector between flush boxes would have to leave from a face with room
+  // beside it, which is a side-choice decision (`rankedSidePairs`), not
+  // something this function can invent after the sides are fixed.
+  if (start.x === end.x && start.y === end.y) return [start, end]
   // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
   // often share one tangent coordinate — anchors are renderer-chosen
   // defaults, so sliding one end along its side buys a single straight
