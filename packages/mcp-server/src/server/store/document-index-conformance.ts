@@ -130,12 +130,17 @@ export function describeDocumentIndexConformance(
       // `a/b` moving to `a` produces `a` and `a/b`, and `a/b` is exactly what
       // the move is emptying. Treating it as occupied would refuse a move
       // that is perfectly well defined.
-      await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'spatial' })
+      // Deepest first, deliberately. A store that rewrites rows in whatever
+      // order its query returned will then try `a/b/b` -> `a/b` while the
+      // original `a/b` is still there, and collide on a move the contract
+      // says must succeed. Creating the shallow one first hides that behind
+      // insertion order.
       const grandchild = await index.createDocument({
         workspaceId: WS,
         path: 'a/b/b',
         kind: 'markdown',
       })
+      await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'spatial' })
 
       await index.moveDocument({ workspaceId: WS, from: 'a/b', to: 'a' })
 

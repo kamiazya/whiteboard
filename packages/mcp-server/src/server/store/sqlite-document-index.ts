@@ -117,6 +117,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
         const occupied = new Set(rows.map((row) => row.slug))
         const rewritten = moving.map((row) => ({
           id: row.id,
+          from: row.slug,
           slug: `${to}${row.slug.slice(from.length)}`,
         }))
         // Every produced path, not just `to`: moving `a` onto a free `c`
@@ -129,6 +130,15 @@ export class SqliteDocumentIndex implements DocumentIndex {
             throw new DocumentPathTakenError(workspaceId, row.slug)
           }
         }
+
+        // Shallowest source first. When a move goes UP into its own ancestor
+        // namespace the produced path of a deeper row equals the vacated path
+        // of a shallower one, so writing them in the order the query happened
+        // to return can hit the unique index on a move the contract says
+        // succeeds. `compareDocumentPaths` already sorts a parent before its
+        // descendants, which is exactly the order that frees each path before
+        // anything claims it.
+        rewritten.sort((left, right) => compareDocumentPaths(left.from, right.from))
 
         const now = Date.now()
         for (const row of rewritten) {
