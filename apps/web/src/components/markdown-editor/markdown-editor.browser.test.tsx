@@ -9,6 +9,7 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
 })
 
 describe('MarkdownEditor (real browser)', () => {
@@ -26,6 +27,28 @@ describe('MarkdownEditor (real browser)', () => {
     expect(onChange).toHaveBeenCalled()
     const lastCall = onChange.mock.calls.at(-1)?.[0]
     expect(lastCall).toBe('# Hello world')
+  })
+
+  it('the toolbar Bold button wraps the live selection without collapsing it', async () => {
+    const onChange = vi.fn()
+    const { getByTestId, getByRole } = render(
+      <MarkdownEditor value="make this bold" onChange={onChange} />,
+    )
+
+    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
+
+    // Select the word "this" (offsets 5..9) from the document start.
+    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+    await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}')
+    await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
+
+    await userEvent.click(getByRole('button', { name: 'Bold' }))
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('make **this** bold')
+
+    // The selection stayed live inside the delimiters: typing replaces it.
+    await userEvent.keyboard('that')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('make **that** bold')
   })
 
   it('the preview SVG reflects real Canvas 2D text measurement: a longer preceding run yields a wider advance for the next run', async () => {

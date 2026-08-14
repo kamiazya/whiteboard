@@ -69,7 +69,9 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(<MarkdownEditor value={'keep me\ntail'} onChange={onChange} />)
 
-    await userEvent.click(editableOf())
+    // Click the FIRST LINE, not the content element: the content column has
+    // vertical padding, so its center point can map to a different line.
+    await userEvent.click(editableOf().querySelector('.cm-line') as HTMLElement)
     await userEvent.keyboard('{Home}')
     // Select "keep" on the first line.
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
