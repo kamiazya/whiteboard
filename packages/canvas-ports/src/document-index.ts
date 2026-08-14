@@ -62,6 +62,14 @@ export interface DocumentIndex {
    * destination is taken.
    */
   moveDocument(input: MoveDocumentInput): Promise<void>
-  /** Deleting an absent path succeeds; the caller wants it gone either way. */
+  /**
+   * Deleting an absent path succeeds; the caller wants it gone either way.
+   *
+   * Deleting one that still has descendants does NOT: every document here can
+   * hold children, so a cascade is reachable from a single call naming one
+   * path, and deletion is the operation with nothing to undo it. Refusing
+   * makes the caller name what it is destroying. `moveDocument` carries
+   * descendants precisely because a move loses nothing.
+   */
   deleteDocument(input: DeleteDocumentInput): Promise<void>
 }
