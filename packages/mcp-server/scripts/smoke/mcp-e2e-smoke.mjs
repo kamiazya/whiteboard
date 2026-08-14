@@ -94,10 +94,23 @@ async function callTool(name, args) {
   return JSON.parse(text)
 }
 
-async function expectToolError(name, args, because = 'without createWorkspace') {
+/**
+ * `expecting` is required, and checked against the error text: isError alone
+ * says a call failed, not that it failed for the reason under test. Every
+ * step here refuses on a guard, and a typo'd id or an unrelated regression
+ * also produces isError — which would keep the step green while testing
+ * nothing.
+ */
+async function expectToolError(name, args, because, expecting) {
   const res = await rpc('tools/call', { name, arguments: args })
   if (!res?.isError) {
     throw new Error(`expected ${name} to fail, got: ${JSON.stringify(res)}`)
+  }
+  const text = res.content?.[0]?.text ?? ''
+  if (!text.includes(expecting)) {
+    throw new Error(
+      `${name} failed for the wrong reason.\n  expected text containing: ${expecting}\n  got: ${text}`,
+    )
   }
   console.log(`[e2e] ${name} ${because} → isError (expected)`)
 }
@@ -172,11 +185,12 @@ async function main() {
 
   // Unknown-workspace guard: without createWorkspace the create must fail
   // (workspaces never materialize implicitly from a typo'd workspaceId).
-  await expectToolError('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
-    segment: 'e2e-src',
-    kind: 'spatial',
-  })
+  await expectToolError(
+    'wb_document_create',
+    { workspaceId: WORKSPACE_ID, segment: 'e2e-src', kind: 'spatial' },
+    'without createWorkspace',
+    'Workspace not found',
+  )
 
   // wb_document_create: first daemon-dependent RPC (cold-start latency).
   const created = await callTool('wb_document_create', {
@@ -210,16 +224,24 @@ async function main() {
   }
   console.log('[e2e] wb_document_create/list → name round-trips, unnamed stays unnamed')
 
-  // wb_facet_set: seed extension-facet state so wb_version_save has content.
+  // A facet is OKF frontmatter, so it belongs to the markdown document; the
+  // spatial one refuses it.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    canvasId: named.canvasId,
     facets: { 'e2e/1': { note: 'before-save' } },
   })
-  if (facets.canvasId !== canvasId) {
+  if (facets.canvasId !== named.canvasId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
-  console.log('[e2e] wb_facet_set → seeded canvas state')
+  console.log('[e2e] wb_facet_set → set on the markdown document')
+
+  await expectToolError(
+    'wb_facet_set',
+    { workspaceId: WORKSPACE_ID, canvasId, facets: { 'e2e/1': { note: 'nope' } } },
+    'on a spatial document',
+    'Facets are OKF frontmatter',
+  )
 
   // wb_node_add: the only MCP path that puts a node on a spatial canvas,
   // and what the lock round-trip below needs to have something to lock.
@@ -241,6 +263,7 @@ async function main() {
       node: { id: 'lockable', type: 'text', x: 1, y: 1, width: 10, height: 10, text: 'clobber' },
     },
     'on an id that is already taken',
+    'already exists on canvas',
   )
 
   // wb_edge_add: the only MCP path that connects two nodes. Needs a second
@@ -270,6 +293,7 @@ async function main() {
       edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' },
     },
     'with an endpoint the canvas does not have',
+    'references nonexistent toNode',
   )
 
   const nodeLocked = await callTool('wb_node_lock', {
@@ -292,6 +316,7 @@ async function main() {
     'wb_node_patch',
     { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'lockable', patch: { x: 999 } },
     'on a locked node',
+    'node is locked',
   )
 
   // The lock is editor state, never canvas content: it must not appear in
@@ -378,12 +403,14 @@ async function main() {
     'wb_edge_patch',
     { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'link', patch: { label: 'nope' } },
     'on a locked edge',
+    'edge is locked',
   )
 
   await expectToolError(
     'wb_edge_lock',
     { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },
     'with an id the canvas does not have',
+    'edge not found',
   )
 
   // wb_version_save
@@ -450,6 +477,7 @@ async function main() {
     'wb_document_set',
     { workspaceId: WORKSPACE_ID, canvasId, markdown: '---\ntype: note\n---\nBody.' },
     'on a spatial document',
+    'This writes OKF Markdown',
   )
   await expectToolError(
     'wb_node_add',
@@ -459,6 +487,7 @@ async function main() {
       node: { id: 'stray', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'stray' },
     },
     'on a markdown document',
+    'This adds a JSON Canvas node',
   )
 
   const importMarkdown = [

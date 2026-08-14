@@ -63,7 +63,10 @@ export function triggerDaemonCanvasCreate(
     callTool('wb_document_create', {
       workspaceId: WORKSPACE_ID,
       segment: 'e2e-src',
-      kind: 'spatial',
+      // markdown, because the flow below sets a facet on it — facets are OKF
+      // frontmatter, and nothing here needs a spatial canvas: version
+      // save/list/restore is about history, not content shape.
+      kind: 'markdown',
       createWorkspace: true,
     })
   return options.retryDaemonStartup
@@ -255,8 +258,8 @@ export async function runE2eCheckpointSmoke({
     const canvasId = created.canvasId
     console.log(`[e2e] wb_document_create → ${canvasId}`)
 
-    // wb_facet_set seeds extension-facet state on the created canvas so the version
-    // saved below has content to round-trip through restore.
+    // wb_facet_set seeds extension-facet state on the created document so the
+    // version saved below has content to round-trip through restore.
     const facets = await callTool('wb_facet_set', {
       workspaceId: WORKSPACE_ID,
       canvasId,
