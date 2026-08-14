@@ -6,15 +6,21 @@ import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import { resetShellStatusForTests, setShellDaemonAuthError } from './lib/shell-status-store.js'
-// App reaches every page through React.lazy(), so a page renders only once
-// its dynamic import resolves. The other three pages are vi.mock'd below, so
-// their imports are already trivial; PairConsentPage is the one this file
-// loads for real, and under a full-suite run the dev server served that
-// chunk slowly enough to outlast the assertion's retry budget. Importing it
-// here — before any test runs, with nothing competing — puts it in the ESM
-// cache, so lazy() settles in a microtask and the render is deterministic
-// rather than a race the assertion usually wins. Side-effect import: the
-// component is reached through App, never referenced directly.
+// App reaches every page through React.lazy(), so a page renders only once its
+// dynamic import resolves — and under a full-suite run that resolution can
+// outlast the 1000ms retry budget of the `findBy*` query waiting on it. The
+// rule, enforced by App.lazy-coverage.test.ts rather than by remembering:
+// EVERY page App lazy-loads is either vi.mock'd below or imported here, so
+// lazy() settles in a microtask and the render is deterministic instead of a
+// race the assertion usually wins. Side-effect imports: the components are
+// reached through App, never referenced directly.
+//
+// The earlier version of this comment said "the other three pages are
+// vi.mock'd", and NotFoundPage was added afterwards as a fourth that was
+// neither mocked nor imported — which is exactly the flake this file kept
+// producing in CI and never in isolation. A count goes stale; the guard does
+// not.
+import './components/status/NotFoundPage.js'
 import './pages/PairConsentPage.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,

@@ -1,4 +1,11 @@
 import { describe, expect, it } from 'vitest'
+// Imported STATICALLY, though nothing here mocks it. As `await import()`
+// inside the test body, the transform-and-load of the whole barrel graph was
+// charged to the 10s per-test budget — ample on an idle machine and the first
+// thing to blow once every project runs in parallel. The test's own work is
+// three property reads; only the load was slow, so it belongs in the
+// collection phase, which no per-test timeout bounds.
+import * as barrel from './index.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 import {
   daemonPingResponseSchema,
@@ -85,8 +92,7 @@ describe('runtimeVerifyResponseSchema', () => {
 // runtimeVerifyResponseSchema) keeps the negative assertion from passing
 // vacuously if the barrel export is ever renamed away.
 describe('api-contracts barrel excludes the Buffer-refining request schema', () => {
-  it('exports runtimeVerifyResponseSchema but not runtimeVerifyRequestSchema', async () => {
-    const barrel = await import('./index.js')
+  it('exports runtimeVerifyResponseSchema but not runtimeVerifyRequestSchema', () => {
     const keys = Object.keys(barrel)
     expect(keys).toContain('runtimeVerifyResponseSchema')
     expect(keys).not.toContain('runtimeVerifyRequestSchema')
