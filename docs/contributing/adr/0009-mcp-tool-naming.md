@@ -99,6 +99,28 @@ the laid-out projection `canvas-render` already calls a **scene**.
    source; when a document is serialised to OKF, its frontmatter `title` is a
    **projection** of that name, not a second copy to keep in sync.
 
+   **OKF is an export format, not the storage model.** The Loro side keeps
+   its own OKF-*compatible* document; OKF is what that document is projected
+   into on the way out and parsed from on the way in. This settles a question
+   the paragraph above leaves open, because it only describes serialising:
+   what `wb_document_set` should do with a `title` in the OKF it is given.
+
+   It applies it to the workspace name. Parsing projects INTO the model
+   exactly as serialising projects out of it, so the name reaches the one
+   place that stores it — OKF owns no storage, and there is no second copy to
+   go out of sync. Ignoring the field instead would satisfy the letter of
+   "never a second place to write it" by making a read-edit-write round trip
+   drop the title silently, which is the failure this decision exists to
+   prevent, not an instance of following it.
+
+   Two consequences worth stating, both test-pinned:
+
+   - **Absent is not cleared.** An OKF with no `title` says nothing about the
+     name, so a write that omits it leaves the existing name alone.
+   - **The round trip normalises rather than preserving verbatim.** A blank
+     title is no title — `WorkspaceNode.displayName` treats absent and blank
+     as one state — so `title: ""` in, no `title` out.
+
 3. **Each format owns its own content structure. `Facet` belongs to OKF.**
    An OKF document has frontmatter (facets) and a markdown body. A JSON Canvas
    document has nodes and edges. Neither carries the other's shape, and a

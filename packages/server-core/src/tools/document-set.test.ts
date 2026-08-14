@@ -1,5 +1,6 @@
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import {
+  readCoreFacets,
   readDocumentKind,
   readFacets,
   readSpatialCanvas,
@@ -15,6 +16,8 @@ import {
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createDocumentSetTool } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
+import { exportOkf } from './export-okf.js'
+import { loadWorkspaceTree } from './workspace-tree-io.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -244,5 +247,100 @@ describe('wb_document_set tool', () => {
     expect(readSpatialCanvas(doc).nodes).toHaveLength(1)
     // Refused, so still undeclared — the spatial path is what declares it.
     expect(readDocumentKind(doc)).toBeUndefined()
+  })
+})
+
+describe('OKF title is a projection of the workspace name, both ways', () => {
+  // OKF is an export format, not the storage model: the Loro side keeps its
+  // own OKF-compatible document, and the workspace owns the name. So parsing
+  // an OKF is projecting it INTO that model, exactly as serialising projects
+  // back out — `title` lands on the workspace, never in the content.
+  test('a title in the written OKF renames the document, and is not stored as a facet', async () => {
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\ntitle: リリース計画 2026\n---\nBody.',
+    })
+
+    const tree = await loadWorkspaceTree(store, WORKSPACE_ID)
+    const node = tree.snapshot().nodes.find((n) => n.canvasId === CANVAS_ID)
+    expect(node?.displayName).toBe('リリース計画 2026')
+    expect(readCoreFacets(await loadDoc(store, CANVAS_ID))?.title).toBeUndefined()
+  })
+
+  test('writing OKF without a title leaves the existing name alone', async () => {
+    // Absent is not the same as cleared. An OKF with no `title` says nothing
+    // about the name, so a write that omits it must not erase one.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\ntitle: Keep me\n---\nOne.',
+    })
+
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\n---\nTwo.',
+    })
+
+    const tree = await loadWorkspaceTree(store, WORKSPACE_ID)
+    expect(tree.snapshot().nodes[0]?.displayName).toBe('Keep me')
+  })
+
+  test('the exported OKF carries the workspace name as its title', async () => {
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\ntitle: Round trip\n---\nBody.',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    expect(exported.frontmatter.title).toBe('Round trip')
+    expect(exported.markdown).toContain('title: Round trip')
+  })
+
+  test('a blank title round-trips to no title, not to an empty one', async () => {
+    // The shrunk counterexample from the round-trip property, pinned as the
+    // regression guard: {"frontmatter":{"type":" ","title":""},"body":""}.
+    // A blank name IS no name — the two are deliberately one state — so the
+    // round trip normalises here rather than preserving '' verbatim.
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\ntitle: ""\n---\n',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    expect(exported.frontmatter.title).toBeUndefined()
+  })
+
+  test('an unnamed document exports no title at all, rather than its slug', async () => {
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      markdown: '---\ntype: note\n---\nBody.',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    expect(exported.frontmatter.title).toBeUndefined()
   })
 })
