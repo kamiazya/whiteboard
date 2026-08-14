@@ -112,9 +112,9 @@ token exchange. Until that lands, discovery is convenience, not proof.
 ## Browser-dependent operations
 
 No current MCP tool requires a connected browser client — canvas patching
-(`wb_node_patch` / `wb_edge_patch` / `wb_body_patch` / `wb_facet_set`), rendering
-(`wb_scene_render`), export/import (`canvas_export_okf` /
-`canvas_export_json_canvas` / `wb_document_set`), and versioning
+(`wb_node_add` / `wb_node_patch` / `wb_edge_add` / `wb_edge_patch` /
+`wb_body_patch` / `wb_facet_set`), rendering (`wb_scene_render`), reading and
+writing content (`wb_document_get` / `wb_document_set`), and versioning
 (`wb_version_save` / `wb_version_restore` / `wb_version_list`) all operate on the
 persisted document headlessly.
 
