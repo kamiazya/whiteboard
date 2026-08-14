@@ -324,57 +324,82 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
  * updates with it exactly the way the worker exchanges with the daemon.
  */
 describe('authority replica', () => {
-  // Single-port only, on purpose. The polyfill builds a fresh worker context
-  // per `new SharedWorker` (see this file's header), so anything about two
-  // ports meeting in one worker would pass or fail here for reasons that say
-  // nothing about a browser. That half lives in the browser test beside it.
+  /**
+   * EXACTLY ONE replica test can live in this file, and it has to be this one.
+   *
+   * `@vitest/web-worker` runs every worker in the host realm, and loro-crdt's
+   * WASM initialises once per realm: the FIRST worker to `import('loro-crdt')`
+   * gets the module, and in every worker after it the same import REJECTS with
+   * `TypeError: Cannot read properties of undefined (reading 'id')`. The
+   * worker degrades exactly as designed — the relay keeps running and replica
+   * messages go unanswered — so a second replica test does not fail loudly,
+   * it waits out its whole budget for a reply that was never coming.
+   *
+   * That makes "which replica test is first in the file" load-bearing, which
+   * is not a property to leave implicit. The slot goes to the daemon case
+   * because it is the ONLY one the browser file cannot host: a real browser
+   * runs loro in as many workers as you like, but there is no daemon there to
+   * feed a frame. Everything else about the replica — snapshots, cross-tab
+   * fan-out, a push a sibling receives — is in
+   * `sse-shared-worker.browser.test.tsx`, where it belongs.
+   *
+   * If you add a second replica test here, it will hang, and the reason will
+   * not be your test.
+   */
   const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
-  const nextMessage = (port: MessagePort, type: string) =>
-    new Promise<Record<string, unknown>>((resolve) => {
-      const onMessage = (e: MessageEvent) => {
-        if ((e.data as { type?: string }).type !== type) return
-        port.removeEventListener('message', onMessage)
-        resolve(e.data as Record<string, unknown>)
-      }
-      port.addEventListener('message', onMessage)
-      port.start()
-    })
+  const b64 = (bytes: Uint8Array) => {
+    let out = ''
+    for (const byte of bytes) out += String.fromCharCode(byte)
+    return btoa(out)
+  }
 
-  it('answers a document nobody has opened with an empty snapshot, not an error', async () => {
+  it('relays a daemon frame onward as authority state, not only verbatim', async () => {
+    // A tab that has forked from the replica reads `authority-update` and
+    // nothing else. If the replica only ever spoke when a TAB pushed, that tab
+    // would silently miss every change that did not originate in a sibling
+    // tab — an MCP tool writing to the canvas, another device, a restore. The
+    // channel has to carry the daemon too, or the fork model drops writes.
     const port = connect()
     const doc = nextDoc()
+    const authority = new Promise<string>((resolve) => {
+      port.addEventListener('message', (e: MessageEvent) => {
+        const data = e.data as { type?: string; update?: string }
+        if (data.type === 'authority-update' && data.update !== undefined) resolve(data.update)
+      })
+    })
     port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
-    const reply = nextMessage(port, 'snapshot')
-    port.postMessage({ type: 'snapshot-request', doc })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
 
-    // Forkable is the property that matters: forking from empty and letting
-    // the daemon fill it in is the same path a first-ever open takes.
+    // Real Loro bytes, so the replica genuinely merges rather than dropping a
+    // frame it cannot parse and passing for the wrong reason.
+    const daemon = new LoroDoc()
+    daemon.getMap('m').set('k', 'from-daemon')
+    daemon.commit()
+    pushTo(
+      doc,
+      `event: update\ndata: ${JSON.stringify({ doc, update: b64(daemon.export({ mode: 'update' })) })}\n\n`,
+    )
+
+    // Reconstructed rather than compared byte-for-byte: what travels is the
+    // replica's delta, which is not required to equal the frame that produced
+    // it — only to carry the same state.
     const forked = new LoroDoc()
-    forked.import(decode((await reply).snapshot as string))
-    expect(forked.getMap('anything').size).toBe(0)
-  })
+    forked.import(decode(await authority))
+    expect(forked.getMap('m').get('k')).toBe('from-daemon')
+    // Its own budget: this is the only case in the block that waits for a
+    // stream to open, and the sibling describe's 5s default is not a wait,
+    // it is a coin flip under a loaded suite.
+  }, 25_000)
 
-  // A `push` followed by a snapshot-request is NOT tested here: under the
-  // polyfill the port stops delivering anything at all after a push, while the
-  // same sequence works in a real browser (see the browser test beside this).
-  // Chasing that difference would be debugging the polyfill, not the worker.
-
-  // NOT covered anywhere yet, and worth saying so: anything about a DAEMON
-  // frame reaching the replica (rather than only the relay). That is one
-  // claim about arrival — the frame lands in the replica at all — and one
-  // about multiplicity: the replica takes its own hub subscription per
-  // document, so N tabs watching one document cost ONE import per frame
-  // rather than N.
+  // Still NOT covered, and worth saying so: that N tabs watching one document
+  // cost ONE replica import per daemon frame rather than N. The replica takes
+  // its own hub subscription per document precisely so they do, but the count
+  // is internal, and the two ports needed to observe it are two tabs of one
+  // worker only in the browser file — which has no daemon to feed. That one
+  // meets in an E2E.
   //
-  // Neither is observable at either layer, and for opposite reasons. jsdom
-  // can feed a daemon frame through MSW but cannot observe the replica: every
-  // snapshot-request that follows replica work stops being answered under the
-  // polyfill. The browser test can observe the replica but has no daemon to
-  // feed it, and its two ports are two tabs of one worker only THERE — which
-  // is the very thing the multiplicity claim is about. Both halves meet only
-  // in an E2E against a real daemon, which is where this belongs.
-  //
-  // What IS pinned, above: that the feed is released. Dropping the release
-  // turns the sibling `unsubscribe` cases red, because the hub keeps a
-  // document subscribed on the daemon while any listener remains.
+  // What IS pinned above, in the sibling describe: that the feed is released.
+  // Dropping the release turns the `unsubscribe` cases red, because the hub
+  // keeps a document subscribed on the daemon while any listener remains.
 })

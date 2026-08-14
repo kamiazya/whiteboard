@@ -128,7 +128,8 @@ function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): voi
     return
   }
   const off = hub.subscribe(doc, {
-    onUpdate: (bytes) => importIntoReplica(baseUrl, doc, bytes),
+    // `null`: the daemon is the source, so nobody is excluded from the fan-out.
+    onUpdate: (bytes) => ingest(baseUrl, doc, bytes, null),
     onMessage: () => {},
   })
   replicaFeeds.set(key, { off, ports: 1 })
@@ -179,38 +180,52 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function importIntoReplica(baseUrl: string, doc: string, bytes: Uint8Array): void {
+/**
+ * Merge bytes into a document's replica and tell the interested tabs what
+ * actually changed.
+ *
+ * One function for both directions on purpose: a tab's push and a daemon
+ * frame differ only in who must NOT be told (`from` — the sender, or nobody
+ * when the daemon is the source). Everything else — merge, diff against what
+ * the replica already had, fan out — is the same, and writing it twice is how
+ * the two directions drift.
+ *
+ * The daemon direction is what makes `authority-update` a channel a client can
+ * live on alone. A replica that only spoke when a tab pushed would leave a
+ * forked tab silently missing every change that did not originate in a
+ * sibling tab: an MCP tool writing to the canvas, another device, a restore.
+ */
+function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePort | null): void {
   queueReplicaWork(() => {
+    const replica = replicaFor(baseUrl, doc)
+    if (replica === undefined) return
+    const before = replica.version()
     // Total by construction: a frame this replica cannot merge (a truncated
     // update, a future format) must not take the worker down for every tab
     // and every other document. The daemon remains the source it can re-sync
     // from.
     try {
-      replicaFor(baseUrl, doc)?.import(bytes)
+      replica.import(bytes)
     } catch {
       return
     }
+    // Only what the replica did not already have travels onward. Two things
+    // depend on this rather than on it being an optimisation: a tab
+    // re-pushing work a sibling already delivered costs no broadcast, and the
+    // daemon's echo of a tab's OWN push diffs to nothing — which is what stops
+    // the round trip from looping back out as authority state.
+    const merged = replica.export({ mode: 'update', from: before })
+    if (merged.byteLength === 0) return
+    const encoded = toBase64(merged)
+    for (const [target, state] of ports) {
+      if (target === from) continue
+      // Two daemons can mint the same document id, so a tab paired with one of
+      // them must never be handed the other's edits.
+      if (state.baseUrl !== baseUrl) continue
+      if (!state.subscriptions.has(doc)) continue
+      target.postMessage({ type: 'authority-update', doc, update: encoded })
+    }
   })
-}
-
-/**
- * To every port subscribed to `doc` ON THE SAME ORIGIN, except the one that
- * sent the work. Two daemons can mint the same document id, and a tab paired
- * with one of them must never be handed the other's edits.
- */
-function broadcastAuthorityUpdate(
-  baseUrl: string,
-  doc: string,
-  update: Uint8Array,
-  from: MessagePort,
-): void {
-  const encoded = toBase64(update)
-  for (const [target, state] of ports) {
-    if (target === from) continue
-    if (state.baseUrl !== baseUrl) continue
-    if (!state.subscriptions.has(doc)) continue
-    target.postMessage({ type: 'authority-update', doc, update: encoded })
-  }
 }
 
 function handle(port: MessagePort, raw: unknown): void {
@@ -269,22 +284,10 @@ function handle(port: MessagePort, raw: unknown): void {
   }
 
   if (msg.type === 'push') {
-    queueReplicaWork(() => {
-      const replica = replicaFor(state.baseUrl, msg.doc)
-      if (replica === undefined) return
-      const before = replica.version()
-      try {
-        replica.import(fromBase64(msg.update))
-      } catch {
-        return
-      }
-      // Only what the replica did not already have travels onward, so a tab
-      // re-pushing work another tab already delivered costs one import and no
-      // broadcast. Loro merges are idempotent, but a broadcast is not free.
-      const merged = replica.export({ mode: 'update', from: before })
-      if (merged.byteLength === 0) return
-      broadcastAuthorityUpdate(state.baseUrl, msg.doc, merged, port)
-    })
+    // Excluded from its own fan-out: echoing an edit back to the tab that made
+    // it would turn every stroke into a round trip through the tab that drew
+    // it, which is the cost the fork model exists to avoid.
+    ingest(state.baseUrl, msg.doc, fromBase64(msg.update), port)
     return
   }
 
