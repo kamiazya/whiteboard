@@ -111,4 +111,14 @@ describe('architecture-map.md doc sync', () => {
   it('no longer contains the stale "currently covers canvas-model and canvas-codec" claim', () => {
     expect(doc).not.toContain('It currently covers `canvas-model` and `canvas-codec`')
   })
+
+  // The rule file answers "is this checked?", and for a composition root the
+  // answer is split: this tool checks the manifest's direction, while
+  // web-app-boundary.test.ts scans apps/web's source. A reader who only finds
+  // one of the two concludes the other is unguarded.
+  it('names every COMPOSITION_ROOTS entry and the enforcer that scans apps/web source', () => {
+    const missing = COMPOSITION_ROOTS.filter((packageDir) => !doc.includes(packageDir))
+    expect(missing).toHaveLength(0)
+    expect(doc).toContain('web-app-boundary.test.ts')
+  })
 })

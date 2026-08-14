@@ -128,6 +128,7 @@ const EXPECTED_TOOLS = [
   'wb_edge_lock',
   'wb_edge_patch',
   'wb_facet_set',
+  'wb_node_add',
   'wb_node_lock',
   'wb_node_patch',
   'wb_canvas_tidy',
@@ -200,34 +201,47 @@ async function main() {
   }
   console.log('[e2e] wb_facet_set → seeded canvas state')
 
-  // wb_node_lock: the sidecar lock round-trip. wb_document_set is the only
-  // MCP path that creates a spatial node, and it always writes one text
-  // node with this id.
-  await callTool('wb_document_set', {
+  // wb_node_add: the only MCP path that puts a node on a spatial canvas,
+  // and what the lock round-trip below needs to have something to lock.
+  const added = await callTool('wb_node_add', {
     workspaceId: WORKSPACE_ID,
     canvasId,
-    markdown: '---\ntype: canvas\ntitle: e2e-lock\n---\n\nlockable body\n',
+    node: { id: 'lockable', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'lockable' },
   })
+  if (added.canvasId !== canvasId || added.node?.id !== 'lockable') {
+    throw new Error(`wb_node_add returned unexpected shape: ${JSON.stringify(added)}`)
+  }
+  console.log('[e2e] wb_node_add → lockable')
+
+  await expectToolError(
+    'wb_node_add',
+    {
+      workspaceId: WORKSPACE_ID,
+      canvasId,
+      node: { id: 'lockable', type: 'text', x: 1, y: 1, width: 10, height: 10, text: 'clobber' },
+    },
+    'on an id that is already taken',
+  )
 
   const nodeLocked = await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
-    nodeId: 'okf-body',
+    nodeId: 'lockable',
     locked: true,
   })
   if (
     nodeLocked.canvasId !== canvasId ||
-    nodeLocked.nodeId !== 'okf-body' ||
+    nodeLocked.nodeId !== 'lockable' ||
     nodeLocked.locked !== true
   ) {
     throw new Error(`wb_node_lock returned unexpected shape: ${JSON.stringify(nodeLocked)}`)
   }
-  console.log('[e2e] wb_node_lock → okf-body locked')
+  console.log('[e2e] wb_node_lock → lockable locked')
 
   // The lock binds agents, not just the pointer.
   await expectToolError(
     'wb_node_patch',
-    { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'okf-body', patch: { x: 999 } },
+    { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'lockable', patch: { x: 999 } },
     'on a locked node',
   )
 
@@ -249,7 +263,7 @@ async function main() {
   await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
     canvasId,
-    nodeId: 'okf-body',
+    nodeId: 'lockable',
     locked: false,
   })
 
@@ -272,7 +286,7 @@ async function main() {
   // The names have to be the ones the OTHER tools take. A digest that reads
   // back positionally still satisfies the schema and still looks right in a
   // unit test, while telling a reader to patch a node that does not exist.
-  if (!digest.nodes.some((node) => node.id === 'okf-body')) {
+  if (!digest.nodes.some((node) => node.id === 'lockable')) {
     throw new Error(
       `wb_scene_digest did not name the seeded node by its document id: ${JSON.stringify(digest.nodes)}`,
     )

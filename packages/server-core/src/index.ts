@@ -85,6 +85,8 @@ export {
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
 export { generateCanvasId } from './tools/generate-canvas-id.js'
+export type { NodeAddInput, NodeAddOutput } from './tools/node-add.js'
+export { createNodeAddTool, nodeAddInputSchema, nodeAddOutputSchema } from './tools/node-add.js'
 export type { NodeLockInput, NodeLockOutput } from './tools/node-lock.js'
 export {
   createNodeLockTool,
