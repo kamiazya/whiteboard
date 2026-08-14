@@ -101,6 +101,20 @@ paths:
    explicit `{ unresolved: true }` entry both degrade to the same
    placeholder mechanism. The function is total: it never throws and never
    infinite-loops, on any bundle including dense cyclic ones.
+   The mdast layout carries the CONTENT-bearing sibling of this contract:
+   `MdastLayoutOptions.resolveEmbed?: (canvasId) => { title?, root:
+   MdastRoot } | undefined` (same injected-resolver class as `renderMath` /
+   `resolveFile*`). A paragraph whose SOLE child is an `embed` node lays
+   the resolved body out inline under an `embedResolved` node whose
+   children stay ABSOLUTE (no SVG transform — the listItem/tableCell
+   transform-boundary set is untouched); an embed mixed into prose stays a
+   link run, labeled with `title` when known. Depth cap and path-local
+   cycle semantics mirror this decision exactly, and a missing/throwing
+   resolver degrades to an `embedPlaceholder('unresolvable')`. Both guards
+   are pinned by a property over dense random embed graphs
+   (`mdast-blocks.properties.test.ts`), each mutation-checked separately —
+   the cap alone also bounds nesting, so a depth assertion by itself would
+   let the cycle guard rot.
 5. **Document envelope** (`sceneBounds` in `scene-bounds.ts`,
    `SvgDocumentOptions` in `svg/backend.ts`): `renderSceneToSvg(scene)`
    with no options, or an options object with every field `undefined`,

@@ -11,11 +11,13 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-canvas.js'
 import '../index.css'
 
@@ -430,6 +432,58 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await waitFor(
       () => {
         expect(screen.getByTestId('location-probe').textContent).toBe(`/local/${TARGET_ID}`)
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it("a block ![[embed]] renders the target note's body inline in the preview", async () => {
+    const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const store = new IndexedDBStore()
+    await store.save({
+      id: TARGET_ID,
+      name: 'Embed target',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'markdown' as const,
+    })
+    await store.save({
+      id: SOURCE_ID,
+      name: 'Embed source',
+      updatedAt: '2026-05-24T00:00:01.000Z',
+      kind: 'markdown' as const,
+    })
+    // Seed the target's Loro body through the same store the page loads from.
+    const targetDoc = new Loro()
+    targetDoc.getText('body').insert(0, 'unmistakable embedded body text')
+    await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
+    await store.setDefaultCanvasId(SOURCE_ID)
+    render(<BrowserLocalCanvasPage store={store} />)
+
+    const editable = await waitFor(
+      () => {
+        const el = document.querySelector('[contenteditable="true"]')
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 10_000 },
+    )
+    editable.focus()
+    // Trailing keystrokes AFTER the reference completes are the regression
+    // surface: each one re-runs the embed-content effect while the load is
+    // in flight, and a per-effect cancellation dropped the result with
+    // nothing left to re-fire it (the stuck-placeholder bug).
+    // Blank line after the reference: a single newline is a markdown SOFT
+    // break, which would fold the trailing text into the embed's paragraph
+    // and turn it into an INLINE run instead of a block embed.
+    await userEvent.keyboard(`![[[[canvas:${TARGET_ID}]]{Enter}{Enter}and more typing`)
+
+    // The preview loads the target body asynchronously and lays it out
+    // inline through the render pipeline's embed seam.
+    await waitFor(
+      () => {
+        const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+        expect(preview?.textContent).toContain('unmistakable embedded body text')
       },
       { timeout: 10_000 },
     )

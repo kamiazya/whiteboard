@@ -3,7 +3,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-canvas-codec'
-import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutMdastBlocks,
   renderSceneToSvg,
@@ -20,6 +20,11 @@ export interface RenderMarkdownPreviewOptions {
    * references resolve; unresolved aliases stay literal bracket text.
    */
   readonly resolveAlias?: AliasResolver
+  /**
+   * Resolves an embed target's parsed body for inline rendering
+   * (canvas-render's layout seam, threaded through verbatim).
+   */
+  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
 }
 
 /**
@@ -42,9 +47,9 @@ export interface RenderMarkdownPreviewOptions {
  */
 export function renderMarkdownPreviewSvg(
   value: string,
-  { measure, maxWidth, background, resolveAlias }: RenderMarkdownPreviewOptions,
+  { measure, maxWidth, background, resolveAlias, resolveEmbed }: RenderMarkdownPreviewOptions,
 ): string {
-  return renderSceneToSvg(layoutScene(value, measure, maxWidth, resolveAlias), {
+  return renderSceneToSvg(layoutScene(value, measure, maxWidth, resolveAlias, resolveEmbed), {
     padding: 8,
     background,
   })
@@ -55,12 +60,14 @@ function layoutScene(
   measure: MeasureText,
   maxWidth: number,
   resolveAlias?: AliasResolver,
+  resolveEmbed?: MdastLayoutOptions['resolveEmbed'],
 ): Scene {
   try {
     return layoutMdastBlocks(resolveReferences(parseMarkdownBody(value), resolveAlias), {
       measure,
       maxWidth,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
+      ...(resolveEmbed !== undefined ? { resolveEmbed } : {}),
     })
   } catch {
     return { nodes: [] }

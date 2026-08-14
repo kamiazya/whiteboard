@@ -36,6 +36,28 @@ async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocumen
   }
 }
 
+/**
+ * Loads one referenced MARKDOWN document's body (and title facet) from the
+ * same store — the loader behind `useMarkdownEmbedContent`'s cache, total
+ * like its spatial sibling above.
+ */
+export async function loadMarkdownEmbedSource(
+  canvasId: string,
+): Promise<{ body: string; title?: string } | undefined> {
+  try {
+    const result = await new LoroStore().load(canvasId)
+    if (result.kind !== 'ok') return undefined
+    const doc = new Loro()
+    doc.import(result.snapshot)
+    for (const delta of result.deltas ?? []) doc.import(delta)
+    const title = readCoreFacets(doc)?.title
+    return { body: doc.getText('body').toString(), ...(title !== undefined ? { title } : {}) }
+  } catch (err) {
+    log.warn('embedded markdown load failed', { canvasId, err })
+    return undefined
+  }
+}
+
 /** The file references present in a canvas, deduplicated. */
 export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
   return [...new Set(canvas.nodes.flatMap((node) => (node.type === 'file' ? [node.file] : [])))]

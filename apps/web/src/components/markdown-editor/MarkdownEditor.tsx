@@ -1,6 +1,6 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
 import { type CanvasCoreMeta, canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -49,6 +49,12 @@ export interface MarkdownEditorProps {
    * are inert (their href is a bare ULID, not a URL).
    */
   onOpenCanvas?: (canvasId: string) => void
+  /**
+   * Resolves `![[embed]]` targets' parsed bodies so block embeds render
+   * inline (canvas-render's layout seam; the host pre-fetches, see
+   * useMarkdownEmbedContent).
+   */
+  resolveEmbed?: MdastLayoutOptions['resolveEmbed']
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -108,6 +114,17 @@ function countWords(value: string): number {
   return (value.match(/[\p{L}\p{N}]+/gu) ?? []).length
 }
 
+/**
+ * Whether an anchor href is a bare canvas id rather than a URL. Two id
+ * grammars coexist by construction: the daemon mints ULIDs
+ * (`canvasIdSchema`), the browser-local store mints `crypto.randomUUID()`
+ * v4 UUIDs — both reach the preview through the alias resolver.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isCanvasIdHref(href: string): boolean {
+  return canvasIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
+}
+
 export function MarkdownEditor({
   value,
   onChange,
@@ -120,6 +137,7 @@ export function MarkdownEditor({
   meta,
   resolveAlias,
   onOpenCanvas,
+  resolveEmbed,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
@@ -132,7 +150,7 @@ export function MarkdownEditor({
     const anchor = event.target instanceof Element ? event.target.closest('a') : null
     if (!anchor) return
     const href = anchor.getAttribute('href')
-    if (href === null || !canvasIdSchema.safeParse(href).success) return
+    if (href === null || !isCanvasIdHref(href)) return
     event.preventDefault()
     onOpenCanvas(href)
   }
@@ -314,6 +332,7 @@ export function MarkdownEditor({
                   measure={resolvedMeasure}
                   theme={theme}
                   resolveAlias={resolveAlias}
+                  resolveEmbed={resolveEmbed}
                 />
               )}
             </div>

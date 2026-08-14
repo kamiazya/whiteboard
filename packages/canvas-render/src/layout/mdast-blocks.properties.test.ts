@@ -266,4 +266,51 @@ describe('layoutMdastBlocks properties', () => {
       }
     },
   )
+
+  // Embed recursion totality: a small fixed id pool keeps the generated
+  // graphs DENSE in cycles and self-references — a sparse generator would
+  // never reach the arrangements the cap and cycle guards exist for.
+  const EMBED_IDS = Array.from({ length: 6 }, (_, i) => `01ARZ3NDEKTSV4RRFFQ69G5FA${i}`)
+  const embedGraphArb = fc.dictionary(
+    fc.constantFrom(...EMBED_IDS),
+    fc.array(fc.constantFrom(...EMBED_IDS), { minLength: 0, maxLength: 4 }),
+    { minKeys: 1, maxKeys: 6 },
+  )
+
+  fcTest.prop([embedGraphArb, fc.constantFrom(...EMBED_IDS)], withDefaults())(
+    'terminates on any embed graph, nesting embedResolved at most the depth cap deep',
+    (graph, rootId) => {
+      const docOf = (id: string): MdastRoot =>
+        rootOf(
+          (graph[id] ?? []).map(
+            (child) =>
+              ({ type: 'paragraph', children: [{ type: 'embed', canvasId: child }] }) as const,
+          ),
+        )
+      const scene = layoutMdastBlocks(docOf(rootId), {
+        measure,
+        maxWidth: MAX_WIDTH,
+        fontFamily: FONT_FAMILY,
+        resolveEmbed: (id) => (graph[id] ? { root: docOf(id) } : undefined),
+      })
+      // Two guards, two assertions — the cap alone also bounds nesting, so
+      // asserting depth by itself passes with the cycle guard deleted
+      // (mutation-checked): the path-local re-visit rule needs its own claim.
+      const inspect = (nodes: readonly SceneNode[], path: readonly string[]): number => {
+        let deepest = path.length
+        for (const node of nodes) {
+          const children = (node as { children?: readonly SceneNode[] }).children
+          if (!Array.isArray(children)) continue
+          let childPath = path
+          if (node.kind === 'embedResolved') {
+            expect(path).not.toContain(node.canvasId)
+            childPath = [...path, node.canvasId]
+          }
+          deepest = Math.max(deepest, inspect(children, childPath))
+        }
+        return deepest
+      }
+      expect(inspect(scene.nodes, [])).toBeLessThanOrEqual(3)
+    },
+  )
 })

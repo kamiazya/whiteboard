@@ -252,7 +252,12 @@ function renderNode(node: SceneNode): string {
         ? `<g ${PRESENTATION_ATTR}>${node.svg}</g>`
         : `<g>${node.svg}</g>`
     case 'embedPlaceholder':
-      return `<a href="#${escapeXmlAttr(node.canvasId)}"><text ${rectAttrs(node.bbox)}>${escapeXmlText(node.title)}</text></a>`
+      // SVG <text> y is the BASELINE, so the box TOP would paint the title
+      // one line above the placeholder's own space, colliding with the
+      // preceding block. The node carries no measured ascent (it is not a
+      // text run), so the baseline is derived from the box: 0.8 matches the
+      // ascent ratio the measurer contract documents for body text.
+      return `<a href="#${escapeXmlAttr(node.canvasId)}"><text x="${formatCoord(node.bbox.x)}" y="${formatCoord(node.bbox.y + node.bbox.h * 0.8)}">${escapeXmlText(node.title)}</text></a>`
     case 'embedResolved':
       return `<g>${node.children.map(renderNode).join('')}</g>`
     case 'edge': {
