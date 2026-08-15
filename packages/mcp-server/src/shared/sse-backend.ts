@@ -13,7 +13,9 @@
  * and any access log that sees it. Reading the body ourselves keeps the token
  * in a header and works unchanged inside a SharedWorker.
  */
+
 import { apiFetch } from './api-client.js'
+import { canvasApiUrl, canvasFileApiUrl } from './api-contracts/canvas-url.js'
 import type {
   BinaryFileDataLike,
   CanvasBackend,
@@ -73,9 +75,7 @@ export class SseBackend implements CanvasBackend {
     // that started reading before seeding would apply deltas to an empty doc.
     try {
       const res = await this.fetchFn(
-        this.url(
-          `/api/canvas/${encodeURIComponent(this.workspaceId)}/${encodeURIComponent(this.slug)}/snapshot`,
-        ),
+        this.url(canvasApiUrl(this.workspaceId, this.slug, 'snapshot')),
       )
       if (this.cancelled) return
       if (res.ok) {
@@ -157,11 +157,7 @@ export class SseBackend implements CanvasBackend {
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
-    const res = await this.fetchFn(
-      this.url(
-        `/api/canvas/${encodeURIComponent(this.workspaceId)}/${encodeURIComponent(this.slug)}/file/${encodeURIComponent(fileId)}`,
-      ),
-    )
+    const res = await this.fetchFn(this.url(canvasFileApiUrl(this.workspaceId, this.slug, fileId)))
     if (!res.ok) return null
     return res.blob()
   }

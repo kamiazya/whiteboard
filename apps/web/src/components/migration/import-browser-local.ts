@@ -1,5 +1,6 @@
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
+  canvasApiUrl,
   createCanvasRequestSchema,
   createCanvasResponseSchema,
   problemDetailsErrorSchema,
@@ -140,7 +141,7 @@ async function importOneCanvasUnsafe(
   const mergedSnapshot = mergeToSnapshot(loroLoad.snapshot, loroLoad.deltas ?? [])
 
   const updateRes = await fetch(
-    `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(createdSlug)}/update`,
+    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdSlug, 'update')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

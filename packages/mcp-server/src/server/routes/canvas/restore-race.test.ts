@@ -51,7 +51,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -70,7 +70,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
     const tm0 = targetList.insertContainer(0, new LoroMap())
     tm0.set('id', 'b-only')
     targetDoc.commit()
-    await app.request('/api/canvas/session1/canvas-b/update', {
+    await app.request('/api/w/session1/canvas/canvas-b/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: targetDoc.export({ mode: 'update', from: tvv0 }),
@@ -146,7 +146,7 @@ describe('restore in-place vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: sourceDoc.export({ mode: 'update', from: svv0 }),

@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-// Schemas for the thin /api/canvas/:workspaceId/:slug/* endpoints that drive
+// Schemas for the thin /api/w/:workspaceId/canvas/<path>/* endpoints that drive
 // browser-side state (viewport, client-count). These bridge MCP tools to the
 // daemon, so a wire-format change has exactly one place to update.
 
-// ── POST /api/canvas/:workspaceId/:slug/viewport ──────────────────────────
+// ── POST /api/w/:workspaceId/canvas/<path>/viewport ───────────────────────
 // The request body is forwarded to the browser unchanged (mode / elementIds /
 // padding / animate / scrollX / scrollY / zoom) with no server-side schema —
 // the canonical shape lives in shared/ws-messages.ts as
@@ -21,7 +21,7 @@ const viewportErrorBodySchema = z.object({
   hint: z.string().optional(),
 })
 
-// ── GET /api/canvas/:workspaceId/:slug/client-count ───────────────────────
+// ── GET /api/w/:workspaceId/canvas/<path>/client-count ────────────────────
 const clientCountResponseSchema = z.object({
   count: z.number().int().nonnegative(),
   readyCount: z.number().int().nonnegative(),

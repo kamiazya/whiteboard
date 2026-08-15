@@ -64,7 +64,7 @@ describe('parseDaemonRoute', () => {
 
   it('does not yet accept a multi-segment tail', () => {
     // The shape leaves room for a document path here, but the page below
-    // still loads by slug through /api/canvas/:workspaceId/:slug — a URL the
+    // still loads by a single-segment slug — a URL the
     // app cannot open is worse than a not-found, so it stays not-a-route
     // until that data path converges too.
     expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toBeNull()

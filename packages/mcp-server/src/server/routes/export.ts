@@ -13,7 +13,7 @@ import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { canvasExists } from '../store/canvas-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../validators.js'
+import { onCanvasAction } from './canvas/path-route.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
 // The body is a small JSON options object (padding/scale/frameId/theme/
@@ -25,31 +25,12 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 export function createExportRouter() {
   const app = new Hono()
 
-  // POST /api/canvas/:workspaceId/:slug/export
-  app.post(
-    '/api/canvas/:workspaceId/:slug/export',
-    bodyLimit({
-      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
-    async (c) => {
-      const { workspaceId, slug } = c.req.param()
-      try {
-        validateWorkspaceId(workspaceId)
-        validateSlug(slug)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json(body, 400)
-        throw err
-      }
-
+  // POST /api/w/:workspaceId/canvas/<path>/export
+  onCanvasAction(
+    app,
+    'post',
+    'export',
+    async (c, workspaceId, path) => {
       // The body is optional. Empty body is fine; malformed JSON or
       // schema-invalid payloads are rejected with 400 instead of being
       // silently dropped.
@@ -97,20 +78,20 @@ export function createExportRouter() {
 
       // The headless path operates directly on the LoroDoc and does NOT
       // verify that the canvas actually exists — getDoc / loadCanvas return
-      // an empty doc on cache miss, so a typoed slug would otherwise emit a
+      // an empty doc on cache miss, so a typoed path would otherwise emit a
       // blank PNG. Reject up front with 404 so callers learn about the typo
       // instead of shipping the silently-empty file.
-      if (!(await canvasExists(workspaceId, slug))) {
+      if (!(await canvasExists(workspaceId, path))) {
         const errBody: ExportErrorBody = {
           error: 'canvas_not_found',
-          message: `Canvas not found: ${workspaceId}/${slug}`,
+          message: `Canvas not found: ${workspaceId}/${path}`,
         }
         return c.json(errBody, 404)
       }
 
       let pngBuffer: Buffer
       try {
-        pngBuffer = await renderHeadless(workspaceId, slug, body)
+        pngBuffer = await renderHeadless(workspaceId, path, body)
       } catch (err) {
         const errBody: ExportErrorBody = {
           error: 'headless_export_failed',
@@ -122,10 +103,21 @@ export function createExportRouter() {
       const filePath =
         outputPath !== undefined
           ? await writeExplicitOutput(outputPath, pngBuffer)
-          : await writeDefaultOutput(workspaceId, slug, pngBuffer)
+          : await writeDefaultOutput(workspaceId, path, pngBuffer)
       const response: ExportResponse = { filePath }
       return c.json(response)
     },
+    bodyLimit({
+      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
   )
 
   return app
@@ -133,12 +125,14 @@ export function createExportRouter() {
 
 async function renderHeadless(
   workspaceId: string,
-  slug: string,
+  path: string,
   body: z.infer<typeof exportRequestSchema>,
 ): Promise<Buffer> {
   const result = await exportCanvasHeadless({
     workspaceId,
-    slug,
+    // The store layer still speaks `slug`; renaming it through canvas-store
+    // is its own sweep.
+    slug: path,
     options: {
       padding: body.padding,
       scale: body.scale,
@@ -153,9 +147,9 @@ async function renderHeadless(
 // A plain PNG: the headless renderer no longer embeds scene JSON, so a
 // `.excalidraw.png` suffix would falsely claim the file is re-importable as
 // a scene.
-function defaultExportPath(workspaceId: string, slug: string): string {
+function defaultExportPath(workspaceId: string, path: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `${slug}-${timestamp}-${nanoid(6)}.png`
+  const fileName = `${path}-${timestamp}-${nanoid(6)}.png`
   return join(getDataDir(), workspaceId, 'exports', fileName)
 }
 
@@ -169,12 +163,12 @@ const MAX_DEFAULT_PATH_ATTEMPTS = 5
 
 async function writeDefaultOutput(
   workspaceId: string,
-  slug: string,
+  path: string,
   pngBuffer: Buffer,
 ): Promise<string> {
   let lastFilePath: string | undefined
   for (let attempt = 0; attempt < MAX_DEFAULT_PATH_ATTEMPTS; attempt++) {
-    const filePath = defaultExportPath(workspaceId, slug)
+    const filePath = defaultExportPath(workspaceId, path)
     lastFilePath = filePath
     await mkdir(dirname(filePath), { recursive: true })
     try {

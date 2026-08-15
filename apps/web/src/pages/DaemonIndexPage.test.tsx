@@ -83,7 +83,7 @@ function installFetchMock(routes: MockRoutes) {
       }
       return Promise.resolve(jsonResponse(names))
     }
-    const snapshotMatch = url.match(/\/api\/canvas\/([^/]+)\/([^/]+)\/snapshot$/)
+    const snapshotMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/)
     if (snapshotMatch) {
       const slug = decodeURIComponent(snapshotMatch[2])
       const bytes = routes.snapshotByCanvas?.[slug]
@@ -95,7 +95,7 @@ function installFetchMock(routes: MockRoutes) {
         }),
       )
     }
-    const updateMatch = url.match(/\/api\/canvas\/([^/]+)\/([^/]+)\/update$/)
+    const updateMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/)
     if (updateMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(updateMatch[1])
       const slug = decodeURIComponent(updateMatch[2])
@@ -505,7 +505,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces/ws-a/names')) {
         return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
       }
-      if (url.endsWith('/api/canvas/ws-a/alpha/snapshot')) {
+      if (url.endsWith('/api/w/ws-a/canvas/alpha/snapshot')) {
         snapshotCalls++
         return new Promise<Response>((resolve) => {
           resolveSnapshot = resolve
@@ -591,7 +591,7 @@ describe('DaemonIndexPage', () => {
       ) {
         return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
       }
-      if (url.endsWith('/api/canvas/ws-a/alpha/snapshot')) {
+      if (url.endsWith('/api/w/ws-a/canvas/alpha/snapshot')) {
         return new Promise<Response>((resolve) => {
           resolveSnapshot = resolve
         })

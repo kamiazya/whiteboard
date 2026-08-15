@@ -1,4 +1,5 @@
 import { apiFetch } from './api-client.js'
+import { canvasFileApiUrl } from './api-contracts/canvas-url.js'
 import type { BinaryFileDataLike } from './canvas-backend-contract.js'
 
 /**
@@ -27,14 +28,11 @@ export async function uploadFiles(
         throw new Error(`file ${fileId}: malformed dataURL (no base64 payload)`)
       }
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await fetchFn(
-        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${encodeURIComponent(fileId)}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': fd.mimeType },
-          body: binary,
-        },
-      )
+      const res = await fetchFn(canvasFileApiUrl(workspaceId, slug, fileId), {
+        method: 'PUT',
+        headers: { 'Content-Type': fd.mimeType },
+        body: binary,
+      })
       if (!res.ok) {
         throw new Error(`PUT /file/${fileId} failed: ${res.status}`)
       }

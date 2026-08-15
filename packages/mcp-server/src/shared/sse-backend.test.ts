@@ -90,7 +90,9 @@ describe('SseBackend', () => {
     await vi.waitFor(() => expect(snapshots.length).toBe(1))
 
     expect(snapshots[0]).toEqual(new Uint8Array([7, 7, 7]))
-    expect(fake.calls.some((c) => c.url.includes('/api/canvas/ws-1/canvas-a/snapshot'))).toBe(true)
+    expect(fake.calls.some((c) => c.url.includes('/api/w/ws-1/canvas/canvas-a/snapshot'))).toBe(
+      true,
+    )
     backend.disconnect()
   })
 
@@ -213,7 +215,7 @@ describe('SseBackend', () => {
 
     await vi.waitFor(() => {
       const post = fake.calls.find(
-        (c) => c.url.includes('/api/canvas/ws-1/canvas-a/update') && c.method === 'POST',
+        (c) => c.url.includes('/api/w/ws-1/canvas/canvas-a/update') && c.method === 'POST',
       )
       expect(post).toBeDefined()
     })

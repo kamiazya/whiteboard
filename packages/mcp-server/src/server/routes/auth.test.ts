@@ -12,11 +12,11 @@ describe('requiresDaemonAuth', () => {
     // it server-side costs nothing on the happy path and closes the
     // read-without-a-token surface for anyone else.
     expect(requiresDaemonAuth('/api/workspaces')).toBe(true)
-    expect(requiresDaemonAuth('/api/canvas/session-1/demo/snapshot')).toBe(true)
+    expect(requiresDaemonAuth('/api/w/session-1/canvas/demo/snapshot')).toBe(true)
     expect(
       requiresDaemonAuth('/api/workspaces/session-1/canvases/demo/versions/v1/thumbnail'),
     ).toBe(true)
-    expect(requiresDaemonAuth('/api/canvas/session-1/demo/file/f1')).toBe(true)
+    expect(requiresDaemonAuth('/api/w/session-1/canvas/demo/file/f1')).toBe(true)
   })
 
   it('allows only /api/runtime/ping to bypass the middleware', () => {

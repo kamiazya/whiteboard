@@ -56,7 +56,7 @@ const server = setupServer(
   // The canvas update route: where a push lands, after the worker's replica
   // has merged it. Addressed by workspace and slug, which the worker
   // reconstructs from the document key it routes everything else by.
-  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
     daemonWrites.push({
       doc: `${String(params.workspaceId)}/${String(params.slug)}`,
       body: new Uint8Array(await request.arrayBuffer()),
