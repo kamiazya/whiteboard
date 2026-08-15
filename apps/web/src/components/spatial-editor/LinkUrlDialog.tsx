@@ -11,7 +11,7 @@
  * context menu: it must behave identically where the app stylesheet is
  * absent (browser-mode component tests).
  */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { z } from 'zod'
 import { isFollowableUrl } from './followable-url.js'
 
@@ -26,9 +26,30 @@ export interface LinkUrlDialogProps {
   readonly onCancel: () => void
 }
 
+/**
+ * Why this text cannot be used, in the words that tell someone what to do
+ * next — or null when there is nothing to say. An empty field is not a
+ * mistake, and the two failures need different advice: a typo wants the
+ * missing scheme, a `javascript:` URL wants to know we will not open it at
+ * all, and telling THAT person to "add https://" would be wrong.
+ */
+function refusalFor(value: string): string | null {
+  if (value.trim() === '') return null
+  if (urlSchema.safeParse(value).success) return null
+  return isParseableUrl(value)
+    ? 'Only http:// and https:// links can be opened.'
+    : 'Enter a full address, starting with https://'
+}
+
+function isParseableUrl(value: string): boolean {
+  return z.url().safeParse(value).success
+}
+
 export function LinkUrlDialog({ title, initialUrl, onSubmit, onCancel }: LinkUrlDialogProps) {
   const [value, setValue] = useState(initialUrl ?? '')
   const isValid = urlSchema.safeParse(value).success
+  const refusal = refusalFor(value)
+  const errorId = useId()
 
   return (
     <div
@@ -67,10 +88,26 @@ export function LinkUrlDialog({ title, initialUrl, onSubmit, onCancel }: LinkUrl
             type="url"
             value={value}
             placeholder="https://example.com"
+            aria-invalid={refusal !== null}
+            aria-describedby={refusal === null ? undefined : errorId}
             onChange={(e) => setValue(e.target.value)}
             className="w-72 rounded border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
           />
         </label>
+        {/* Always mounted, even while empty. A live region that arrives in
+            the DOM already carrying its message is announced inconsistently
+            (Safari+VoiceOver, some NVDA setups); one that is already there
+            when its text changes is not. Polite rather than assertive
+            because this updates on every keystroke, and an alert on each one
+            would talk over the typing it is describing. */}
+        <p
+          id={errorId}
+          data-testid="link-url-error"
+          role="status"
+          className="max-w-72 text-destructive text-xs empty:hidden"
+        >
+          {refusal ?? ''}
+        </p>
         <div className="flex justify-end gap-2">
           <button
             type="button"
