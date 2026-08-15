@@ -7,6 +7,7 @@ export default {
   },
   mutate: [
     'src/shared/diagnostics/redact.ts',
+    'src/server/app-helpers.ts',
     'src/server/store/path-guard.ts',
     'src/server/output-path.ts',
     'src/shared/api-contracts/libraries.ts',
