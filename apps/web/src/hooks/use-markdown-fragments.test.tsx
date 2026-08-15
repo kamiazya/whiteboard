@@ -43,10 +43,27 @@ describe('useMarkdownFragments', () => {
       expect(result.current.renderDiagram('mermaid', 'graph TD; A-->B')).toBeDefined(),
     )
     rerender({ body: '```ts\nconst x = 1\n```\n' })
+    await waitFor(() => expect(l.diagram).toHaveBeenCalledWith('ts', 'const x = 1'))
+    const declineCalls = (l.diagram as ReturnType<typeof vi.fn>).mock.calls.length
+    // A later effect pass over the same body must not re-offer the declined
+    // fence — the decline is cached as terminal.
+    rerender({ body: '```ts\nconst x = 1\n```\n' })
     await act(async () => {})
-    // The ts fence was offered to the loader (which declined) at most once;
-    // the decline is cached, so it is never retried.
+    expect((l.diagram as ReturnType<typeof vi.fn>).mock.calls.length).toBe(declineCalls)
     expect(result.current.renderDiagram('ts', 'const x = 1')).toBeUndefined()
+  })
+
+  it('never lets a math block and a same-source math fence share a cache row', async () => {
+    const l = loaders()
+    const body = '$$\nx^2\n$$\n\n```math\nx^2\n```\n'
+    const { result } = renderHook(() => useMarkdownFragments({ body, loaders: l }))
+    await waitFor(() => expect(result.current.renderMath('x^2', true)).toBeDefined())
+    await act(async () => {})
+    // The fence went to the diagram loader (which declined the language);
+    // its decline must not shadow — nor be shadowed by — the math result.
+    expect(l.diagram).toHaveBeenCalledWith('math', 'x^2')
+    expect(result.current.renderDiagram('math', 'x^2')).toBeUndefined()
+    expect(result.current.renderMath('x^2', true)).toBeDefined()
   })
 
   it('caches a failed render as terminal instead of retrying it per keystroke', async () => {

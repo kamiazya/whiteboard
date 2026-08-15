@@ -551,7 +551,14 @@ function layoutBlock(
     }
     case 'math': {
       const renderMath = options.renderMath ?? defaultRenderMath
-      const rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
+      let rendered: string | RenderedSvgFragment
+      try {
+        // A throwing renderer degrades this one node to the placeholder
+        // (total-layout rule), exactly like renderDiagram above.
+        rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
+      } catch {
+        rendered = defaultRenderMath(node.value)
+      }
       if (typeof rendered !== 'string') {
         return placeFragment(rendered, cursor, options)
       }

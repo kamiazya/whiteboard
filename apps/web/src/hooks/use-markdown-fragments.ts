@@ -34,8 +34,9 @@ type Wanted = {
 }
 
 /**
- * Every renderable fragment source in one parsed document. Keys carry the
- * kind and language so `x^2` as math and as a fence never collide. Total:
+ * Every renderable fragment source in one parsed document. Keys carry a
+ * kind namespace and the fence language, so a $$ math block and a
+ * ```math fence with identical source never share a cache row. Total:
  * a mid-edit body the schema rejects has no fragments to offer.
  */
 function collectFragmentSources(body: string, loaders: FragmentLoaders): readonly Wanted[] {
@@ -52,7 +53,7 @@ function collectFragmentSources(body: string, loaders: FragmentLoaders): readonl
       if (node.type === 'code' && node.lang) {
         const { lang, value } = node
         wanted.push({
-          key: `${lang}:${value}`,
+          key: `fence:${lang}:${value}`,
           render: () => loaders.diagram(lang, value),
         })
       }
@@ -110,7 +111,7 @@ export function useMarkdownFragments({
     [cache],
   )
   const renderDiagram = useCallback(
-    (lang: string, value: string) => cache.get(`${lang}:${value}`) ?? undefined,
+    (lang: string, value: string) => cache.get(`fence:${lang}:${value}`) ?? undefined,
     [cache],
   )
   return { renderMath, renderDiagram }

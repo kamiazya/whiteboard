@@ -56,7 +56,10 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     // fontCache 'local' keeps each fragment self-contained: 'global' would
     // put shared glyph <defs> outside the fragment, which cannot survive
     // being embedded into the preview's larger SVG document.
-    const tex = new TeX({ packages: AllPackages })
+    // `href` is excluded from the package set: \href{javascript:...}{x}
+    // would put an attacker-controlled URL into SVG this app injects
+    // verbatim (see fragmentHrefsAreLocal for the output-side guard).
+    const tex = new TeX({ packages: AllPackages.filter((name) => name !== 'href') })
     const svg = new SVG({ fontCache: 'local' })
     const doc = mathjax.document('', { InputJax: tex, OutputJax: svg })
     return (value: string, displayMode: boolean) => {
@@ -69,6 +72,25 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     log.warn('MathJax failed to load; math keeps the source placeholder', { err })
     return undefined
   }
+}
+
+/**
+ * Output-side guard for both engines (defense in depth behind the
+ * per-engine config): a fragment is embedded verbatim, so every
+ * (xlink:)href it carries must be a fragment-local `#...` reference —
+ * MathJax's glyph <use> reuse and mermaid's marker refs are exactly that.
+ * Any other target (javascript:, data:, https:, or an obfuscated
+ * java\nscript:) rejects the whole fragment; the layout keeps its
+ * documented fallback rather than rendering a link this code cannot vouch
+ * for.
+ */
+function fragmentHrefsAreLocal(svg: string): boolean {
+  const hrefPattern = /(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi
+  for (const match of svg.matchAll(hrefPattern)) {
+    const target = (match[1] ?? match[2] ?? '').trim()
+    if (!target.startsWith('#')) return false
+  }
+  return true
 }
 
 /** Parses `width="12.5ex"`-style MathJax root attributes into px. */
@@ -87,7 +109,7 @@ export async function renderMathFragment(
   if (convert === undefined) return undefined
   try {
     const svg = convert(value, displayMode)
-    if (!svg.startsWith('<svg')) return undefined
+    if (!svg.startsWith('<svg') || !fragmentHrefsAreLocal(svg)) return undefined
     const width = exAttrToPx(svg, 'width')
     const height = exAttrToPx(svg, 'height')
     return {
@@ -157,6 +179,7 @@ export async function renderDiagramFragment(
   if (mermaid === undefined) return undefined
   try {
     const { svg } = await mermaid.render(`wb-mermaid-${mermaidRenderSeq++}`, value)
+    if (!fragmentHrefsAreLocal(svg)) return undefined
     const width = svgDimension(svg, 'width')
     const height = svgDimension(svg, 'height')
     return {

@@ -268,6 +268,28 @@ describe('layoutMdastBlocks — default math fallback', () => {
     expect(throwing.nodes.filter((n) => n.kind === 'codeBlock')).toHaveLength(2)
   })
 
+  it('degrades a throwing renderMath to the source placeholder instead of aborting layout', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        { type: 'math', value: 'x^2', meta: null },
+        { type: 'paragraph', children: [{ type: 'text', value: 'after' }] },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, {
+      ...options,
+      renderMath: () => {
+        throw new Error('boom')
+      },
+    })
+    const fragment = scene.nodes.find((n) => n.kind === 'svgFragment')
+    if (fragment?.kind !== 'svgFragment') throw new Error('expected svgFragment')
+    expect(fragment.svg).toContain('x^2')
+    // The rest of the document still lays out — one bad renderer never
+    // costs the whole preview.
+    expect(scene.nodes.some((n) => n.kind === 'paragraph')).toBe(true)
+  })
+
   it('escapes untrusted math source in the default renderMath fallback fragment', () => {
     const root: MdastRoot = {
       type: 'root',
