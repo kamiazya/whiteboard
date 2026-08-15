@@ -64,9 +64,8 @@ describe('rows written before canvasIds were ULIDs', () => {
   // A daemon that predates ADR-0007 decision 5 has nanoid ids in `canvases`.
   // The index reads that table directly now, so such a row reaches every
   // caller — and `wb_document_list` declares an outputSchema the MCP SDK
-  // validates at runtime, so ONE of them makes the whole listing fail rather
-  // than degrading. The index must not hand out an entry that violates the
-  // schema its own port declares.
+  // validates at runtime, so ONE of them once made the whole listing fail
+  // rather than degrading (the #795 regression). These pin the resolution.
   async function withLegacyRow(body: (index: SqliteDocumentIndex) => Promise<void>): Promise<void> {
     const tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-legacy-id-'))
     const handle = await createIsolatedDb({ dataDir: tempDir })
@@ -97,14 +96,10 @@ describe('rows written before canvasIds were ULIDs', () => {
     }
   }
 
-  // KNOWN GAP, deliberately not fixed here (user decision 2026-08-15): the
-  // product keeps emitting the offending entry, and the affected local data
-  // was repaired by hand instead. `it.fails` is the guard — it passes while
-  // the gap is open and turns RED the moment someone closes it, which forces
-  // whoever does to come here and flip it rather than leaving a stale test.
-  // The fix is a migration that rewrites pre-ULID ids and moves the blobs and
-  // every table that references them; see the task for the surface.
-  it.fails('does not emit a listing entry that fails its own schema', async () => {
+  // #801 closed the gap this guarded (it was an `it.fails` for one merge):
+  // listDocuments now skips a non-ULID row instead of emitting an entry the
+  // port schema rejects, so every entry it does emit is valid.
+  it('does not emit a listing entry that fails its own schema', async () => {
     await withLegacyRow(async (index) => {
       const entries = await index.listDocuments({ workspaceId: 'ws-legacy' })
       for (const entry of entries) {
@@ -116,12 +111,18 @@ describe('rows written before canvasIds were ULIDs', () => {
     })
   })
 
-  it('still accounts for the document rather than silently dropping it', async () => {
-    // Whatever the fix, the row must not just vanish: a listing that quietly
-    // omits stored data is the same dishonest surface a 200-empty was.
+  it('skips the legacy row rather than failing the listing — the #801 contract', async () => {
+    // Two candidate designs met here and this pins the one that won. #802
+    // wanted the row accounted for in the listing; #801 skips it with a
+    // warning log, and its rationale holds: these rows were never in the
+    // agent listing before the convergence either (the retired tree did not
+    // hold them), so skipping restores the status quo ante rather than
+    // hiding something previously visible — and the row stays reachable in
+    // the user's gallery. What must never come back is the failure mode both
+    // PRs were about: one legacy row darkening the whole listing.
     await withLegacyRow(async (index) => {
       const entries = await index.listDocuments({ workspaceId: 'ws-legacy' })
-      expect(entries.map((entry) => entry.path)).toContain('pre-ulid-doc')
+      expect(entries.map((entry) => entry.path)).not.toContain('pre-ulid-doc')
     })
   })
 })
