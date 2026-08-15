@@ -7,11 +7,10 @@ import {
 } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readDocumentKind, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
-import { readMarkdownDocumentBody } from './markdown-document-body.js'
 
 const log = getLogger('resolve-file-references')
 
@@ -100,7 +99,7 @@ export async function resolveFileReferences(
           return
         }
 
-        const body = readMarkdownDocumentBody(readSpatialCanvas(doc))
+        const body = readMarkdownBody(doc)
         resolved.set(ref, {
           ...(label !== undefined ? { label } : {}),
           // An empty body has no blocks, so the seam degrades to the card on

@@ -3,13 +3,13 @@ import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-m
 import {
   readDocumentKind,
   readSpatialCanvas,
+  MARKDOWN_BODY_NODE_ID as TEXT_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
-import { MARKDOWN_BODY_NODE_ID as TEXT_NODE_ID } from '../render/markdown-document-body.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
