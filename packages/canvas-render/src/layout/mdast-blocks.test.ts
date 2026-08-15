@@ -209,6 +209,65 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
 })
 
 describe('layoutMdastBlocks — default math fallback', () => {
+  it('sizes a math fragment from the dimensions a real renderer reports', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'math', value: 'x^2', meta: null }],
+    }
+    const scene = layoutMdastBlocks(root, {
+      ...options,
+      renderMath: () => ({ svg: '<g data-math/>', width: 120, height: 48 }),
+    })
+    const fragment = scene.nodes.find((n) => n.kind === 'svgFragment')
+    if (fragment?.kind !== 'svgFragment') throw new Error('expected svgFragment')
+    expect(fragment.svg).toBe('<g data-math/>')
+    expect(fragment.bbox.h).toBe(48)
+    expect(fragment.bbox.w).toBe(120)
+
+    // A reported width past the column clamps to it; a plain-string result
+    // keeps the source-line-count fallback height exactly as before.
+    const wide = layoutMdastBlocks(root, {
+      ...options,
+      renderMath: () => ({ svg: '<g/>', width: 10_000, height: 48 }),
+    })
+    const wideFragment = wide.nodes.find((n) => n.kind === 'svgFragment')
+    if (wideFragment?.kind !== 'svgFragment') throw new Error('expected svgFragment')
+    expect(wideFragment.bbox.w).toBe(600)
+  })
+
+  it('renders a fenced diagram through the renderDiagram seam, degrading to the code block', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        { type: 'code', lang: 'mermaid', meta: null, value: 'graph TD; A-->B' },
+        { type: 'code', lang: 'ts', meta: null, value: 'const x = 1' },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, {
+      ...options,
+      renderDiagram: (lang) =>
+        lang === 'mermaid' ? { svg: '<g data-diagram/>', width: 200, height: 100 } : undefined,
+    })
+    const kinds = scene.nodes.map((n) => n.kind)
+    expect(kinds).toContain('svgFragment')
+    expect(kinds).toContain('codeBlock')
+    const fragment = scene.nodes.find((n) => n.kind === 'svgFragment')
+    if (fragment?.kind !== 'svgFragment') throw new Error('expected svgFragment')
+    expect(fragment.svg).toBe('<g data-diagram/>')
+    expect(fragment.bbox).toMatchObject({ w: 200, h: 100 })
+
+    // A throwing renderer degrades to the plain code block (total-layout
+    // rule), never an aborted layout.
+    const throwing = layoutMdastBlocks(root, {
+      ...options,
+      renderDiagram: () => {
+        throw new Error('boom')
+      },
+    })
+    expect(throwing.nodes.some((n) => n.kind === 'svgFragment')).toBe(false)
+    expect(throwing.nodes.filter((n) => n.kind === 'codeBlock')).toHaveLength(2)
+  })
+
   it('escapes untrusted math source in the default renderMath fallback fragment', () => {
     const root: MdastRoot = {
       type: 'root',
@@ -220,7 +279,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
     if (fragment?.kind !== 'svgFragment') throw new Error('unreachable')
     expect(fragment.svg).not.toContain('<script>')
     expect(fragment.svg).toBe(
-      '<text>&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;text&gt;</text>',
+      '<text y="0.8em">&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;text&gt;</text>',
     )
   })
 })

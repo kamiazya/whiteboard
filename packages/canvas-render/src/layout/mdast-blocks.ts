@@ -72,9 +72,25 @@ export interface MdastLayoutOptions {
    * Renders a math source string to an SVG fragment. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
    * real renderer, math nodes fall back to a deterministic placeholder
-   * fragment carrying the raw source as escaped text.
+   * fragment carrying the raw source as escaped text. A renderer that knows
+   * the fragment's intrinsic size returns the object form so the block's
+   * bbox matches what is painted (width clamps to the column); a plain
+   * string keeps the source-line-count fallback height. `undefined` (a
+   * renderer that has not produced this value yet — an async renderer's
+   * cache miss) falls back to the escaped-source placeholder.
    */
-  readonly renderMath?: (value: string, displayMode: boolean) => string
+  readonly renderMath?: (
+    value: string,
+    displayMode: boolean,
+  ) => string | RenderedSvgFragment | undefined
+  /**
+   * Renders a fenced code block's content as a diagram (mermaid and
+   * friends) — same injected-resolver class as `renderMath`: synchronous,
+   * optional, caller-supplied, total from this side. Called for every
+   * fence with a language; `undefined` (any language the caller does not
+   * handle) or a throw keeps the plain code block.
+   */
+  readonly renderDiagram?: (lang: string, value: string) => string | RenderedSvgFragment | undefined
   /**
    * Resolves an embed target's already-parsed body — the same injected-
    * resolver class as `renderMath` and spatial-canvas's `resolveFile*`
@@ -89,6 +105,17 @@ export interface MdastLayoutOptions {
   readonly resolveEmbed?: (
     canvasId: string,
   ) => { readonly title?: string; readonly root: MdastRoot } | undefined
+}
+
+/**
+ * The object form a math/diagram renderer returns when it knows the
+ * fragment's intrinsic size. Plain TS, in-process only (zod-schema-
+ * discipline: no boundary crossed).
+ */
+export interface RenderedSvgFragment {
+  readonly svg: string
+  readonly width?: number
+  readonly height?: number
 }
 
 /** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
@@ -114,7 +141,11 @@ function tryResolveEmbed(
  * precondition to supply as well-formed, already-trusted SVG.
  */
 function defaultRenderMath(value: string): string {
-  return `<text>${escapeXmlText(value)}</text>`
+  // y in em, not 0: SVG <text> y is the BASELINE, and the fragment wrapper
+  // positions this at its box top — a baseline of 0 would paint the source
+  // one line ABOVE the fragment's own space, colliding with the preceding
+  // block (the embedPlaceholder baseline rationale, in fragment-local units).
+  return `<text y="0.8em">${escapeXmlText(value)}</text>`
 }
 
 interface Cursor {
@@ -436,6 +467,17 @@ function layoutBlock(
       return list
     }
     case 'code': {
+      if (node.lang) {
+        let rendered: string | RenderedSvgFragment | undefined
+        try {
+          rendered = options.renderDiagram?.(node.lang, node.value)
+        } catch {
+          rendered = undefined
+        }
+        if (rendered !== undefined) {
+          return placeFragment(rendered, cursor, options)
+        }
+      }
       const lines = node.value.split('\n')
       const height = lines.length * CODE_LINE_HEIGHT_PX
       const code: CodeBlockNode = {
@@ -509,16 +551,49 @@ function layoutBlock(
     }
     case 'math': {
       const renderMath = options.renderMath ?? defaultRenderMath
+      const rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
+      if (typeof rendered !== 'string') {
+        return placeFragment(rendered, cursor, options)
+      }
       const height = node.value.split('\n').length * CODE_LINE_HEIGHT_PX
       const fragment: SvgFragmentNode = {
         kind: 'svgFragment',
         bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
-        svg: renderMath(node.value, true),
+        svg: rendered,
       }
       cursor.y += height + BLOCK_GAP_PX
       return fragment
     }
   }
+}
+
+/**
+ * Places a renderer-supplied SVG fragment at the cursor, sized from the
+ * dimensions the renderer reported. Width clamps to the column; a missing
+ * or non-finite dimension falls back to the column width / one code line,
+ * keeping layout total against a renderer that reports garbage.
+ */
+function placeFragment(
+  rendered: string | RenderedSvgFragment,
+  cursor: Cursor,
+  options: MdastLayoutOptions,
+): SvgFragmentNode {
+  const fragment = typeof rendered === 'string' ? { svg: rendered } : rendered
+  const width =
+    fragment.width !== undefined && Number.isFinite(fragment.width) && fragment.width > 0
+      ? Math.min(fragment.width, options.maxWidth)
+      : options.maxWidth
+  const height =
+    fragment.height !== undefined && Number.isFinite(fragment.height) && fragment.height > 0
+      ? fragment.height
+      : CODE_LINE_HEIGHT_PX
+  const node: SvgFragmentNode = {
+    kind: 'svgFragment',
+    bbox: { x: 0, y: cursor.y, w: width, h: height },
+    svg: fragment.svg,
+  }
+  cursor.y += height + BLOCK_GAP_PX
+  return node
 }
 
 function layoutListItem(

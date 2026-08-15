@@ -89,7 +89,7 @@ export const DETERMINISM_GOLDEN_SVG =
   '<g><text x="0" y="0">Title &amp; &lt;more&gt;</text></g>' +
   '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40">link text</text></a></g>' +
   '<rect x="0" y="64" width="600" height="1" role="presentation"/>' +
-  '<g><circle cx="20" cy="20" r="19.999"/></g>' +
+  '<svg x="0" y="72" width="40" height="40" overflow="visible"><circle cx="20" cy="20" r="19.999"/></svg>' +
   '<g><g><g><text x="0" y="120">Col1</text></g>' +
   '<g transform="translate(100,0)"><text x="0" y="120">Col2</text></g></g></g>' +
   '<g><g transform="translate(24,0)"><g><text x="0" y="152">Item</text></g></g></g>' +
@@ -115,7 +115,7 @@ export const DETERMINISM_GOLDEN_DOCUMENT_SVG =
   '<g><text x="0" y="0">Title &amp; &lt;more&gt;</text></g>' +
   '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40">link text</text></a></g>' +
   '<rect x="0" y="64" width="600" height="1" role="presentation"/>' +
-  '<g><circle cx="20" cy="20" r="19.999"/></g>' +
+  '<svg x="0" y="72" width="40" height="40" overflow="visible"><circle cx="20" cy="20" r="19.999"/></svg>' +
   '<g><g><g><text x="0" y="120">Col1</text></g>' +
   '<g transform="translate(100,0)"><text x="0" y="120">Col2</text></g></g></g>' +
   '<g><g transform="translate(24,0)"><g><text x="0" y="152">Item</text></g></g></g>' +
