@@ -1,7 +1,13 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { EditorSelection, EditorState, Prec, type StateCommand } from '@codemirror/state'
+import {
+  EditorSelection,
+  EditorState,
+  type Extension,
+  Prec,
+  type StateCommand,
+} from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
@@ -96,6 +102,21 @@ export interface SourcePaneProps {
   placeholderText?: string
   /** Receives the imperative API while the view is mounted, null after. */
   apiRef?: RefObject<SourcePaneApi | null>
+  /**
+   * Host-supplied CodeMirror extensions, appended at view creation — the
+   * seam a composition root uses to bind this editor to a CRDT document
+   * (loro-codemirror). The view is created once per mount, so a host that
+   * gains its extension later must remount (key) rather than expect a
+   * live reconfigure.
+   */
+  extensions?: readonly Extension[]
+  /**
+   * When false, external `value` changes are NOT reconciled into the view
+   * — for CRDT-bound hosts, where the binding itself applies remote
+   * changes and a second reconcile path would race it and double-apply.
+   * The view's content then flows only editor->out. Default true.
+   */
+  reconcileExternalValue?: boolean
 }
 
 /**
@@ -111,6 +132,8 @@ export function SourcePane({
   autoFocus = false,
   placeholderText,
   apiRef,
+  extensions,
+  reconcileExternalValue = true,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -156,6 +179,9 @@ export function SourcePane({
         // horizontal scrollbar.
         EditorView.lineWrapping,
         ...(placeholderText !== undefined ? [placeholder(placeholderText)] : []),
+        // Host extensions last, after every built-in: a CRDT binding must
+        // observe the final document the built-ins produce.
+        ...(extensions ?? []),
         // Fill the host pane instead of sizing to content: without a
         // bounded height the scroller never scrolls and the pane collapses
         // to its padding inside a flex row.
@@ -216,6 +242,9 @@ export function SourcePane({
   }, [])
 
   useEffect(() => {
+    // A CRDT-bound host applies external changes through the binding
+    // itself; reconciling here as well would race it and double-apply.
+    if (!reconcileExternalValue) return
     const view = viewRef.current
     if (!view) return
     const current = view.state.doc.toString()
@@ -231,7 +260,7 @@ export function SourcePane({
     // what makes a remote CRDT update land without yanking the local caret
     // out of the word being typed.
     view.dispatch({ changes: minimalChange(current, value) })
-  }, [value])
+  }, [value, reconcileExternalValue])
 
   return (
     <div

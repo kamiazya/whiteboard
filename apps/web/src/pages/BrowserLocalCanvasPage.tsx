@@ -1,8 +1,9 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
@@ -211,6 +212,19 @@ export function BrowserLocalCanvasPage({
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
+  // Binds CodeMirror straight to the document's 'body' text container:
+  // edits land in the CRDT with real deltas (not the wholesale replace
+  // setBody does), and an external change moves the local caret exactly.
+  // The hook's doc subscription keeps body state and the save schedule in
+  // step with the binding's commits, so onChange has nothing left to do.
+  const markdownBinding = useMemo(
+    () =>
+      markdownDoc.doc === null
+        ? undefined
+        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText('body'))],
+    [markdownDoc.doc],
+  )
+  const noopChange = useCallback(() => {}, [])
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
   // [[Name]] resolution for the markdown preview: display names from the
@@ -711,7 +725,8 @@ export function BrowserLocalCanvasPage({
                 <MarkdownEditor
                   key={canvasId ?? 'no-canvas'}
                   value={markdownDoc.body}
-                  onChange={markdownDoc.setBody}
+                  onChange={markdownBinding === undefined ? markdownDoc.setBody : noopChange}
+                  sourceExtensions={markdownBinding}
                   autoFocus
                   className="h-full"
                   theme={resolvedTheme}
