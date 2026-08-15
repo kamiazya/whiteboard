@@ -53,10 +53,11 @@ export interface DaemonCanvasPageProps {
   daemonBaseUrl: string
   workspaceId?: string
   slug?: string
-  // The bootstrap token seeded by useDaemonConnection into
-  // window.__WHITEBOARD_DAEMON_TOKEN__. DaemonBackend's WS auth reads that
-  // global directly (readDaemonTokenOnce); this prop is only for the HTTP
-  // side (createDaemonFetch's Authorization header).
+  // The daemon credential for this session: a bootstrap token (#wb= flow)
+  // or a pairing session token (pairing-grant flow). Feeds both the HTTP
+  // side (createDaemonFetch's Authorization header) and the WS upgrade
+  // (DaemonBackend's wsToken); when the #wb= flow also seeded
+  // window.__WHITEBOARD_DAEMON_TOKEN__, that global wins for the WS.
   token?: string
   capabilities?: WhiteboardCapabilities
   // Rendered as a "Continue in browser-local" escape next to the auth-error
@@ -117,7 +118,14 @@ export function DaemonCanvasPage({
         daemonBaseUrl,
       })
       if (transport !== 'sse') {
-        return new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })
+        // wsToken carries the pairing session token into the WS upgrade —
+        // without it a pairing-grant session authenticates HTTP but opens
+        // the socket credential-less and is rejected 401 (edits then stay
+        // browser-only while the page looks connected).
+        return new DaemonBackend(workspaceId, slug, daemonBaseUrl, {
+          fetch: daemonFetch,
+          wsToken: () => token,
+        })
       }
       // Null where SharedWorker is unavailable; SseBackend then opens its own
       // stream, which is correct but not shared across tabs.
