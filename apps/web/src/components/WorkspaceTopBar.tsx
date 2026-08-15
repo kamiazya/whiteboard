@@ -301,11 +301,17 @@ export default function WorkspaceTopBar({
             failure states render here beside the switcher. The status line
             replaces the deleted dialog's disabled "Creating…" button as the
             flow's announced busy indication (accessibility criterion 5). */}
-        {newCanvasBusy && (
-          <span aria-live="polite" role="status" className="text-xs text-muted-foreground">
-            Creating canvas…
-          </span>
-        )}
+        {/* Mounted even while silent: a polite region that arrives already
+            carrying its message is announced inconsistently, so this one is
+            always here and only its text changes. */}
+        <span
+          aria-live="polite"
+          role="status"
+          aria-label="New canvas status"
+          className="text-xs text-muted-foreground empty:hidden"
+        >
+          {newCanvasBusy ? 'Creating canvas…' : ''}
+        </span>
         {newCanvasError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newCanvasError}

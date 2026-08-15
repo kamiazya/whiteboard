@@ -906,7 +906,9 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
       await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/canvas/ws_1/canvas-a'))
       // Screen-reader-visible announcement, independent of the visible label.
-      expect(screen.getByRole('status').textContent).toContain('Canvas URL copied to clipboard.')
+      expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
+        'Canvas URL copied to clipboard.',
+      )
 
       await act(async () => {
         vi.advanceTimersByTime(2000)
@@ -932,7 +934,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain("Couldn't copy automatically")
     expect(screen.queryByText('Copied!')).toBeNull()
-    expect(screen.getByRole('status').textContent).toContain(
+    expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
       "Couldn't copy the canvas URL automatically.",
     )
 
@@ -959,7 +961,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
     fireEvent.pointerUp(copyItem)
 
     const alert = await screen.findByRole('alert')
-    const status = screen.getByRole('status')
+    const status = screen.getByRole('status', { name: 'Copy status' })
     const menu = screen.getByRole('menu')
 
     expect(menu.contains(alert)).toBe(false)
