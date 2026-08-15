@@ -4,6 +4,7 @@ import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-m
 import { readCoreFacets, readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { readMarkdownDocumentBody } from '../render/markdown-document-body.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -60,7 +61,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     canvasId: input.canvasId,
   })
   const facets = readFacets(doc)
-  const body = canvas.nodes.find((node) => node.type === 'text')?.text ?? ''
+  const body = readMarkdownDocumentBody(canvas)
   const { title: _storedTitle, ...storedMeta } = coreMeta ?? {
     type: OKF_EXPORT_PLACEHOLDER_TYPE,
   }

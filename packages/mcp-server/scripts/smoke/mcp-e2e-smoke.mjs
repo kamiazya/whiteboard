@@ -353,6 +353,24 @@ async function main() {
   }
   console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
 
+  // The opt-in reference path is a SECOND composition through the same
+  // output schema, reached only when `embedReferences` is set — so the
+  // default call above cannot cover it. This canvas has no file node, which
+  // is the point: the resolve step must be a no-op that still produces a
+  // schema-valid scene rather than something only exercised when a
+  // reference happens to resolve.
+  const renderedWithRefs = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    embedReferences: true,
+  })
+  if (typeof renderedWithRefs.svg !== 'string' || !renderedWithRefs.svg.includes('<rect')) {
+    throw new Error(
+      `wb_scene_render(embedReferences) returned unexpected shape: ${JSON.stringify(renderedWithRefs)}`,
+    )
+  }
+  console.log('[e2e] wb_scene_render(embedReferences:true) → schema-valid svg')
+
   const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, canvasId })
   if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
     throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
