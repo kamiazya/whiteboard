@@ -105,11 +105,20 @@ it('cancels touchstart on the canvas so iOS cannot claim the press, but not on o
   expect(onOverlay.defaultPrevented).toBe(false)
 })
 
-it('hand mode stays navigation-only: long-press opens nothing', async () => {
+it('hand mode stays navigation-only, and a slow pan keeps panning', async () => {
   const { container } = mount(withNode, 'hand')
   const root = rootOf(container)
+  const transform = () =>
+    (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
+
   touch(root, 'pointerdown', 200, 130)
+  // Held past the long-press delay WITHOUT moving — the shape of a slow
+  // one-finger pan. No menu, and the pan must survive: an armed timer
+  // would have cleared isPanningRef here and stranded the drag.
   await new Promise((resolve) => setTimeout(resolve, 650))
   expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
-  touch(root, 'pointerup', 200, 130)
+  const before = transform()
+  touch(root, 'pointermove', 260, 190)
+  await vi.waitFor(() => expect(transform()).not.toBe(before))
+  touch(root, 'pointerup', 260, 190)
 })

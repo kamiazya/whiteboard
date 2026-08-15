@@ -4,7 +4,7 @@
  * control that visibly does nothing. Real browser: the decision reads
  * `document.fullscreenEnabled`, which jsdom does not implement at all.
  */
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { TopBarSecondaryActions } from './TopBarSecondaryActions.js'
 
@@ -29,9 +29,31 @@ it('offers Fullscreen where the browser supports it', () => {
   expect(container.querySelector('[aria-label="Fullscreen"]')).not.toBeNull()
 })
 
-it('hides Fullscreen — button and kebab item — where the browser has none', () => {
+// The kebab must be OPENED to assert on its items: a closed DropdownMenu
+// renders no content, so checking the document text while it is shut would
+// pass no matter what the menu holds. Opened by dispatching pointerDown at
+// the trigger (Radix's own open event, the pattern the other top-bar tests
+// use) rather than a user click: the trigger is `min-[400px]:hidden`, so at
+// the test window's width a real click has nothing visible to land on.
+async function openKebab(container: HTMLElement): Promise<void> {
+  const trigger = container.querySelector(
+    '[data-testid="topbar-more-actions-trigger"]',
+  ) as HTMLElement
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+  await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).not.toBeNull())
+}
+
+it('hides Fullscreen — button and kebab item — where the browser has none', async () => {
   stubFullscreenEnabled(false)
   const { container } = render(<TopBarSecondaryActions onToggleFullscreen={() => {}} />)
   expect(container.querySelector('[aria-label="Fullscreen"]')).toBeNull()
-  expect(container.textContent).not.toContain('Fullscreen')
+  await openKebab(container)
+  expect(document.body.textContent).not.toContain('Fullscreen')
+})
+
+it('offers the kebab item too where the browser supports it', async () => {
+  stubFullscreenEnabled(true)
+  const { container } = render(<TopBarSecondaryActions onToggleFullscreen={() => {}} />)
+  await openKebab(container)
+  expect(document.querySelector('[role="menuitem"]')?.textContent).toContain('Fullscreen')
 })

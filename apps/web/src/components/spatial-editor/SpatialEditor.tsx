@@ -1425,7 +1425,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           clearLongPress()
           return
         }
-        if (touchPointsRef.current.size === 1) {
+        // Hand mode is navigation-ONLY, so there is no menu for the timer
+        // to open — and arming it anyway is actively harmful: the press
+        // below starts a pan, and 500ms later the timer's teardown would
+        // clear isPanningRef mid-drag, stranding the pan under a finger
+        // that is still moving.
+        if (touchPointsRef.current.size === 1 && tool !== 'hand') {
           // Arm the long-press menu. Firing abandons whatever the press
           // started (a node move's 'pressing' state, marquee arming): the
           // press has become a menu invocation, not a drag.
@@ -2874,6 +2879,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             }
           />
         )}
+        {longPressPulse !== null && (
+          // The moment the long-press commits: one expanding ring at the
+          // pressed point. Haptics are best-effort at most (see
+          // haptics.ts), so this is the feedback channel that always works;
+          // removed on its own animationend (the reduced-motion floor
+          // shortens, never cancels, so cleanup still fires).
+          //
+          // OUTSIDE the pan/zoom transform, unlike the canvas-space
+          // overlays: the coordinates are root-local screen px, and a
+          // fixed-size feedback ring must not scale with zoom.
+          <div
+            data-testid="long-press-pulse"
+            aria-hidden="true"
+            className="long-press-pulse"
+            style={{ left: longPressPulse.x, top: longPressPulse.y }}
+            onAnimationEnd={() => setLongPressPulse(null)}
+          />
+        )}
         {/* The OOUI creation surface: every canvas is empty until a node
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
@@ -3126,20 +3149,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               node.height * viewport.zoom >= EXPAND_MIN_H
             }
           />
-          {longPressPulse !== null && (
-            // The moment the long-press commits: one expanding ring at the
-            // pressed point. Haptics are best-effort at most (see
-            // haptics.ts), so this is the feedback channel that always
-            // works; removed on its own animationend (the reduced-motion
-            // floor shortens, never cancels, so cleanup still fires).
-            <div
-              data-testid="long-press-pulse"
-              aria-hidden="true"
-              className="long-press-pulse"
-              style={{ left: longPressPulse.x, top: longPressPulse.y }}
-              onAnimationEnd={() => setLongPressPulse(null)}
-            />
-          )}
           {marquee !== null && (
             <svg
               data-testid="marquee-rect"
