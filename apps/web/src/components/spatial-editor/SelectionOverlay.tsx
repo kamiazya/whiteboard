@@ -1,6 +1,6 @@
 /** Selection outline + resize handles + in-flight connect line, drawn in canvas space. */
 import type { Box, ResizeHandleKind } from './geometry.js'
-import { resizeHandleBoxes } from './geometry.js'
+import { cornerHitBoxes, edgeBandBoxes, resizeHandleBoxes } from './geometry.js'
 
 export interface SelectionOverlayProps {
   readonly box: Box
@@ -74,7 +74,16 @@ export function SelectionOverlay({
   onEditRequest,
 }: SelectionOverlayProps) {
   const handles = resizeHandleBoxes(box, zoom)
+  // Hitting and drawing are separate questions: the markers stay 8px so
+  // small nodes are not swallowed, while the transparent hit shapes below
+  // meet WCAG 2.5.8's 24px floor — 32px where the pointer is a finger
+  // (matchMedia is cheap and correct here; a resize re-render re-reads it).
+  const hitPx =
+    typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 32 : 24
+  const cornerHits = cornerHitBoxes(box, zoom, hitPx)
+  const edgeBands = edgeBandBoxes(box, zoom, hitPx / 2, hitPx)
   const connectHandleSize = 10 / zoom
+  const connectHitRadius = hitPx / 2 / zoom
   return (
     <svg
       data-testid="selection-overlay"
@@ -99,14 +108,68 @@ export function SelectionOverlay({
         strokeWidth={1 / zoom}
         pointerEvents="none"
       />
-      {handles.map((handle) => (
-        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this handle's canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+      {/* Paint order IS the hit priority: edge bands at the bottom, corner
+          hits above them, connect hits last of all — so a press near a
+          corner is a corner, and the connect port outside the edge is never
+          shadowed by the band under it. */}
+      {edgeBands.map((band) => (
+        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
         <rect
-          key={handle.kind}
-          data-testid={`resize-handle-${handle.kind}`}
+          key={band.kind}
+          data-testid={`resize-handle-${band.kind}`}
           role="button"
           tabIndex={0}
-          aria-label={HANDLE_LABEL[handle.kind]}
+          aria-label={HANDLE_LABEL[band.kind]}
+          x={band.box.x}
+          y={band.box.y}
+          width={band.box.width}
+          height={band.box.height}
+          fill="transparent"
+          style={{ pointerEvents: 'auto', cursor: `${band.kind}-resize` }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            e.stopPropagation()
+            onHandlePointerDown(band.kind, band.box, e)
+          }}
+          onKeyDown={(e) => {
+            if (onHandleKeyDown === undefined || !ARROW_KEYS.has(e.key)) return
+            e.stopPropagation()
+            onHandleKeyDown(band.kind, band.box, e)
+          }}
+        />
+      ))}
+      {cornerHits.map((hit) => (
+        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+        <rect
+          key={hit.kind}
+          data-testid={`resize-handle-${hit.kind}`}
+          role="button"
+          tabIndex={0}
+          aria-label={HANDLE_LABEL[hit.kind]}
+          x={hit.box.x}
+          y={hit.box.y}
+          width={hit.box.width}
+          height={hit.box.height}
+          fill="transparent"
+          style={{ pointerEvents: 'auto', cursor: `${hit.kind}-resize` }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            e.stopPropagation()
+            onHandlePointerDown(hit.kind, hit.box, e)
+          }}
+          onKeyDown={(e) => {
+            if (onHandleKeyDown === undefined || !ARROW_KEYS.has(e.key)) return
+            // Fully handled here — without this the root's own arrow handler
+            // would ALSO nudge the node, double-applying every keypress.
+            e.stopPropagation()
+            onHandleKeyDown(hit.kind, hit.box, e)
+          }}
+        />
+      ))}
+      {handles.map((handle) => (
+        <rect
+          key={`marker-${handle.kind}`}
+          aria-hidden="true"
           x={handle.box.x}
           y={handle.box.y}
           width={handle.box.width}
@@ -114,45 +177,45 @@ export function SelectionOverlay({
           fill="var(--background)"
           stroke={SELECTION_STROKE}
           strokeWidth={1 / zoom}
-          style={{ pointerEvents: 'auto', cursor: `${handle.kind}-resize` }}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            e.stopPropagation()
-            onHandlePointerDown(handle.kind, handle.box, e)
-          }}
-          onKeyDown={(e) => {
-            if (onHandleKeyDown === undefined || !ARROW_KEYS.has(e.key)) return
-            // Fully handled here — without this the root's own arrow handler
-            // would ALSO nudge the node, double-applying every keypress.
-            e.stopPropagation()
-            onHandleKeyDown(handle.kind, handle.box, e)
-          }}
+          pointerEvents="none"
         />
       ))}
       {onConnectPointerDown !== undefined &&
         CONNECT_SIDES.map((side) => (
-          // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
-          <circle
-            key={side.kind}
-            data-testid={side.kind === 'e' ? 'connect-handle' : `connect-handle-${side.kind}`}
-            role="button"
-            tabIndex={0}
-            aria-label={`Connect to another node (from the ${side.label} side)`}
-            cx={side.cx(box, connectHandleSize)}
-            cy={side.cy(box, connectHandleSize)}
-            r={connectHandleSize / 2}
-            fill={SELECTION_STROKE}
-            style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
-            onPointerDown={(e) => {
-              if (e.button !== 0) return
-              e.stopPropagation()
-              onConnectPointerDown(e)
-            }}
-            onKeyDown={(e) => {
-              if (onConnectKeyDown === undefined || (e.key !== 'Enter' && e.key !== ' ')) return
-              onConnectKeyDown(e)
-            }}
-          />
+          <g key={side.kind}>
+            <circle
+              aria-hidden="true"
+              cx={side.cx(box, connectHandleSize)}
+              cy={side.cy(box, connectHandleSize)}
+              r={connectHandleSize / 2}
+              fill={SELECTION_STROKE}
+              pointerEvents="none"
+            />
+            {/* biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand. */}
+            <circle
+              data-testid={side.kind === 'e' ? 'connect-handle' : `connect-handle-${side.kind}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Connect to another node (from the ${side.label} side)`}
+              cx={side.cx(box, connectHandleSize)}
+              cy={side.cy(box, connectHandleSize)}
+              r={connectHitRadius}
+              fill="transparent"
+              // The halo makes the invisible target legible the moment it is
+              // hovered or focused — see index.css's --manipulation-halo.
+              className="connect-hit"
+              style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                e.stopPropagation()
+                onConnectPointerDown(e)
+              }}
+              onKeyDown={(e) => {
+                if (onConnectKeyDown === undefined || (e.key !== 'Enter' && e.key !== ' ')) return
+                onConnectKeyDown(e)
+              }}
+            />
+          </g>
         ))}
       {onEditRequest !== undefined && (
         // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.

@@ -134,6 +134,14 @@
    * `.cm-md-marker` is declared last to win the color and weight it shares
    * with the tokens that enclose it.
    */
+  /* The connect port's oversized hit circle is invisible until it matters:
+     hover or keyboard focus fills it with the halo so the target the finger
+     gets is also the target the eye can confirm. */
+  .connect-hit:hover,
+  .connect-hit:focus-visible {
+    fill: var(--manipulation-halo);
+  }
+
   .cm-md-heading {
     font-weight: 700;
     color: var(--foreground);
