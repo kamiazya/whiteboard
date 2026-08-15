@@ -284,10 +284,19 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
-    await waitFor(() => {
-      const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
-      expect(restored.value).toBe('Fast switch')
-    })
+    // The only assertion in this file gated on a save that had NOT landed
+    // before the unmount — every other reload here calls waitForSaved()
+    // first. That makes this reload wait for the flush to finish rather than
+    // race it, which is the behaviour under test but also strictly slower
+    // than an unordered read, and testing-library's 1s default is not a
+    // budget for a real IndexedDB write plus a read on a loaded CI runner.
+    await waitFor(
+      () => {
+        const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+        expect(restored.value).toBe('Fast switch')
+      },
+      { timeout: 10_000 },
+    )
   })
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
