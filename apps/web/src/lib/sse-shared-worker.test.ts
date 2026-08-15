@@ -94,6 +94,12 @@ const server = setupServer(
     })
     return HttpResponse.json({ ok: true })
   }),
+  // The worker seeds every subscribed document's replica from this route.
+  // Answered (with "unknown") rather than left unhandled: `bypass` would let
+  // the request escape to whatever real daemon is listening on this port.
+  http.get(`${BASE}/api/w/:workspaceId/canvas/:slug/snapshot`, () =>
+    HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
+  ),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -103,7 +109,9 @@ beforeEach(() => {
   subscribeAuth = []
   messageBodies = []
   updateWrites = []
-  pushByStream.clear()
+  // pushByStream is NOT cleared: the replica port's stream is opened once and
+  // spans tests, and its ids are unique for the file's lifetime, so clearing
+  // would orphan a live stream while colliding with nothing.
 })
 afterEach(() => server.resetHandlers())
 
@@ -113,6 +121,32 @@ afterEach(() => server.resetHandlers())
 let docSeq = 0
 const nextDoc = () => `w/doc-${++docSeq}`
 
+const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+const b64 = (bytes: Uint8Array) => {
+  let out = ''
+  for (const byte of bytes) out += String.fromCharCode(byte)
+  return btoa(out)
+}
+
+/** A one-key Loro update whose state a test can recognise on arrival. */
+const loroUpdate = (key: string, value: string): Uint8Array => {
+  const doc = new LoroDoc()
+  doc.getMap('m').set(key, value)
+  doc.commit()
+  return doc.export({ mode: 'update' })
+}
+
+/** The value of `m.<key>` after importing every collected authority frame. */
+const reconstruct = (frames: unknown[], key: string): unknown => {
+  const doc = new LoroDoc()
+  for (const frame of frames) {
+    const data = frame as { type?: string; update?: string }
+    if (data.type === 'authority-update' && data.update !== undefined)
+      doc.import(decode(data.update))
+  }
+  return doc.getMap('m').get(key)
+}
+
 function connect(): MessagePort {
   const worker = new SharedWorker(new URL('./sse-shared-worker.ts', import.meta.url), {
     type: 'module',
@@ -120,6 +154,43 @@ function connect(): MessagePort {
   worker.port.start()
   return worker.port
 }
+
+/**
+ * The ONE replica-capable worker in this file, created before every other.
+ *
+ * `@vitest/web-worker` evaluates each worker in the host realm and loro-crdt's
+ * WASM initialises once per realm: whichever worker's `import('loro-crdt')`
+ * settles first wins, and a worker that loses degrades exactly as designed —
+ * its replica work goes unanswered. Since the raw relay's retirement that
+ * degradation means the worker delivers NOTHING to its tabs, so which worker
+ * wins cannot be left to a race decided by module timing. It is pinned here:
+ * every case that asserts port-side delivery drives this port, and per-test
+ * workers serve only assertions that read the DAEMON side (subscribe bodies,
+ * control messages, headers), which a degraded worker still performs.
+ *
+ * Listeners on this shared port must scope to the doc keys their own test
+ * minted — another case's authority traffic is not a mis-forwarded frame.
+ */
+let replicaPort: MessagePort
+beforeAll(async () => {
+  replicaPort = connect()
+  replicaPort.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+  // Awaited until the replica ANSWERS, not merely created: what poisons a
+  // worker's loro is another worker's loro-crdt evaluation racing this one's
+  // still-loading import. A snapshot reply proves the import settled while
+  // this worker was still the realm's only one.
+  const probe = nextDoc()
+  await new Promise<void>((resolve) => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type !== 'snapshot' || data.doc !== probe) return
+      replicaPort.removeEventListener('message', onMessage)
+      resolve()
+    }
+    replicaPort.addEventListener('message', onMessage)
+    replicaPort.postMessage({ type: 'snapshot-request', doc: probe })
+  })
+}, 20_000)
 
 // The worker's module load, its connect dispatch and its first fetch are all
 // async, and a fixed sleep long enough on an idle machine is not long enough
@@ -198,33 +269,45 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
   })
 
   it('forwards only the subscribed document, not every frame on the stream', async () => {
-    const port = connect()
+    const port = replicaPort
     // Status events are liveness, not document frames; this case is about
-    // which documents' frames are forwarded.
+    // which documents' frames are forwarded. Scoped to this test's own keys
+    // because the port is shared.
     const seen: unknown[] = []
-    port.onmessage = (e) => {
-      if ((e.data as { type?: string }).type !== 'status') seen.push(e.data)
-    }
     const doc = nextDoc()
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    const listener = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type === 'status') return
+      if (data.doc !== doc && data.doc !== 'w/other') return
+      seen.push(e.data)
+    }
+    port.addEventListener('message', listener)
     port.postMessage({ type: 'subscribe', doc })
     await until(() => streamIdFor(doc) !== undefined)
 
     // The unsubscribed frame is pushed alone and given a real window to be
     // wrongly forwarded in. Sending both at once would prove nothing: they
     // would land in the same parser call, so the assertion would hold whether
-    // or not the addressing worked.
+    // or not the addressing worked. Real Loro bytes on both: the replica
+    // behind `authority-update` drops a frame it cannot merge, so garbage
+    // would make the negative half pass with the addressing broken.
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: btoa('\x09') })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: b64(loroUpdate('leak', 'wrong-doc')) })}\n\n`,
     )
     await settle()
     expect(seen).toEqual([])
 
-    pushTo(doc, `event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
+    pushTo(
+      doc,
+      `event: update\ndata: ${JSON.stringify({ doc, update: b64(loroUpdate('mine', 'delivered')) })}\n\n`,
+    )
     await until(() => seen.length >= 1)
 
-    expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
+    // State, not bytes: what travels is the replica's delta for this doc.
+    expect(reconstruct(seen, 'mine')).toBe('delivered')
+    expect(reconstruct(seen, 'leak')).toBeUndefined()
+    port.removeEventListener('message', listener)
   })
 
   it('sends a control message under the stream id the worker actually opened', async () => {
@@ -284,13 +367,6 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
 
   // The hazard every assertion in this file is written around, made explicit
   // and deterministic. A SharedWorker cannot be terminated, so a worker from an
-  // earlier test is still running and can open its stream at any moment —
-  // including between this test's own connect and its assertion. Standing one
-  // up on purpose is the only way to reproduce that ordering on demand;
-  // waiting for it to happen by luck under load is what made these tests flake
-  // in CI and pass in isolation.
-  // The hazard every assertion in this file is written around, made explicit
-  // and deterministic. A SharedWorker cannot be terminated, so a worker from an
   // earlier test is still running and can open a stream at any moment —
   // including AFTER this test has opened its own. Order matters: a leftover
   // worker opening first is harmless, because anything keyed on "the most
@@ -300,13 +376,14 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
   // CI. Standing the neighbour up on purpose is the only way to reproduce it
   // on demand.
   it('keeps routing to its own stream when another worker opens one later', async () => {
-    const port = connect()
+    const port = replicaPort
     const doc = nextDoc()
     const seen: unknown[] = []
-    port.onmessage = (e) => {
-      if ((e.data as { type?: string }).type !== 'status') seen.push(e.data)
+    const listener = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type !== 'status' && data.doc === doc) seen.push(e.data)
     }
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.addEventListener('message', listener)
     port.postMessage({ type: 'subscribe', doc })
     await until(() => streamIdFor(doc) !== undefined)
 
@@ -318,9 +395,13 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     await until(() => streamIdFor(neighbourDoc) !== undefined)
     expect(streamIdFor(doc)).not.toBe(streamIdFor(neighbourDoc))
 
-    pushTo(doc, `event: update\ndata: ${JSON.stringify({ doc, update: btoa('\x07') })}\n\n`)
+    pushTo(
+      doc,
+      `event: update\ndata: ${JSON.stringify({ doc, update: b64(loroUpdate('routed', 'to-own-stream')) })}\n\n`,
+    )
     await until(() => seen.length >= 1)
-    expect(seen).toEqual([{ type: 'update', doc, update: btoa('\x07') }])
+    expect(reconstruct(seen, 'routed')).toBe('to-own-stream')
+    port.removeEventListener('message', listener)
   })
 
   it('takes a document back off the stream once it is unsubscribed', async () => {
@@ -345,49 +426,29 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
  */
 describe('authority replica', () => {
   /**
-   * EXACTLY ONE replica test can live in this file, and it has to be this one.
-   *
-   * `@vitest/web-worker` runs every worker in the host realm, and loro-crdt's
-   * WASM initialises once per realm: the FIRST worker to `import('loro-crdt')`
-   * gets the module, and in every worker after it the same import REJECTS with
-   * `TypeError: Cannot read properties of undefined (reading 'id')`. The
-   * worker degrades exactly as designed — the relay keeps running and replica
-   * messages go unanswered — so a second replica test does not fail loudly,
-   * it waits out its whole budget for a reply that was never coming.
-   *
-   * That makes "which replica test is first in the file" load-bearing, which
-   * is not a property to leave implicit. The slot goes to the daemon case
-   * because it is the ONLY one the browser file cannot host: a real browser
-   * runs loro in as many workers as you like, but there is no daemon there to
-   * feed a frame. Everything else about the replica — snapshots, cross-tab
-   * fan-out, a push a sibling receives — is in
+   * Every replica case in this file drives `replicaPort` — see its comment for
+   * why only that one worker can answer. This deep case keeps the slot it has
+   * always had because it is the ONLY one the browser file cannot host: a real
+   * browser runs loro in as many workers as you like, but there is no daemon
+   * there to feed a frame. Everything else about the replica — snapshots,
+   * cross-tab fan-out, a push a sibling receives — is in
    * `sse-shared-worker.browser.test.tsx`, where it belongs.
-   *
-   * If you add a second replica test here, it will hang, and the reason will
-   * not be your test.
    */
-  const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
-  const b64 = (bytes: Uint8Array) => {
-    let out = ''
-    for (const byte of bytes) out += String.fromCharCode(byte)
-    return btoa(out)
-  }
-
   it('relays a daemon frame onward as authority state, not only verbatim', async () => {
     // A tab that has forked from the replica reads `authority-update` and
     // nothing else. If the replica only ever spoke when a TAB pushed, that tab
     // would silently miss every change that did not originate in a sibling
     // tab — an MCP tool writing to the canvas, another device, a restore. The
     // channel has to carry the daemon too, or the fork model drops writes.
-    const port = connect()
+    const port = replicaPort
     const doc = nextDoc()
     const authority = new Promise<string>((resolve) => {
       port.addEventListener('message', (e: MessageEvent) => {
-        const data = e.data as { type?: string; update?: string }
-        if (data.type === 'authority-update' && data.update !== undefined) resolve(data.update)
+        const data = e.data as { type?: string; doc?: string; update?: string }
+        if (data.type === 'authority-update' && data.doc === doc && data.update !== undefined)
+          resolve(data.update)
       })
     })
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
     port.postMessage({ type: 'subscribe', doc })
     await until(() => streamIdFor(doc) !== undefined)
 

@@ -20,6 +20,7 @@ function createHarness(): SseStreamSourceHarness {
   const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
   const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
   const daemonWrites: { doc: string; body: Uint8Array }[] = []
+  const daemonState = new Map<string, Uint8Array>()
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
 
@@ -45,6 +46,14 @@ function createHarness(): SseStreamSourceHarness {
     }
     // The canvas update route, which is where a push lands. Matched before the
     // JSON parse below: its body is raw update bytes, not JSON.
+    const canvasSnapshot = /\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/.exec(url)
+    if (canvasSnapshot) {
+      const [, workspaceId, slug] = canvasSnapshot
+      const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(slug as string)}`
+      const bytes = daemonState.get(doc)
+      if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
+      return new Response(bytes.slice().buffer as ArrayBuffer, { status: 200 })
+    }
     const canvasUpdate = /\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
       const [, workspaceId, slug] = canvasUpdate
@@ -78,6 +87,7 @@ function createHarness(): SseStreamSourceHarness {
     controlMessages: () => controlMessages,
     openedStreamIds: () => openedStreamIds,
     daemonWrites: () => daemonWrites,
+    seedDaemonState: (doc, bytes) => daemonState.set(doc, bytes),
     ready: async () => {
       await vi.waitFor(() => {
         if (push === null) throw new Error('stream not open')
