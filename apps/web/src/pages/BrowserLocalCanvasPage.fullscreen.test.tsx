@@ -2,7 +2,7 @@
 // top layer — workspace switcher, rename, menus — which is 48px of chrome
 // nobody entered fullscreen to see. It now steps aside, leaving the canvas
 // and the dock, with one floating way back out.
-import { act, cleanup, render as rtlRender, screen } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -86,6 +86,43 @@ it('floats one exit control while the chrome is gone, and it exits', async () =>
     setFullscreenElement(screen.getByRole('main'))
   })
   const exit = screen.getByRole('button', { name: 'Exit fullscreen' })
+  // The control someone just activated unmounted with the top bar; focus must
+  // land on its replacement, not fall to <body>.
+  expect(document.activeElement).toBe(exit)
   exit.click()
   expect(exitFullscreen).toHaveBeenCalledTimes(1)
+
+  // And it leaves with the mode — the top bar's own toggle takes over.
+  await act(async () => {
+    setFullscreenElement(null)
+  })
+  expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull()
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Fullscreen' })),
+  )
+})
+
+it('a rejected requestFullscreen is reported, not an unhandled rejection', async () => {
+  await renderLoaded()
+  const rejection = new DOMException('denied', 'NotAllowedError')
+  Element.prototype.requestFullscreen = vi.fn(() => Promise.reject(rejection))
+  const warnings: unknown[] = []
+  vi.spyOn(console, 'warn').mockImplementation((...args) => void warnings.push(args))
+
+  screen.getByRole('button', { name: 'Fullscreen' }).click()
+  // Let the rejection propagate through the catch.
+  await act(async () => {
+    await Promise.resolve()
+  })
+  expect(warnings.some((args) => JSON.stringify(args).includes('requestFullscreen'))).toBe(true)
+})
+
+it('starts OUT of fullscreen under jsdom, where fullscreenElement is undefined', async () => {
+  // The regression this pins: the sync compared `!== null`, jsdom's default
+  // is UNDEFINED, and `undefined !== null` read as "in fullscreen" — so every
+  // first mount hid the top bar. Delete the test override to expose the real
+  // jsdom default rather than the null this file installs elsewhere.
+  // biome-ignore lint/performance/noDelete: restoring the prototype default IS the scenario
+  delete (document as { fullscreenElement?: Element | null }).fullscreenElement
+  await renderLoaded()
 })

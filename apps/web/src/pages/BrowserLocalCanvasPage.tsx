@@ -178,6 +178,34 @@ export function BrowserLocalCanvasPage({
   // Fullscreen can also be left with Escape or the browser's own chrome, so
   // the button's label follows the DOCUMENT rather than our own click.
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const exitFullscreenRef = useRef<HTMLButtonElement | null>(null)
+  const wasFullscreenRef = useRef(false)
+  // The toggle unmounts the element that was just activated (entering removes
+  // the top bar's button, exiting removes the floating one), and a removed
+  // focused element drops focus to <body> — a keyboard user would have to
+  // tab back from nothing. Hand focus to whichever control replaced it.
+  useEffect(() => {
+    if (isFullscreen) {
+      wasFullscreenRef.current = true
+      exitFullscreenRef.current?.focus()
+      return
+    }
+    if (!wasFullscreenRef.current) return
+    wasFullscreenRef.current = false
+    // The top bar is lazy, so its toggle may land a frame later; retry
+    // briefly rather than racing the remount.
+    let attempts = 12
+    const tryFocus = () => {
+      const toggle = document.querySelector<HTMLButtonElement>('button[aria-label="Fullscreen"]')
+      if (toggle !== null) {
+        toggle.focus()
+        return
+      }
+      attempts -= 1
+      if (attempts > 0) requestAnimationFrame(tryFocus)
+    }
+    tryFocus()
+  }, [isFullscreen])
   useEffect(() => {
     // Boolean(): jsdom leaves fullscreenElement undefined rather than null,
     // and `undefined !== null` read as "in fullscreen" on first mount there.
@@ -709,9 +737,16 @@ export function BrowserLocalCanvasPage({
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
                 // Entering hides this whole bar; the floating exit control and
-                // native Escape are the ways back out.
-                if (document.fullscreenElement) void document.exitFullscreen()
-                else void mainRef.current?.requestFullscreen()
+                // native Escape are the ways back out. requestFullscreen can
+                // REJECT (Permissions-Policy, an iframe without
+                // allow="fullscreen", no user activation) — a swallowed
+                // rejection is unhandled-rejection noise, so both directions log.
+                if (document.fullscreenElement)
+                  document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+                else
+                  mainRef.current
+                    ?.requestFullscreen()
+                    .catch((err) => log.warn('requestFullscreen rejected', err))
               }}
               capabilities={{
                 versions: capabilities.versions,
@@ -727,14 +762,18 @@ export function BrowserLocalCanvasPage({
           of one Loro document — see use-markdown-canvas-doc.ts), everything
           else the spatial editor. */}
       {isFullscreen && (
-        <button
-          type="button"
+        <Button
+          ref={exitFullscreenRef}
+          variant="outline"
+          size="icon"
           aria-label="Exit fullscreen"
-          onClick={() => void document.exitFullscreen()}
-          className="absolute top-3 right-3 z-20 rounded-md border bg-background/80 p-2 text-muted-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-foreground"
+          onClick={() =>
+            document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+          }
+          className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
         >
           <Minimize2 aria-hidden="true" className="size-4" />
-        </button>
+        </Button>
       )}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
         {canvasKind === 'markdown' ? (
