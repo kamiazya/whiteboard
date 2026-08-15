@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { documentEntrySchema } from '@kamiazya/whiteboard-canvas-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIsolatedDb } from './db/test-helpers.js'
@@ -56,5 +57,72 @@ describe('SqliteDocumentIndex', () => {
       await handle.dispose()
       await rm(tempDir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('rows written before canvasIds were ULIDs', () => {
+  // A daemon that predates ADR-0007 decision 5 has nanoid ids in `canvases`.
+  // The index reads that table directly now, so such a row reaches every
+  // caller — and `wb_document_list` declares an outputSchema the MCP SDK
+  // validates at runtime, so ONE of them once made the whole listing fail
+  // rather than degrading (the #795 regression). These pin the resolution.
+  async function withLegacyRow(body: (index: SqliteDocumentIndex) => Promise<void>): Promise<void> {
+    const tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-legacy-id-'))
+    const handle = await createIsolatedDb({ dataDir: tempDir })
+    try {
+      await handle.db
+        .insertInto('workspaces')
+        .values({ id: 'ws-legacy', createdAt: 0, updatedAt: 0 })
+        .execute()
+      await handle.db
+        .insertInto('canvases')
+        .values({
+          id: 'uH6qTx6Ai2hl',
+          workspaceId: 'ws-legacy',
+          slug: 'pre-ulid-doc',
+          displayName: null,
+          isPinned: 0,
+          pinOrder: null,
+          currentBranch: 'main',
+          createdAt: 0,
+          updatedAt: 0,
+          kind: 'spatial',
+        })
+        .execute()
+      await body(new SqliteDocumentIndex(handle.db))
+    } finally {
+      await handle.dispose()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  // #801 closed the gap this guarded (it was an `it.fails` for one merge):
+  // listDocuments now skips a non-ULID row instead of emitting an entry the
+  // port schema rejects, so every entry it does emit is valid.
+  it('does not emit a listing entry that fails its own schema', async () => {
+    await withLegacyRow(async (index) => {
+      const entries = await index.listDocuments({ workspaceId: 'ws-legacy' })
+      for (const entry of entries) {
+        expect(
+          documentEntrySchema.safeParse(entry).success,
+          `entry violates documentEntrySchema: ${JSON.stringify(entry)}`,
+        ).toBe(true)
+      }
+    })
+  })
+
+  it('skips the legacy row rather than failing the listing — the #801 contract', async () => {
+    // Two candidate designs met here and this pins the one that won. #802
+    // wanted the row accounted for in the listing; #801 skips it with a
+    // warning log, and its rationale holds: these rows were never in the
+    // agent listing before the convergence either (the retired tree did not
+    // hold them), so skipping restores the status quo ante rather than
+    // hiding something previously visible — and the row stays reachable in
+    // the user's gallery. What must never come back is the failure mode both
+    // PRs were about: one legacy row darkening the whole listing.
+    await withLegacyRow(async (index) => {
+      const entries = await index.listDocuments({ workspaceId: 'ws-legacy' })
+      expect(entries.map((entry) => entry.path)).not.toContain('pre-ulid-doc')
+    })
   })
 })
