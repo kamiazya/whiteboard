@@ -191,6 +191,11 @@ export interface DocumentIndex {
    */
   resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null>
   /**
+   * Fails `WorkspaceNotFoundError` for a workspace that does not exist,
+   * rather than answering with an empty list. A typo'd workspaceId is
+   * otherwise indistinguishable from a workspace that genuinely holds
+   * nothing, and the caller most likely to hit it is a listing.
+   *
    * Ordered by path, compared SEGMENT BY SEGMENT — not as whole strings.
    * A hierarchical listing is the point of this index, and leaving the order
    * to whatever a store's rows come back in would put a storage detail in

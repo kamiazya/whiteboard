@@ -1,3 +1,4 @@
+import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -8,7 +9,7 @@ import type {
   MoveDocumentInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '../index.js'
 import {
   compareDocumentPaths,
   DocumentHasDescendantsError,
@@ -16,8 +17,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-canvas-ports'
-import { generateCanvasId } from '@kamiazya/whiteboard-server-core'
+} from '../index.js'
 
 /** Whether `path` is `ancestor` itself or sits below it. */
 function isSelfOrDescendant(path: string, ancestor: string): boolean {
@@ -99,6 +99,9 @@ export class InMemoryDocumentIndex implements DocumentIndex {
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {
+    if (!this.#workspaces.has(workspaceId)) {
+      throw new WorkspaceNotFoundError(workspaceId)
+    }
     return [...this.#inWorkspace(workspaceId).values()].sort((left, right) =>
       compareDocumentPaths(left.path, right.path),
     )

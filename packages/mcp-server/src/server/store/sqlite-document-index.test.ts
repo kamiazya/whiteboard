@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe } from 'vitest'
 import { createIsolatedDb } from './db/test-helpers.js'
-import { describeDocumentIndexConformance } from './document-index-conformance.js'
 import { SqliteDocumentIndex } from './sqlite-document-index.js'
 
 describe('SqliteDocumentIndex', () => {
