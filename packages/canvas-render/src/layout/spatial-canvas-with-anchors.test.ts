@@ -1,9 +1,8 @@
-import { describe, expect, it } from 'vitest'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { assignEdgeAnchors } from './spatial-edges.js'
-import { layoutSpatialCanvas, layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
-
+import { describe, expect, it } from 'vitest'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
+import { layoutSpatialCanvas, layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const measure = () => ({ advanceWidth: 12, ascent: 10, descent: 2, lineGap: 0 })
 const parseBody = () => ({ type: 'root' as const, children: [] })
