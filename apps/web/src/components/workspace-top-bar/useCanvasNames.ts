@@ -1,4 +1,8 @@
-import { type WorkspaceNames, workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import {
+  canvasesApiUrl,
+  type WorkspaceNames,
+  workspaceNamesSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CanvasInfo } from './types'
 
@@ -67,14 +71,11 @@ export function useCanvasNames({
   const renameCanvas = useCallback(
     async (targetSlug: string, name: string): Promise<boolean> => {
       try {
-        const res = await daemonFetch(
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(targetSlug)}/name`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
-          },
-        )
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetSlug, 'name'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
         if (res.ok) {
           setNames(workspaceNamesSchema.parse(await res.json()))
           return true
@@ -92,14 +93,11 @@ export function useCanvasNames({
   const togglePin = useCallback(
     async (targetSlug: string, pinned: boolean) => {
       try {
-        const res = await daemonFetch(
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(targetSlug)}/pin`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pinned }),
-          },
-        )
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetSlug, 'pin'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned }),
+        })
         if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
       } catch {
         /* Pin failures stay silent; the UX does not need explicit retry handling here. */

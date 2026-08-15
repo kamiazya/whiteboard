@@ -1,4 +1,4 @@
-import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import type { AppLogger } from '@/lib/app-logger'
@@ -37,14 +37,11 @@ export function useSaveVersion({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await daemonFetch(
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label }),
-          },
-        )
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, slug, 'versions'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label }),
+        })
         if (!res.ok) return false
         const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
         if (!parsed.success) {
@@ -62,14 +59,11 @@ export function useSaveVersion({
           try {
             const blob = await getThumbnailBlob()
             if (blob) {
-              await daemonFetch(
-                `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
-                {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'image/png' },
-                  body: blob,
-                },
-              )
+              await daemonFetch(canvasesApiUrl(workspaceId, slug, `versions/${id}/thumbnail`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/png' },
+                body: blob,
+              })
             }
           } catch (err) {
             log?.error('manual-save thumbnail upload failed:', err)

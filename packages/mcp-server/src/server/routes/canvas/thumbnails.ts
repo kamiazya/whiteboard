@@ -9,6 +9,7 @@ import {
 } from '../../validators.js'
 import { isValidPngSignature } from '../canvas-thumbnail.js'
 import { handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 // Thumbnails are PNG blobs exported from the browser canvas. Match
 // files.ts's MAX_FILE_UPLOAD_BYTES rather than inventing a separate number.
@@ -26,24 +27,13 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
   const { versionStore } = options
 
   // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
-  app.put(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
-    bodyLimit({
-      maxSize: THUMBNAIL_UPLOAD_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Upload exceeds ${THUMBNAIL_UPLOAD_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
-    async (c) => {
-      const { workspaceId, slug, id } = c.req.param()
+  onCanvasesRoute(
+    app,
+    'put',
+    ['versions', ':id', 'thumbnail'],
+    async (c, workspaceId, slug, params) => {
+      const id = params.id as string
       try {
-        validateWorkspaceId(workspaceId)
-        validateSlug(slug)
         validateVersionId(id)
       } catch (err) {
         const body = validationErrorBody(err)
@@ -62,47 +52,53 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
       }
       return c.json({ ok: true })
     },
+    {},
+    bodyLimit({
+      maxSize: THUMBNAIL_UPLOAD_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Upload exceeds ${THUMBNAIL_UPLOAD_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
   )
 
   // Return the PNG with cache headers, or 404 if it has not been saved.
-  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
-    const { workspaceId, slug, id } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-      validateVersionId(id)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    try {
-      const bytes = await versionStore.loadThumbnail(workspaceId, id)
-      if (!bytes) return c.json({ error: 'not_found' }, 404)
-      return c.body(bytes.buffer as ArrayBuffer, 200, {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=3600, immutable',
-      })
-    } catch (err) {
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
-      throw err
-    }
-  })
+  onCanvasesRoute(
+    app,
+    'get',
+    ['versions', ':id', 'thumbnail'],
+    async (c, workspaceId, slug, params) => {
+      const id = params.id as string
+      try {
+        validateVersionId(id)
+      } catch (err) {
+        const body = validationErrorBody(err)
+        if (body) return c.json(body, 400)
+        throw err
+      }
+      try {
+        const bytes = await versionStore.loadThumbnail(workspaceId, id)
+        if (!bytes) return c.json({ error: 'not_found' }, 404)
+        return c.body(bytes.buffer as ArrayBuffer, 200, {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=3600, immutable',
+        })
+      } catch (err) {
+        const issue = handleCorruptStoredData(err)
+        if (issue) return c.json(issue.body, issue.status)
+        throw err
+      }
+    },
+  )
 
   // Return the newest version thumbnail for canvas-switcher previews.
   // "Newest" means the first hasThumbnail=true entry in version list order (createdAt desc).
   // Keep max-age short (5 min) so fresh auto-save thumbnails replace cached ones promptly.
-  app.get('/api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'get', ['latest-thumbnail'], async (c, workspaceId, slug) => {
     try {
       const versions = await versionStore.list(workspaceId, slug)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)

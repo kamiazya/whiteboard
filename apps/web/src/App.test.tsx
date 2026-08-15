@@ -858,6 +858,15 @@ describe('App URL routing', () => {
     expect(receivedDaemonPageProps?.slug).toBe('main')
   })
 
+  it('cold-loads a NESTED document path deep link, slug intact', async () => {
+    // The tail is the document's path since the data layer converged on
+    // paths; the page must receive it verbatim, separators and all.
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/notes/2026/plan')
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
+    expect(receivedDaemonPageProps?.slug).toBe('notes/2026/plan')
+  })
+
   it('cold-loads a /w/:workspaceId deep link into the gallery pre-scoped to that workspace', async () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/workspace-b')
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()

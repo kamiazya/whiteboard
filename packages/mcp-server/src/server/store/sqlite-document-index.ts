@@ -38,7 +38,7 @@ function toEntry(row: {
   return {
     canvasId: row.id,
     path: row.slug,
-    kind: row.kind as DocumentEntry['kind'],
+    ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
   }
 }
@@ -130,7 +130,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', path)
       .executeTakeFirst()
-    if (!row?.kind) return null
+    if (!row) return null
     return toEntry(row)
   }
 
@@ -144,7 +144,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', canvasId)
       .executeTakeFirst()
-    if (!row?.kind) return null
+    if (!row) return null
     return toEntry(row)
   }
 
@@ -187,7 +187,6 @@ export class SqliteDocumentIndex implements DocumentIndex {
     // user's gallery), and the log is where the absence is said.
     const entries: DocumentEntry[] = []
     for (const row of rows) {
-      if (row.kind === null) continue
       if (!canvasIdSchema.safeParse(row.id).success) {
         log.warning(
           { workspaceId, slug: row.slug },
