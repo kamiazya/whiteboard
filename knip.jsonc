@@ -96,6 +96,12 @@
     }
   },
   "ignoreDependencies": [
+    // Referenced only as a createRequire().resolve() string in apps/web's
+    // vite.config.ts / vitest.browser.config.ts: the direct devDependency is
+    // what makes that resolve legal under pnpm's strict node_modules, and the
+    // alias it feeds pins the package's DOM-free build so worker chunks that
+    // contain remark can evaluate. Knip only follows import statements.
+    "decode-named-character-reference",
     // docs-snapshots `@docs-assets/*` alias resolves through Vite's
     // `resolve.alias` (vitest.docs-snapshots.config.ts) to files under
     // docs/assets/, not an npm package.

@@ -9,6 +9,7 @@ import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -41,6 +42,7 @@ export default defineConfig({
         __dirname,
         '../../packages/canvas-viewer/src/index.ts',
       ),
+      ...workerSafeDepsAlias,
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real
