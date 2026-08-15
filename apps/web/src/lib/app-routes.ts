@@ -2,7 +2,7 @@
 // functions (no React Router import) so the shape is unit-testable without a
 // router context and has exactly one place that can drift from
 // DaemonDetectedBanner's deep link (which builds the same
-// `/canvas/:workspaceId/:slug` shape independently, since it runs on a
+// `/w/:workspaceId/canvas/*` shape independently, since it runs on a
 // different origin — the daemon's — and cannot import a client-side route
 // table).
 export function indexPath(): string {
@@ -13,8 +13,11 @@ export function workspacePath(workspaceId: string): string {
   return `/w/${encodeURIComponent(workspaceId)}`
 }
 
+// Nested under the workspace it belongs to, so the URL reads as placement
+// rather than as two unrelated ids. The tail is one encoded segment: the
+// page below still loads by slug, so a document path cannot go here yet.
 export function canvasPath(workspaceId: string, slug: string): string {
-  return `/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}`
+  return `${workspacePath(workspaceId)}/canvas/${encodeURIComponent(slug)}`
 }
 
 export function browserLocalIndexPath(): string {
@@ -34,7 +37,10 @@ export type DaemonRoute =
 // tree exists to match against), and keeping it framework-agnostic lets it
 // be unit-tested without a Router context.
 export function parseDaemonRoute(pathname: string): DaemonRoute | null {
-  const canvasMatch = pathname.match(/^\/canvas\/([^/]+)\/([^/]+)\/?$/)
+  // The canvas branch is checked first: `/w/:ws` and `/w/:ws/canvas/...`
+  // share a prefix, and the workspace pattern below is anchored so it cannot
+  // swallow a canvas URL either way.
+  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/canvas\/([^/]+)\/?$/)
   if (canvasMatch) {
     const workspaceId = decodeSegment(canvasMatch[1])
     const slug = decodeSegment(canvasMatch[2])
@@ -53,7 +59,7 @@ export function parseDaemonRoute(pathname: string): DaemonRoute | null {
 }
 
 // decodeURIComponent throws URIError on a malformed percent sequence
-// (`/canvas/w%1/main`). These parsers run inside render-phase lazy
+// (`/w/w%1/canvas/main`). These parsers run inside render-phase lazy
 // initializers, so a throw here takes down the whole app; an unparseable URL
 // is a not-a-route, not a crash.
 function decodeSegment(segment: string): string | null {

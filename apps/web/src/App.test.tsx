@@ -851,8 +851,8 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /canvas/:workspaceId/:slug deep link straight into DaemonCanvasPage', async () => {
-    renderAppWithRouter(LOCAL_DAEMON_STATE, '/canvas/w1/main')
+  it('cold-loads a /w/:workspaceId/canvas/:slug deep link straight into DaemonCanvasPage', async () => {
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
     expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.slug).toBe('main')
@@ -875,11 +875,11 @@ describe('App URL routing', () => {
       onOpenCanvas('w1', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
-    expect(router.state.location.pathname).toBe('/canvas/w1/main')
+    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
   })
 
   it('updates the URL back to the gallery when onNavigateBack fires', async () => {
-    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/canvas/w1/main')
+    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
     await screen.findByTestId('daemon-canvas-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
@@ -926,7 +926,7 @@ describe('App URL routing', () => {
     }
     const router = renderAppWithRouter(BROWSER_LOCAL_STATE, '/')
     await screen.findByTestId('daemon-canvas-page')
-    expect(router.state.location.pathname).toBe('/canvas/w1/main')
+    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
     // The replace must not have added a new history entry: going back from
     // here should leave the SPA (nothing left to land on inside this test's
     // single-entry history), not bounce to a stale pre-pairing '/' entry.

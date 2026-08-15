@@ -904,7 +904,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
       fireEvent.pointerUp(copyItem)
 
       await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/canvas/ws_1/canvas-a'))
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/w/ws_1/canvas/canvas-a'))
       // Screen-reader-visible announcement, independent of the visible label.
       expect(screen.getByRole('status').textContent).toContain('Canvas URL copied to clipboard.')
 
@@ -938,7 +938,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
 
     // Fallback: the URL is still available as selectable text.
     const fallbackInput = screen.getByLabelText('Canvas URL') as HTMLInputElement
-    expect(fallbackInput.value).toContain('/canvas/ws_1/canvas-a')
+    expect(fallbackInput.value).toContain('/w/ws_1/canvas/canvas-a')
     expect(fallbackInput.readOnly).toBe(true)
   })
 
