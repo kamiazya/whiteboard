@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { cn } from '../../lib/utils.js'
 import { DocumentHeader } from './DocumentHeader.js'
@@ -55,6 +56,12 @@ export interface MarkdownEditorProps {
    * useMarkdownEmbedContent).
    */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /**
+   * Injection seam for tests: the async engines behind math blocks and
+   * diagram fences. Defaults to the real dynamically-imported
+   * MathJax/mermaid loaders (markdown-fragment-renderers.ts).
+   */
+  fragmentLoaders?: FragmentLoaders
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -79,10 +86,12 @@ const MIN_PREVIEW_WIDTH = 320
  *   CodeMirror instance to a CRDT document is a persistence/collaboration
  *   concern, and this component is a plain controlled `value`/`onChange`
  *   pair that owns neither.
- * - Math / mermaid rendering needs a composition-root `renderMath`
- *   implementation (MathJax, mermaid), which apps/web does not have yet.
- *   None is injected, so math degrades to canvas-render's escaped-source
- *   placeholder and a mermaid fence renders as a plain code block.
+ * - Inline `$math$` renders as plain text runs: the layout's phrasing path
+ *   has no fragment seam, and a sized inline fragment inside a wrapped
+ *   line is its own layout problem. Block math and mermaid fences render
+ *   through useMarkdownFragments (async MathJax/mermaid behind
+ *   cache-backed sync seams); until a source's first render lands, math
+ *   shows the escaped-source placeholder and a fence the plain code block.
  * - `[[wikiLink]]` / `![[embed]]` resolution needs a workspace-index-backed
  *   resolver for `resolveReferences`, which does not exist at this
  *   component's boundary; without one they stay literal bracket text.
@@ -138,9 +147,17 @@ export function MarkdownEditor({
   resolveAlias,
   onOpenCanvas,
   resolveEmbed,
+  fragmentLoaders,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
+  // Watches the DEBOUNCED value: fragment sources only exist once the
+  // preview would draw them, and rendering per raw keystroke would race
+  // the engines for intermediate sources nobody will see.
+  const { renderMath, renderDiagram } = useMarkdownFragments({
+    body: debouncedValue,
+    ...(fragmentLoaders !== undefined ? { loaders: fragmentLoaders } : {}),
+  })
 
   // A resolved wikiLink's anchor carries a bare canvas id as its href —
   // meaningless as a URL, meaningful to the host. Intercept exactly those;
@@ -333,6 +350,8 @@ export function MarkdownEditor({
                   theme={theme}
                   resolveAlias={resolveAlias}
                   resolveEmbed={resolveEmbed}
+                  renderMath={renderMath}
+                  renderDiagram={renderDiagram}
                 />
               )}
             </div>

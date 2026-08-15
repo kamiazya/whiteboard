@@ -245,12 +245,30 @@ function renderNode(node: SceneNode): string {
       return `<text ${rectAttrs(node.bbox)}>${escapeXmlText(node.value)}</text>`
     case 'unresolvedReference':
       return `<g ${PRESENTATION_ATTR}/>`
-    case 'svgFragment':
+    case 'svgFragment': {
       // Precondition: the caller has already validated `svg` is well-formed
       // XML before constructing this node — emitted verbatim, not escaped.
+      // A nested <svg> carries the position: the fragment's own coordinates
+      // stay untouched, the wrapper's x/y move them into document flow, and
+      // this deliberately does NOT use a transform so the listItem/tableCell
+      // x-transform-boundary set (translate-scene.ts) stays exactly two —
+      // a fragment has no scene-graph children for that machinery to see.
+      // overflow stays visible so a fragment taller than its reported size
+      // renders rather than silently clipping. A non-finite bbox degrades
+      // to the unpositioned group form (total rule, mirroring shape).
+      const { x, y, w, h } = node.bbox
+      const positioned =
+        Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)
+      if (!positioned) {
+        return node.role === 'presentation'
+          ? `<g ${PRESENTATION_ATTR}>${node.svg}</g>`
+          : `<g>${node.svg}</g>`
+      }
+      const attrs = `x="${formatCoord(x)}" y="${formatCoord(y)}" width="${formatCoord(w)}" height="${formatCoord(h)}" overflow="visible"`
       return node.role === 'presentation'
-        ? `<g ${PRESENTATION_ATTR}>${node.svg}</g>`
-        : `<g>${node.svg}</g>`
+        ? `<svg ${attrs} ${PRESENTATION_ATTR}>${node.svg}</svg>`
+        : `<svg ${attrs}>${node.svg}</svg>`
+    }
     case 'embedPlaceholder':
       // SVG <text> y is the BASELINE, so the box TOP would paint the title
       // one line above the placeholder's own space, colliding with the

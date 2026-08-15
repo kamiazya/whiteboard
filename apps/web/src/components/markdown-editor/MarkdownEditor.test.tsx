@@ -9,6 +9,30 @@ afterEach(() => {
 })
 
 describe('MarkdownEditor', () => {
+  it('renders math blocks and mermaid fences through the injected fragment engines', async () => {
+    const loaders = {
+      math: async (value: string) => ({ svg: `<g data-math="${value}"/>`, height: 40 }),
+      diagram: async (lang: string) =>
+        lang === 'mermaid' ? { svg: '<g data-diagram="yes"/>', width: 100, height: 80 } : undefined,
+    }
+    const { getByTestId, findByTestId } = render(
+      <MarkdownEditor
+        value={'$$\nE=mc^2\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n'}
+        onChange={() => {}}
+        previewDebounceMs={0}
+        fragmentLoaders={loaders}
+      />,
+    )
+    await findByTestId('markdown-preview-pane')
+    // The async engines land per source and the preview re-renders with the
+    // fragments emitted verbatim into its SVG.
+    await vi.waitFor(() => {
+      const html = getByTestId('markdown-preview-pane').innerHTML
+      expect(html).toContain('data-math="E=mc^2"')
+      expect(html).toContain('data-diagram="yes"')
+    })
+  })
+
   it('renders both a source pane and a preview pane for the given value', () => {
     const { getByTestId, container } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
     expect(getByTestId('markdown-source-pane')).toBeTruthy()
