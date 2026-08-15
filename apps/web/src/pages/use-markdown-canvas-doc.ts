@@ -25,6 +25,33 @@ const pendingFlushes = new Map<string, Promise<unknown>>()
 const SAVE_DEBOUNCE_MS = 500
 
 /**
+ * Every save for a document goes through one queue, and the load effect
+ * awaits it. Two invariants ride on that:
+ *
+ * - A load must not read the store while a save it should see is in flight,
+ *   or it reloads pre-edit state and the edit is gone (the debounce that
+ *   held it is already spent).
+ * - Two saves must not land out of order. Each is a full snapshot export, so
+ *   an earlier one landing last puts the document back to where it was.
+ *
+ * Keyed per document and module-level because the writers that need to share
+ * it — a cleanup closure and the next effect instance — share nothing else.
+ * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
+ * one was, so it cannot leave the queue permanently poisoned.
+ */
+function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array): Promise<void> {
+  const previous = pendingFlushes.get(canvasId)
+  const next = Promise.resolve(previous)
+    .then(() => store.save(canvasId, snapshot))
+    .catch(() => {})
+    .finally(() => {
+      if (pendingFlushes.get(canvasId) === next) pendingFlushes.delete(canvasId)
+    })
+  pendingFlushes.set(canvasId, next)
+  return next
+}
+
+/**
  * `type` is the one required core facet, so a canvas with nothing stored
  * still needs a value before anything can be written. It names what the
  * document IS rather than how it is stored — but a markdown note starting
@@ -63,12 +90,8 @@ export function useMarkdownCanvasDoc(
   const loroRef = useRef(loro)
   loroRef.current = loro
 
-  // The cleanup's flush save and the next effect's load race on the same
-  // canvasId: fire-and-forget, the load can read the store BEFORE the flush
-  // lands, and the debounce that held the edit is already gone — the last
-  // 500ms of typing vanish for good. Keyed per document and module-level
-  // because the cleanup closure and the next effect instance share nothing
-  // else.
+  // See queueSave: the load below awaits whatever save is still in flight
+  // for this document before reading the store.
   const pending = pendingFlushes
 
   useEffect(() => {
@@ -124,12 +147,7 @@ export function useMarkdownCanvasDoc(
         timerRef.current = null
         const doc = docRef.current
         if (doc !== null && canvasId !== null) {
-          const flush = loroRef.current
-            .save(canvasId, doc.export({ mode: 'snapshot' }))
-            .finally(() => {
-              if (pending.get(canvasId) === flush) pending.delete(canvasId)
-            })
-          pending.set(canvasId, flush)
+          void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
         }
       }
     }
@@ -144,10 +162,13 @@ export function useMarkdownCanvasDoc(
     if (canvasId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
+      // Clearing the ref first means a cleanup arriving after this point
+      // finds no timer to flush — so this save has to enqueue itself, or the
+      // next load has nothing to wait on.
       timerRef.current = null
       const doc = docRef.current
       if (doc === null) return
-      void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
+      void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
     }, SAVE_DEBOUNCE_MS)
   }, [canvasId])
   scheduleSaveRef.current = scheduleSave

@@ -67,7 +67,9 @@ describe('flush/load ordering across an effect cycle', () => {
     // lost for good. Captured live as a title typed into the real page
     // coming back '' after a remount. The store here makes the race
     // deterministic: save parks on a gate the test opens only after the
-    // reload has started.
+    // reload has started, and the ordering is asserted from a log rather
+    // than inferred from a delay.
+    const log: string[] = []
     const saves: Uint8Array[] = []
     let releaseSave: () => void = () => {}
     const saveGate = new Promise<void>((resolve) => {
@@ -76,14 +78,17 @@ describe('flush/load ordering across an effect cycle', () => {
     let saved: Uint8Array | null = null
     const store: LoroStoreLike = {
       async save(_canvasId, snapshot) {
+        log.push('save-start')
         await saveGate
         saved = snapshot
         saves.push(snapshot)
+        log.push('save-end')
       },
       createEmptySnapshot() {
         return new Uint8Array()
       },
       async load() {
+        log.push('load')
         if (saved === null) return { kind: 'missing' } as never
         return { kind: 'ok', snapshot: saved, deltas: [] } as never
       },
@@ -104,8 +109,11 @@ describe('flush/load ordering across an effect cycle', () => {
     // any transient enabled/canvasId flicker produces.
     rerender({ enabled: false })
     rerender({ enabled: true })
-    // Let the reload start against the un-flushed store, THEN land the save.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // One macrotask tick, not a guessed delay: the load effect chains off the
+    // pending-save map through microtasks, so an unguarded load has already
+    // read the store by the time this resolves. The assertion below is on the
+    // resulting ORDER, so a slower machine cannot turn a broken build green.
+    await new Promise((resolve) => setTimeout(resolve, 0))
     releaseSave()
 
     await waitFor(() => expect(result.current.doc).not.toBeNull())
@@ -113,5 +121,80 @@ describe('flush/load ordering across an effect cycle', () => {
       timeout: 3000,
     })
     expect(saves.length).toBeGreaterThan(0)
+    // Two loads: the mount's, then the reload under test — which must come
+    // after the flush landed.
+    await waitFor(() => expect(log.filter((entry) => entry === 'load')).toHaveLength(2), {
+      timeout: 3000,
+    })
+    expect(log.lastIndexOf('load')).toBeGreaterThan(log.indexOf('save-end'))
+  })
+
+  it('a reload waits for a debounce save that already started', async () => {
+    // The sibling above covers the save the CLEANUP starts. This covers the
+    // one the debounce TIMER starts: once it fires it clears the timer ref,
+    // so a later unmount registers no flush at all and the next load has
+    // nothing to wait on. Same ending — the load reads the pre-edit store
+    // and the edit is gone — reached through the path the cleanup fix does
+    // not cover.
+    //
+    // Asserted as an ORDER, not a delay: the store logs when each save
+    // starts and lands and when a load reads it, and `load` must never sit
+    // between a save's start and its landing. A sleep would only say "it
+    // happened to be fast enough here".
+    const log: string[] = []
+    let releaseSave: () => void = () => {}
+    const saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve
+    })
+    let saved: Uint8Array | null = null
+    const store: LoroStoreLike = {
+      async save(_canvasId, snapshot) {
+        log.push('save-start')
+        await saveGate
+        saved = snapshot
+        log.push('save-end')
+      },
+      createEmptySnapshot() {
+        return new Uint8Array()
+      },
+      async load() {
+        log.push('load')
+        if (saved === null) return { kind: 'missing' } as never
+        return { kind: 'ok', snapshot: saved, deltas: [] } as never
+      },
+    }
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useMarkdownCanvasDoc(store, 'c1', enabled),
+      { initialProps: { enabled: true } },
+    )
+    await waitFor(() => expect(result.current.doc).not.toBeNull())
+
+    act(() => {
+      result.current.setBody('typed before the switch')
+    })
+
+    // Let the debounce actually FIRE — that is the state this test is about,
+    // and it is what leaves the cleanup with no timer to flush.
+    await waitFor(() => expect(log).toContain('save-start'), { timeout: 3000 })
+
+    rerender({ enabled: false })
+    rerender({ enabled: true })
+
+    // One macrotask tick. The load effect chains off `pendingFlushes` through
+    // microtasks, so an unguarded load has already read the store by the time
+    // this resolves — the ordering below then fails deterministically rather
+    // than by luck.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    releaseSave()
+
+    // Two loads happen in total: the mount's, then the reload under test.
+    await waitFor(() => expect(log.filter((entry) => entry === 'load')).toHaveLength(2), {
+      timeout: 3000,
+    })
+    expect(log.lastIndexOf('load')).toBeGreaterThan(log.indexOf('save-end'))
+    await waitFor(() => expect(result.current.body).toBe('typed before the switch'), {
+      timeout: 3000,
+    })
   })
 })
