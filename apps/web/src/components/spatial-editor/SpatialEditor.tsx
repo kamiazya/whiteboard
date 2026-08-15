@@ -112,6 +112,7 @@ import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
+import { useGestureCaptured } from './use-gesture-captured.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -836,6 +837,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * edge, re-render the remainder (composeNode is per-node pure, so the
      * prefix equivalence holds while the backdrop stays edge-free).
      */
+    // The committed layout, FROZEN at gesture start. The worker's next
+    // reply may land mid-gesture, and BOTH halves matter: the anchors are
+    // the points bystander edges are pinned to, and the scene is what
+    // decides which edges are pin-eligible at all (frozenSidesOf) — a
+    // swapped scene silently un-pins every bystander even with the anchors
+    // held, which is the same re-fraction by another door.
+    const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
+    const gestureCommitted = useGestureCaptured(
+      gestureState.kind === 'moving' ||
+        gestureState.kind === 'resizing' ||
+        gestureState.kind === 'connecting',
+      committedPair,
+    )
     // Last optimized sides for the gesture's carried edges (see liveEdges).
     const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
     useEffect(() => {
@@ -878,13 +892,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         svg: rendered.svg,
         bounds: rendered.bounds,
         measure,
-        committedAnchors: anchors,
+        committedAnchors: gestureCommitted.anchors,
       }
       // isLocked closes over lockedNodeIds/lockEnabled, both listed.
     }, [
       gestureState,
       canvas,
-      anchors,
+      gestureCommitted,
       extraIds,
       lockEnabled,
       lockedNodeIds,
@@ -954,13 +968,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas around the pointer stays still and pointer frames skip the
       // crossing-optimization loop. The prospective edge itself derives
       // fresh each frame.
-      const frozenEdgeSides = frozenSidesOf(scene)
+      const frozenEdgeSides = frozenSidesOf(gestureCommitted.scene)
       return computeDragPreview(gestureState, boxes, livePoint, {
         canvas,
         selectableBoxes,
         frozenEdgeSides,
       })
-    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, scene])
+    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted])
 
     /**
      * EVERY edge, re-composed against the ghost's snapped live position and
@@ -999,7 +1013,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           .map((edge) => edge.id),
       )
       const frozenSides = new Map(
-        [...frozenSidesOf(scene)]
+        [...frozenSidesOf(gestureCommitted.scene)]
           .filter(([id]) => !carriedEdgeIds.has(id))
           .map(([id, pair]) => {
             const pin = dragStatic.committedAnchors.get(id)
@@ -1051,7 +1065,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ),
         bounds: liveBounds,
       }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme, scene])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
 
     /**
      * The resized node's own content, re-rendered at its PREVIEW size each
