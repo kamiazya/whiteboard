@@ -110,6 +110,7 @@ export interface CanvasContextMenuProps {
   readonly selectedId: string | null
   readonly groupSelection: (memberIds: readonly string[]) => void
   readonly isImageFileRef?: (file: string) => boolean
+  readonly missingFileRef?: (file: string) => boolean
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
   readonly copySelection: () => ClipboardFragment | null
@@ -148,6 +149,7 @@ export function CanvasContextMenu({
   selectedId,
   groupSelection,
   isImageFileRef,
+  missingFileRef,
   onOpenFileRef,
   openLinkNode,
   copySelection,
@@ -485,7 +487,11 @@ export function CanvasContextMenu({
           items.push({ kind: 'separator' })
         }
         if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
-          if (onOpenFileRef !== undefined) {
+          // A missing target makes Open a dead end (worse: the daemon's
+          // slug routes lazily create, so following would mint an empty
+          // canvas under the dangling ref). Change target stays — it is
+          // the repair affordance.
+          if (onOpenFileRef !== undefined && missingFileRef?.(node.file) !== true) {
             items.push({
               label: 'Open canvas',
               icon: <ExternalLink />,
