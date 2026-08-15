@@ -15,7 +15,7 @@
  */
 
 import { apiFetch } from './api-client.js'
-import { canvasApiUrl, canvasFileApiUrl } from './api-contracts/canvas-url.js'
+import { canvasFileApiUrl } from './api-contracts/canvas-url.js'
 import type {
   BinaryFileDataLike,
   CanvasBackend,
@@ -73,16 +73,18 @@ export class SseBackend implements CanvasBackend {
   private async run(handlers: CanvasBackendHandlers): Promise<void> {
     // Snapshot first: the stream carries only incremental updates, so a client
     // that started reading before seeding would apply deltas to an empty doc.
+    // Through the source, not a direct fetch, for the same reason push is:
+    // which authority answers is the implementations' difference. The hub
+    // asks the daemon (the same GET this method used to make itself); the
+    // worker-backed source asks the worker's replica, so a second tab opens
+    // without a daemon round trip and off this thread.
     try {
-      const res = await this.fetchFn(
-        this.url(canvasApiUrl(this.workspaceId, this.slug, 'snapshot')),
-      )
+      const bytes = await this.resolveSource().snapshot(this.docKey)
       if (this.cancelled) return
-      if (res.ok) {
-        // Reading the body is a second await: re-check, or a disconnect landing
-        // in that window seeds a document the caller has already torn down.
-        const bytes = new Uint8Array(await res.arrayBuffer())
-        if (this.cancelled) return
+      // `null` is "the authority does not know this document" — the caller
+      // keeps its own state and the stream fills in from empty, the same
+      // path a first-ever open takes.
+      if (bytes !== null && bytes.byteLength > 0) {
         handlers.onSnapshot(bytes)
       }
     } catch {

@@ -99,6 +99,10 @@ it('the worker scene is deeply equal to the main-thread scene', async () => {
   expect(fromWorker.svg).toBe(onMain.svg)
   expect(fromWorker.bounds).toEqual(onMain.bounds)
   expect(fromWorker.scene).toEqual(onMain.scene)
+  // The anchor map crosses as a structuredClone'd Map; the drag overlay pins
+  // bystander edges to it, so a worker that dropped or reordered entries
+  // would silently re-fraction shared anchor groups mid-drag.
+  expect([...fromWorker.anchors.entries()]).toEqual([...onMain.anchors.entries()])
 }, 60_000)
 
 it('carries the file-label seam across the wire', async () => {

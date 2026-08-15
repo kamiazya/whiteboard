@@ -16,10 +16,15 @@ export type {
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
 } from './layout/spatial-canvas.js'
-export { layoutSpatialCanvas, layoutSpatialEdges } from './layout/spatial-canvas.js'
+export {
+  layoutSpatialCanvas,
+  layoutSpatialCanvasWithAnchors,
+  layoutSpatialEdges,
+} from './layout/spatial-canvas.js'
 export {
   assignEdgeAnchors,
   type EdgeAnchorOverride,
+  type EdgeAnchorPair,
   type EdgeSides,
   routeEdge,
 } from './layout/spatial-edges.js'

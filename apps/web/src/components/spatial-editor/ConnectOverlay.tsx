@@ -49,7 +49,7 @@ export function ConnectOverlay({
             width={source.box.width + 4}
             height={source.box.height + 4}
             fill="none"
-            stroke="#2563eb"
+            stroke="var(--manipulation)"
             strokeWidth={2}
             strokeDasharray="6 3"
           />

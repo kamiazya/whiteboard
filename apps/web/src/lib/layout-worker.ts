@@ -57,14 +57,21 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
     }
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const missingRefs = new Set(request.missingFileRefs ?? [])
-    const { svg, bounds, scene } = renderCanvasToSvgWith(request.canvas, {
+    const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(request.canvas, {
       measure,
       theme: request.theme,
       resolveFileLabel: labels.size === 0 ? undefined : (file) => labels.get(file),
       resolveFileMissing: missingRefs.size === 0 ? undefined : (file) => missingRefs.has(file),
       parseBody: parseMarkdownBody,
     })
-    const response: LayoutResponse = { type: 'laid-out', id: request.id, svg, bounds, scene }
+    const response: LayoutResponse = {
+      type: 'laid-out',
+      id: request.id,
+      svg,
+      bounds,
+      scene,
+      anchors,
+    }
     self.postMessage(response)
   } catch (error) {
     const response: LayoutResponse = {

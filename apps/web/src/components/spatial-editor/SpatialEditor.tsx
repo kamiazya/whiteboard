@@ -72,7 +72,6 @@ import type {
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  assignEdgeAnchors,
   BODY_FONT_SIZE_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
@@ -99,6 +98,7 @@ import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
+import { hapticTick } from '../../lib/haptics.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -173,6 +173,7 @@ import {
   ToolPalette,
 } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
+import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
@@ -381,6 +382,15 @@ function labelEditorStyle(theme: ResolvedTheme) {
 /** Screen-space px within which a press/right-click counts as hitting an
  * edge line; divided by the zoom for the canvas-space comparison. */
 const EDGE_HIT_TOLERANCE_PX = 6
+
+/**
+ * Touch long-press → context menu. 500ms matches the platform long-press
+ * feel (and Android's own contextmenu synthesis delay, so the two paths
+ * agree on timing there); the slop is finger-sized jitter, not intent to
+ * drag — past it the press is a drag and the menu must not interrupt.
+ */
+const LONG_PRESS_MENU_MS = 500
+const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 /**
  * Window for OUR double-press detection (see handlePointerDown). Matches the
@@ -501,6 +511,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setTool(initialTool)
     }, [initialTool])
     const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
+    // Screen point of the last committed long-press, while its pulse plays.
+    const [longPressPulse, setLongPressPulse] = useState<Point | null>(null)
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -563,6 +575,36 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const prevCanvasRef = useRef(canvas)
     const prevExternalVersionRef = useRef(externalVersion)
     canvasRef.current = canvas
+
+    // Mirror for callbacks that outlive their render — the long-press timer
+    // fires ~500ms after the closure that armed it, by which time the press
+    // itself has usually advanced the gesture ('pressing'/'moving'); reducing
+    // a cancel against the ARM-time state would mis-apply it.
+    const gestureStateRef = useRef(gestureState)
+    gestureStateRef.current = gestureState
+
+    /**
+     * Touch long-press -> context menu. iOS Safari never synthesises a
+     * `contextmenu` event from a touch long-press (Android Chrome does), so
+     * without this the app's object menu is simply unreachable on an iPhone
+     * — the press reads as a drag start and the menu never opens. Armed on
+     * a single stationary touch, cancelled by movement past the slop, a
+     * second finger, or lift.
+     */
+    const longPressRef = useRef<{
+      timer: ReturnType<typeof setTimeout>
+      pointerId: number
+      screen: Point
+    } | null>(null)
+    const clearLongPress = () => {
+      if (longPressRef.current !== null) {
+        clearTimeout(longPressRef.current.timer)
+        longPressRef.current = null
+      }
+    }
+    // The timer must call the LATEST render's opener (fresh viewport/boxes/
+    // selection), not the one captured when the finger landed.
+    const openContextMenuAtRef = useRef<(screen: Point) => void>(() => {})
 
     // Controlled-prop-swap policy: a sync-driven parent can replace `canvas`
     // mid-gesture. Feed the reducer a `canvas-replaced` event so it can abort
@@ -695,7 +737,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // fast route through carried-side caching, and a round trip per frame
     // would be the wrong trade there. This is the path that blocks on every
     // node added and every drag dropped.
-    const { svg, bounds, scene } = useWorkerScene(
+    const { svg, bounds, scene, anchors } = useWorkerScene(
       canvas,
       { measure: resolvedMeasure, theme },
       fileSeamOptions,
@@ -829,10 +871,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * The returned `measure` memoizes per drag: edge labels measure on the
      * first live frame and every later frame re-places the cached metrics,
      * keeping pointermoves free of text measurement.
-     * ponytail: full render at the drag boundary is ~30ms on an 80-node
-     * canvas; if start/commit jank appears on much larger canvases, move
-     * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
+     * ponytail: the backdrop render here is ~21ms at 45 nodes (the anchor
+     * pass, formerly ~7x that, now arrives with the committed scene); if
+     * start jank reappears on much larger canvases, the next rung is
+     * reusing the committed scene graph for the backdrop instead of
+     * re-rendering — drop the carried node runs, truncate at the first
+     * edge, re-render the remainder (composeNode is per-node pure, so the
+     * prefix equivalence holds while the backdrop stays edge-free).
      */
+    // The committed layout, FROZEN at gesture start. The worker's next
+    // reply may land mid-gesture, and BOTH halves matter: the anchors are
+    // the points bystander edges are pinned to, and the scene is what
+    // decides which edges are pin-eligible at all (frozenSidesOf) — a
+    // swapped scene silently un-pins every bystander even with the anchors
+    // held, which is the same re-fraction by another door.
+    const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
+    const gestureCommitted = useGestureCaptured(
+      gestureState.kind === 'moving' ||
+        gestureState.kind === 'resizing' ||
+        gestureState.kind === 'connecting',
+      committedPair,
+    )
     // Last optimized sides for the gesture's carried edges (see liveEdges).
     const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
     useEffect(() => {
@@ -863,19 +922,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         metricsCache.set(key, metrics)
         return metrics
       }
-      // The committed anchor state, captured once per gesture: liveEdges
-      // pins bystander edges to these exact points so a carried edge
-      // joining their (node, side) group cannot re-fraction them mid-drag.
-      const committedAnchors = assignEdgeAnchors(
-        canvas.nodes,
-        canvas.edges,
-        canvas['x-whiteboard']?.edgeRouting?.style,
-      )
-      return { carried, svg: rendered.svg, bounds: rendered.bounds, measure, committedAnchors }
+      // The committed anchor state: liveEdges pins bystander edges to these
+      // exact points so a carried edge joining their (node, side) group
+      // cannot re-fraction them mid-drag. Taken from the committed scene's
+      // OWN layout rather than re-run here — the anchor pass is the most
+      // expensive step of a layout (measured: ~7x the backdrop render), and
+      // these are also the anchors the pixels on screen were routed with,
+      // which a fresh pass over a newer canvas is not.
+      return {
+        carried,
+        svg: rendered.svg,
+        bounds: rendered.bounds,
+        measure,
+        committedAnchors: gestureCommitted.anchors,
+      }
       // isLocked closes over lockedNodeIds/lockEnabled, both listed.
     }, [
       gestureState,
       canvas,
+      gestureCommitted,
       extraIds,
       lockEnabled,
       lockedNodeIds,
@@ -945,13 +1010,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas around the pointer stays still and pointer frames skip the
       // crossing-optimization loop. The prospective edge itself derives
       // fresh each frame.
-      const frozenEdgeSides = frozenSidesOf(scene)
+      const frozenEdgeSides = frozenSidesOf(gestureCommitted.scene)
       return computeDragPreview(gestureState, boxes, livePoint, {
         canvas,
         selectableBoxes,
         frozenEdgeSides,
       })
-    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, scene])
+    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted])
 
     /**
      * EVERY edge, re-composed against the ghost's snapped live position and
@@ -990,7 +1055,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           .map((edge) => edge.id),
       )
       const frozenSides = new Map(
-        [...frozenSidesOf(scene)]
+        [...frozenSidesOf(gestureCommitted.scene)]
           .filter(([id]) => !carriedEdgeIds.has(id))
           .map(([id, pair]) => {
             const pin = dragStatic.committedAnchors.get(id)
@@ -1042,7 +1107,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ),
         bounds: liveBounds,
       }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme, scene])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
 
     /**
      * The resized node's own content, re-rendered at its PREVIEW size each
@@ -1354,6 +1419,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             isPanningRef.current = false
             lastPressRef.current = null
             doublePressRef.current = null
+            clearLongPress()
             toggleSelectionMember(anchorPrimary, gathered)
             return
           }
@@ -1379,7 +1445,44 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             trySetPointerCapture(root, pointerId)
           }
           activePointerIdRef.current = e.pointerId
+          clearLongPress()
           return
+        }
+        // Hand mode is navigation-ONLY, so there is no menu for the timer
+        // to open — and arming it anyway is actively harmful: the press
+        // below starts a pan, and 500ms later the timer's teardown would
+        // clear isPanningRef mid-drag, stranding the pan under a finger
+        // that is still moving.
+        if (touchPointsRef.current.size === 1 && tool !== 'hand') {
+          // Arm the long-press menu. Firing abandons whatever the press
+          // started (a node move's 'pressing' state, marquee arming): the
+          // press has become a menu invocation, not a drag.
+          clearLongPress()
+          const screen = clientPointToRootLocal(e, root)
+          longPressRef.current = {
+            pointerId: e.pointerId,
+            screen,
+            timer: setTimeout(() => {
+              longPressRef.current = null
+              if (gestureStateRef.current.kind !== 'idle') {
+                applyResult(
+                  reduceGesture(gestureStateRef.current, canvasRef.current, {
+                    type: 'pointercancel',
+                  }),
+                )
+              }
+              setMarquee(null)
+              isPanningRef.current = false
+              lastPressRef.current = null
+              doublePressRef.current = null
+              // The native long-press this replaces gave a system haptic;
+              // keep that cue so the menu opening under a still-down finger
+              // reads as deliberate, not glitchy.
+              hapticTick()
+              setLongPressPulse(screen)
+              openContextMenuAtRef.current(screen)
+            }, LONG_PRESS_MENU_MS),
+          }
         }
       }
       const screenPointForPan = clientPointToRootLocal(e, root)
@@ -1496,14 +1599,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       // Replace the browser menu with the object's own action menu.
       e.preventDefault()
-      // Hand mode is navigation-ONLY: a touch long-press synthesises a
-      // contextmenu, and surfacing the edit menu there made phone panning
-      // fall into editing mid-gesture (user report 2026-08-08). Switching
-      // to Select is the explicit gate into editing affordances.
-      if (tool === 'hand') return
       const root = rootRef.current
       if (root === null) return
-      const screenPoint = clientPointToRootLocal(e, root)
+      openContextMenuAt(clientPointToRootLocal(e, root))
+    }
+
+    const openContextMenuAt = (screenPoint: Point) => {
+      // Hand mode is navigation-ONLY: surfacing the edit menu on a touch
+      // long-press there made phone panning fall into editing mid-gesture
+      // (user report 2026-08-08). Switching to Select is the explicit gate
+      // into editing affordances.
+      if (tool === 'hand') return
       const point = screenToCanvas(screenPoint, viewport)
       // The MENU hit-tests every node, locked included — a locked node has
       // to stay right-clickable or Unlock would be unreachable. Only the
@@ -1546,10 +1652,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         point,
       })
     }
+    openContextMenuAtRef.current = openContextMenuAt
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      // Movement past finger-jitter slop turns the press into a drag: the
+      // armed long-press menu must not interrupt it.
+      const armed = longPressRef.current
+      if (armed !== null && armed.pointerId === e.pointerId) {
+        const now = clientPointToRootLocal(e, root)
+        if (Math.hypot(now.x - armed.screen.x, now.y - armed.screen.y) > LONG_PRESS_SLOP_PX) {
+          clearLongPress()
+        }
+      }
       // A gathering finger has already acted on its press, and the anchor's
       // own gesture was cancelled when gathering began — neither may resume
       // dragging the canvas while the other is still down.
@@ -1615,6 +1731,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
       const root = rootRef.current
       // Gathering fingers act on the press, so their release carries no
       // meaning — running the click/marquee logic here would re-collapse the
@@ -1781,6 +1898,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
       // Pointer ids are reused, so a gathering finger left in these refs by a
       // cancel would silently deaden whichever later touch inherits its id.
       gatherPointersRef.current.delete(e.pointerId)
@@ -2255,6 +2373,45 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // something this effect needs to do. What React does NOT do for us is
     // release pointer capture the platform is still holding on our behalf;
     // an unmount mid-drag (route change, a parent swapping this component
+    // iOS Safari's native long-press behaviors (selection loupe, callout,
+    // the haptic-touch takeover) ignore `touch-action` and CSS user-select
+    // suppression in practice: the system claims the press and fires
+    // pointercancel, which disarms the app's own long-press menu timer —
+    // the press is "hijacked". preventDefault on `touchstart` is the one
+    // reliable off-switch for that entire family, and it must be a
+    // NON-PASSIVE native listener (React's synthetic handlers don't
+    // guarantee that, and browsers default touch listeners to passive).
+    // Canvas interactions are pointer-event driven and unaffected —
+    // pointerdown has already fired by the time touchstart is cancelled;
+    // what this suppresses is the native gesture claim plus the synthetic
+    // mouse-compatibility events the canvas never uses. Overlays
+    // (`data-editor-overlay`: text editor, palette, menus, dialogs) keep
+    // native touch semantics — they hold real form controls.
+    useEffect(() => {
+      const root = rootRef.current
+      if (root === null) return
+      const refuseNativeTouch = (event: TouchEvent) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-editor-overlay]') !== null
+        ) {
+          return
+        }
+        event.preventDefault()
+      }
+      root.addEventListener('touchstart', refuseNativeTouch, { passive: false })
+      // touchmove too, not just touchstart: an embedding sheet (iOS's
+      // SFSafariViewController in-app browser) decides from UNCONSUMED move
+      // events whether a drag is ITS drag — a canvas pan was dragging the
+      // whole sheet up and down. Canvas gestures are pointer-event driven
+      // and unaffected.
+      root.addEventListener('touchmove', refuseNativeTouch, { passive: false })
+      return () => {
+        root.removeEventListener('touchstart', refuseNativeTouch)
+        root.removeEventListener('touchmove', refuseNativeTouch)
+      }
+    }, [])
+
     // out) would otherwise leave the browser holding capture for a pointer
     // no element can any longer respond to. Best-effort/never-throw, same
     // reasoning as `trySetPointerCapture`.
@@ -2265,6 +2422,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // cleanup time would always see `null` and silently skip the release.
       const root = rootRef.current
       return () => {
+        // A long-press timer must not fire into an unmounted editor.
+        if (longPressRef.current !== null) {
+          clearTimeout(longPressRef.current.timer)
+          longPressRef.current = null
+        }
         const pointerId = activePointerIdRef.current
         if (root === null || pointerId === null) return
         try {
@@ -2740,6 +2902,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             }
           />
         )}
+        {longPressPulse !== null && (
+          // The moment the long-press commits: one expanding ring at the
+          // pressed point. Haptics are best-effort at most (see
+          // haptics.ts), so this is the feedback channel that always works;
+          // removed on its own animationend (the reduced-motion floor
+          // shortens, never cancels, so cleanup still fires).
+          //
+          // OUTSIDE the pan/zoom transform, unlike the canvas-space
+          // overlays: the coordinates are root-local screen px, and a
+          // fixed-size feedback ring must not scale with zoom.
+          <div
+            data-testid="long-press-pulse"
+            aria-hidden="true"
+            className="long-press-pulse"
+            style={{ left: longPressPulse.x, top: longPressPulse.y }}
+            onAnimationEnd={() => setLongPressPulse(null)}
+          />
+        )}
         {/* The OOUI creation surface: every canvas is empty until a node
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
@@ -3009,9 +3189,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 y={Math.min(marquee.start.y, marquee.current.y)}
                 width={Math.abs(marquee.current.x - marquee.start.x)}
                 height={Math.abs(marquee.current.y - marquee.start.y)}
-                fill="#2563eb"
+                fill="var(--manipulation)"
                 fillOpacity={0.08}
-                stroke="#2563eb"
+                stroke="var(--manipulation)"
                 strokeWidth={1 / viewport.zoom}
                 strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
               />
@@ -3029,29 +3209,61 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 pointerEvents: 'none',
               }}
             >
+              {/* Dashed with a dot at each end: a ruler showing a measured
+                  extent, not an alert line. The dash and dot sizes divide by
+                  zoom for the same reason every handle does — the ruler is
+                  chrome, and chrome keeps its on-screen size. */}
               {snapGuides.x.map((x) => (
-                <line
-                  key={`x${x}`}
-                  data-axis="x"
-                  x1={x}
-                  x2={x}
-                  y1={guideSpan.minY}
-                  y2={guideSpan.maxY}
-                  stroke="#e11d48"
-                  strokeWidth={1 / viewport.zoom}
-                />
+                <g key={`x${x}`}>
+                  <line
+                    data-axis="x"
+                    x1={x}
+                    x2={x}
+                    y1={guideSpan.minY}
+                    y2={guideSpan.maxY}
+                    stroke="var(--manipulation-guide)"
+                    strokeWidth={1 / viewport.zoom}
+                    strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+                  />
+                  <circle
+                    cx={x}
+                    cy={guideSpan.minY}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                  <circle
+                    cx={x}
+                    cy={guideSpan.maxY}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                </g>
               ))}
               {snapGuides.y.map((y) => (
-                <line
-                  key={`y${y}`}
-                  data-axis="y"
-                  x1={guideSpan.minX}
-                  x2={guideSpan.maxX}
-                  y1={y}
-                  y2={y}
-                  stroke="#e11d48"
-                  strokeWidth={1 / viewport.zoom}
-                />
+                <g key={`y${y}`}>
+                  <line
+                    data-axis="y"
+                    x1={guideSpan.minX}
+                    x2={guideSpan.maxX}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--manipulation-guide)"
+                    strokeWidth={1 / viewport.zoom}
+                    strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+                  />
+                  <circle
+                    cx={guideSpan.minX}
+                    cy={y}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                  <circle
+                    cx={guideSpan.maxX}
+                    cy={y}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                </g>
               ))}
             </svg>
           )}
@@ -3073,6 +3285,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )}
           {selection !== undefined && selectionBox !== undefined && (
             <SelectionOverlay
+              // Keyed by TARGET: a new selection remounts the overlay and
+              // replays the outline's draw-once; dragging or resizing the
+              // same node keeps the element and stays still.
+              key={selection.id}
               box={selectionBox}
               zoom={viewport.zoom}
               onHandlePointerDown={(handle, _handleBox, e) => {
@@ -3161,7 +3377,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     data-testid="edge-selection-highlight"
                     points={selected.path.map((p) => `${p.x},${p.y}`).join(' ')}
                     fill="none"
-                    stroke="#2563eb"
+                    stroke="var(--manipulation)"
                     strokeWidth={3}
                     strokeLinecap="round"
                   />

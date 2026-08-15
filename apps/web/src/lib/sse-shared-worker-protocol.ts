@@ -46,10 +46,6 @@ export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
 ])
 
 export const sseWorkerEventSchema = z.discriminatedUnion('type', [
-  // Loro update bytes stay base64 here: structured clone could carry the bytes,
-  // but keeping the worker's output identical to the wire frame means the
-  // decode lives in exactly one place.
-  z.object({ type: z.literal('update'), doc: z.string(), update: z.string() }),
   z.object({ type: z.literal('message'), doc: z.string(), raw: z.string() }),
   // Whether a stream is currently carrying this document. Addressed like the
   // others so a tab watching several canvases routes it the same way; the

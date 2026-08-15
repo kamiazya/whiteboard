@@ -23,8 +23,11 @@ describe('SelectionOverlay', () => {
     expect(onHandlePointerDown).toHaveBeenCalledTimes(1)
     const [handle, box] = onHandlePointerDown.mock.calls[0] as [string, typeof BOX, unknown]
     expect(handle).toBe('se')
-    // se handle is centered on the box's bottom-right corner (x+width, y+height).
-    expect(box).toEqual({ x: 106, y: 66, width: 8, height: 8 })
+    // The HIT box (24px, centered on the corner), not the 8px marker: the
+    // interactive element is the hit shape now. Its only consumer names the
+    // parameter _handleBox and anchors resize on selectionBox instead, so
+    // this pins the callback contract, not resize math.
+    expect(box).toEqual({ x: 98, y: 58, width: 24, height: 24 })
   })
 
   it('scales the handle box by zoom (constant on-screen size)', () => {
@@ -40,7 +43,8 @@ describe('SelectionOverlay', () => {
     fireEvent.pointerDown(screen.getByTestId('resize-handle-nw'))
     const [, box] = onHandlePointerDown.mock.calls[0] as [string, typeof BOX, unknown]
     // Handle size is HANDLE_SIZE_PX / zoom = 8 / 2 = 4, centered on (x, y).
-    expect(box).toEqual({ x: 8, y: 18, width: 4, height: 4 })
+    // 24 screen px at zoom 2 → 12 canvas units, still corner-centered.
+    expect(box).toEqual({ x: 4, y: 14, width: 12, height: 12 })
   })
 
   it('invokes onConnectPointerDown when the connect handle is pressed', () => {
@@ -123,7 +127,7 @@ describe('SelectionOverlay', () => {
     expect(onHandleKeyDown).toHaveBeenCalledTimes(1)
     const [kind, box] = onHandleKeyDown.mock.calls[0] as [string, typeof BOX, unknown]
     expect(kind).toBe('se')
-    expect(box).toEqual({ x: 106, y: 66, width: 8, height: 8 })
+    expect(box).toEqual({ x: 98, y: 58, width: 24, height: 24 })
     fireEvent.keyDown(handle, { key: 'Tab' })
     expect(onHandleKeyDown).toHaveBeenCalledTimes(1)
   })
@@ -148,4 +152,34 @@ describe('SelectionOverlay', () => {
     fireEvent.keyDown(connect, { key: 'Tab' })
     expect(onConnectKeyDown).toHaveBeenCalledTimes(2)
   })
+})
+
+it('grows the hit boxes to 32px where the pointer is coarse', () => {
+  const original = window.matchMedia
+  // The repo already stubs matchMedia in jsdom (useThemeMode.test.tsx) —
+  // this branch is plain JS, so unlike dock-button's CSS-only variant it
+  // is testable and therefore tested.
+  window.matchMedia = ((query: string) =>
+    ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }) as unknown as MediaQueryList) as typeof window.matchMedia
+  try {
+    const onHandlePointerDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={onHandlePointerDown}
+        onConnectPointerDown={vi.fn()}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('resize-handle-se'))
+    const [, box] = onHandlePointerDown.mock.calls[0] as [string, typeof BOX]
+    expect(box.width).toBe(32)
+  } finally {
+    window.matchMedia = original
+  }
 })
