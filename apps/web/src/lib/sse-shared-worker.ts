@@ -101,6 +101,14 @@ function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['Loro
   if (existing !== undefined) return existing
   const created = new loro.LoroDoc()
   replicas.set(key, created)
+  // Its own empty version, not `undefined`. A `from`-less update export is not
+  // empty even for an untouched document, so treating "nothing acknowledged"
+  // as "no baseline" makes every fresh subscription POST a header the daemon
+  // has no use for. An empty baseline says the same thing and diffs to
+  // nothing — and stays conservative once the replica has real state, since
+  // the first write after that carries the whole document rather than
+  // assuming the daemon already has what it happens to have sent us.
+  ackedVersions.set(key, created.version())
   return created
 }
 
@@ -131,6 +139,15 @@ function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): voi
     // `null`: the daemon is the source, so nobody is excluded from the fan-out.
     onUpdate: (bytes) => ingest(baseUrl, doc, bytes, null),
     onMessage: () => {},
+    onConnectionChange: (connected) => {
+      // The stream coming back is the only signal a daemon that refused a
+      // write is ready to take it, and the tab that made that edit may never
+      // touch the canvas again — so without this the recovery would wait for a
+      // second edit that never comes. A document with nothing outstanding
+      // computes an empty delta and writes nothing, so this is free when there
+      // is no work to redo.
+      if (connected) scheduleWrite(baseUrl, doc)
+    },
   })
   replicaFeeds.set(key, { off, ports: 1 })
 }
@@ -159,6 +176,64 @@ const ports = new Map<MessagePort, PortState>()
  * request time rather than captured when the hub is built.
  */
 const tokens = new Map<string, string | undefined>()
+
+/**
+ * The replica version the daemon is known to have taken, per origin+document.
+ *
+ * Absent means "assume nothing", which sends the document's whole state on the
+ * first write. That is deliberately the conservative direction: over-sending
+ * costs bytes and Loro merges it away, while an acknowledged version that runs
+ * AHEAD of what the daemon really holds loses an edit permanently — the
+ * replica would never offer those ops again, and the tab that made them keeps
+ * showing work that is stored nowhere.
+ *
+ * So this advances on a successful write and on nothing else. In particular it
+ * does NOT advance when a daemon frame arrives: that frame says what the
+ * daemon has of its OWN, and cannot speak for a tab's unpushed work sitting in
+ * the same replica.
+ */
+const ackedVersions = new Map<string, ReturnType<InstanceType<LoroModule['LoroDoc']>['version']>>()
+
+/**
+ * One write at a time per document, so two in flight cannot land out of order
+ * and let the later one's acknowledgement cover ops the earlier one never
+ * delivered. Each link recomputes what is outstanding when it runs, which is
+ * also what makes a failure self-healing: the bytes a refused write held are
+ * still unacknowledged, so the next write picks them up without anything
+ * having to buffer them.
+ */
+const writeChains = new Map<string, Promise<unknown>>()
+
+function scheduleWrite(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  const previous = writeChains.get(key) ?? Promise.resolve()
+  const next = previous
+    .then(async () => {
+      const replica = replicaFor(baseUrl, doc)
+      if (replica === undefined) return
+      const acked = ackedVersions.get(key)
+      if (acked === undefined) return
+      // Read BEFORE the export and the await, for two different reasons: ops
+      // that land while this request is in flight are not covered by it and
+      // must not be marked acknowledged, and this is also the comparison that
+      // decides whether there is anything to send at all.
+      const at = replica.version()
+      // Compared by VERSION, not by byte length. An update export is 22 bytes
+      // of header even when it carries no ops, so a length check calls that a
+      // write worth making and POSTs an empty body on every reconnect. `0` is
+      // "the same state"; anything else, including the `undefined` Loro
+      // returns for versions it cannot order, means send.
+      if (at.compare(acked) === 0) return
+      const pending = replica.export({ mode: 'update', from: acked })
+      await hubFor(baseUrl).push(doc, pending)
+      ackedVersions.set(key, at)
+    })
+    // Swallowed on purpose — there is no caller to tell. A refused write
+    // leaves `ackedVersions` where it was, which IS the retry: the next write,
+    // or the reconnect flush, recomputes the same outstanding bytes.
+    .catch(() => undefined)
+  writeChains.set(key, next)
+}
 
 function hubFor(baseUrl: string): SseStreamHub {
   const existing = hubs.get(baseUrl)
@@ -208,13 +283,14 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // re-pushing work a sibling already delivered costs no broadcast, and the
     // daemon's echo of a tab's OWN push diffs to nothing — which is what stops
     // the round trip from looping back out as authority state.
+    // Tab-originated work goes on to the daemon; daemon-originated work is
+    // already there. WHAT gets written is decided against the acknowledged
+    // version rather than against the delta computed here — those are
+    // different questions, and answering them with one value is what silently
+    // dropped an edit the daemon refused.
+    if (from !== null) scheduleWrite(baseUrl, doc)
     const merged = replica.export({ mode: 'update', from: before })
     if (merged.byteLength === 0) return
-    // Tab-originated work goes on to the daemon; daemon-originated work is
-    // already there. The empty-diff return above is what makes that split safe
-    // to state so plainly — a tab re-pushing what the daemon just sent never
-    // reaches here to be written back.
-    if (from !== null) hubFor(baseUrl).push(doc, merged)
     const encoded = toBase64(merged)
     for (const [target, state] of ports) {
       if (target === from) continue
