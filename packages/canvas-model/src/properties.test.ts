@@ -31,12 +31,9 @@ import {
   mdastPhrasingContentArbitrary,
   mdastRootArbitrary,
   spatialNodeArbitrary,
-  workspaceMetaArbitrary,
-  workspaceTreeNodeDataArbitrary,
   xWhiteboardArbitrary,
 } from './test-utils/arbitraries.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { workspaceMetaSchema, workspaceTreeNodeDataSchema } from './workspace-tree.js'
 
 describe('arbitrary-conformance: every generator agrees with its schema', () => {
   fcTest.prop([canvasMetaArbitrary], withDefaults())('canvasMetaSchema', (value) => {
@@ -69,17 +66,6 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
 
   fcTest.prop([markdownCanvasArbitrary], withDefaults())('markdownCanvasSchema', (value) => {
     expect(markdownCanvasSchema.safeParse(value).success).toBe(true)
-  })
-
-  fcTest.prop([workspaceTreeNodeDataArbitrary], withDefaults())(
-    'workspaceTreeNodeDataSchema',
-    (value) => {
-      expect(workspaceTreeNodeDataSchema.safeParse(value).success).toBe(true)
-    },
-  )
-
-  fcTest.prop([workspaceMetaArbitrary], withDefaults())('workspaceMetaSchema', (value) => {
-    expect(workspaceMetaSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop([canonicalUlidArbitrary], withDefaults())('canvasIdSchema', (value) => {

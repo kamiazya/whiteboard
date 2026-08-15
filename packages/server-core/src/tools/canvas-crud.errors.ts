@@ -1,9 +1,11 @@
 /**
  * Typed error contract for canvas-CRUD handlers. `create-server.ts` maps
- * these classes (never message-string matching against
- * `WorkspaceTree`'s thrown errors) to HTTP status codes, so a future
- * wording change in `WorkspaceTree`'s error messages cannot silently
- * change the API's status-code behavior.
+ * these classes — never a message string — to HTTP status codes, so
+ * rewording an error cannot silently change the API's status codes.
+ *
+ * They exist alongside `DocumentIndex`'s own errors because these carry
+ * advice aimed at an MCP caller; the port's are mapped to status codes
+ * directly where no such advice applies.
  */
 export class CanvasNotFoundError extends Error {
   constructor(
@@ -22,19 +24,5 @@ export class WorkspaceNotFoundError extends Error {
         'Pass createWorkspace: true to create it along with the canvas.',
     )
     this.name = 'WorkspaceNotFoundError'
-  }
-}
-
-export class CanvasSegmentConflictError extends Error {
-  constructor(readonly segment: string) {
-    super(`Segment conflict: "${segment}" already exists under this parent`)
-    this.name = 'CanvasSegmentConflictError'
-  }
-}
-
-export class CanvasParentNotFoundError extends Error {
-  constructor(readonly parentId: string) {
-    super(`Parent node not found: ${parentId}`)
-    this.name = 'CanvasParentNotFoundError'
   }
 }

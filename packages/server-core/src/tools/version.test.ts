@@ -7,7 +7,6 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
@@ -17,7 +16,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
 }
 
 async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {

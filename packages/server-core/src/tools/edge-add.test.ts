@@ -5,7 +5,6 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
 import { createEdgeAddTool, EdgeAlreadyExistsError } from './edge-add.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
@@ -14,7 +13,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
 }
 
 function node(id: string) {

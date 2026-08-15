@@ -50,11 +50,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: ['zod'],
   },
   '@kamiazya/whiteboard-canvas-workspace': {
-    allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
-      '@kamiazya/whiteboard-canvas-ports',
-    ],
+    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model', '@kamiazya/whiteboard-canvas-ports'],
     // loro-crdt: this package owns the LoroDoc<->model bridge (see
     // .claude/rules/package-canvas-workspace.md), so it's the one shared-
     // layer package (besides server-core, which re-exposes the bridge via

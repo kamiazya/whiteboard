@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { DocumentIndex } from '../index.js'
 import {
   DocumentHasDescendantsError,
@@ -16,14 +16,15 @@ import {
  * Taken as a factory rather than written inline against one implementation
  * so the second one — the browser store, when `apps/web` grows a daemon-free
  * document index — inherits the same bar by calling it. It lives beside the
- * only current implementation instead of in `canvas-ports` because that
- * package publishes no test-utils entry point, and adding one before a second
- * caller exists would be plumbing for nobody.
+ * port itself, so an implementation in any package inherits the same bar by
+ * calling it.
  */
 export function describeDocumentIndexConformance(
   makeIndex: () => Promise<{ index: DocumentIndex; dispose: () => Promise<void> }>,
 ): void {
   const WS = 'ws-conformance'
+  // A well-formed id the index never assigned.
+  const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
   async function withIndex(body: (index: DocumentIndex) => Promise<void>): Promise<void> {
     const { index, dispose } = await makeIndex()
@@ -322,6 +323,65 @@ export function describeDocumentIndexConformance(
 
       await index.deleteDocument({ workspaceId: WS, path: 'p' })
       expect(await index.resolveDocument({ workspaceId: 'ws-other', path: 'p' })).not.toBeNull()
+    })
+  })
+
+  describe('setDocumentName', () => {
+    it('renames a document without moving it', async () => {
+      await withIndex(async (index) => {
+        const { canvasId } = await index.createDocument({
+          workspaceId: WS,
+          path: 'a/b',
+          kind: 'markdown',
+          name: 'Old',
+        })
+
+        await index.setDocumentName({ workspaceId: WS, canvasId, name: 'New' })
+
+        const entry = await index.resolveDocumentById({ workspaceId: WS, canvasId })
+        expect(entry?.name).toBe('New')
+        // The name is not the placement: renaming must not relocate it.
+        expect(entry?.path).toBe('a/b')
+      })
+    })
+
+    it('clears the name when given none', async () => {
+      await withIndex(async (index) => {
+        const { canvasId } = await index.createDocument({
+          workspaceId: WS,
+          path: 'p',
+          kind: 'spatial',
+          name: 'Named',
+        })
+
+        await index.setDocumentName({ workspaceId: WS, canvasId })
+
+        expect(
+          (await index.resolveDocumentById({ workspaceId: WS, canvasId }))?.name,
+        ).toBeUndefined()
+      })
+    })
+
+    it('fails for a document that is not there', async () => {
+      await withIndex(async (index) => {
+        await expect(
+          index.setDocumentName({ workspaceId: WS, canvasId: ABSENT_ID, name: 'x' }),
+        ).rejects.toThrow(DocumentNotFoundError)
+      })
+    })
+
+    it('will not rename across workspaces', async () => {
+      await withIndex(async (index) => {
+        const { canvasId } = await index.createDocument({
+          workspaceId: WS,
+          path: 'p',
+          kind: 'spatial',
+        })
+
+        await expect(
+          index.setDocumentName({ workspaceId: 'ws-other', canvasId, name: 'x' }),
+        ).rejects.toThrow(DocumentNotFoundError)
+      })
     })
   })
 }

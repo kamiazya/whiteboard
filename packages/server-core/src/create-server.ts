@@ -1,14 +1,10 @@
+import { DocumentPathTakenError } from '@kamiazya/whiteboard-canvas-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { CanvasNotFoundError as SnapshotNotFoundError } from './render/load-spatial-canvas.js'
 import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
-import {
-  CanvasNotFoundError,
-  CanvasParentNotFoundError,
-  CanvasSegmentConflictError,
-  WorkspaceNotFoundError,
-} from './tools/canvas-crud.errors.js'
+import { CanvasNotFoundError, WorkspaceNotFoundError } from './tools/canvas-crud.errors.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 import {
   createCanvasInputSchema,
@@ -154,11 +150,8 @@ function mapCanvasError(c: Context, err: unknown) {
   if (err instanceof WorkspaceNotFoundError) {
     return c.json({ error: err.message }, 404)
   }
-  if (err instanceof CanvasSegmentConflictError) {
+  if (err instanceof DocumentPathTakenError) {
     return c.json({ error: err.message }, 409)
-  }
-  if (err instanceof CanvasParentNotFoundError) {
-    return c.json({ error: err.message }, 400)
   }
   throw err
 }

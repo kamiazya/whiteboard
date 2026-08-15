@@ -24,6 +24,7 @@ export function unusedDocumentIndex(): DocumentIndex {
     resolveDocumentById: refuse('resolveDocumentById'),
     listDocuments: refuse('listDocuments'),
     moveDocument: refuse('moveDocument'),
+    setDocumentName: refuse('setDocumentName'),
     deleteDocument: refuse('deleteDocument'),
   }
 }

@@ -14,17 +14,15 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { createDocumentSetTool } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
-import { loadWorkspaceTree } from './workspace-tree-io.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
 }
 
 async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
@@ -267,9 +265,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
       markdown: '---\ntype: note\ntitle: リリース計画 2026\n---\nBody.',
     })
 
-    const tree = await loadWorkspaceTree(store, WORKSPACE_ID)
-    const node = tree.snapshot().nodes.find((n) => n.canvasId === CANVAS_ID)
-    expect(node?.displayName).toBe('リリース計画 2026')
+    const entry = await store.documentIndex.resolveDocumentById({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+    })
+    expect(entry?.name).toBe('リリース計画 2026')
     expect(readCoreFacets(await loadDoc(store, CANVAS_ID))?.title).toBeUndefined()
   })
 
@@ -291,8 +291,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
       markdown: '---\ntype: note\n---\nTwo.',
     })
 
-    const tree = await loadWorkspaceTree(store, WORKSPACE_ID)
-    expect(tree.snapshot().nodes[0]?.displayName).toBe('Keep me')
+    const entry = await store.documentIndex.resolveDocumentById({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+    })
+    expect(entry?.name).toBe('Keep me')
   })
 
   test('the exported OKF carries the workspace name as its title', async () => {

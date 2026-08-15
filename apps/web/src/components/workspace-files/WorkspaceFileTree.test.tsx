@@ -5,21 +5,21 @@ import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 afterEach(cleanup)
 
 const canvases = [
-  { canvasId: 'c-root', segment: 'readme', alias: 'readme' },
-  { canvasId: 'c-notes', segment: 'notes', alias: 'notes' },
-  { canvasId: 'c-child', segment: 'design', alias: 'notes/design' },
-  { canvasId: 'c-deep', segment: 'palette', alias: 'notes/design/palette' },
+  { canvasId: 'c-root', path: 'readme' },
+  { canvasId: 'c-notes', path: 'notes' },
+  { canvasId: 'c-child', path: 'notes/design' },
+  { canvasId: 'c-deep', path: 'notes/design/palette' },
 ]
 
 describe('WorkspaceFileTree', () => {
-  it('renders nested aliases as an ARIA tree, not a flat list', () => {
+  it('renders nested paths as an ARIA tree, not a flat list', () => {
     render(<WorkspaceFileTree canvases={canvases} onOpen={() => {}} />)
 
     expect(screen.getByRole('tree')).not.toBeNull()
     // notes is a branch: expandable, expanded by default.
     const notes = screen.getByRole('treeitem', { name: /notes/ })
     expect(notes.getAttribute('aria-expanded')).toBe('true')
-    // Its child is reachable inside a group, not as a sibling alias string.
+    // Its child is reachable inside a group, not as a sibling path string.
     expect(screen.getByRole('treeitem', { name: /design/ })).not.toBeNull()
     expect(screen.queryByText('notes/design')).toBeNull()
   })
@@ -30,7 +30,7 @@ describe('WorkspaceFileTree', () => {
 
     fireEvent.click(screen.getByText('readme'))
     expect(onOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ canvasId: 'c-root', alias: 'readme' }),
+      expect.objectContaining({ canvasId: 'c-root', path: 'readme' }),
     )
   })
 
@@ -54,7 +54,7 @@ describe('WorkspaceFileTree', () => {
     expect(design.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(screen.getByText('design'))
     expect(onOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ canvasId: 'c-child', alias: 'notes/design' }),
+      expect.objectContaining({ canvasId: 'c-child', path: 'notes/design' }),
     )
   })
 

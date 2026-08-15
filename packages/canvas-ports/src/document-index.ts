@@ -53,6 +53,15 @@ export const moveDocumentInputSchema = z
   .strict()
 export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 
+export const setDocumentNameInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    canvasId: canvasIdSchema,
+    name: z.string().min(1).optional(),
+  })
+  .strict()
+export type SetDocumentNameInput = z.infer<typeof setDocumentNameInputSchema>
+
 export const deleteDocumentInputSchema = z
   .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
   .strict()
@@ -121,9 +130,10 @@ export class DocumentPathTakenError extends Error {
 export class DocumentNotFoundError extends Error {
   constructor(
     readonly workspaceId: string,
-    readonly path: string,
+    /** The path or the id the caller named — whichever the operation takes. */
+    readonly target: string,
   ) {
-    super(`No document at "${path}" in workspace "${workspaceId}"`)
+    super(`No document "${target}" in workspace "${workspaceId}"`)
     this.name = 'DocumentNotFoundError'
   }
 }
@@ -245,6 +255,17 @@ export interface DocumentIndex {
    * carved into this one.
    */
   moveDocument(input: MoveDocumentInput): Promise<void>
+  /**
+   * Sets — or, with no `name`, clears — a document's display name. Keyed by
+   * id rather than by path because a name is not a placement: renaming must
+   * leave the document exactly where it is, and a caller that has to name the
+   * path to change the name would eventually move one by accident.
+   *
+   * Fails `DocumentNotFoundError` for an id this workspace does not hold, on
+   * the same reasoning as `moveDocument`: a rename has a target, and quietly
+   * doing nothing is indistinguishable from having renamed it.
+   */
+  setDocumentName(input: SetDocumentNameInput): Promise<void>
   /**
    * Deleting an absent path succeeds; the caller wants it gone either way.
    *

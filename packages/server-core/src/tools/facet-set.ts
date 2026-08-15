@@ -7,9 +7,9 @@ import {
 import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { DocumentKindMismatchError } from './errors.js'
-import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
@@ -43,7 +43,7 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
       // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas

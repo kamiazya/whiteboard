@@ -1,14 +1,9 @@
-import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
-import { WorkspaceTree, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
-import { LoroDoc, type TreeID } from 'loro-crdt'
+import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-canvas-ports'
+import { writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import {
-  CanvasNotFoundError,
-  CanvasParentNotFoundError,
-  CanvasSegmentConflictError,
-  WorkspaceNotFoundError,
-} from './canvas-crud.errors.js'
+import { CanvasNotFoundError, WorkspaceNotFoundError } from './canvas-crud.errors.js'
 import type {
   createCanvasInputSchema,
   createCanvasOutputSchema,
@@ -20,22 +15,25 @@ import type {
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
 import { saveDocSnapshot } from './canvas-doc-io.js'
-import {
-  loadWorkspaceTree,
-  loadWorkspaceTreeIfExists,
-  saveWorkspaceTree,
-} from './workspace-tree-io.js'
 
 /**
- * Finds the tree node whose `canvasId` matches, or throws
- * `CanvasNotFoundError`. Shared by get/delete handlers.
+ * The index refuses an unknown workspace in its own words; the tool surface
+ * has said `WorkspaceNotFoundError` with its own advice since before the
+ * index existed, and a caller reading the tool's error should not have to
+ * learn a second name for the same condition.
  */
-function findNodeOrThrow(tree: WorkspaceTree, workspaceId: string, canvasId: string) {
-  const node = tree.snapshot().nodes.find((n) => n.canvasId === canvasId)
-  if (!node) {
-    throw new CanvasNotFoundError(workspaceId, canvasId)
+async function rethrowWorkspaceNotFound<T>(
+  workspaceId: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await body()
+  } catch (err) {
+    if (err instanceof PortWorkspaceNotFoundError) {
+      throw new WorkspaceNotFoundError(workspaceId)
+    }
+    throw err
   }
-  return node
 }
 
 export async function wbCanvasCreate(
@@ -46,49 +44,45 @@ export async function wbCanvasCreate(
   // workspaceId must fail loudly rather than silently writing data into a
   // workspace nobody asked for. `createWorkspace: true` is the explicit
   // opt-in that bootstraps a genuinely new workspace.
-  const existingTree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
-  if (existingTree === null && input.createWorkspace !== true) {
-    throw new WorkspaceNotFoundError(input.workspaceId)
-  }
-  const tree = existingTree ?? new WorkspaceTree(new LoroDoc())
-
-  const parentId = input.parentId as TreeID | undefined
-  if (parentId !== undefined && tree.getNode(parentId) === undefined) {
-    throw new CanvasParentNotFoundError(input.parentId as string)
+  if (input.createWorkspace === true) {
+    await deps.documentIndex.createWorkspace({ workspaceId: input.workspaceId })
   }
 
-  const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
-  if (conflict) {
-    throw new CanvasSegmentConflictError(input.segment)
-  }
+  const entry = await rethrowWorkspaceNotFound(input.workspaceId, () =>
+    deps.documentIndex.createDocument({
+      workspaceId: input.workspaceId,
+      path: input.path,
+      kind: input.kind,
+      ...(input.name === undefined ? {} : { name: input.name }),
+    }),
+  )
 
-  const canvasId = generateCanvasId()
-  tree.createNode(canvasId, input.segment, parentId, undefined, input.name)
-  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-
-  // Persist the document, not only its place in the tree. Creation used to
-  // write the node alone and leave the document to be conjured on first
-  // write, which is why nothing could say what a document was: there was no
+  // Persist the document, not only its placement. Creation used to write the
+  // placement alone and leave the document to be conjured on first write,
+  // which is why nothing could say what a document was: there was no
   // document yet to ask. The kind is written once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
-  await saveDocSnapshot(deps, canvasId, doc)
+  await saveDocSnapshot(deps, entry.canvasId, doc)
 
-  return { canvasId, segment: input.segment }
+  return { canvasId: entry.canvasId, path: entry.path }
 }
 
 export async function wbCanvasGet(
   deps: ServerDeps,
   input: z.infer<typeof getCanvasInputSchema>,
 ): Promise<z.infer<typeof getCanvasOutputSchema>> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
-  const alias = tree.resolveAlias(node.id)
+  const entry = await deps.documentIndex.resolveDocumentById({
+    workspaceId: input.workspaceId,
+    canvasId: input.canvasId,
+  })
+  if (entry === null) {
+    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
+  }
   return {
-    canvasId: node.canvasId,
-    segment: node.segment,
-    alias: alias ?? node.segment,
-    ...(node.displayName === undefined ? {} : { name: node.displayName }),
+    canvasId: entry.canvasId,
+    path: entry.path,
+    ...(entry.name === undefined ? {} : { name: entry.name }),
   }
 }
 
@@ -96,19 +90,17 @@ export async function wbCanvasList(
   deps: ServerDeps,
   input: z.infer<typeof listCanvasesInputSchema>,
 ): Promise<z.infer<typeof listCanvasesOutputSchema>> {
-  // Agree with wbCanvasCreate about workspace existence: a never-persisted
-  // workspace is an error, not an empty list — otherwise a typo'd
-  // workspaceId is indistinguishable from a genuinely empty workspace.
-  const tree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
-  if (tree === null) {
-    throw new WorkspaceNotFoundError(input.workspaceId)
-  }
+  // An unknown workspace is an error, not an empty list — otherwise a typo'd
+  // workspaceId is indistinguishable from a genuinely empty workspace. The
+  // index enforces that; this only restates it in the tool's vocabulary.
+  const entries = await rethrowWorkspaceNotFound(input.workspaceId, () =>
+    deps.documentIndex.listDocuments({ workspaceId: input.workspaceId }),
+  )
   return {
-    canvases: tree.snapshot().nodes.map((node) => ({
-      canvasId: node.canvasId,
-      segment: node.segment,
-      alias: tree.resolveAlias(node.id) ?? node.segment,
-      ...(node.displayName === undefined ? {} : { name: node.displayName }),
+    canvases: entries.map((entry) => ({
+      canvasId: entry.canvasId,
+      path: entry.path,
+      ...(entry.name === undefined ? {} : { name: entry.name }),
     })),
   }
 }
@@ -117,12 +109,19 @@ export async function wbCanvasDelete(
   deps: ServerDeps,
   input: z.infer<typeof deleteCanvasInputSchema>,
 ): Promise<z.infer<typeof deleteCanvasOutputSchema>> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
-  tree.delete(node.id)
-  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-  // The tree removal alone makes the document unreachable; its stored bytes
-  // would stay behind with nothing left that could ever name them again.
-  await deps.canvasDocStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: node.canvasId } })
+  const entry = await deps.documentIndex.resolveDocumentById({
+    workspaceId: input.workspaceId,
+    canvasId: input.canvasId,
+  })
+  if (entry === null) {
+    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
+  }
+  // Placement first: the index refuses while documents sit below this one, so
+  // the bytes are only discarded once nothing can still be orphaned by it.
+  await deps.documentIndex.deleteDocument({
+    workspaceId: input.workspaceId,
+    path: entry.path,
+  })
+  await deps.canvasDocStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: entry.canvasId } })
   return { deleted: true }
 }

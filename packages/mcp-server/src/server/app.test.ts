@@ -500,7 +500,7 @@ describe('createApp daemon mutation auth', () => {
       name: 'wb_document_create',
       arguments: {
         workspaceId: 'default',
-        segment: 'via-mcp',
+        path: 'via-mcp',
         kind: 'spatial',
         createWorkspace: true,
       },
@@ -510,7 +510,7 @@ describe('createApp daemon mutation auth', () => {
     expect(canvasCreateTool?.outputSchema).toBeDefined()
     expect(createResult.structuredContent).toMatchObject({
       canvasId: expect.any(String),
-      segment: 'via-mcp',
+      path: 'via-mcp',
     })
     expect(createResult.content).toEqual([
       {
@@ -549,14 +549,14 @@ describe('createApp daemon mutation auth', () => {
       name: 'wb_document_create',
       arguments: {
         workspaceId: 'default',
-        segment: 'via-modern-mcp',
+        path: 'via-modern-mcp',
         kind: 'spatial',
         createWorkspace: true,
       },
     })
     expect(createResult.structuredContent).toMatchObject({
       canvasId: expect.any(String),
-      segment: 'via-modern-mcp',
+      path: 'via-modern-mcp',
     })
     await transport.close()
   })

@@ -2,9 +2,9 @@ import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/white
 import { setNodeLock } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { NodeNotFoundError } from './errors.js'
-import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
  * Lock/unlock is the ONE mutation a locked node still accepts (user
@@ -42,7 +42,7 @@ export function createNodeLockTool(deps: ServerDeps) {
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
       // Reject a ghost id rather than storing a lock nothing can ever

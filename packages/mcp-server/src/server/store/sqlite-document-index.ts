@@ -9,6 +9,7 @@ import type {
   MoveDocumentInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
+  SetDocumentNameInput,
 } from '@kamiazya/whiteboard-canvas-ports'
 import {
   compareDocumentPaths,
@@ -141,6 +142,18 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .executeTakeFirst()
     if (!row?.kind) return null
     return toEntry(row)
+  }
+
+  async setDocumentName({ workspaceId, canvasId, name }: SetDocumentNameInput): Promise<void> {
+    const result = await this.db
+      .updateTable('canvases')
+      .set({ displayName: name ?? null })
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', canvasId)
+      .executeTakeFirst()
+    if (result.numUpdatedRows === 0n) {
+      throw new DocumentNotFoundError(workspaceId, canvasId)
+    }
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {

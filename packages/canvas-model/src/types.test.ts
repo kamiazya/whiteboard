@@ -32,12 +32,6 @@ import type {
   XWhiteboard,
   xWhiteboardSchema,
 } from './spatial.js'
-import type {
-  WorkspaceMeta,
-  WorkspaceTreeNodeData,
-  workspaceMetaSchema,
-  workspaceTreeNodeDataSchema,
-} from './workspace-tree.js'
 
 // Compile-time only: this file asserts every exported type is exactly
 // z.infer<typeof schema> for its schema, catching a hand-written type that
@@ -57,8 +51,6 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<SpatialCanvas>().toEqualTypeOf<z.infer<typeof spatialCanvasSchema>>()
   expectTypeOf<XWhiteboard>().toEqualTypeOf<z.infer<typeof xWhiteboardSchema>>()
   expectTypeOf<MarkdownCanvas>().toEqualTypeOf<z.infer<typeof markdownCanvasSchema>>()
-  expectTypeOf<WorkspaceTreeNodeData>().toEqualTypeOf<z.infer<typeof workspaceTreeNodeDataSchema>>()
-  expectTypeOf<WorkspaceMeta>().toEqualTypeOf<z.infer<typeof workspaceMetaSchema>>()
 })
 
 it('mdast: the lazy recursive schema stays typed as MdastNode, not any', () => {

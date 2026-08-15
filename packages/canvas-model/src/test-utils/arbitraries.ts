@@ -158,23 +158,6 @@ export const xWhiteboardArbitrary = fc.record({
 
 export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })
 
-const segmentArbitrary: fc.Arbitrary<string> = fc
-  .string({ minLength: 1, maxLength: 20 })
-  .filter((segment) => !segment.includes('/') && segment !== '.' && segment !== '..')
-
-export const workspaceTreeNodeDataArbitrary = fc.record({
-  canvasId: canonicalUlidArbitrary,
-  segment: segmentArbitrary,
-})
-
-export const workspaceMetaArbitrary = fc.dictionary(
-  fc.string({ minLength: 1, maxLength: 15 }),
-  fc.jsonValue(),
-  {
-    maxKeys: 4,
-  },
-)
-
 // ---------------------------------------------------------------------------
 // mdast content-model arbitraries. Valid-by-construction: each function only
 // ever generates a tree that is legal under the matching category schema in

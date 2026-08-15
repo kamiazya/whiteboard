@@ -1,5 +1,5 @@
 /**
- * Files tab: the OpenCanvas workspace file tree (/api/v1 alias world)
+ * Files tab: the OpenCanvas workspace file tree (/api/v1 path world)
  * reachable from the daemon index page, with a read-only OKF preview.
  */
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
@@ -31,11 +31,10 @@ function installFetchMock(
     status: 200,
     body: {
       canvases: [
-        { canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: 'notes', alias: 'notes' },
+        { canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
         {
           canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
-          segment: 'design',
-          alias: 'notes/design',
+          path: 'notes/design',
         },
       ],
     },
@@ -69,7 +68,7 @@ afterEach(() => {
 })
 
 describe('DaemonIndexPage tree view', () => {
-  it('shows the alias tree and previews a canvas OKF on click', async () => {
+  it('shows the path tree and previews a canvas OKF on click', async () => {
     installFetchMock()
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
@@ -80,7 +79,7 @@ describe('DaemonIndexPage tree view', () => {
     await waitFor(() => {
       expect(screen.getByTestId('workspace-files-panel')).not.toBeNull()
     })
-    // Nested alias renders as a tree branch, not a flat 'notes/design' row.
+    // A nested path renders as a tree branch, not a flat 'notes/design' row.
     expect(screen.queryByText('notes/design')).toBeNull()
     const design = await screen.findByText('design')
 

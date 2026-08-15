@@ -2,7 +2,7 @@
  * The daemon mounts server-core's /api/v1 OpenCanvas surface when given
  * ServerDeps. Until this slice, createServer(deps) was only used for its
  * MCP tools — the HTTP app it returns was never mounted, so the workspace
- * tree (canvasId + alias world) was unreachable over HTTP even though the
+ * tree (canvasId + path world) was unreachable over HTTP even though the
  * routes existed. The mount sits under the same /api/* daemon auth as every
  * other API route.
  */
@@ -83,24 +83,22 @@ describe('createApp /api/v1 OpenCanvas mount', () => {
     expect(res.status).toBe(404)
   })
 
-  it('round-trips create → list with the derived alias', async () => {
+  it('round-trips create → list with the document path', async () => {
     const deps = resolveServerDeps(createContainer())
     const app = createApp({ ...createRuntimeOptions('secret'), serverDeps: deps })
 
     const createRes = await app.request('/api/v1/workspaces/default/canvases', {
       method: 'POST',
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ segment: 'notes', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'notes', kind: 'spatial', createWorkspace: true }),
     })
     expect(createRes.status).toBe(201)
 
     const listRes = await app.request('/api/v1/workspaces/default/canvases', {
       headers: { Authorization: 'Bearer secret' },
     })
-    const body = (await listRes.json()) as { canvases: { segment: string; alias: string }[] }
-    expect(body.canvases.map((c) => ({ segment: c.segment, alias: c.alias }))).toEqual([
-      { segment: 'notes', alias: 'notes' },
-    ])
+    const body = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(body.canvases.map((c) => c.path)).toEqual(['notes'])
   })
 
   it('leaves /api/v1 unmounted (404) when no serverDeps are supplied', async () => {

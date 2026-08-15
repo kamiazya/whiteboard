@@ -2,7 +2,6 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -23,7 +22,7 @@ const NODE_WITH_EXTENSION = {
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
 }
 
 describe('exportJsonCanvas', () => {
