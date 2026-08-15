@@ -70,6 +70,25 @@ describe('saveCanvas / loadCanvas', () => {
     expect(loaded.getMovableList('elements').length).toBe(0)
   })
 
+  it('mints a canonical ULID for a new row, so both writers share one id space', async () => {
+    // The document index and saveCanvas both create rows in the same table.
+    // The index mints ULIDs (the port's DocumentEntry accepts nothing else),
+    // while saveCanvas minted nanoids — so every canvas created through the
+    // web UI became a row the agent surface must skip. Two writers, one
+    // table, one id policy.
+    await saveCanvas('session1', 'ulid-mint', new LoroDoc())
+    const { getDb } = await import('./db/index.js')
+    const { getDataDir } = await import('../config.js')
+    const db = await getDb(getDataDir())
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'ulid-mint')
+      .executeTakeFirst()
+    expect(row?.id).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+  })
+
   it('saves and restores a LoroDoc with elements', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
