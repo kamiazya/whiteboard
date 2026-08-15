@@ -227,6 +227,27 @@ function migrateLegacyListToMovable(doc: LoroDoc): boolean {
   return true
 }
 
+/**
+ * Whether this daemon has ever registered the workspace.
+ *
+ * Exists so read surfaces can tell "empty" from "never heard of it". Nothing
+ * mints workspace ids ahead of use any more, but ids OUTLIVE the daemon that
+ * minted them — a browser keeps its paired workspace id in localStorage, and
+ * a rebuilt data dir does not know it. Answering such an id with empty lists
+ * and lazily-created empty docs reads exactly like the user's data being
+ * gone, when the truth is "not here".
+ */
+export async function workspaceExists(workspaceId: string): Promise<boolean> {
+  validateWorkspaceId(workspaceId)
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('workspaces')
+    .select(['id'])
+    .where('id', '=', workspaceId)
+    .executeTakeFirst()
+  return row !== undefined
+}
+
 export async function canvasExists(workspaceId: string, slug: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)

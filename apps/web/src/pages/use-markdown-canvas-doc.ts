@@ -38,6 +38,14 @@ export interface MarkdownCanvasDocState {
   /** Null until the initial load resolves, mirroring `body`. */
   readonly coreMeta: CanvasCoreMeta | null
   readonly setCoreMeta: (next: CanvasCoreMeta) => void
+  /**
+   * The loaded Loro instance, for composition-root CRDT bindings
+   * (loro-codemirror). Null until the initial load resolves. A binding
+   * mutates the 'body' text container and commits directly — the doc
+   * subscription below is what keeps `body` state and the save schedule in
+   * step with commits this hook did not make.
+   */
+  readonly doc: Loro | null
 }
 
 export function useMarkdownCanvasDoc(
@@ -47,6 +55,7 @@ export function useMarkdownCanvasDoc(
 ): MarkdownCanvasDocState {
   const [body, setBodyState] = useState<string | null>(null)
   const [coreMeta, setCoreMetaState] = useState<CanvasCoreMeta | null>(null)
+  const [doc, setDoc] = useState<Loro | null>(null)
   const docRef = useRef<Loro | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loroRef = useRef(loro)
@@ -55,11 +64,13 @@ export function useMarkdownCanvasDoc(
   useEffect(() => {
     if (!enabled || canvasId === null) {
       docRef.current = null
+      setDoc(null)
       setBodyState(null)
       setCoreMetaState(null)
       return
     }
     let cancelled = false
+    let unsubscribe: (() => void) | undefined
     void loroRef.current.load(canvasId).then((result) => {
       if (cancelled) return
       const doc = new Loro()
@@ -72,11 +83,23 @@ export function useMarkdownCanvasDoc(
         }
       }
       docRef.current = doc
+      // Subscribed AFTER the initial import, so loading never schedules a
+      // save of what was just loaded. This is how commits made OUTSIDE
+      // setBody — a CRDT binding mutating the 'body' container directly —
+      // still reach the body state (and the preview) and get persisted.
+      unsubscribe = doc.subscribe((event) => {
+        if (cancelled) return
+        setBodyState(doc.getText('body').toString())
+        setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+        if (event.by === 'local') scheduleSaveRef.current?.()
+      })
+      setDoc(doc)
       setBodyState(doc.getText('body').toString())
       setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
     })
     return () => {
       cancelled = true
+      unsubscribe?.()
       // FLUSH, not cancel. A pending debounce holds edits that are already in
       // the document and already on screen; dropping it loses whatever was
       // typed in the last 500ms before a canvas switch or unmount. For the
@@ -95,7 +118,10 @@ export function useMarkdownCanvasDoc(
   }, [canvasId, enabled])
 
   // One timer for both writers: they export the same document, so a second
-  // independent debounce would only duplicate the save.
+  // independent debounce would only duplicate the save. Reached through a
+  // ref from the doc subscription, which is created inside the load effect
+  // before this binding initializes on the first render.
+  const scheduleSaveRef = useRef<(() => void) | null>(null)
   const scheduleSave = useCallback(() => {
     if (canvasId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
@@ -106,6 +132,7 @@ export function useMarkdownCanvasDoc(
       void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
     }, SAVE_DEBOUNCE_MS)
   }, [canvasId])
+  scheduleSaveRef.current = scheduleSave
 
   const setBody = useCallback(
     (next: string) => {
@@ -138,5 +165,5 @@ export function useMarkdownCanvasDoc(
     [scheduleSave],
   )
 
-  return { body, setBody, coreMeta, setCoreMeta }
+  return { body, setBody, coreMeta, setCoreMeta, doc }
 }

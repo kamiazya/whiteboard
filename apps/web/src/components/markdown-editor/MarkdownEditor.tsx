@@ -1,3 +1,4 @@
+import type { Extension } from '@codemirror/state'
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
 import { type CanvasCoreMeta, canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
@@ -63,6 +64,13 @@ export interface MarkdownEditorProps {
    * MathJax/mermaid loaders (markdown-fragment-renderers.ts).
    */
   fragmentLoaders?: FragmentLoaders
+  /**
+   * Host-supplied CodeMirror extensions for the source pane — the CRDT
+   * binding seam (see SourcePane.extensions). When set, external `value`
+   * reconciliation is disabled: the binding owns editor<->document sync
+   * and `value` flows only outward (preview, word count).
+   */
+  sourceExtensions?: readonly Extension[]
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -83,10 +91,10 @@ const MIN_PREVIEW_WIDTH = 320
  * without overwriting the stored preference.
  *
  * Deliberately out of scope, each for a specific reason:
- * - CRDT binding (`loro-codemirror`) belongs to the sync slice: binding a
- *   CodeMirror instance to a CRDT document is a persistence/collaboration
- *   concern, and this component is a plain controlled `value`/`onChange`
- *   pair that owns neither.
+ * - CRDT binding (`loro-codemirror`) is the HOST's concern, wired through
+ *   `sourceExtensions`: this component stays a plain controlled
+ *   `value`/`onChange` pair, and a bound host disables the value-reconcile
+ *   path because the binding owns editor<->document sync.
  * - Inline `$math$` renders as plain text runs: the layout's phrasing path
  *   has no fragment seam, and a sized inline fragment inside a wrapped
  *   line is its own layout problem. Block math and mermaid fences render
@@ -193,6 +201,7 @@ export function MarkdownEditor({
   onOpenCanvas,
   resolveEmbed,
   fragmentLoaders,
+  sourceExtensions,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
@@ -370,6 +379,10 @@ export function MarkdownEditor({
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"
+            extensions={sourceExtensions}
+            // A CRDT binding owns editor<->document sync; the controlled
+            // reconcile path would race it (see SourcePane).
+            reconcileExternalValue={sourceExtensions === undefined}
           />
         </div>
         {effectiveMode === 'split' && (
