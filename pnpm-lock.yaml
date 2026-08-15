@@ -76,6 +76,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-u12wT5x9skXDbQswB0QA0cyMb8Rq77Un0zgbIGMqFDY=
 
+patchedDependencies:
+  mdast-util-gfm-task-list-item@2.0.0: 46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47
+
 importers:
 
   .:
@@ -13550,7 +13553,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm-task-list-item@2.0.0:
+  mdast-util-gfm-task-list-item@2.0.0(patch_hash=46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
@@ -13566,7 +13569,7 @@ snapshots:
       mdast-util-gfm-footnote: 2.1.0
       mdast-util-gfm-strikethrough: 2.0.0
       mdast-util-gfm-table: 2.0.0
-      mdast-util-gfm-task-list-item: 2.0.0
+      mdast-util-gfm-task-list-item: 2.0.0(patch_hash=46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color

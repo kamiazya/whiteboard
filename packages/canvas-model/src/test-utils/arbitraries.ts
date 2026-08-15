@@ -187,18 +187,9 @@ const inlineCodeLeafArbitrary = fc
   .string({ maxLength: 20 })
   .map((value) => ({ type: 'inlineCode' as const, value }))
 const breakLeafArbitrary: fc.Arbitrary<{ type: 'break' }> = fc.constant({ type: 'break' })
-// html values carry a non-whitespace character by construction: a real
-// parse can never produce an html node whose value is blank (the value IS
-// the raw source of an html construct), and a blank one serializes to
-// nothing — which strands a GFM task-list checkbox onto a continuation
-// line (`*\n[ ] x`) and trips a dev-only upstream assert
-// (mdast-util-gfm-task-list-item@2.0.0 exitCheck, via devlop; production
-// builds no-op the assert). Exclusion, not a fix: tracked as the
-// remark-taskitem-continuation-crash issue until upstream repairs it.
-const nonBlankHtmlValue = fc
-  .string({ minLength: 1, maxLength: 20 })
-  .filter((value) => value.trim().length > 0)
-const htmlLeafArbitrary = nonBlankHtmlValue.map((value) => ({ type: 'html' as const, value }))
+const htmlLeafArbitrary = fc
+  .string({ maxLength: 20 })
+  .map((value) => ({ type: 'html' as const, value }))
 const imageLeafArbitrary = fc
   .record({ url: fc.webUrl(), title: optionalNullableString, alt: optionalNullableString })
   .map(({ url, title, alt }) => ({ type: 'image' as const, url, title, alt }))
@@ -331,11 +322,9 @@ const definitionLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
     url,
     title,
   }))
-// Same non-blank rule as htmlLeafArbitrary above, same upstream reason.
-const flowHtmlLeafArbitrary: fc.Arbitrary<MdastFlowContent> = nonBlankHtmlValue.map((value) => ({
-  type: 'html',
-  value,
-}))
+const flowHtmlLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
+  .string({ maxLength: 20 })
+  .map((value) => ({ type: 'html', value }))
 const mathLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
   .record({
     value: fc.string({ maxLength: 20 }),
