@@ -116,7 +116,7 @@ export function CanvasActionsMenu({
              this page's own DOM. */}
       {typeof document !== 'undefined' &&
         createPortal(
-          <div aria-live="polite" role="status" className="sr-only">
+          <div aria-live="polite" role="status" aria-label="Copy status" className="sr-only">
             {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
             {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
           </div>,
