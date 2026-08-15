@@ -193,6 +193,102 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
 })
 
 /**
+ * Keyed off the same `spatialNodeArb` file pool as the facet resolver
+ * above, so generated canvases exercise every `composeFileMarkdown` path:
+ * a body that renders, an empty body that degrades, and a reference the
+ * resolver does not know.
+ */
+function fakeResolveFileMarkdown(file: string): MdastRoot | undefined {
+  if (file === 'a.md') {
+    return {
+      type: 'root',
+      children: [
+        { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Body' }] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'prose that wraps somewhere' }] },
+      ],
+    }
+  }
+  if (file === 'notes/b.md') return { type: 'root', children: [] }
+  return undefined
+}
+
+describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
+  const bare = { measure, parseBody: fakeParseBody, appearance }
+  const withMarkdown = { ...bare, resolveFileMarkdown: fakeResolveFileMarkdown }
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'a resolving markdown resolver never throws and renders identically twice (determinism)',
+    (canvas) => {
+      const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, withMarkdown), { padding: 8 })
+      const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, withMarkdown), { padding: 8 })
+      expect(svgA).toBe(svgB)
+    },
+  )
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'an installed-but-silent resolver changes nothing (additivity)',
+    (canvas) => {
+      const withNoOpSeam = layoutSpatialCanvas(canvas, {
+        ...withMarkdown,
+        resolveFileMarkdown: () => undefined,
+      })
+      expect(withNoOpSeam).toEqual(layoutSpatialCanvas(canvas, bare))
+    },
+  )
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'a resolver that always throws is indistinguishable from no resolver (totality)',
+    (canvas) => {
+      const withThrowingSeam = layoutSpatialCanvas(canvas, {
+        ...withMarkdown,
+        resolveFileMarkdown: () => {
+          throw new Error('simulated resolver failure')
+        },
+      })
+      expect(withThrowingSeam).toEqual(layoutSpatialCanvas(canvas, bare))
+    },
+  )
+
+  fcTest.prop([spatialCanvasArb], withDefaults())(
+    'a resolved markdown body always outranks a resolved facet card',
+    (canvas) => {
+      // Stated against what the CARD-only layout actually rendered, not
+      // against the canvas: a node too small for any content degrades both
+      // seams, and asserting unconditionally would make this property pass
+      // vacuously on exactly those canvases (which the generator produces —
+      // it found this on a 0x0 node).
+      const cardOnly = collectRunText(
+        layoutSpatialCanvas(canvas, { ...bare, resolveFileFacets: fakeResolveFileFacets }).nodes,
+      )
+      if (!cardOnly.includes('Card')) return
+
+      const both = collectRunText(
+        layoutSpatialCanvas(canvas, {
+          ...withMarkdown,
+          resolveFileFacets: fakeResolveFileFacets,
+        }).nodes,
+      )
+      expect(both).toContain('Body')
+      expect(both).not.toContain('Card')
+    },
+  )
+})
+
+/** Every run's text anywhere in a scene, for content-level assertions. */
+function collectRunText(nodes: readonly unknown[]): string[] {
+  const out: string[] = []
+  const visit = (node: unknown) => {
+    if (node === null || typeof node !== 'object') return
+    const entry = node as { kind?: string; text?: string; runs?: unknown[]; children?: unknown[] }
+    if (entry.kind === 'textRun' && typeof entry.text === 'string') out.push(entry.text)
+    for (const run of entry.runs ?? []) visit(run)
+    for (const child of entry.children ?? []) visit(child)
+  }
+  for (const node of nodes) visit(node)
+  return out
+}
+
+/**
  * Live-drag parity: a mid-drag preview built with `layoutSpatialEdges` over
  * the moved canvas must equal the edge-and-label suffix of the committed
  * `layoutSpatialCanvas` of that same moved canvas — detours around

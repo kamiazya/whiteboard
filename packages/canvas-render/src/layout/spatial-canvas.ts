@@ -150,12 +150,28 @@ export interface SpatialLayoutOptions {
     file: string,
   ) => { readonly href: string; readonly alt?: string } | undefined
   /**
+   * Resolves a file node's reference to the already-parsed body of a
+   * referenced MARKDOWN document, laid out inline in the node's content
+   * area. Checked after the image and canvas-embed seams and BEFORE the
+   * facet card: a document's own prose says more about it than the facets
+   * describing it, and less than a spatial canvas or an image the caller
+   * already resolved. `undefined` or a throw keeps the lower-ranked
+   * rendering.
+   *
+   * Deliberately carries no title, unlike `MdastLayoutOptions.resolveEmbed`.
+   * A document's name lives in the workspace, not in its content
+   * (vocabulary.md), and `resolveFileLabel` is already the seam that
+   * resolves it; `resolveEmbed` carries one only because an embed mixed
+   * into prose has no other name source.
+   */
+  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
+  /**
    * Resolves a file node's reference to card content built from its facet
    * data. Checked LAST among the file-node content resolvers — after the
-   * image and canvas-embed seams — so it never outranks either; `undefined`,
-   * a throw, or card data with no usable title/rows (the common case for a
-   * document that carries no facets this caller maps) all keep the plain
-   * chrome+label rendering.
+   * image, canvas-embed and markdown seams — so it never outranks any of
+   * them; `undefined`, a throw, or card data with no usable title/rows (the
+   * common case for a document that carries no facets this caller maps) all
+   * keep the plain chrome+label rendering.
    */
   readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
 }
@@ -413,6 +429,87 @@ function composeFileImage(
 }
 
 /**
+ * Lays an mdast root out at a node's content width and keeps the blocks
+ * that fit its padded content box. `undefined` for a degenerate box or
+ * when not even the first block fits, so every caller degrades to its own
+ * lower-ranked rendering instead of painting a clipped fragment.
+ *
+ * Shared by the facet-card and markdown-body seams rather than duplicated:
+ * both put mdast blocks in a node box, and two producers of the same
+ * geometry is the drift class package-canvas-render.md's "one producer per
+ * geometry" rule exists to prevent.
+ *
+ * Truncation is at whole-block granularity: `layoutMdastBlocks` lays top-
+ * level blocks out with strictly increasing bottoms, so the blocks whose
+ * bottom fits are exactly a contiguous top prefix.
+ *
+ * ponytail: silently dropping the rest is the ceiling here — a "more"
+ * affordance needs a focusable DOM-overlay/keyboard treatment this
+ * pure-geometry package cannot own. Upgrade path is an editor-side overlay,
+ * not a scene node here.
+ */
+function fitBodyInNode(
+  node: SpatialNode,
+  root: MdastRoot,
+  options: ResolvedLayoutOptions,
+): Scene | undefined {
+  const padding = options.geometry.paddingPx
+  const innerW = node.width - 2 * padding
+  const innerH = node.height - 2 * padding
+  if (!(innerW > 0) || !(innerH > 0)) return undefined
+
+  const body = layoutMdastBlocks(root, {
+    measure: options.measure,
+    maxWidth: contentWidth(node.width, options),
+    fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+  })
+
+  // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
+  // no `bbox`); that guard is for the type checker, not runtime.
+  const fitted = body.nodes.filter(
+    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
+  )
+  return fitted.length === 0 ? undefined : { nodes: fitted }
+}
+
+/**
+ * The markdown-body rendering of a file node: the referenced document's
+ * own prose laid out inline in the node's content area, with the reference
+ * label placed OUTSIDE the frame exactly as `composeFileEmbed` does — both
+ * seams turn the node into a container showing another document, so they
+ * must read the same way.
+ *
+ * Returns `undefined` — falling through to the facet card, then the plain
+ * label — for every "nothing to show" path: no resolver, an `undefined` or
+ * thrown result, an empty body, or a box too small for even one block.
+ * Like every other file seam this is the expected common case rather than
+ * an error, so it is never reported via `onDegrade`.
+ */
+function composeFileMarkdown(
+  node: Extract<SpatialNode, { type: 'file' }>,
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] | undefined {
+  if (options.resolveFileMarkdown === undefined) return undefined
+  let root: MdastRoot | undefined
+  try {
+    root = options.resolveFileMarkdown(node.file)
+  } catch {
+    root = undefined
+  }
+  if (root === undefined) return undefined
+
+  const body = fitBodyInNode(node, root, options)
+  if (body === undefined) return undefined
+
+  const chrome = chromeShape(node, options)
+  const label = labelOf(node, options)
+  const placed = placeInNode(node, body, options)
+  return label === undefined
+    ? [chrome, ...placed]
+    : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), ...placed]
+}
+
+/**
  * The facet-card rendering of a file node: a bare heading line (the card's
  * `title`) followed by one paragraph per row (`label: value`), laid out
  * through `layoutMdastBlocks` — the same producer `composeTextNode` uses —
@@ -446,11 +543,6 @@ function composeFileFacets(
   const rows = card.rows.filter((row) => row.label.trim().length > 0 || row.value.trim().length > 0)
   if (title === undefined && rows.length === 0) return undefined
 
-  const padding = options.geometry.paddingPx
-  const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding
-  if (!(innerW > 0) || !(innerH > 0)) return undefined
-
   const blocks: MdastFlowContent[] = []
   if (title !== undefined) {
     blocks.push({ type: 'heading', depth: 3, children: [{ type: 'text', value: title }] })
@@ -465,31 +557,10 @@ function composeFileFacets(
     })
   }
 
-  const body = layoutMdastBlocks(
-    { type: 'root', children: blocks },
-    {
-      measure: options.measure,
-      maxWidth: contentWidth(node.width, options),
-      fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
-    },
-  )
+  const body = fitBodyInNode(node, { type: 'root', children: blocks }, options)
+  if (body === undefined) return undefined
 
-  // Truncate at whole-block granularity: layoutMdastBlocks lays top-level
-  // blocks out with strictly increasing bottoms, so the blocks whose bottom
-  // fits the padded content box are exactly a contiguous top prefix.
-  //
-  // ponytail: silently dropping the rest is the ceiling for this slice — a
-  // "more" affordance needs a focusable DOM-overlay/keyboard treatment this
-  // pure-geometry package cannot own. Upgrade path is an editor-side
-  // overlay in a later slice, not a scene node here.
-  // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
-  // no `bbox`); that guard is for the type checker, not runtime.
-  const fitted = body.nodes.filter(
-    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
-  )
-  if (fitted.length === 0) return undefined
-
-  return [chromeShape(node, options), ...placeInNode(node, { nodes: fitted }, options)]
+  return [chromeShape(node, options), ...placeInNode(node, body, options)]
 }
 
 /**
@@ -541,6 +612,8 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
           ? [chrome, embed]
           : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
       }
+      const markdown = composeFileMarkdown(node, options)
+      if (markdown !== undefined) return markdown
       const facets = composeFileFacets(node, options)
       if (facets !== undefined) return facets
       break
