@@ -276,3 +276,106 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
   )
   expect(points.some(([x, y]) => x === 300 && y! >= 100 && y! <= 200)).toBe(true)
 })
+
+it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', async () => {
+  // Past the offload threshold the committed anchors arrive asynchronously;
+  // a reply for an edit made just before the drag can land while the gesture
+  // is in flight. The points bystander edges are pinned to must not track
+  // it — swapping them under a moving hand is the exact re-fraction the
+  // committed-anchors capture exists to prevent. A stubbed Worker makes the
+  // reply land at a chosen moment.
+  class FakeWorker {
+    static instances: FakeWorker[] = []
+    static respond(data: unknown) {
+      for (const w of FakeWorker.instances)
+        for (const fn of w.listeners.get('message') ?? []) fn({ data })
+    }
+    private listeners = new Map<string, Set<(e: unknown) => void>>()
+    requests: { id?: number }[] = []
+    constructor() {
+      FakeWorker.instances.push(this)
+    }
+    addEventListener(type: string, fn: (e: unknown) => void) {
+      let set = this.listeners.get(type)
+      if (!set) {
+        set = new Set()
+        this.listeners.set(type, set)
+      }
+      set.add(fn)
+    }
+    removeEventListener(type: string, fn: (e: unknown) => void) {
+      this.listeners.get(type)?.delete(fn)
+    }
+    postMessage(msg: { id?: number }) {
+      this.requests.push(msg)
+    }
+    terminate() {}
+  }
+  vi.stubGlobal('Worker', FakeWorker)
+  try {
+    const big = (shift: number): SpatialCanvas => ({
+      nodes: [
+        { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
+        { id: 'p', type: 'text', x: 500, y: 100 + shift, width: 120, height: 60, text: 'P' },
+        { id: 'q', type: 'text', x: 500, y: 400 + shift, width: 120, height: 60, text: 'Q' },
+        ...Array.from({ length: 9 }, (_, i) => ({
+          id: `f${i}`,
+          type: 'text' as const,
+          x: 900 + i * 160,
+          y: 600,
+          width: 120,
+          height: 60,
+          text: `f${i}`,
+        })),
+      ],
+      edges: [{ id: 'bystander', fromNode: 'p', toNode: 'q' }],
+    })
+    function Host() {
+      const [canvas, setCanvas] = useState<SpatialCanvas>(() => big(0))
+      return (
+        <div style={{ width: 1200, height: 800 }}>
+          <button type="button" data-testid="edit" onClick={() => setCanvas(big(60))}>
+            edit
+          </button>
+          <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
+        </div>
+      )
+    }
+    const { container } = render(<Host />)
+    const root = rootOf(container)
+
+    // The edit whose worker reply will land mid-drag.
+    fireEvent.click(container.querySelector('[data-testid="edit"]') as HTMLElement)
+    await frame()
+
+    await dragWithoutRelease(root, [160, 130], [260, 280])
+    const live = container.querySelector('[data-testid="live-edges"]')
+    expect(live, 'the move gesture should be live').not.toBeNull()
+    const pathsBefore = [...(live?.querySelectorAll('polyline, path') ?? [])].map(
+      (el) => el.getAttribute('points') ?? el.getAttribute('d'),
+    )
+    expect(pathsBefore.length).toBeGreaterThan(0)
+
+    const lastId = FakeWorker.instances.flatMap((w) => w.requests).at(-1)?.id ?? 1
+    const { assignEdgeAnchors } = await import('@kamiazya/whiteboard-canvas-render')
+    FakeWorker.respond({
+      type: 'laid-out',
+      id: lastId,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      bounds: { x: 0, y: 0, w: 10, h: 10 },
+      scene: { nodes: [] },
+      anchors: assignEdgeAnchors(big(60).nodes, big(60).edges),
+    })
+    await frame()
+    await frame()
+
+    const pathsAfter = [
+      ...(container
+        .querySelector('[data-testid="live-edges"]')
+        ?.querySelectorAll('polyline, path') ?? []),
+    ].map((el) => el.getAttribute('points') ?? el.getAttribute('d'))
+    expect(pathsAfter).toEqual(pathsBefore)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

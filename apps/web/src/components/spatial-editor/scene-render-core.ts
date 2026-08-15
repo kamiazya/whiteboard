@@ -15,12 +15,13 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-mod
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   BoundingBox,
+  EdgeAnchorPair,
   FacetCardData,
   MeasureText,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  layoutSpatialCanvas,
+  layoutSpatialCanvasWithAnchors,
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -46,13 +47,20 @@ export interface RenderedCanvas {
   readonly svg: string
   readonly bounds: BoundingBox
   readonly scene: Scene
+  /**
+   * The edge-anchor map the layout routed with. Carried out so a consumer
+   * that needs the committed anchors (the drag overlay pins bystander edges
+   * to them) never re-runs the anchor pass — it is the most expensive step
+   * of the layout, and it already ran to produce this scene.
+   */
+  readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
 }
 
 export function renderCanvasToSvgWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
 ): RenderedCanvas {
-  const scene = layoutSpatialCanvas(canvas, {
+  const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
     measure: options.measure,
     parseBody: options.parseBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
@@ -65,5 +73,5 @@ export function renderCanvasToSvgWith(
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })
-  return { svg, bounds, scene }
+  return { svg, bounds, scene, anchors }
 }

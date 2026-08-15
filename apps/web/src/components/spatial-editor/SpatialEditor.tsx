@@ -72,7 +72,6 @@ import type {
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  assignEdgeAnchors,
   BODY_FONT_SIZE_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
@@ -174,6 +173,7 @@ import {
   ToolPalette,
 } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
+import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
@@ -737,7 +737,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // fast route through carried-side caching, and a round trip per frame
     // would be the wrong trade there. This is the path that blocks on every
     // node added and every drag dropped.
-    const { svg, bounds, scene } = useWorkerScene(
+    const { svg, bounds, scene, anchors } = useWorkerScene(
       canvas,
       { measure: resolvedMeasure, theme },
       fileSeamOptions,
@@ -871,10 +871,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * The returned `measure` memoizes per drag: edge labels measure on the
      * first live frame and every later frame re-places the cached metrics,
      * keeping pointermoves free of text measurement.
-     * ponytail: full render at the drag boundary is ~30ms on an 80-node
-     * canvas; if start/commit jank appears on much larger canvases, move
-     * layoutSpatialCanvas + an OffscreenCanvas measurer into a worker.
+     * ponytail: the backdrop render here is ~21ms at 45 nodes (the anchor
+     * pass, formerly ~7x that, now arrives with the committed scene); if
+     * start jank reappears on much larger canvases, the next rung is
+     * reusing the committed scene graph for the backdrop instead of
+     * re-rendering — drop the carried node runs, truncate at the first
+     * edge, re-render the remainder (composeNode is per-node pure, so the
+     * prefix equivalence holds while the backdrop stays edge-free).
      */
+    // The committed layout, FROZEN at gesture start. The worker's next
+    // reply may land mid-gesture, and BOTH halves matter: the anchors are
+    // the points bystander edges are pinned to, and the scene is what
+    // decides which edges are pin-eligible at all (frozenSidesOf) — a
+    // swapped scene silently un-pins every bystander even with the anchors
+    // held, which is the same re-fraction by another door.
+    const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
+    const gestureCommitted = useGestureCaptured(
+      gestureState.kind === 'moving' ||
+        gestureState.kind === 'resizing' ||
+        gestureState.kind === 'connecting',
+      committedPair,
+    )
     // Last optimized sides for the gesture's carried edges (see liveEdges).
     const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
     useEffect(() => {
@@ -905,19 +922,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         metricsCache.set(key, metrics)
         return metrics
       }
-      // The committed anchor state, captured once per gesture: liveEdges
-      // pins bystander edges to these exact points so a carried edge
-      // joining their (node, side) group cannot re-fraction them mid-drag.
-      const committedAnchors = assignEdgeAnchors(
-        canvas.nodes,
-        canvas.edges,
-        canvas['x-whiteboard']?.edgeRouting?.style,
-      )
-      return { carried, svg: rendered.svg, bounds: rendered.bounds, measure, committedAnchors }
+      // The committed anchor state: liveEdges pins bystander edges to these
+      // exact points so a carried edge joining their (node, side) group
+      // cannot re-fraction them mid-drag. Taken from the committed scene's
+      // OWN layout rather than re-run here — the anchor pass is the most
+      // expensive step of a layout (measured: ~7x the backdrop render), and
+      // these are also the anchors the pixels on screen were routed with,
+      // which a fresh pass over a newer canvas is not.
+      return {
+        carried,
+        svg: rendered.svg,
+        bounds: rendered.bounds,
+        measure,
+        committedAnchors: gestureCommitted.anchors,
+      }
       // isLocked closes over lockedNodeIds/lockEnabled, both listed.
     }, [
       gestureState,
       canvas,
+      gestureCommitted,
       extraIds,
       lockEnabled,
       lockedNodeIds,
@@ -987,13 +1010,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas around the pointer stays still and pointer frames skip the
       // crossing-optimization loop. The prospective edge itself derives
       // fresh each frame.
-      const frozenEdgeSides = frozenSidesOf(scene)
+      const frozenEdgeSides = frozenSidesOf(gestureCommitted.scene)
       return computeDragPreview(gestureState, boxes, livePoint, {
         canvas,
         selectableBoxes,
         frozenEdgeSides,
       })
-    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, scene])
+    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted])
 
     /**
      * EVERY edge, re-composed against the ghost's snapped live position and
@@ -1032,7 +1055,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           .map((edge) => edge.id),
       )
       const frozenSides = new Map(
-        [...frozenSidesOf(scene)]
+        [...frozenSidesOf(gestureCommitted.scene)]
           .filter(([id]) => !carriedEdgeIds.has(id))
           .map(([id, pair]) => {
             const pin = dragStatic.committedAnchors.get(id)
@@ -1084,7 +1107,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ),
         bounds: liveBounds,
       }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme, scene])
+    }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
 
     /**
      * The resized node's own content, re-rendered at its PREVIEW size each

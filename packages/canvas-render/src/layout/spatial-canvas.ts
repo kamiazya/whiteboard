@@ -362,7 +362,7 @@ function composeFileEmbed(
   }
   if (child === undefined) return undefined
 
-  const childScene = layoutSpatialCanvasInternal(child, {
+  const childScene = layoutSpatialCanvasInternalScene(child, {
     ...options,
     embedPath: new Set([...options.embedPath, node.file]),
     embedDepth: options.embedDepth + 1,
@@ -644,6 +644,21 @@ function composeEdgeLabel(
  * `resolveGeometry`) and threaded to every helper as `ResolvedLayoutOptions`.
  */
 export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayoutOptions): Scene {
+  return layoutSpatialCanvasWithAnchors(canvas, options).scene
+}
+
+/**
+ * `layoutSpatialCanvas` plus the edge-anchor map the layout itself routed
+ * with. The anchor pass is the most expensive step of the whole layout, and
+ * the editor's drag start needs exactly the committed anchors — so a caller
+ * holding the scene must never have to re-run the pass to get them. Same
+ * one-producer rule as `layoutSpatialEdges`: this IS the layout, not a
+ * second computation beside it.
+ */
+export function layoutSpatialCanvasWithAnchors(
+  canvas: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
@@ -652,18 +667,27 @@ export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayou
   })
 }
 
-function layoutSpatialCanvasInternal(
+/** The embed path needs only the scene; the anchor map is per-top-level-canvas. */
+function layoutSpatialCanvasInternalScene(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): Scene {
+  return layoutSpatialCanvasInternal(canvas, resolved).scene
+}
+
+function layoutSpatialCanvasInternal(
+  canvas: SpatialCanvas,
+  resolved: ResolvedLayoutOptions,
+): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
-  return { nodes: [...nodeContent, ...composeEdgesAndLabels(canvas, resolved)] }
+  const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
+  return { scene: { nodes: [...nodeContent, ...content] }, anchors }
 }
 
 function composeEdgesAndLabels(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
-): SceneNode[] {
+): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
   const anchors = assignEdgeAnchors(
@@ -689,7 +713,7 @@ function composeEdgesAndLabels(
   const labelContent = canvas.edges
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
     .filter((label): label is TextRunNode => label !== undefined)
-  return [...edgeContent, ...labelContent]
+  return { content: [...edgeContent, ...labelContent], anchors }
 }
 
 /**
@@ -710,5 +734,5 @@ export function layoutSpatialEdges(
     geometry: resolveGeometry(options.geometry),
     embedPath: new Set(),
     embedDepth: 0,
-  })
+  }).content
 }
