@@ -45,6 +45,7 @@
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "loro-codemirror": "^0.3.3",
     "loro-crdt": "catalog:",
     "lucide-react": "^1.28.0",
     "mathjax-full": "^3.2.2",

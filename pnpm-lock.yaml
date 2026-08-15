@@ -185,6 +185,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      loro-codemirror:
+        specifier: ^0.3.3
+        version: 0.3.3(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6)
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6
@@ -6076,6 +6079,13 @@ packages:
 
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
+
+  loro-codemirror@0.3.3:
+    resolution: {integrity: sha512-C6qAUmDjMTyoXVeDxKWixvr/TSTo/jXFrvgGW+wn6RAHeIzNFovBDLQNi/Sary4Ahx8DaYADTCm9eCaRAjvWtw==}
+    peerDependencies:
+      '@codemirror/state': ^6.0.0
+      '@codemirror/view': ^6.7.0
+      loro-crdt: ^1.8.2
 
   loro-crdt@1.13.6:
     resolution: {integrity: sha512-OsnKW64J+1XdCMafAqR+aASn/wQEgDzwcDwu6dDOVSxxbLPFgnU6LX8ja+hd5PnEcT+kuz9eXSagvlYXsRbQIw==}
@@ -13408,6 +13418,12 @@ snapshots:
   long@5.3.2: {}
 
   longest-streak@3.1.0: {}
+
+  loro-codemirror@0.3.3(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6):
+    dependencies:
+      '@codemirror/state': 6.7.1
+      '@codemirror/view': 6.43.7
+      loro-crdt: 1.13.6
 
   loro-crdt@1.13.6: {}
 
