@@ -146,7 +146,20 @@ describe('createFileGcSweeper scheduling', () => {
   })
 
   it('runs a pass after intervalMs elapses and reschedules', async () => {
-    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    // Each pass blocks on its own gate until the test releases it. The
+    // reschedule arm only lands after a pass COMPLETES, so while a gate is
+    // held no further pass can fire — which is what makes the exact call
+    // counts below deterministic. The previous shape (auto-resolving purge
+    // plus bounded extra advances) tolerated the second pass slipping LATE,
+    // but under heavy parallel-worker load a single advance step could land
+    // pass 1's call AND fire pass 2 before the count was inspected, failing
+    // `toHaveBeenCalledTimes(1)` in the other direction.
+    const gates = [
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+    ] as const
+    let passIndex = 0
+    const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
       listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
@@ -159,16 +172,14 @@ describe('createFileGcSweeper scheduling', () => {
     expect(purge).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
-    // The completion-reschedule arm lands after the pass settles; under
-    // heavy parallel-worker load that can slip past a single advance, so
-    // advance bounded extra intervals until the second pass fires. The
-    // invariant under test is "reschedules after completion", not exact
-    // phase alignment (single-flight/stop have their own deterministic
-    // tick()-based tests).
-    for (let i = 0; i < 5 && purge.mock.calls.length < 2; i++) {
-      await advanceTimersAndFlush(1000)
-    }
+    // Releasing gate 1 lets the pass settle, which is what arms the next
+    // interval — the reschedule under test.
+    gates[0].resolve({ purgedCount: 0, purgedBytes: 0 })
+    await advanceTimersAndFlush(1000)
+    await advanceUntilCalls(purge, 2)
     expect(purge).toHaveBeenCalledTimes(2)
+
+    gates[1].resolve({ purgedCount: 0, purgedBytes: 0 })
     await sweeper.stop()
   })
 
