@@ -17,11 +17,19 @@ import '../components/WorkspaceTopBar.js'
 beforeEach(() => {
   // jsdom has no fullscreen at all; start each test explicitly OUT of it.
   setFullscreenElement(null)
+  // …and jsdom is therefore an environment the app now HIDES the affordance
+  // in (iPhone Safari is the real one — see lib/fullscreen-support.ts). These
+  // tests are about what fullscreen does once available, so they present a
+  // capable environment: the method has to exist before the page renders,
+  // since that is when the component reads the capability.
+  Element.prototype.requestFullscreen = vi.fn(() => Promise.resolve())
 })
 
 afterEach(() => {
   cleanup()
   setFullscreenElement(null)
+  // biome-ignore lint/performance/noDelete: restore jsdom's real (absent) shape rather than leaving a stub for other files
+  delete (Element.prototype as { requestFullscreen?: unknown }).requestFullscreen
   vi.restoreAllMocks()
 })
 
