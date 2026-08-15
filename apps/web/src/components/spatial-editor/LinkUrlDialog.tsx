@@ -94,18 +94,20 @@ export function LinkUrlDialog({ title, initialUrl, onSubmit, onCancel }: LinkUrl
             className="w-72 rounded border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
           />
         </label>
-        {refusal !== null && (
-          // Polite, not assertive: this updates on every keystroke, and an
-          // alert on each one would talk over the typing it is describing.
-          <p
-            id={errorId}
-            data-testid="link-url-error"
-            role="status"
-            className="max-w-72 text-destructive text-xs"
-          >
-            {refusal}
-          </p>
-        )}
+        {/* Always mounted, even while empty. A live region that arrives in
+            the DOM already carrying its message is announced inconsistently
+            (Safari+VoiceOver, some NVDA setups); one that is already there
+            when its text changes is not. Polite rather than assertive
+            because this updates on every keystroke, and an alert on each one
+            would talk over the typing it is describing. */}
+        <p
+          id={errorId}
+          data-testid="link-url-error"
+          role="status"
+          className="max-w-72 text-destructive text-xs empty:hidden"
+        >
+          {refusal ?? ''}
+        </p>
         <div className="flex justify-end gap-2">
           <button
             type="button"

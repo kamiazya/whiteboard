@@ -21,15 +21,17 @@ function renderDialog() {
   const ok = [...container.querySelectorAll('button')].find(
     (b) => b.textContent === 'OK',
   ) as HTMLButtonElement
-  return { container, input, ok, submitted }
+  return { input, ok, submitted }
 }
 
 it('says nothing while the field is still empty', () => {
-  const { container, ok } = renderDialog()
+  const { ok } = renderDialog()
 
   // An untouched field is not a mistake, and an error sitting there before
   // anyone has typed reads as a broken dialog.
-  expect(container.querySelector('[data-testid="link-url-error"]')).toBeNull()
+  // The live region itself IS present — one that appears together with its
+  // first message is announced inconsistently — but it says nothing.
+  expect(screen.getByTestId('link-url-error').textContent).toBe('')
   expect(ok.disabled).toBe(true)
 })
 
@@ -77,7 +79,10 @@ it('takes the message back down once the address is usable', () => {
   fireEvent.change(input, { target: { value: 'nope' } })
   fireEvent.change(input, { target: { value: 'https://example.com' } })
 
-  expect(screen.queryByTestId('link-url-error')).toBeNull()
+  expect(screen.getByTestId('link-url-error').textContent).toBe('')
   expect(input.getAttribute('aria-invalid')).toBe('false')
+  // And the field stops pointing at it: a description that resolves to
+  // nothing is worse than no description.
+  expect(input.hasAttribute('aria-describedby')).toBe(false)
   expect(ok.disabled).toBe(false)
 })
