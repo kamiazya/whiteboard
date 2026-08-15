@@ -79,12 +79,24 @@ export const FONT_DEGRADED = 'font-degraded'
  * silent content regression — worse than the jank this worker exists to
  * remove.
  */
-export function canLayoutInWorker(options: {
-  readonly resolveFileCanvas?: unknown
-  readonly expandFileNode?: unknown
-  readonly resolveFileImage?: unknown
-  readonly resolveFileFacets?: unknown
-}): boolean {
+export function canLayoutInWorker(
+  options: {
+    readonly resolveFileCanvas?: unknown
+    readonly expandFileNode?: unknown
+    readonly resolveFileImage?: unknown
+    readonly resolveFileFacets?: unknown
+  },
+  canvas: SpatialCanvas,
+): boolean {
+  // The seams only disqualify a canvas that could actually CALL one: every
+  // seam here is keyed on a file reference, so a canvas without a file node
+  // lays out identically with or without them. This is judged per canvas
+  // rather than per host because the real pages supply the seams
+  // UNCONDITIONALLY (useCanvasFileSeams returns them whether or not any file
+  // node exists) — a presence check reads as "this host has file support"
+  // and silently turns the worker off for every production canvas.
+  const hasFileNode = canvas.nodes.some((node) => node.type === 'file')
+  if (!hasFileNode) return true
   return (
     options.resolveFileCanvas === undefined &&
     options.expandFileNode === undefined &&

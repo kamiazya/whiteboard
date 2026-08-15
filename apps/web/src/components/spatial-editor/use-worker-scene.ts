@@ -86,7 +86,7 @@ export function useWorkerScene(
     () => ({ ...base, ...fileSeamOptions }),
     [base.measure, base.theme, fileSeamOptions],
   )
-  const offloadable = canLayoutInWorker(fileSeamOptions) && worthOffloading(canvas)
+  const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
   // the first render, and any render the worker cannot serve.
   const renderNow = () => renderCanvasToSvg(canvas, options)
