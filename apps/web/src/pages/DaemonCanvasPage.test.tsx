@@ -138,6 +138,39 @@ describe('DaemonCanvasPage', () => {
     vi.clearAllMocks()
   })
 
+  it('renders a workspace-not-found list failure as an error, never as an empty workspace', async () => {
+    // The daemon now answers 404 for a workspace it has never registered —
+    // the reachable case being a stale pairing, since a browser keeps its
+    // paired workspace id in localStorage and ids outlive the install that
+    // minted them. Rendering that as "This workspace has no canvases yet"
+    // plus a Create button reads as the user's data being GONE, and invites
+    // them to start over inside a workspace that never existed here. The
+    // error screen, with the daemon's own title, is the honest rendering.
+    const { DaemonApiError } = await vi.importActual<typeof import('../lib/daemon-api-client.js')>(
+      '../lib/daemon-api-client.js',
+    )
+    mockListCanvases.mockRejectedValue(
+      new DaemonApiError('Workspace "stale-pairing" not found', 404),
+    )
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="stale-pairing"
+          createBackend={makeCreateBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('Workspace "stale-pairing" not found')).toBeTruthy(),
+    )
+    expect(screen.queryByText('This workspace has no canvases yet.')).toBeNull()
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+  })
+
   it('mounts the editor with a mocked backend and renders the canvas list', async () => {
     await act(async () => {
       render(

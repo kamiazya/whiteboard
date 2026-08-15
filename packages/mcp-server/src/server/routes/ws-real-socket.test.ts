@@ -76,7 +76,7 @@ vi.mock('../config.js', async () => {
 
 const { setDataDirForTests, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
 const { clearCache } = await import('../store/doc-cache.js')
-const { loadCanvas } = await import('../store/canvas-store.js')
+const { loadCanvas, saveCanvas } = await import('../store/canvas-store.js')
 const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
 
 // Snapshot of initialFakeHomeDir's contents immediately after the
@@ -189,6 +189,10 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     scratchDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-real-socket-'))
     await mkdir(join(scratchDir, 'session1'), { recursive: true })
     setDataDirForTests(scratchDir)
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
