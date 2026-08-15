@@ -1,22 +1,29 @@
 /**
- * Whether this browser offers element fullscreen at all.
+ * Whether this browser can put an ELEMENT into fullscreen.
  *
- * iPhone Safari does not: the Fullscreen API is video-only there (iPad
- * Safari and every desktop browser do offer it), so `Fullscreen` was a
- * button that visibly did nothing on a phone. `document.fullscreenEnabled`
- * is exactly the standard's answer to this question — it is `false` when
- * fullscreen is unavailable, including when an embedding iframe withholds
- * the permission.
+ * iPhone Safari cannot: its Fullscreen API is video-only (iPad Safari and
+ * every desktop browser do offer the element API), so `Fullscreen` was a
+ * button that visibly did nothing on a phone.
  *
- * Only an explicit `false` counts as unsupported: a runtime that does not
- * implement the property at all (jsdom) reports `undefined`, and hiding
- * the affordance there would mean tests exercising a UI no real browser
- * shows. Safari's legacy `webkitFullscreenEnabled` is consulted for the
- * same reason — an older WebKit that answers only under the prefix must
- * not be read as "unsupported".
+ * Detection is by CAPABILITY — does the element actually have a
+ * `requestFullscreen` method — not by `document.fullscreenEnabled` alone.
+ * That was the first attempt and it shipped the bug it was meant to fix:
+ * iPhone Safari does not implement the property at all, so it reads
+ * `undefined`, and "only an explicit false means unsupported" let the
+ * button through on exactly the device it was hidden for. A runtime that
+ * implements the whole API absent (jsdom) also has no method, and hiding
+ * there is correct too — no jsdom test asserts the affordance exists.
+ *
+ * `fullscreenEnabled === false` is still honoured on top: a browser that
+ * HAS the method can still refuse (an iframe without the permission), and
+ * that answer is authoritative.
  */
 export function isFullscreenSupported(doc: Document = document): boolean {
-  const legacy = (doc as Document & { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled
-  if (doc.fullscreenEnabled === false && legacy !== true) return false
-  return true
+  const root = doc.documentElement as (HTMLElement & { webkitRequestFullscreen?: unknown }) | null
+  if (root === null) return false
+  const hasMethod =
+    typeof root.requestFullscreen === 'function' ||
+    typeof root.webkitRequestFullscreen === 'function'
+  if (!hasMethod) return false
+  return doc.fullscreenEnabled !== false
 }

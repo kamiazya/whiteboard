@@ -57,3 +57,27 @@ it('offers the kebab item too where the browser supports it', async () => {
   await openKebab(container)
   expect(document.querySelector('[role="menuitem"]')?.textContent).toContain('Fullscreen')
 })
+
+it('hides Fullscreen on the real iPhone shape: no element API at all', async () => {
+  // The shape that shipped the first version of this bug. iPhone Safari's
+  // Fullscreen API is video-only: documentElement has no
+  // requestFullscreen, AND `fullscreenEnabled` is not implemented either
+  // — so a check that only rejected an explicit `false` let the button
+  // through on exactly the device it was hidden for.
+  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: unknown }
+  const original = Object.getOwnPropertyDescriptor(Element.prototype, 'requestFullscreen')
+  Object.defineProperty(root, 'requestFullscreen', { configurable: true, value: undefined })
+  Object.defineProperty(root, 'webkitRequestFullscreen', { configurable: true, value: undefined })
+  try {
+    const { container } = render(<TopBarSecondaryActions onToggleFullscreen={() => {}} />)
+    expect(container.querySelector('[aria-label="Fullscreen"]')).toBeNull()
+    await openKebab(container)
+    expect(document.body.textContent).not.toContain('Fullscreen')
+  } finally {
+    // biome-ignore lint/performance/noDelete: restoring an own-property shadow is exactly what delete is for
+    delete (root as { requestFullscreen?: unknown }).requestFullscreen
+    // biome-ignore lint/performance/noDelete: same
+    delete (root as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen
+    expect(original).toBeDefined()
+  }
+})

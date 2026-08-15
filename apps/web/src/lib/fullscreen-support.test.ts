@@ -1,28 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { isFullscreenSupported } from './fullscreen-support.js'
 
-function fakeDoc(props: Record<string, unknown>): Document {
-  return props as unknown as Document
+function fakeDoc(root: Record<string, unknown> | null, docProps: Record<string, unknown> = {}) {
+  return { documentElement: root, ...docProps } as unknown as Document
 }
 
 describe('isFullscreenSupported', () => {
-  it('is false where the browser says fullscreen is unavailable (iPhone Safari)', () => {
-    expect(isFullscreenSupported(fakeDoc({ fullscreenEnabled: false }))).toBe(false)
+  it('is false where the element API is absent (iPhone Safari: video-only)', () => {
+    // The device shape that made this function necessary: no
+    // requestFullscreen at all, and `fullscreenEnabled` not implemented
+    // either — so it reads undefined, not false.
+    expect(isFullscreenSupported(fakeDoc({}))).toBe(false)
   })
 
-  it('is true where the browser offers it', () => {
-    expect(isFullscreenSupported(fakeDoc({ fullscreenEnabled: true }))).toBe(true)
+  it('is true where the element API exists', () => {
+    expect(isFullscreenSupported(fakeDoc({ requestFullscreen: () => {} }))).toBe(true)
   })
 
-  it('honours the legacy WebKit answer when the standard one says no', () => {
+  it('accepts the legacy prefixed method', () => {
+    expect(isFullscreenSupported(fakeDoc({ webkitRequestFullscreen: () => {} }))).toBe(true)
+  })
+
+  it('honours an explicit refusal even when the method exists (embedded iframe)', () => {
     expect(
-      isFullscreenSupported(fakeDoc({ fullscreenEnabled: false, webkitFullscreenEnabled: true })),
-    ).toBe(true)
+      isFullscreenSupported(fakeDoc({ requestFullscreen: () => {} }, { fullscreenEnabled: false })),
+    ).toBe(false)
   })
 
-  it('assumes supported where the property is absent (non-browser runtimes)', () => {
-    // jsdom implements no fullscreen at all; hiding the affordance there
-    // would mean tests exercising a UI no real browser shows.
-    expect(isFullscreenSupported(fakeDoc({}))).toBe(true)
+  it('is false, never a throw, with no document element at all', () => {
+    expect(isFullscreenSupported(fakeDoc(null))).toBe(false)
   })
 })
