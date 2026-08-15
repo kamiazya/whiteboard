@@ -209,6 +209,22 @@
    * a FINITE iteration count at the use site keeps it a pulse that
    * guides attention on entry, never a standing ping.
    */
+  /* The selection outline sketches itself in — draw once, hold, never
+     loop. A CSS animation on purpose: the global prefers-reduced-motion
+     collapse above turns it into the finished form with no JS branch. */
+  @keyframes selection-draw {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .selection-draw {
+    stroke-dasharray: 100;
+    animation: selection-draw var(--motion-duration-fast) var(--motion-ease-out) 1 both;
+  }
+
   @keyframes attention-pulse {
     from {
       transform: scale(1);

@@ -94,11 +94,18 @@ export function SelectionOverlay({
           and connect controls, so hiding it would undo their keyboard path. */}
       {/* Purely visual chrome — the interactive controls below carry their own role/label. */}
       <rect
+        data-testid="selection-outline"
         aria-hidden="true"
         // SVG shape elements can be natively focusable in some browsers even
         // without an explicit tabIndex; tabIndex={-1} keeps this decorative
         // outline out of the tab order to match its aria-hidden intent.
         tabIndex={-1}
+        // Draws itself once and stops (BRAND.md motion grammar). pathLength
+        // normalises the perimeter so the keyframes need no measurements;
+        // the caller remounts this component per selection TARGET, which is
+        // what replays the draw for a new selection but not per drag frame.
+        pathLength={100}
+        className="selection-draw"
         x={box.x}
         y={box.y}
         width={box.width}
@@ -170,6 +177,9 @@ export function SelectionOverlay({
         <rect
           key={`marker-${handle.kind}`}
           aria-hidden="true"
+          // Same reason as the outline: SVG shapes can be natively focusable
+          // in some browsers, and aria-hidden on a focusable is a trap.
+          tabIndex={-1}
           x={handle.box.x}
           y={handle.box.y}
           width={handle.box.width}
@@ -185,6 +195,7 @@ export function SelectionOverlay({
           <g key={side.kind}>
             <circle
               aria-hidden="true"
+              tabIndex={-1}
               cx={side.cx(box, connectHandleSize)}
               cy={side.cy(box, connectHandleSize)}
               r={connectHandleSize / 2}

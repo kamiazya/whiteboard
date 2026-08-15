@@ -3105,6 +3105,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )}
           {selection !== undefined && selectionBox !== undefined && (
             <SelectionOverlay
+              // Keyed by TARGET: a new selection remounts the overlay and
+              // replays the outline's draw-once; dragging or resizing the
+              // same node keeps the element and stays still.
+              key={selection.id}
               box={selectionBox}
               zoom={viewport.zoom}
               onHandlePointerDown={(handle, _handleBox, e) => {
