@@ -310,8 +310,13 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // an empty box the user would have to retype.
     expect((title as HTMLInputElement).value).toBe('Diagram A')
 
+    // clear(), not a select-all chord: the browser's select-all is Cmd+A on
+    // macOS and Ctrl+A elsewhere, so `{Control>}a{/Control}` selects nothing
+    // on a Mac and the new title appends to the old one ("Diagram
+    // AArchitecture map"). clear() drives the field's own selection API and
+    // means the same thing on every platform.
     await userEvent.click(title)
-    await userEvent.keyboard('{Control>}a{/Control}')
+    await userEvent.clear(title)
     await userEvent.keyboard('Architecture map')
     await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
     await screen.findByRole('menuitem', { name: /Architecture map/ }, { timeout: 10_000 })
