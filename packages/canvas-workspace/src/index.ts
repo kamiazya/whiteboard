@@ -1,4 +1,3 @@
-export { createAliasResolver } from './alias-resolver.js'
 export {
   deleteSpatialEdge,
   deleteSpatialNode,
@@ -19,5 +18,3 @@ export {
   writeSpatialEdge,
   writeSpatialNode,
 } from './loro-bridge.js'
-export type { WorkspaceNode, WorkspaceTreeSnapshot } from './workspace-tree.js'
-export { WorkspaceTree } from './workspace-tree.js'
