@@ -22,6 +22,12 @@
 //   - Change port binding to 0.0.0.0 → test "loopback port binding" fails.
 //   - Remove WHITEBOARD_SERVER_JWKS_URI from env example → required vars test fails.
 //   - Add `--allowed-origins=*` to env example → forbidden pattern test fails.
+//   - Revert the env example's usage comment to `cp .env.server.example .env.server`
+//     (or change compose's env_file to .env.server) → test "usage comment names the
+//     same env file that compose env_file declares" fails.
+//   - Drop the `NODE_VERSION="$(cat .node-version)"` prefix from the env example's
+//     compose-up instruction → test "usage comment keeps the NODE_VERSION build-arg
+//     prefix" fails, while the cp-target equality test above stays green.
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -197,6 +203,24 @@ describe('.env.server.example contracts', () => {
 
   it('does not reference the whiteboard daemon run command', () => {
     expect(envExample).not.toMatch(/whiteboard daemon run/)
+  })
+
+  it('usage comment names the same env file that compose env_file declares', () => {
+    const composeEnvFile = compose.match(/env_file:\s*\n\s*-\s*(\S+)/)
+    expect(composeEnvFile).not.toBeNull()
+    const cpTarget = envExample.match(/cp \.env\.server\.example\s+(\S+)/)
+    expect(cpTarget).not.toBeNull()
+    expect(cpTarget![1]).toBe(composeEnvFile![1])
+  })
+
+  it('usage comment keeps the NODE_VERSION build-arg prefix on the compose up line', () => {
+    expect(envExample).toMatch(
+      /NODE_VERSION="\$\(cat \.node-version\)" docker compose -f docker-compose\.server\.yml up -d --build/,
+    )
+  })
+
+  it('does not reference the stale --env-file .env.server instruction', () => {
+    expect(envExample).not.toContain('--env-file .env.server')
   })
 })
 
