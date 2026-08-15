@@ -2,6 +2,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import {
   boxContains,
+  cornerHitBoxes,
+  edgeBandBoxes,
   findFreeSpot,
   hitTest,
   indexNodeBoxes,
@@ -91,12 +93,60 @@ describe('boxContains', () => {
 })
 
 describe('resizeHandleBoxes', () => {
-  it('produces 8 handles sized inversely to zoom so they stay constant on screen', () => {
+  it('draws CORNERS only, sized inversely to zoom so they stay constant on screen', () => {
     const box = { x: 0, y: 0, width: 100, height: 100 }
     const handles = resizeHandleBoxes(box, 2)
-    expect(handles).toHaveLength(8)
+    // Edge-midpoint handles are gone as chrome: the whole edge is the grab
+    // (edgeBandBoxes below), so only the corners need a visible marker.
+    expect(handles.map((h) => h.kind)).toEqual(['nw', 'ne', 'se', 'sw'])
     for (const h of handles) {
       expect(h.box.width).toBeCloseTo(8 / 2)
+    }
+  })
+})
+
+describe('cornerHitBoxes', () => {
+  it('centers a hit box of the requested SCREEN size on each corner', () => {
+    const box = { x: 0, y: 0, width: 100, height: 100 }
+    const hits = cornerHitBoxes(box, 2, 24)
+    expect(hits.map((h) => h.kind)).toEqual(['nw', 'ne', 'se', 'sw'])
+    for (const h of hits) {
+      expect(h.box.width).toBeCloseTo(12) // 24 screen px at zoom 2
+    }
+    const se = hits.find((h) => h.kind === 'se')
+    if (se === undefined) throw new Error('missing se')
+    expect(se.box.x + se.box.width / 2).toBeCloseTo(100)
+    expect(se.box.y + se.box.height / 2).toBeCloseTo(100)
+  })
+})
+
+describe('edgeBandBoxes', () => {
+  const box = { x: 0, y: 0, width: 100, height: 100 }
+
+  it('lays a band of the requested thickness along each edge, centered on it', () => {
+    const bands = edgeBandBoxes(box, 1, 16, 24)
+    expect(bands.map((b) => b.kind)).toEqual(['n', 'e', 's', 'w'])
+    const east = bands.find((b) => b.kind === 'e')
+    if (east === undefined) throw new Error('missing e')
+    expect(east.box.x + east.box.width / 2).toBeCloseTo(100)
+    expect(east.box.width).toBeCloseTo(16)
+  })
+
+  it('stops each band short of the corner hit zones, so corners always win their ground', () => {
+    const bands = edgeBandBoxes(box, 1, 16, 24)
+    const north = bands.find((b) => b.kind === 'n')
+    if (north === undefined) throw new Error('missing n')
+    // Corner hits are 24px squares centered on (0,0)/(100,0): the band must
+    // start after the nw zone (12) and end before the ne zone (100-12).
+    expect(north.box.x).toBeCloseTo(12)
+    expect(north.box.x + north.box.width).toBeCloseTo(88)
+  })
+
+  it('never inverts on a node smaller than two corner zones', () => {
+    const tiny = { x: 0, y: 0, width: 20, height: 20 }
+    for (const band of edgeBandBoxes(tiny, 1, 16, 24)) {
+      expect(band.box.width).toBeGreaterThanOrEqual(0)
+      expect(band.box.height).toBeGreaterThanOrEqual(0)
     }
   })
 })
