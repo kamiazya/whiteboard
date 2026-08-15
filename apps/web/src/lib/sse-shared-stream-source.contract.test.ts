@@ -24,6 +24,7 @@ const BASE = 'http://127.0.0.1:3099'
 // separate one case's traffic from another's.
 let streamOpens = 0
 const openedStreamIds: string[] = []
+const daemonWrites: { doc: string; body: Uint8Array }[] = []
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
@@ -50,6 +51,16 @@ const server = setupServer(
   }),
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
     subscribeBodies.push((await request.json()) as (typeof subscribeBodies)[number])
+    return HttpResponse.json({ ok: true })
+  }),
+  // The canvas update route: where a push lands, after the worker's replica
+  // has merged it. Addressed by workspace and slug, which the worker
+  // reconstructs from the document key it routes everything else by.
+  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+    daemonWrites.push({
+      doc: `${String(params.workspaceId)}/${String(params.slug)}`,
+      body: new Uint8Array(await request.arrayBuffer()),
+    })
     return HttpResponse.json({ ok: true })
   }),
   http.post(`${BASE}/api/sync/message`, async ({ request }) => {
@@ -83,6 +94,7 @@ function createHarness(): SseStreamSourceHarness {
     unsubscribedDocs: () => subscribeBodies.flatMap((b) => b.unsubscribe ?? []),
     controlMessages: () => controlMessages,
     openedStreamIds: () => openedStreamIds,
+    daemonWrites: () => daemonWrites,
     ready: async () => {
       await vi.waitFor(() => {
         if (pushFrame === null) throw new Error('stream not open')
