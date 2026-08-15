@@ -9,6 +9,7 @@ import { getDoc } from '../../store/doc-cache.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { defaultHumanDisplayName, handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
@@ -22,16 +23,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   const { versionStore } = options
 
   // List versions for one canvas in reverse chronological order.
-  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'get', ['versions'], async (c, workspaceId, slug) => {
     try {
       const versions = await versionStore.list(workspaceId, slug)
       const response: ListVersionsResponse = { versions }
@@ -44,16 +36,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   })
 
   // Save a manual version with body { label?: string; operator?: OperatorInfo }. auto is false.
-  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'post', ['versions'], async (c, workspaceId, slug) => {
     // Empty body is valid (no label / operator); a non-empty body must parse as
     // JSON and pass schema validation, otherwise return invalid_body.
     const rawText = await c.req.text()

@@ -4,6 +4,7 @@ import { evictDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 export interface MaintenanceRouterOptions {
   versionStore: VersionStore
@@ -19,16 +20,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // GC the op-log before the oldest retained version frontiers using shallow-snapshot.
   // Side effects: replace the on-disk .loro file and evict doc-cache so the next getDoc reloads the shallow doc.
   // Avoid calling this frequently on highly active multi-peer canvases because concurrent applyAndPersist calls can race.
-  app.post('/api/workspaces/:workspaceId/canvases/:slug/compact', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'post', ['compact'], async (c, workspaceId, slug) => {
     try {
       const result = await compactCanvas(workspaceId, slug, versionStore)
       if (result.compacted) evictDoc(workspaceId, slug)

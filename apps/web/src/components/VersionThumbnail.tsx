@@ -1,3 +1,4 @@
+import { canvasesApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useEffect, useState } from 'react'
 import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
 
@@ -40,7 +41,11 @@ export function VersionThumbnail({
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
-  const path = `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(versionId)}/thumbnail`
+  const path = canvasesApiUrl(
+    workspaceId,
+    slug,
+    `versions/${encodeURIComponent(versionId)}/thumbnail`,
+  )
 
   useEffect(() => {
     if (!hasThumbnail || !hasDaemonApi) return

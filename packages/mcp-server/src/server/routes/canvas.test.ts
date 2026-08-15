@@ -188,6 +188,83 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(collideSnapshot.status).toBe(200)
   })
 
+  it('drives the whole canvases family against a nested document path', async () => {
+    // The second legacy family (already workspace-first, but :slug could not
+    // match a nested path): versions, thumbnails, restore, compact, name,
+    // pin, rename, delete. One scenario, so a regression in ANY of them on a
+    // nested path is loud.
+    const app = createCanvasRouter()
+    const create = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'notes/2026/plan', kind: 'spatial' }),
+    })
+    expect(create.status).toBe(200)
+    const P = '/api/workspaces/ws1/canvases/notes/2026/plan'
+
+    // name + pin (PUT with suffix)
+    expect(
+      (
+        await app.request(`${P}/name`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Plan 2026' }),
+        })
+      ).status,
+    ).toBe(200)
+    expect(
+      (
+        await app.request(`${P}/pin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned: true }),
+        })
+      ).status,
+    ).toBe(200)
+
+    // versions: create → list → thumbnail PUT/GET → restore
+    const created = await app.request(`${P}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(created.status).toBe(200)
+    const { version } = (await created.json()) as { version: { id: string } }
+    const versionId = version.id
+
+    const list = await app.request(`${P}/versions`)
+    expect(list.status).toBe(200)
+
+    const putThumb = await app.request(`${P}/versions/${versionId}/thumbnail`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    })
+    expect(putThumb.status).toBe(200)
+    expect((await app.request(`${P}/versions/${versionId}/thumbnail`)).status).toBe(200)
+    expect((await app.request(`${P}/latest-thumbnail`)).status).toBe(200)
+
+    const restore = await app.request(`${P}/versions/${versionId}/restore`, { method: 'POST' })
+    expect(restore.status).toBe(200)
+
+    // compact (POST with suffix)
+    expect((await app.request(`${P}/compact`, { method: 'POST' })).status).toBe(200)
+
+    // rename moves the whole subtree address
+    const renamed = await app.request(`${P}/slug`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'notes/2027/plan' }),
+    })
+    expect(renamed.status).toBe(200)
+
+    // delete at the NEW nested path
+    const del = await app.request('/api/workspaces/ws1/canvases/notes/2027/plan', {
+      method: 'DELETE',
+    })
+    expect(del.status).toBe(200)
+  })
+
   it('creates a kind:markdown canvas, and the list carries it back', async () => {
     const app = createCanvasRouter()
     const createRes = await app.request('/api/workspaces/ws1/canvases', {

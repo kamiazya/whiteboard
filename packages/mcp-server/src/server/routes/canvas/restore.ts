@@ -14,6 +14,7 @@ import {
   validationErrorBody,
 } from '../../validators.js'
 import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
   versionStore: VersionStore
@@ -86,117 +87,69 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
 
-  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore', async (c) => {
-    const { workspaceId, slug, id } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-      validateVersionId(id)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    // Body is optional. Empty body / non-JSON ⇒ in-place mode.
-    const rawText = await c.req.text()
-    let targetSlug: string | undefined
-    let overwrite = false
-    if (rawText.length > 0) {
-      let parsedJson: unknown
+  onCanvasesRoute(
+    app,
+    'post',
+    ['versions', ':id', 'restore'],
+    async (c, workspaceId, slug, params) => {
+      const id = params.id as string
       try {
-        parsedJson = JSON.parse(rawText)
-      } catch {
-        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+        validateVersionId(id)
+      } catch (err) {
+        const body = validationErrorBody(err)
+        if (body) return c.json(body, 400)
+        throw err
       }
-      const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
-      if (!parsed.success) {
-        return c.json({ error: 'invalid_body', message: 'invalid restore options' }, 400)
-      }
-      targetSlug = parsed.data.targetSlug
-      overwrite = parsed.data.overwrite === true
-    }
-    try {
-      // Every doc read + save below runs inside one workspace-lock hold.
-      // getDoc() alone is unlocked, so a concurrent delete/rename that runs
-      // its whole lock-protected section between an unlocked read here and
-      // the eventual saveCanvas() would find no row left at that slug and
-      // silently insert a brand-new phantom canvas (or resurrect content
-      // onto a slug the delete just cleared). Both the in-place branch and
-      // the targetSlug-overwrite branch have that getDoc(slug)->saveCanvas(slug)
-      // shape, so one lock around the whole handler body closes it for both
-      // — mirrors live-doc.ts's POST /update handler.
-      return await withWorkspaceWriteLock(workspaceId, async () => {
-        const doc = await getDoc(workspaceId, slug)
-        const past = await versionStore.load(workspaceId, id, doc)
-        if (!past) {
-          return c.json({ error: 'not_found' }, 404)
+      // Body is optional. Empty body / non-JSON ⇒ in-place mode.
+      const rawText = await c.req.text()
+      let targetSlug: string | undefined
+      let overwrite = false
+      if (rawText.length > 0) {
+        let parsedJson: unknown
+        try {
+          parsedJson = JSON.parse(rawText)
+        } catch {
+          return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
         }
-
-        // Restore-as-new-canvas / overwrite-existing-canvas branch.
-        // targetSlug === slug is the same document as the in-place restore
-        // below, so route it there directly instead of forcing callers to
-        // pass overwrite:true against their own canvas.
-        if (targetSlug !== undefined && targetSlug !== slug) {
-          try {
-            validateSlug(targetSlug)
-          } catch (err) {
-            const body = validationErrorBody(err)
-            if (body) return c.json(body, 400)
-            throw err
+        const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
+        if (!parsed.success) {
+          return c.json({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+        }
+        targetSlug = parsed.data.targetSlug
+        overwrite = parsed.data.overwrite === true
+      }
+      try {
+        // Every doc read + save below runs inside one workspace-lock hold.
+        // getDoc() alone is unlocked, so a concurrent delete/rename that runs
+        // its whole lock-protected section between an unlocked read here and
+        // the eventual saveCanvas() would find no row left at that slug and
+        // silently insert a brand-new phantom canvas (or resurrect content
+        // onto a slug the delete just cleared). Both the in-place branch and
+        // the targetSlug-overwrite branch have that getDoc(slug)->saveCanvas(slug)
+        // shape, so one lock around the whole handler body closes it for both
+        // — mirrors live-doc.ts's POST /update handler.
+        return await withWorkspaceWriteLock(workspaceId, async () => {
+          const doc = await getDoc(workspaceId, slug)
+          const past = await versionStore.load(workspaceId, id, doc)
+          if (!past) {
+            return c.json({ error: 'not_found' }, 404)
           }
 
-          const targetAlreadyExists = await canvasExists(workspaceId, targetSlug)
-          if (targetAlreadyExists && !overwrite) {
-            return c.json(
-              {
-                error: 'output_exists',
-                message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
-              },
-              409,
-            )
-          }
+          // Restore-as-new-canvas / overwrite-existing-canvas branch.
+          // targetSlug === slug is the same document as the in-place restore
+          // below, so route it there directly instead of forcing callers to
+          // pass overwrite:true against their own canvas.
+          if (targetSlug !== undefined && targetSlug !== slug) {
+            try {
+              validateSlug(targetSlug)
+            } catch (err) {
+              const body = validationErrorBody(err)
+              if (body) return c.json(body, 400)
+              throw err
+            }
 
-          if (targetAlreadyExists) {
-            // The version id belongs to the SOURCE canvas's history, so its
-            // label lives in the source's version list even though we are
-            // about to reconcile it onto the target.
-            const all = await versionStore.list(workspaceId, slug)
-            const label = all.find((v) => v.id === id)?.label
-            const targetDoc = await getDoc(workspaceId, targetSlug)
-            // The merged content is the source's own shape (spatial nodes/edges
-            // vs. a markdown body), same reasoning as the new-canvas branch
-            // below — the target's stored kind must follow it or a kind-aware
-            // consumer (editor routing) opens the overwritten canvas with the
-            // wrong editor.
-            const sourceKind = await getCanvasKind(workspaceId, slug)
-            await reconcileCommitSaveBroadcast(
-              workspaceId,
-              targetSlug,
-              targetDoc,
-              past,
-              label,
-              sourceKind,
-            )
-            return c.json({
-              canvasId: `${workspaceId}/${targetSlug}`,
-              elementCount: countAliveNodes(targetDoc),
-            })
-          }
-
-          // Genuinely new canvas: no live doc and no connected clients, so
-          // there is nothing to reconcile against. The restored content is
-          // whatever the source canvas actually stores (spatial nodes/edges
-          // maps vs. a markdown 'body' text container), so the new row must
-          // carry the source's own kind rather than falling back to the
-          // saveCanvas default.
-          try {
-            const sourceKind = await getCanvasKind(workspaceId, slug)
-            await saveCanvas(workspaceId, targetSlug, past, {
-              overwrite: false,
-              ...(sourceKind !== null ? { kind: sourceKind } : {}),
-            })
-          } catch (err) {
-            if (err instanceof ConflictError) {
+            const targetAlreadyExists = await canvasExists(workspaceId, targetSlug)
+            if (targetAlreadyExists && !overwrite) {
               return c.json(
                 {
                   error: 'output_exists',
@@ -205,29 +158,80 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
                 409,
               )
             }
-            throw err
-          }
-          // Guard against a stale cache entry from a since-deleted canvas at
-          // this slug being served instead of the just-written snapshot.
-          evictDoc(workspaceId, targetSlug)
-          return c.json({
-            canvasId: `${workspaceId}/${targetSlug}`,
-            elementCount: countAliveNodes(past),
-          })
-        }
 
-        // In-place reconcile branch (default).
-        const all = await versionStore.list(workspaceId, slug)
-        const label = all.find((v) => v.id === id)?.label
-        await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
-        return c.json({ ok: true })
-      })
-    } catch (err) {
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
-      throw err
-    }
-  })
+            if (targetAlreadyExists) {
+              // The version id belongs to the SOURCE canvas's history, so its
+              // label lives in the source's version list even though we are
+              // about to reconcile it onto the target.
+              const all = await versionStore.list(workspaceId, slug)
+              const label = all.find((v) => v.id === id)?.label
+              const targetDoc = await getDoc(workspaceId, targetSlug)
+              // The merged content is the source's own shape (spatial nodes/edges
+              // vs. a markdown body), same reasoning as the new-canvas branch
+              // below — the target's stored kind must follow it or a kind-aware
+              // consumer (editor routing) opens the overwritten canvas with the
+              // wrong editor.
+              const sourceKind = await getCanvasKind(workspaceId, slug)
+              await reconcileCommitSaveBroadcast(
+                workspaceId,
+                targetSlug,
+                targetDoc,
+                past,
+                label,
+                sourceKind,
+              )
+              return c.json({
+                canvasId: `${workspaceId}/${targetSlug}`,
+                elementCount: countAliveNodes(targetDoc),
+              })
+            }
+
+            // Genuinely new canvas: no live doc and no connected clients, so
+            // there is nothing to reconcile against. The restored content is
+            // whatever the source canvas actually stores (spatial nodes/edges
+            // maps vs. a markdown 'body' text container), so the new row must
+            // carry the source's own kind rather than falling back to the
+            // saveCanvas default.
+            try {
+              const sourceKind = await getCanvasKind(workspaceId, slug)
+              await saveCanvas(workspaceId, targetSlug, past, {
+                overwrite: false,
+                ...(sourceKind !== null ? { kind: sourceKind } : {}),
+              })
+            } catch (err) {
+              if (err instanceof ConflictError) {
+                return c.json(
+                  {
+                    error: 'output_exists',
+                    message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
+                  },
+                  409,
+                )
+              }
+              throw err
+            }
+            // Guard against a stale cache entry from a since-deleted canvas at
+            // this slug being served instead of the just-written snapshot.
+            evictDoc(workspaceId, targetSlug)
+            return c.json({
+              canvasId: `${workspaceId}/${targetSlug}`,
+              elementCount: countAliveNodes(past),
+            })
+          }
+
+          // In-place reconcile branch (default).
+          const all = await versionStore.list(workspaceId, slug)
+          const label = all.find((v) => v.id === id)?.label
+          await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
+          return c.json({ ok: true })
+        })
+      } catch (err) {
+        const issue = handleCorruptStoredData(err)
+        if (issue) return c.json(issue.body, issue.status)
+        throw err
+      }
+    },
+  )
 
   return app
 }

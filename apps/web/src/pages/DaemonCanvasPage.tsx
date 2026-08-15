@@ -1,5 +1,5 @@
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
@@ -361,7 +361,7 @@ export function DaemonCanvasPage({
     setSaveVersionMessage(null)
     try {
       const res = await daemonFetch(
-        `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(canvas.workspaceId)}/canvases/${encodeURIComponent(canvas.slug)}/versions`,
+        `${daemonBaseUrl}${canvasesApiUrl(canvas.workspaceId, canvas.slug, 'versions')}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

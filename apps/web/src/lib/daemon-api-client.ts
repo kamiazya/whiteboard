@@ -3,6 +3,7 @@ import {
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
   canvasApiUrl,
+  canvasesApiUrl,
   canvasOkfV1ResponseSchema,
   createCanvasResponseSchema,
   type DeleteCanvasResponse,
@@ -116,7 +117,7 @@ export function deleteCanvas(
 ): Promise<DeleteCanvasResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug)}`,
     deleteCanvasResponseSchema,
     { method: 'DELETE' },
   )
@@ -163,7 +164,7 @@ export function setCanvasName(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug, 'name')}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
