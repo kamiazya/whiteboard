@@ -10,7 +10,7 @@ export function createContainer(storeModule: ContainerModule = storeMemoryModule
 }
 
 /**
- * Assembles ServerDeps by resolving the three store/sync port tokens from a
+ * Assembles ServerDeps by resolving the store/sync port tokens from a
  * DI container. Inversify already throws a descriptive "not bound" error
  * when a token has no binding, so this simply surfaces that failure instead
  * of letting a missing binding silently produce undefined deps.
@@ -19,5 +19,6 @@ export function resolveServerDeps(container: Container): ServerDeps {
   return {
     canvasDocStore: container.get(TOKENS.CanvasDocStore),
     blobStore: container.get(TOKENS.BlobStore),
+    documentIndex: container.get(TOKENS.DocumentIndex),
   }
 }

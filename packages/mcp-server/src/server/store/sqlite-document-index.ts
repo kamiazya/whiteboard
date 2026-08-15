@@ -22,6 +22,25 @@ import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
+/**
+ * A row becomes an entry. `displayName` is null for a document with no name
+ * of its own, and the port says absent rather than null, so the key is left
+ * off entirely instead of carrying a null a reader would have to re-check.
+ */
+function toEntry(row: {
+  id: string
+  slug: string
+  kind: string | null
+  displayName: string | null
+}): DocumentEntry {
+  return {
+    canvasId: row.id,
+    path: row.slug,
+    kind: row.kind as DocumentEntry['kind'],
+    ...(row.displayName === null ? {} : { name: row.displayName }),
+  }
+}
+
 /** How many segments a path has. */
 function depth(path: string): number {
   return path.split('/').length
@@ -53,7 +72,12 @@ export class SqliteDocumentIndex implements DocumentIndex {
     })
   }
 
-  async createDocument({ workspaceId, path, kind }: CreateDocumentInput): Promise<DocumentEntry> {
+  async createDocument({
+    workspaceId,
+    path,
+    kind,
+    name,
+  }: CreateDocumentInput): Promise<DocumentEntry> {
     return withWorkspaceWriteLock(workspaceId, async () => {
       const workspace = await this.db
         .selectFrom('workspaces')
@@ -73,7 +97,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
           id: canvasId,
           workspaceId,
           slug: path,
-          displayName: null,
+          displayName: name ?? null,
           isPinned: 0,
           pinOrder: null,
           currentBranch: 'main',
@@ -87,7 +111,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       if ((inserted.numInsertedOrUpdatedRows ?? 0n) === 0n) {
         throw new DocumentPathTakenError(workspaceId, path)
       }
-      return { canvasId, path, kind }
+      return { canvasId, path, kind, ...(name === undefined ? {} : { name }) }
     })
   }
 
@@ -97,12 +121,12 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }: ResolveDocumentInput): Promise<DocumentEntry | null> {
     const row = await this.db
       .selectFrom('canvases')
-      .select(['id', 'slug', 'kind'])
+      .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', path)
       .executeTakeFirst()
     if (!row?.kind) return null
-    return { canvasId: row.id, path: row.slug, kind: row.kind }
+    return toEntry(row)
   }
 
   async resolveDocumentById({
@@ -111,25 +135,25 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     const row = await this.db
       .selectFrom('canvases')
-      .select(['id', 'slug', 'kind'])
+      .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', canvasId)
       .executeTakeFirst()
     if (!row?.kind) return null
-    return { canvasId: row.id, path: row.slug, kind: row.kind }
+    return toEntry(row)
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {
     const rows = await this.db
       .selectFrom('canvases')
-      .select(['id', 'slug', 'kind'])
+      .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .execute()
     // Sorted here rather than in SQL: segment-wise order is not what any
     // collation gives, and the row count per workspace is a list a human reads.
     return rows
       .filter((row) => row.kind !== null)
-      .map((row) => ({ canvasId: row.id, path: row.slug, kind: row.kind as DocumentEntry['kind'] }))
+      .map(toEntry)
       .sort((left, right) => compareDocumentPaths(left.path, right.path))
   }
 

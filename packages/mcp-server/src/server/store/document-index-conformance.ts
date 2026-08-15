@@ -38,6 +38,31 @@ export function describeDocumentIndexConformance(
     }
   }
 
+  it('carries a name when given one, and reports none as absent rather than null', async () => {
+    await withIndex(async (index) => {
+      const named = await index.createDocument({
+        workspaceId: WS,
+        path: 'named',
+        kind: 'spatial',
+        name: 'Quarterly plan',
+      })
+      expect(named.name).toBe('Quarterly plan')
+      expect((await index.resolveDocument({ workspaceId: WS, path: 'named' }))?.name).toBe(
+        'Quarterly plan',
+      )
+
+      const anonymous = await index.createDocument({
+        workspaceId: WS,
+        path: 'anonymous',
+        kind: 'spatial',
+      })
+      expect('name' in anonymous).toBe(false)
+      const readBack = await index.resolveDocument({ workspaceId: WS, path: 'anonymous' })
+      expect(readBack).not.toBeNull()
+      expect('name' in (readBack as object)).toBe(false)
+    })
+  })
+
   it('refuses to create a document in a workspace that does not exist', async () => {
     await withIndex(async (index) => {
       // A typo'd or hallucinated workspaceId must fail loudly rather than

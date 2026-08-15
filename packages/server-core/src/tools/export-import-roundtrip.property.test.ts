@@ -9,6 +9,7 @@ import {
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { createDocumentSetTool } from './document-set.js'
 import { exportOkf } from './export-okf.js'
 
@@ -76,7 +77,11 @@ const okfDocumentArbitrary = fc
 async function setupTools() {
   const store = new FakeCanvasDocStore()
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-  const deps = { canvasDocStore: store, blobStore: {} as never }
+  const deps = {
+    canvasDocStore: store,
+    blobStore: {} as never,
+    documentIndex: unusedDocumentIndex(),
+  }
   return {
     deps,
     documentSet: createDocumentSetTool(deps),

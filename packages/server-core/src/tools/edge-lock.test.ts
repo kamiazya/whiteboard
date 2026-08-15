@@ -7,6 +7,7 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { createEdgeLockTool } from './edge-lock.js'
 import { EdgeNotFoundError } from './errors.js'
 
@@ -38,7 +39,7 @@ async function seedCanvas(canvasDocStore: FakeCanvasDocStore): Promise<void> {
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 }
 
 async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySet<string>> {

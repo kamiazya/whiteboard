@@ -2,12 +2,17 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { wbCanvasCreate } from './canvas-crud.js'
 import { saveDocSnapshot } from './canvas-doc-io.js'
 import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
 
 function makeDeps(): ServerDeps {
-  return { canvasDocStore: createInMemoryCanvasDocStore(), blobStore: {} as never }
+  return {
+    canvasDocStore: createInMemoryCanvasDocStore(),
+    blobStore: {} as never,
+    documentIndex: unusedDocumentIndex(),
+  }
 }
 
 async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {

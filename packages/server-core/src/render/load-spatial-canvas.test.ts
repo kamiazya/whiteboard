@@ -2,6 +2,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { CanvasNotFoundError, loadSpatialCanvas } from './load-spatial-canvas.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -9,7 +10,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 describe('loadSpatialCanvas', () => {
   test('throws CanvasNotFoundError when no snapshot exists', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
-    const deps = { canvasDocStore, blobStore: {} as never }
+    const deps = { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 
     await expect(loadSpatialCanvas(deps, CANVAS_ID)).rejects.toThrow(CanvasNotFoundError)
   })
@@ -23,7 +24,7 @@ describe('loadSpatialCanvas', () => {
       })
     })
 
-    const deps = { canvasDocStore, blobStore: {} as never }
+    const deps = { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
     const { doc, canvas } = await loadSpatialCanvas(deps, CANVAS_ID)
 
     expect(doc).toBeInstanceOf(LoroDoc)

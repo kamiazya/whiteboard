@@ -11,12 +11,24 @@ export const documentEntrySchema = z
     canvasId: canvasIdSchema,
     path: documentPathSchema,
     kind: canvasKindSchema,
+    /**
+     * What a human reads, as opposed to `path`, which is an address. Absent
+     * rather than defaulted to the last path segment: a reader that wants
+     * that fallback can choose it, while a listing that invents one reads as
+     * though somebody typed the slug in as a title.
+     */
+    name: z.string().min(1).optional(),
   })
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>
 
 export const createDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, path: documentPathSchema, kind: canvasKindSchema })
+  .object({
+    workspaceId: workspaceIdSchema,
+    path: documentPathSchema,
+    kind: canvasKindSchema,
+    name: z.string().min(1).optional(),
+  })
   .strict()
 export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
 

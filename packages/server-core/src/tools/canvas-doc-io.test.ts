@@ -1,6 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { CanvasDocNotFoundError } from './errors.js'
 
@@ -9,6 +10,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const canvasDeps = (canvasDocStore: FakeCanvasDocStore) => ({
   canvasDocStore,
   blobStore: {} as never,
+  documentIndex: unusedDocumentIndex(),
 })
 
 describe('canvas-doc-io', () => {

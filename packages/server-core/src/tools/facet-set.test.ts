@@ -11,6 +11,7 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
@@ -19,7 +20,7 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 }
 
 describe('wb_facet_set tool', () => {

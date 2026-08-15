@@ -3,6 +3,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
 import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
+import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
 import { saveWorkspaceTree } from './tools/workspace-tree-io.js'
 
@@ -10,6 +11,7 @@ function makeServer() {
   return createServer({
     canvasDocStore: createInMemoryCanvasDocStore(),
     blobStore: {} as never,
+    documentIndex: unusedDocumentIndex(),
   })
 }
 
@@ -161,7 +163,11 @@ describe('canvas OKF read route', () => {
     // worth guarding: a node whose document was deleted, or written by an
     // older build that created nodes lazily, lands here.
     const store = createInMemoryCanvasDocStore()
-    const { app } = createServer({ canvasDocStore: store, blobStore: {} as never })
+    const { app } = createServer({
+      canvasDocStore: store,
+      blobStore: {} as never,
+      documentIndex: unusedDocumentIndex(),
+    })
     const tree = new WorkspaceTree(new LoroDoc())
     const canvasId = '01ARZ3NDEKTSV4RRFFQ69G5FAA'
     tree.createNode(canvasId, 'orphan')
