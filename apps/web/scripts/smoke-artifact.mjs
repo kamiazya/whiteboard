@@ -170,6 +170,17 @@ function main() {
       bundleAll.includes('whiteboard.pages.dev'),
       'bundle contains "whiteboard.pages.dev" (origin-policy string constant)',
     )
+    // The dev-only transport override is guarded by `import.meta.env.DEV`,
+    // which Vite substitutes with `false` here, so the whole reader — and this
+    // key with it — should be eliminated. Asserted rather than trusted: the
+    // guarantee is what makes the override acceptable at all, and a refactor
+    // that read the flag some other way (a variable, a helper, a runtime
+    // check) would keep working in dev while quietly shipping a way to change
+    // a production page's transport from localStorage.
+    assert(
+      !bundleAll.includes('whiteboard:dev-transport'),
+      'bundle does NOT contain "whiteboard:dev-transport" (dev-only override compiled away)',
+    )
     // window.location.origin is accessed via `location.origin` after minification.
     assert(
       bundleAll.includes('location.origin'),
