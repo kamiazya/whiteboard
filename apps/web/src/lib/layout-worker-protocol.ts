@@ -9,12 +9,11 @@
  * a canvas that needs any of the other four falls back to main-thread layout
  * rather than silently rendering without them (see `canLayoutInWorker`).
  *
- * Markdown is parsed on the MAIN thread and the mdast travels here as plain
- * data, rather than the worker importing canvas-codec. Two reasons, one
- * measured and one structural: parsing is 15-19ms of an 81-339ms layout (4-19%),
- * so leaving it behind still removes the overwhelming majority of the block;
- * and it keeps remark/unified out of the worker chunk entirely, which also
- * sidesteps their refusal to evaluate in a module worker under the dev server.
+ * Markdown text crosses as part of the canvas and the WORKER parses it, so
+ * parse and layout leave the main thread together. The old blocker was never
+ * remark itself: decode-named-character-reference's `browser` entry touches
+ * `document` at module top level, and vite.config.ts now pins the DOM-free
+ * build (see workerSafeEntityDecoder there).
  *
  * Transport is plain postMessage, i.e. structuredClone. That was measured
  * rather than assumed: 0.90ms to clone the scene of a 60-node/200-edge canvas
@@ -25,15 +24,11 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
 export type FileRefLabel = { readonly file: string; readonly label: string }
-
-/** A node body already turned into mdast on the main thread. */
-export type ParsedBody = { readonly text: string; readonly mdast: MdastRoot }
 
 export type LayoutRequest = {
   readonly type: 'layout'
@@ -46,7 +41,6 @@ export type LayoutRequest = {
    * resolveFileMissing seam, precomputed against THIS canvas's file nodes
    * (a function cannot cross the wire; a small ref list can). */
   readonly missingFileRefs?: readonly string[]
-  readonly bodies: readonly ParsedBody[]
 }
 
 export type LayoutResponse =

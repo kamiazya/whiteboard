@@ -19,10 +19,9 @@
  *   back to laying the same canvas out synchronously. A degraded worker costs
  *   responsiveness, never content.
  *
- * Markdown is parsed HERE rather than in the worker (see the protocol's note):
- * that is the 15-19ms this cannot remove, against the 81-339ms it can.
+ * Markdown is parsed in the WORKER along with layout (see the protocol's
+ * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -33,7 +32,6 @@ import {
   FONT_DEGRADED,
   type LayoutRequest,
   type LayoutResponse,
-  type ParsedBody,
 } from '../../lib/layout-worker-protocol.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from './scene-render.js'
 import type { RenderedCanvas } from './scene-render-core.js'
@@ -56,18 +54,6 @@ const OFFLOAD_MIN_ELEMENTS = 12
 
 function worthOffloading(canvas: SpatialCanvas): boolean {
   return canvas.nodes.length + canvas.edges.length >= OFFLOAD_MIN_ELEMENTS
-}
-
-/** Every body the worker could be asked for, parsed on this thread. */
-function parseBodies(canvas: SpatialCanvas): ParsedBody[] {
-  const seen = new Set<string>()
-  const bodies: ParsedBody[] = []
-  for (const node of canvas.nodes) {
-    if (node.type !== 'text' || seen.has(node.text)) continue
-    seen.add(node.text)
-    bodies.push({ text: node.text, mdast: parseMarkdownBody(node.text) })
-  }
-  return bodies
 }
 
 function createLayoutWorker(): Worker | null {
@@ -173,7 +159,6 @@ export function useWorkerScene(
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
-      bodies: parseBodies(inputs.canvas),
     }
     worker.postMessage(request)
     return () => worker.removeEventListener('message', onMessage)

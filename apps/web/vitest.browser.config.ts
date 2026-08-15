@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
@@ -40,6 +41,12 @@ export default defineConfig({
       '@kamiazya/whiteboard-canvas-viewer': resolve(
         __dirname,
         '../../packages/canvas-viewer/src/index.ts',
+      ),
+      // Same pin as vite.config.ts: the package's `browser` entry touches
+      // `document` at module top level, which kills any worker chunk that
+      // contains remark. Node's resolver lands on the DOM-free build.
+      'decode-named-character-reference': createRequire(import.meta.url).resolve(
+        'decode-named-character-reference',
       ),
     },
   },
