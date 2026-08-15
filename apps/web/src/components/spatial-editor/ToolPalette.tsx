@@ -186,7 +186,7 @@ export function ToolPalette({
       data-testid="tool-palette"
       role="toolbar"
       aria-label="Canvas tools"
-      className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
+      className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
     >
       {leading !== undefined && (
         <>

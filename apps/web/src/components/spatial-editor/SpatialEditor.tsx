@@ -99,6 +99,7 @@ import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
+import { hapticTick } from '../../lib/haptics.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -1444,6 +1445,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               isPanningRef.current = false
               lastPressRef.current = null
               doublePressRef.current = null
+              // The native long-press this replaces gave a system haptic;
+              // keep that cue so the menu opening under a still-down finger
+              // reads as deliberate, not glitchy.
+              hapticTick()
               openContextMenuAtRef.current(screen)
             }, LONG_PRESS_MENU_MS),
           }

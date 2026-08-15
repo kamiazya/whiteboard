@@ -294,10 +294,11 @@ body {
    * the spatial editor sets touch-action: none on its own element and
    * implements pinch/double-tap itself. */
   touch-action: manipulation;
-  /* viewport-fit=cover extends the app under the notch and home indicator
-   * in the installed PWA; give the shell its floor back. In-browser every
-   * inset is 0 and this is inert. */
-  padding-bottom: env(safe-area-inset-bottom);
+  /* Deliberately NO safe-area padding here: on notched iPhones the bottom
+   * inset is real even in-browser, so body padding pushes the page past
+   * 100vh and the whole app becomes drag-scrollable ("pulled along" during
+   * canvas pans — reported on device). Safe-area compensation lives on the
+   * bottom-anchored chrome itself (the canvas dock's bottom offset). */
 }
 
 #root {
