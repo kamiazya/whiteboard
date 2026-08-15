@@ -429,13 +429,31 @@ describe('authority replica', () => {
     // write is silently dropped by the daemon, which looks exactly like a tab
     // whose edits never persist.
     expect(write.auth).toBe('Bearer t')
-    // What travels is the replica's delta, and it must carry the tab's work
-    // WITHOUT re-sending what the daemon just told us: a write that echoed the
-    // inbound frame back would loop.
     const received = new LoroDoc()
     received.import(write.body)
     expect(received.getMap('m').get('from-tab')).toBe('written-through')
-    expect(received.getMap('m').get('k')).toBeUndefined()
+    // This FIRST write also carries `k`, the daemon's own frame, and that is
+    // deliberate rather than a leak. What the worker sends is everything the
+    // daemon has not ACKNOWLEDGED, and a fresh replica has been acknowledged
+    // nothing — the alternative, assuming the daemon still holds whatever it
+    // once sent us, is an assumption that loses an edit the moment it is
+    // wrong. Loro merges the overlap away, so the cost is one full-state
+    // write per document per worker lifetime, which is what the tab used to
+    // send on every reconnect.
+    //
+    // The claim worth pinning is that it does not keep doing it. A second
+    // edit, after the first write was acknowledged, travels alone.
+    const second = new LoroDoc()
+    second.getMap('m').set('second-edit', 'delta-only')
+    second.commit()
+    port.postMessage({ type: 'push', doc, update: b64(second.export({ mode: 'update' })) })
+
+    await until(() => updateWrites.length >= 2)
+    const delta = new LoroDoc()
+    delta.import(updateWrites[1]?.body as Uint8Array)
+    expect(delta.getMap('m').get('second-edit')).toBe('delta-only')
+    expect(delta.getMap('m').get('from-tab')).toBeUndefined()
+    expect(delta.getMap('m').get('k')).toBeUndefined()
     // Its own budget: this is the only case in the block that waits for a
     // stream to open, and the sibling describe's 5s default is not a wait,
     // it is a coin flip under a loaded suite.

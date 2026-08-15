@@ -74,8 +74,14 @@ export interface SseStreamSource {
    * and writes onward itself. A caller that posted to the daemon directly
    * would be writing around the replica that is meant to be authoritative,
    * and would re-send state the daemon had just delivered.
+   *
+   * A returned promise REJECTS when the authority did not take the bytes, so
+   * a caller holding the only copy can keep holding it. The worker-backed
+   * implementation resolves immediately instead — it has handed the bytes to
+   * the replica, which owns the retry from there, and a tab that waited on
+   * the daemon would be waiting on the wrong thing.
    */
-  push(doc: string, update: Uint8Array): void
+  push(doc: string, update: Uint8Array): void | Promise<void>
 }
 
 export interface SseStreamHubOptions {
@@ -238,21 +244,22 @@ export class SseStreamHub implements SseStreamSource {
    * broadcasts, and its broadcast reaches SSE subscribers, so sync needs no
    * endpoint of its own.
    */
-  push(doc: string, update: Uint8Array): void {
+  async push(doc: string, update: Uint8Array): Promise<void> {
     const url = canvasUpdateUrl(this.options.baseUrl, doc)
-    if (url === null) return
-    void this.options
-      .fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        // `.buffer` of a fresh slice, not the view: this module is also built
-        // for Node's dts pass, where the DOM's BodyInit type is unavailable.
-        body: update.slice().buffer as ArrayBuffer,
-      })
-      .catch(() => {
-        // Dropping it here would lose the edit silently; the caller's CRDT
-        // still holds the state and the next update carries it forward.
-      })
+    if (url === null) throw new Error(`not a document key: ${doc}`)
+    const res = await this.options.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      // `.buffer` of a fresh slice, not the view: this module is also built
+      // for Node's dts pass, where the DOM's BodyInit type is unavailable.
+      body: update.slice().buffer as ArrayBuffer,
+    })
+    // A refusal that ANSWERS is the shape a restarting daemon produces, and it
+    // is the one a bare `.catch()` cannot see: fetch resolves for a 503, so a
+    // writer that only guards against rejection counts it as delivered and
+    // moves its acknowledged version forward over an edit the daemon never
+    // took. Failing loudly here is what lets a caller keep the bytes.
+    if (!res.ok) throw new Error(`update refused: ${res.status}`)
   }
 
   private async post(path: string, body: unknown): Promise<void> {
