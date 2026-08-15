@@ -38,7 +38,7 @@ import type {
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import { computeEdgeJumps } from './edge-jumps.js'
 import { edgeLabelAnchor } from './edge-label-anchor.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { layoutMdastBlocks, type MdastLayoutOptions } from './mdast-blocks.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
@@ -106,6 +106,25 @@ export interface SpatialLayoutOptions {
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
+  /**
+   * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
+   * call this module makes — a spatial `text` node's body, and a file node's
+   * referenced markdown body.
+   *
+   * Declared here as a passthrough rather than re-specified, because a body
+   * is a body: the same document laid out in the markdown editor and inside
+   * a canvas node must resolve its math, diagram fences and `![[embed]]`s
+   * the same way. Leaving them unforwarded is what made one engine give two
+   * answers depending on which surface called it.
+   *
+   * Absent seams keep `layoutMdastBlocks`'s own documented fallbacks (the
+   * escaped-source math placeholder, a plain code block, an
+   * `embedPlaceholder`), so an export or viewer that wires none renders
+   * exactly as before.
+   */
+  readonly renderMath?: MdastLayoutOptions['renderMath']
+  readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
+  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
    * Human-readable label for a file node's reference. A composition root
    * whose file references are opaque ids (the browser-local store) resolves
@@ -210,6 +229,25 @@ function resolveGeometry(geometry: SpatialGeometry | undefined): SpatialGeometry
   }
 }
 
+/**
+ * The `MdastLayoutOptions` every body layout in this module is built from —
+ * one producer, so a seam added to `SpatialLayoutOptions` cannot reach a
+ * text node's body and silently miss a file node's, which is exactly how
+ * the fragment seams came to be wired on one surface only.
+ */
+function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): MdastLayoutOptions {
+  return {
+    measure: options.measure,
+    maxWidth,
+    // Body content is measured and declared with the SAME family the label
+    // path resolves, so one theme drives every glyph in a node.
+    fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+    ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
+    ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
+    ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
+  }
+}
+
 function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number {
   const width = nodeWidth - 2 * options.geometry.paddingPx
   const floor = options.geometry.minContentWidthPx
@@ -303,13 +341,7 @@ function composeTextNode(
   let body: Scene
   try {
     const mdast = options.parseBody(node.text)
-    body = layoutMdastBlocks(mdast, {
-      measure: options.measure,
-      maxWidth,
-      // Body content is measured and declared with the SAME family the
-      // label path resolves, so one theme drives every glyph in a node.
-      fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
-    })
+    body = layoutMdastBlocks(mdast, mdastOptionsFor(maxWidth, options))
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
     body = { nodes: [labelRun(node.text, options)] }
@@ -458,11 +490,7 @@ function fitBodyInNode(
   const innerH = node.height - 2 * padding
   if (!(innerW > 0) || !(innerH > 0)) return undefined
 
-  const body = layoutMdastBlocks(root, {
-    measure: options.measure,
-    maxWidth: contentWidth(node.width, options),
-    fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
-  })
+  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
 
   // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
   // no `bbox`); that guard is for the type checker, not runtime.
