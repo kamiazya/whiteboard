@@ -20,6 +20,8 @@ import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 
+const pendingFlushes = new Map<string, Promise<unknown>>()
+
 const SAVE_DEBOUNCE_MS = 500
 
 /**
@@ -61,6 +63,14 @@ export function useMarkdownCanvasDoc(
   const loroRef = useRef(loro)
   loroRef.current = loro
 
+  // The cleanup's flush save and the next effect's load race on the same
+  // canvasId: fire-and-forget, the load can read the store BEFORE the flush
+  // lands, and the debounce that held the edit is already gone — the last
+  // 500ms of typing vanish for good. Keyed per document and module-level
+  // because the cleanup closure and the next effect instance share nothing
+  // else.
+  const pending = pendingFlushes
+
   useEffect(() => {
     if (!enabled || canvasId === null) {
       docRef.current = null
@@ -71,32 +81,35 @@ export function useMarkdownCanvasDoc(
     }
     let cancelled = false
     let unsubscribe: (() => void) | undefined
-    void loroRef.current.load(canvasId).then((result) => {
-      if (cancelled) return
-      const doc = new Loro()
-      if (result.kind === 'ok') {
-        try {
-          doc.import(result.snapshot)
-          for (const delta of result.deltas ?? []) doc.import(delta)
-        } catch {
-          // degrade to empty — see module doc
-        }
-      }
-      docRef.current = doc
-      // Subscribed AFTER the initial import, so loading never schedules a
-      // save of what was just loaded. This is how commits made OUTSIDE
-      // setBody — a CRDT binding mutating the 'body' container directly —
-      // still reach the body state (and the preview) and get persisted.
-      unsubscribe = doc.subscribe((event) => {
+    void Promise.resolve(pending.get(canvasId))
+      .catch(() => {})
+      .then(() => loroRef.current.load(canvasId))
+      .then((result) => {
         if (cancelled) return
+        const doc = new Loro()
+        if (result.kind === 'ok') {
+          try {
+            doc.import(result.snapshot)
+            for (const delta of result.deltas ?? []) doc.import(delta)
+          } catch {
+            // degrade to empty — see module doc
+          }
+        }
+        docRef.current = doc
+        // Subscribed AFTER the initial import, so loading never schedules a
+        // save of what was just loaded. This is how commits made OUTSIDE
+        // setBody — a CRDT binding mutating the 'body' container directly —
+        // still reach the body state (and the preview) and get persisted.
+        unsubscribe = doc.subscribe((event) => {
+          if (cancelled) return
+          setBodyState(doc.getText('body').toString())
+          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+          if (event.by === 'local') scheduleSaveRef.current?.()
+        })
+        setDoc(doc)
         setBodyState(doc.getText('body').toString())
         setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
-        if (event.by === 'local') scheduleSaveRef.current?.()
       })
-      setDoc(doc)
-      setBodyState(doc.getText('body').toString())
-      setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
-    })
     return () => {
       cancelled = true
       unsubscribe?.()
@@ -111,7 +124,12 @@ export function useMarkdownCanvasDoc(
         timerRef.current = null
         const doc = docRef.current
         if (doc !== null && canvasId !== null) {
-          void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
+          const flush = loroRef.current
+            .save(canvasId, doc.export({ mode: 'snapshot' }))
+            .finally(() => {
+              if (pending.get(canvasId) === flush) pending.delete(canvasId)
+            })
+          pending.set(canvasId, flush)
         }
       }
     }
