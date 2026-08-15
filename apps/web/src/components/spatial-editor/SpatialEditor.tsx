@@ -3029,29 +3029,61 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 pointerEvents: 'none',
               }}
             >
+              {/* Dashed with a dot at each end: a ruler showing a measured
+                  extent, not an alert line. The dash and dot sizes divide by
+                  zoom for the same reason every handle does — the ruler is
+                  chrome, and chrome keeps its on-screen size. */}
               {snapGuides.x.map((x) => (
-                <line
-                  key={`x${x}`}
-                  data-axis="x"
-                  x1={x}
-                  x2={x}
-                  y1={guideSpan.minY}
-                  y2={guideSpan.maxY}
-                  stroke="var(--manipulation-guide)"
-                  strokeWidth={1 / viewport.zoom}
-                />
+                <g key={`x${x}`}>
+                  <line
+                    data-axis="x"
+                    x1={x}
+                    x2={x}
+                    y1={guideSpan.minY}
+                    y2={guideSpan.maxY}
+                    stroke="var(--manipulation-guide)"
+                    strokeWidth={1 / viewport.zoom}
+                    strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+                  />
+                  <circle
+                    cx={x}
+                    cy={guideSpan.minY}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                  <circle
+                    cx={x}
+                    cy={guideSpan.maxY}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                </g>
               ))}
               {snapGuides.y.map((y) => (
-                <line
-                  key={`y${y}`}
-                  data-axis="y"
-                  x1={guideSpan.minX}
-                  x2={guideSpan.maxX}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--manipulation-guide)"
-                  strokeWidth={1 / viewport.zoom}
-                />
+                <g key={`y${y}`}>
+                  <line
+                    data-axis="y"
+                    x1={guideSpan.minX}
+                    x2={guideSpan.maxX}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--manipulation-guide)"
+                    strokeWidth={1 / viewport.zoom}
+                    strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+                  />
+                  <circle
+                    cx={guideSpan.minX}
+                    cy={y}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                  <circle
+                    cx={guideSpan.maxX}
+                    cy={y}
+                    r={2 / viewport.zoom}
+                    fill="var(--manipulation-guide)"
+                  />
+                </g>
               ))}
             </svg>
           )}

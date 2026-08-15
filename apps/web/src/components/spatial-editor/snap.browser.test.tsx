@@ -112,6 +112,13 @@ it('draws the guide that justifies the snap while the drag is in flight', () => 
   })
 
   const guide = container.querySelector('[data-testid="snap-guides"] [data-axis="x"]')
+  // A ruler, not an alert: dashed, with a dot at each end marking the
+  // measured extent — and never solid, which is how it used to read as a
+  // destructive-red warning line.
+  expect(guide?.getAttribute('stroke-dasharray')).not.toBeNull()
+  expect(
+    container.querySelectorAll('[data-testid="snap-guides"] circle').length,
+  ).toBeGreaterThanOrEqual(2)
   expect(guide).toBeTruthy()
   expect(guide?.getAttribute('x1')).toBe('137')
 
