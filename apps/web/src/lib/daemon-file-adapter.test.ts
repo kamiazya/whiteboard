@@ -163,3 +163,37 @@ describe('createDaemonFileAdapter', () => {
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/canvas/${WS}/a%20b/snapshot`)
   })
 })
+
+describe('createDaemonFileAdapter — id references', () => {
+  it('resolves an id reference to its CURRENT slug through the injected lookup', async () => {
+    const daemonFetch = vi.fn(async () => new Response(snapshotOf('hello') as BodyInit))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      slug: SLUG,
+      resolveRefSlug: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
+    })
+    const loaded = await adapter.loadDocument('nanoid-123')
+    expect(loaded).toBeDefined()
+    expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
+      '/api/canvas/ws-1/renamed-canvas/snapshot',
+    )
+  })
+
+  it('falls back to treating an unknown reference as a legacy slug', async () => {
+    const daemonFetch = vi.fn(async () => new Response(snapshotOf('legacy') as BodyInit))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      slug: SLUG,
+      resolveRefSlug: () => undefined,
+    })
+    const loaded = await adapter.loadDocument('old-slug-ref')
+    expect(loaded).toBeDefined()
+    expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
+      '/api/canvas/ws-1/old-slug-ref/snapshot',
+    )
+  })
+})

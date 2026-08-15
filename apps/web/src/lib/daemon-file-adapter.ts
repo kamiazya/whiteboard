@@ -22,6 +22,15 @@ export interface DaemonFileAdapterOptions {
   readonly daemonBaseUrl: string
   readonly workspaceId: string
   readonly slug: string
+  /**
+   * Maps an immutable canvas id to its CURRENT slug (undefined when the
+   * ref is not a known id). New file nodes store ids so a slug rename
+   * cannot dangle them; the daemon's read routes stay slug-addressed, so
+   * resolution happens here. Refs are resolved by LOOKUP, never by format:
+   * the id alphabet overlaps the slug charset, so an unknown ref is
+   * treated as a legacy slug reference.
+   */
+  readonly resolveRefSlug?: (ref: string) => string | undefined
 }
 
 export function createDaemonFileAdapter({
@@ -29,6 +38,7 @@ export function createDaemonFileAdapter({
   daemonBaseUrl,
   workspaceId,
   slug,
+  resolveRefSlug,
 }: DaemonFileAdapterOptions): CanvasFileAdapter {
   const canvasPath = (target: string) =>
     `${daemonBaseUrl}/api/canvas/${workspaceId}/${encodeURIComponent(target)}`
@@ -38,7 +48,8 @@ export function createDaemonFileAdapter({
 
     async loadDocument(ref) {
       try {
-        const res = await daemonFetch(`${canvasPath(ref)}/snapshot`)
+        const target = resolveRefSlug?.(ref) ?? ref
+        const res = await daemonFetch(`${canvasPath(target)}/snapshot`)
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))

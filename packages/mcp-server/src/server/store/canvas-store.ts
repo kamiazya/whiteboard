@@ -590,16 +590,17 @@ export async function renameCanvasSlug(
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<Pick<CanvasSummary, 'slug' | 'updatedAt' | 'kind'>[]> {
+): Promise<Pick<CanvasSummary, 'slug' | 'id' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
     .selectFrom('canvases')
-    .select(['slug', 'updatedAt', 'kind'])
+    .select(['slug', 'id', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   return rows.map((r) => ({
     slug: r.slug,
+    id: r.id,
     updatedAt: new Date(r.updatedAt).toISOString(),
     kind: r.kind ?? 'spatial',
   }))

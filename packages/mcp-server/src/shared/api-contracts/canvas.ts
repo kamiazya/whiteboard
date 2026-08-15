@@ -137,6 +137,16 @@ export const listWorkspacesResponseSchema = z.object({
 
 export const canvasSummarySchema = z.object({
   slug: z.string(),
+  // The immutable id behind the slug (the canvases row's nanoid PK).
+  // Stored references (file nodes) key on this so a slug rename cannot
+  // dangle them (ADR-0008: stored links key on ids); the slug stays the
+  // user-facing, URL-addressed identity. Deliberately not pattern-bound:
+  // clients must treat it as opaque and resolve refs by LOOKUP, never by
+  // format — the nanoid alphabet overlaps the slug charset.
+  // Optional so a new client can still parse an older daemon's id-less list
+  // (the web app and the locally installed daemon version independently);
+  // clients fall back to the slug when the id is absent.
+  id: z.string().min(1).optional(),
   updatedAt: z.string(),
   // Rows stored before this field existed have no recorded kind and read
   // back as spatial — the only kind that existed then.

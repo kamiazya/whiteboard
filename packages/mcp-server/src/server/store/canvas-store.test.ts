@@ -299,6 +299,18 @@ describe('listCanvases', () => {
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
+  it('includes the immutable canvas id on each entry, stable across a slug rename', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const before = await listCanvases('session1')
+    expect(before[0].id).toBeTruthy()
+
+    await renameCanvasSlug('session1', 'canvas-a', 'canvas-renamed')
+    const after = await listCanvases('session1')
+    expect(after[0].slug).toBe('canvas-renamed')
+    // The id is what stored references key on; a rename must not move it.
+    expect(after[0].id).toBe(before[0].id)
+  })
+
   it('persists kind: markdown and lists it back', async () => {
     await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
     const list = await listCanvases('session1')
