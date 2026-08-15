@@ -1,5 +1,5 @@
 import { mdastFlowContentArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
-import { describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { fc, fcTest, hasNoEmptyContainer, withDefaults } from '../test-utils/fast-check.js'
 import { parseMarkdownBody, stringifyMarkdownBody } from './pipeline.js'
 
@@ -25,4 +25,20 @@ describe('markdown body parse totality (including lists)', () => {
       parseMarkdownBody(text)
     },
   )
+})
+
+describe('upstream task-list continuation crash (canary)', () => {
+  // A GFM checkbox stranded on a bullet's continuation line trips a
+  // DEV-ONLY assert inside mdast-util-gfm-task-list-item@2.0.0 (exitCheck,
+  // via devlop — production builds no-op it, so deployed parsing does not
+  // throw; the dev server and this test runner do). The totality
+  // arbitrary excludes the one model shape whose serialization produces
+  // this text (a blank-valued html node emptying a checked item's first
+  // paragraph — unreachable from any real parse). This canary pins the
+  // upstream behavior itself: when a dependency bump makes it stop
+  // throwing, delete this test and the html-value exclusion in
+  // canvas-model's arbitraries together.
+  it('still throws on a checkbox stranded on a continuation line', () => {
+    expect(() => parseMarkdownBody('*\n[ ] x')).toThrow()
+  })
 })
