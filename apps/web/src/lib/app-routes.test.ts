@@ -26,8 +26,8 @@ describe('app-routes', () => {
     expect(canvasPath('w1', 'main')).toBe('/w/w1/canvas/main')
   })
 
-  it('percent-encodes the workspace and the slug', () => {
-    expect(canvasPath('w 1', 'my/slug')).toBe('/w/w%201/canvas/my%2Fslug')
+  it('percent-encodes the workspace, and the slug per segment', () => {
+    expect(canvasPath('w 1', 'my/slug')).toBe('/w/w%201/canvas/my/slug')
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
@@ -54,20 +54,35 @@ describe('parseDaemonRoute', () => {
     })
   })
 
-  it('decodes percent-encoded segments', () => {
-    expect(parseDaemonRoute('/w/w%201/canvas/my%2Fslug')).toEqual({
+  it('accepts a multi-segment document path as the tail', () => {
+    // The whole point of the shape: a document's path IS the URL's tail, one
+    // URL segment per path segment, so the hierarchy the workspace shows is
+    // the hierarchy the address bar shows. The data path below has been able
+    // to load these since the canvases family took paths.
+    expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toEqual({
       kind: 'canvas',
-      workspaceId: 'w 1',
-      slug: 'my/slug',
+      workspaceId: 'w1',
+      slug: 'notes/2026/plan',
     })
   })
 
-  it('does not yet accept a multi-segment tail', () => {
-    // The shape leaves room for a document path here, but the page below
-    // still loads by slug through /api/canvas/:workspaceId/:slug — a URL the
-    // app cannot open is worse than a not-found, so it stays not-a-route
-    // until that data path converges too.
-    expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toBeNull()
+  it('round-trips a nested path through daemonRoutePath', () => {
+    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', slug: 'notes/2026/plan' })).toEqual(
+      '/w/w1/canvas/notes/2026/plan',
+    )
+  })
+
+  it('decodes each tail segment separately, keeping the separators', () => {
+    expect(parseDaemonRoute('/w/w1/canvas/a%20b/c%20d')).toEqual({
+      kind: 'canvas',
+      workspaceId: 'w1',
+      slug: 'a b/c d',
+    })
+    expect(canvasPath('w1', 'a b/c d')).toBe('/w/w1/canvas/a%20b/c%20d')
+  })
+
+  it('treats a malformed segment anywhere in the tail as not-a-route', () => {
+    expect(parseDaemonRoute('/w/w1/canvas/ok/ma%in')).toBeNull()
   })
 
   it('is not confused by the workspace-index route it now nests under', () => {

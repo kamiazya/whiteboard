@@ -8,7 +8,9 @@ import { VersionThumbnail } from './VersionThumbnail.js'
 const WORKSPACE_ID = 'w 1#a'
 const SLUG = 'main/x'
 const VERSION_ID = 'v?1'
-const THUMBNAIL_PATH = `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(SLUG)}/versions/${encodeURIComponent(VERSION_ID)}/thumbnail`
+// The slug is a document path: each segment is encoded, the separators are
+// structure (the canvasesApiUrl contract).
+const THUMBNAIL_PATH = `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${SLUG.split('/').map(encodeURIComponent).join('/')}/versions/${encodeURIComponent(VERSION_ID)}/thumbnail`
 
 function renderInDaemonMode(fetchFn: typeof fetch, props: Partial<{ versionId: string }> = {}) {
   return render(

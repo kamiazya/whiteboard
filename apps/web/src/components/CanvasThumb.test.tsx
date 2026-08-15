@@ -7,12 +7,12 @@ import { CanvasThumb } from './CanvasThumb.js'
 afterEach(() => cleanup())
 
 describe('CanvasThumb', () => {
-  it('renders an img pointed at the latest-thumbnail route, url-encoding the slug', () => {
+  it('renders an img pointed at the latest-thumbnail route, encoding each path segment', () => {
     const { container } = render(<CanvasThumb workspaceId="ws-1" slug="my canvas/x" />)
     const img = container.querySelector('img') as HTMLImageElement
     expect(img).not.toBeNull()
     expect(img.getAttribute('src')).toBe(
-      '/api/workspaces/ws-1/canvases/my%20canvas%2Fx/latest-thumbnail',
+      '/api/workspaces/ws-1/canvases/my%20canvas/x/latest-thumbnail',
     )
     expect(img.getAttribute('loading')).toBe('lazy')
     expect(img.getAttribute('decoding')).toBe('async')

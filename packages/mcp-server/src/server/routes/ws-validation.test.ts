@@ -20,6 +20,13 @@ function expectAllWsWarnings(records: LogRecord[]): void {
 }
 
 describe('parseWsTargetFromRequestUrl', () => {
+  it('takes a nested document path as plain slash segments', () => {
+    expect(parseWsTargetFromRequestUrl('/ws/ws-1/notes/2026/plan', '127.0.0.1:3099')).toEqual({
+      workspaceId: 'ws-1',
+      slug: 'notes/2026/plan',
+    })
+  })
+
   it('accepts validated workspaceId and encoded slug', () => {
     expect(parseWsTargetFromRequestUrl('/ws/sess-1/nested%2Fslug', '127.0.0.1:3099')).toEqual({
       workspaceId: 'sess-1',
@@ -36,12 +43,6 @@ describe('parseWsTargetFromRequestUrl', () => {
   it('rejects invalid slugs before websocket upgrade', () => {
     expect(() => parseWsTargetFromRequestUrl('/ws/sess-1/bad.slug', '127.0.0.1:3099')).toThrow(
       /Invalid slug/,
-    )
-  })
-
-  it('rejects unencoded extra path segments', () => {
-    expect(() => parseWsTargetFromRequestUrl('/ws/sess-1/nested/slug', '127.0.0.1:3099')).toThrow(
-      /Invalid websocket path/,
     )
   })
 

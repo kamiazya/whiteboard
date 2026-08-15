@@ -53,10 +53,10 @@ const server = setupServer(
   // Answered rather than left to `bypass`: the worker seeds every subscribed
   // document from this route, and an unhandled request would escape to
   // whatever real daemon is on this port.
-  http.get(`${BASE}/api/canvas/:workspaceId/:slug/snapshot`, () =>
+  http.get(`${BASE}/api/w/:workspaceId/canvas/:slug/snapshot`, () =>
     HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
   ),
-  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
     // A refusal that ANSWERS rather than drops the connection: a 5xx is the
     // shape a restarting daemon actually produces, and it is the one a
     // `fetch().catch()` cannot see — fetch resolves, so a writer that only

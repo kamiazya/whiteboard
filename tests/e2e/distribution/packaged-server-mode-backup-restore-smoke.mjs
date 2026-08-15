@@ -11,7 +11,7 @@
 //   3.  Start container A with a fresh source data volume.
 //   4.  Seed via valid JWT:
 //         - workspace + canvas (Loro snapshot via canvas POST)
-//         - file blob  (PUT /api/canvas/:ws/:slug/file/:fileId)
+//         - file blob  (PUT /api/w/:ws/canvas/:slug/file/:fileId)
 //         - manual version + thumbnail
 //         - palette entry  (PUT /api/workspaces/:ws/palette, no auth needed)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
@@ -407,7 +407,7 @@ try {
     // Capture Loro snapshot bytes (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok) fail(`scenario 3: snapshot fetch failed with ${snapshotRes.status}`)
@@ -417,7 +417,7 @@ try {
     // Upload file blob (files:write).
     const uploadRes = await authedFetch(
       serverBaseUrl,
-      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
       jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
@@ -574,7 +574,7 @@ try {
     // Snapshot byte-equality (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok)
@@ -596,7 +596,7 @@ try {
     // File blob (files:read).
     const fileRes = await authedFetch(
       serverBaseUrl,
-      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
       jwt,
     )
     if (!fileRes.ok) fail(`scenario 7: file GET on restored server failed with ${fileRes.status}`)

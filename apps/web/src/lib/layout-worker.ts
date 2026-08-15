@@ -7,11 +7,11 @@
  * committed change (add a node, drop a drag, edit text). Moving it here does
  * not make it faster; it stops it freezing the UI.
  *
- * Markdown arrives already parsed (see the protocol's note): this module
- * never imports canvas-codec, so remark and unified stay out of the worker
- * chunk. A body nobody pre-parsed is answered with `failed` rather than an
- * empty paragraph — a slower frame is recoverable, a silently different scene
- * is not.
+ * Markdown is parsed HERE, with the same `parseMarkdownBody` the main thread
+ * uses, so the whole per-commit block — parse plus layout — leaves the main
+ * thread. This is only possible because vite.config.ts pins
+ * decode-named-character-reference to its DOM-free entry; without the alias
+ * this chunk throws `document is not defined` before handling a message.
  *
  * The one thing that would make this WRONG is a scene that differs from what
  * the main thread would have produced. Text measurement is where that would
@@ -26,6 +26,7 @@
 // `CanvasViewer` and `mountCanvasViewer`, whose module graphs touch
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
@@ -56,31 +57,13 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
     }
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const missingRefs = new Set(request.missingFileRefs ?? [])
-    const bodies = new Map(request.bodies.map((b) => [b.text, b.mdast]))
-    let missing: string | undefined
     const { svg, bounds, scene } = renderCanvasToSvgWith(request.canvas, {
       measure,
       theme: request.theme,
       resolveFileLabel: labels.size === 0 ? undefined : (file) => labels.get(file),
       resolveFileMissing: missingRefs.size === 0 ? undefined : (file) => missingRefs.has(file),
-      parseBody: (text: string) => {
-        const parsed = bodies.get(text)
-        if (parsed === undefined) {
-          missing ??= text
-          return { type: 'root', children: [] }
-        }
-        return parsed
-      },
+      parseBody: parseMarkdownBody,
     })
-    if (missing !== undefined) {
-      const response: LayoutResponse = {
-        type: 'failed',
-        id: request.id,
-        reason: `no pre-parsed body for ${JSON.stringify(missing.slice(0, 40))}`,
-      }
-      self.postMessage(response)
-      return
-    }
     const response: LayoutResponse = { type: 'laid-out', id: request.id, svg, bounds, scene }
     self.postMessage(response)
   } catch (error) {

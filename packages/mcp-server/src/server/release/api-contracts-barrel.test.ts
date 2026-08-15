@@ -34,6 +34,10 @@ describe('api-contracts barrel scope', () => {
       '@kamiazya/whiteboard-server-core',
       './branches.js',
       './canvas.js',
+      // canvas-url: the live-canvas API's URL shape, exported so apps/web
+      // builds request URLs through the same function the daemon's own
+      // clients use instead of re-deriving the shape by hand.
+      './canvas-url.js',
       './pairing.js',
       './runtime.js',
     ])

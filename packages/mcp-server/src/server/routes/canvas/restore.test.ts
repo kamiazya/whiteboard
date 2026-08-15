@@ -73,7 +73,7 @@ describe('restore router (real node counts)', () => {
       ],
       edges: [],
     })
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -102,7 +102,7 @@ describe('restore router (real node counts)', () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
     // Source canvas with one node, saved as a version.
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['keep-me']),
@@ -115,7 +115,7 @@ describe('restore router (real node counts)', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     // Target canvas already exists with a different node.
-    await app.request('/api/canvas/session1/canvas-b/update', {
+    await app.request('/api/w/session1/canvas/canvas-b/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['b-only']),
@@ -158,7 +158,7 @@ describe('restore router (kind propagation)', () => {
     // A markdown document: its OKF body is a text node, so the restored
     // content alone cannot say which editor should open it.
     await saveCanvas('session1', 'note-a', new LoroDoc(), { kind: 'markdown' })
-    await app.request('/api/canvas/session1/note-a/update', {
+    await app.request('/api/w/session1/canvas/note-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['okf-body']),
@@ -188,7 +188,7 @@ describe('restore router (kind propagation)', () => {
     // document predating kinds was created. Copying a guess here would be
     // worse than copying the gap: the target keeps it forever, and a
     // markdown document restored as spatial opens in the wrong editor.
-    await app.request('/api/canvas/session1/unknown-a/update', {
+    await app.request('/api/w/session1/canvas/unknown-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['n1']),

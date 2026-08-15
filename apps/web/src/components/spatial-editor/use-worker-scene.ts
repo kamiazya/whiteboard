@@ -19,10 +19,9 @@
  *   back to laying the same canvas out synchronously. A degraded worker costs
  *   responsiveness, never content.
  *
- * Markdown is parsed HERE rather than in the worker (see the protocol's note):
- * that is the 15-19ms this cannot remove, against the 81-339ms it can.
+ * Markdown is parsed in the WORKER along with layout (see the protocol's
+ * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -33,7 +32,6 @@ import {
   FONT_DEGRADED,
   type LayoutRequest,
   type LayoutResponse,
-  type ParsedBody,
 } from '../../lib/layout-worker-protocol.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from './scene-render.js'
 import type { RenderedCanvas } from './scene-render-core.js'
@@ -56,18 +54,6 @@ const OFFLOAD_MIN_ELEMENTS = 12
 
 function worthOffloading(canvas: SpatialCanvas): boolean {
   return canvas.nodes.length + canvas.edges.length >= OFFLOAD_MIN_ELEMENTS
-}
-
-/** Every body the worker could be asked for, parsed on this thread. */
-function parseBodies(canvas: SpatialCanvas): ParsedBody[] {
-  const seen = new Set<string>()
-  const bodies: ParsedBody[] = []
-  for (const node of canvas.nodes) {
-    if (node.type !== 'text' || seen.has(node.text)) continue
-    seen.add(node.text)
-    bodies.push({ text: node.text, mdast: parseMarkdownBody(node.text) })
-  }
-  return bodies
 }
 
 function createLayoutWorker(): Worker | null {
@@ -100,7 +86,7 @@ export function useWorkerScene(
     () => ({ ...base, ...fileSeamOptions }),
     [base.measure, base.theme, fileSeamOptions],
   )
-  const offloadable = canLayoutInWorker(fileSeamOptions) && worthOffloading(canvas)
+  const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
   // the first render, and any render the worker cannot serve.
   const renderNow = () => renderCanvasToSvg(canvas, options)
@@ -117,6 +103,9 @@ export function useWorkerScene(
   const workerRef = useRef<Worker | null>(null)
   /** Latched: a realm that cannot load the face never will within a session. */
   const fontDegraded = useRef(false)
+  /** Latched on a worker `error` event: module evaluation that failed once
+   * fails identically on every reconstruction, so the session stays sync. */
+  const workerDead = useRef(false)
   const requestRef = useRef(0)
   const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
@@ -135,7 +124,7 @@ export function useWorkerScene(
       shownFor.current = inputs
       return
     }
-    if (fontDegraded.current) {
+    if (fontDegraded.current || workerDead.current) {
       shownFor.current = inputs
       setRendered(renderNow())
       return
@@ -166,6 +155,23 @@ export function useWorkerScene(
       setRendered(response.type === 'laid-out' ? response : renderNow())
     }
     worker.addEventListener('message', onMessage)
+    // A worker whose MODULE fails to evaluate never throws at construction —
+    // it fires this event instead, and no `message` will ever come. Without a
+    // listener the request would hang and the previous scene would stay on
+    // screen for every later edit, which breaks this file's own "a degraded
+    // worker costs responsiveness, never content" invariant. Eval failure is
+    // as permanent as a missing font face, so the worker is retired the same
+    // way and the session stays synchronous.
+    const onError = () => {
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+      worker.terminate()
+      workerRef.current = null
+      workerDead.current = true
+      shownFor.current = inputs
+      setRendered(renderNow())
+    }
+    worker.addEventListener('error', onError)
     const request: LayoutRequest = {
       type: 'layout',
       id,
@@ -173,10 +179,12 @@ export function useWorkerScene(
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
-      bodies: parseBodies(inputs.canvas),
     }
     worker.postMessage(request)
-    return () => worker.removeEventListener('message', onMessage)
+    return () => {
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+    }
     // `renderNow` closes over the current inputs by design: a fallback must
     // lay out what was asked for, not what the effect last saw.
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
@@ -188,7 +196,7 @@ export function useWorkerScene(
   // moment, since it is also a user's first impression of the canvas. Warming
   // it while they are still reading brings that edit back to the steady state.
   useEffect(() => {
-    if (!offloadable || fontDegraded.current) return
+    if (!offloadable || fontDegraded.current || workerDead.current) return
     workerRef.current ??= createLayoutWorker()
   }, [offloadable])
 

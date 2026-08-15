@@ -4,7 +4,7 @@ import type {
   ViewportErrorBody,
   ViewportResponse,
 } from '../../shared/api-contracts/canvas-runtime.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../validators.js'
+import { onCanvasAction } from './canvas/path-route.js'
 import { getClientCount, sendViewportRequest } from './ws.js'
 
 // requestId -> { resolve, reject }
@@ -25,18 +25,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
   const timeoutMs = options.timeoutMs ?? 5_000
   const app = new Hono()
 
-  // POST /api/canvas/:workspaceId/:slug/viewport
-  app.post('/api/canvas/:workspaceId/:slug/viewport', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-
+  onCanvasAction(app, 'post', 'viewport', async (c, workspaceId, path) => {
     // The body is optional. Forward all viewport parameters (mode / elementIds /
     // padding / animate / scrollX / scrollY / zoom) to the browser, which applies defaults.
     const body = await c.req
@@ -44,7 +33,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
       .catch(() => ({}) as Record<string, unknown>)
 
     // Fast-fail with 503 if no WS client is connected.
-    if (getClientCount(workspaceId, slug) === 0) {
+    if (getClientCount(workspaceId, path) === 0) {
       const noClient: ViewportErrorBody = {
         error: 'no_client',
         message:
@@ -60,7 +49,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
     try {
       await new Promise<void>((resolve, reject) => {
         pendingViewport.set(requestId, { resolve, reject })
-        sendViewportRequest(workspaceId, slug, requestId, body)
+        sendViewportRequest(workspaceId, path, requestId, body)
 
         timer = setTimeout(() => {
           if (pendingViewport.has(requestId)) {

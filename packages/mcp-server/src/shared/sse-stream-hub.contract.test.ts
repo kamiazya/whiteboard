@@ -46,7 +46,7 @@ function createHarness(): SseStreamSourceHarness {
     }
     // The canvas update route, which is where a push lands. Matched before the
     // JSON parse below: its body is raw update bytes, not JSON.
-    const canvasSnapshot = /\/api\/canvas\/([^/]+)\/([^/]+)\/snapshot$/.exec(url)
+    const canvasSnapshot = /\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/.exec(url)
     if (canvasSnapshot) {
       const [, workspaceId, slug] = canvasSnapshot
       const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(slug as string)}`
@@ -54,7 +54,7 @@ function createHarness(): SseStreamSourceHarness {
       if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
       return new Response(bytes.slice().buffer as ArrayBuffer, { status: 200 })
     }
-    const canvasUpdate = /\/api\/canvas\/([^/]+)\/([^/]+)\/update$/.exec(url)
+    const canvasUpdate = /\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
       const [, workspaceId, slug] = canvasUpdate
       daemonWrites.push({

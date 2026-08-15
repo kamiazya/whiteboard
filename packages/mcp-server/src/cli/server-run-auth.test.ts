@@ -50,7 +50,7 @@ function authInput(
 ): AuthAuthorizeInput {
   return {
     method: 'GET',
-    path: '/api/canvas/ws1/test',
+    path: '/api/w/ws1/canvas/test',
     authorizationHeader: jwt ? `Bearer ${jwt}` : undefined,
     requiredScopes: scopes as never,
   }

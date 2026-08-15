@@ -12,7 +12,6 @@
  * canvas-viewer's font.ts already documents having shipped once.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   createBrowserMeasureText,
@@ -21,12 +20,6 @@ import {
 import { expect, it } from 'vitest'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
-
-/** Every body the worker will be asked for, parsed the way the editor will. */
-const bodiesOf = (c: SpatialCanvas) =>
-  c.nodes
-    .filter((n): n is Extract<typeof n, { type: 'text' }> => n.type === 'text')
-    .map((n) => ({ text: n.text, mdast: parseMarkdownBody(n.text) }))
 
 // Text that wraps, punctuation that kerns, and a mix of scripts: measurement
 // differences show up in wrapped-line counts, not in a single short word.
@@ -97,7 +90,6 @@ it('the worker scene is deeply equal to the main-thread scene', async () => {
     id: 1,
     canvas,
     theme: 'light',
-    bodies: bodiesOf(canvas),
   })
 
   expect(fromWorker.type).toBe('laid-out')
@@ -126,10 +118,45 @@ it('carries the file-label seam across the wire', async () => {
     canvas: withFile,
     theme: 'light',
     fileRefLabels: labels,
-    bodies: bodiesOf(withFile),
   })
   expect(fromWorker.type).toBe('laid-out')
   if (fromWorker.type !== 'laid-out') return
   expect(fromWorker.svg).toContain('Readable name')
+  expect(fromWorker.svg).toBe(onMain.svg)
+}, 60_000)
+
+it('parses markdown itself — no pre-parsed bodies cross the wire', async () => {
+  // The named character reference is the load-bearing detail: decoding it
+  // walks decode-named-character-reference, whose `browser` entry touches
+  // `document` at module top level and killed any worker importing remark
+  // until the vite alias pinned the worker-safe entry. A worker that cannot
+  // parse — or cannot even evaluate its chunk — fails this case loudly.
+  expect(await ensureViewerFontLoaded()).toBe('loaded')
+  const withMarkdown: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'm',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 240,
+        height: 140,
+        text: '# Ampersands &amp; entities\n\nSome *emphasis* to lay out.',
+      },
+    ],
+    edges: [],
+  } as SpatialCanvas
+  const onMain = renderCanvasToSvg(withMarkdown, {
+    measure: createBrowserMeasureText(),
+    theme: 'light',
+  })
+  const fromWorker = await layoutInWorker({
+    type: 'layout',
+    id: 3,
+    canvas: withMarkdown,
+    theme: 'light',
+  })
+  expect(fromWorker.type).toBe('laid-out')
+  if (fromWorker.type !== 'laid-out') return
   expect(fromWorker.svg).toBe(onMain.svg)
 }, 60_000)

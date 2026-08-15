@@ -2,6 +2,8 @@ import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
+  canvasApiUrl,
+  canvasesApiUrl,
   canvasOkfV1ResponseSchema,
   createCanvasResponseSchema,
   type DeleteCanvasResponse,
@@ -115,13 +117,13 @@ export function deleteCanvas(
 ): Promise<DeleteCanvasResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug)}`,
     deleteCanvasResponseSchema,
     { method: 'DELETE' },
   )
 }
 
-// GET /api/canvas/:workspaceId/:slug/snapshot returns raw Loro bytes
+// GET /api/w/:workspaceId/canvas/:slug/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
 // which always calls res.json().
 export async function getCanvasSnapshot(
@@ -130,7 +132,7 @@ export async function getCanvasSnapshot(
   workspaceId: string,
   slug: string,
 ): Promise<Uint8Array> {
-  const url = `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}/snapshot`
+  const url = `${daemonBaseUrl}${canvasApiUrl(workspaceId, slug, 'snapshot')}`
   const res = await fetchFn(url)
   if (!res.ok) {
     throw new Error(await parseProblemDetails(res))
@@ -147,7 +149,7 @@ export function updateCanvas(
 ): Promise<UpdateCanvasResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}/update`,
+    `${daemonBaseUrl}${canvasApiUrl(workspaceId, slug, 'update')}`,
     updateCanvasResponseSchema,
     { method: 'POST', body: snapshot as BodyInit },
   )
@@ -162,7 +164,7 @@ export function setCanvasName(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug, 'name')}`,
     workspaceNamesSchema,
     {
       method: 'PUT',

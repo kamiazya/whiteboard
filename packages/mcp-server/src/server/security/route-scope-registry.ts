@@ -60,19 +60,22 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
 
   const isWrite = isWriteMethod(method)
 
-  // File routes: reading/writing a canvas's attached binary file.
-  if (/^\/api\/canvas\/[^/]+\/[^/]+\/file\//.test(path)) {
+  // File routes: reading/writing a canvas's attached binary file. The
+  // document path is multi-segment, so the discriminator is the mandatory
+  // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
+  if (/^\/api\/w\/[^/]+\/canvas\/.+\/file\/[^/]+$/.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'files:write' : 'files:read'] }
   }
 
   // Canvas write operations that arrive as POST but mutate state.
-  if (/^\/api\/canvas\/[^/]+\/[^/]+\/(update|export)$/.test(path) && method === 'POST') {
+  if (/^\/api\/w\/[^/]+\/canvas\/.+\/(update|export)$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['canvas:write'] }
   }
-  // Remaining /api/canvas/* routes: honor the write/read split so a mutating
-  // POST (e.g. /viewport) isn't authorized by canvas:read alone. The
-  // specific write routes above still take precedence via ordering.
-  if (path.startsWith('/api/canvas/')) {
+  // Remaining /api/w/:workspaceId/canvas/* routes: honor the write/read
+  // split so a mutating POST (e.g. /viewport) isn't authorized by
+  // canvas:read alone. The specific write routes above still take
+  // precedence via ordering.
+  if (/^\/api\/w\/[^/]+\/canvas\//.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
   }
 

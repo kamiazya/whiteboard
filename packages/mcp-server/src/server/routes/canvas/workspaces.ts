@@ -22,6 +22,7 @@ import {
 } from '../../store/canvas-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 // Names the specific field createCanvasRequestSchema rejected, instead of a
 // single message covering the whole request — a valid slug with an invalid
@@ -125,30 +126,27 @@ export function createWorkspacesRouter() {
   // Delete a canvas: row (branches/versions cascade via FK), .loro blob,
   // version thumbnails, and doc-cache entry. Idempotent-shaped 404 for a
   // missing canvas rather than a throw.
-  app.delete('/api/workspaces/:workspaceId/canvases/:slug', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
-      throw err
-    }
-    try {
-      const deleted = await deleteCanvas(workspaceId, slug)
-      if (!deleted) {
-        return c.json({ title: `Canvas "${slug}" not found` }, 404)
+  onCanvasesRoute(
+    app,
+    'delete',
+    [],
+    async (c, workspaceId, slug) => {
+      try {
+        const deleted = await deleteCanvas(workspaceId, slug)
+        if (!deleted) {
+          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+        }
+        const response: DeleteCanvasResponse = { ok: true }
+        return c.json(response)
+      } catch (err) {
+        const issue = handleCorruptStoredData(err)
+        if (issue) return c.json(issue.body, issue.status)
+        getLogger('canvas').error({ err: err as Error }, 'deleteCanvas failed unexpectedly')
+        return c.json({ title: 'Failed to delete canvas.' }, 500)
       }
-      const response: DeleteCanvasResponse = { ok: true }
-      return c.json(response)
-    } catch (err) {
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
-      getLogger('canvas').error({ err: err as Error }, 'deleteCanvas failed unexpectedly')
-      return c.json({ title: 'Failed to delete canvas.' }, 500)
-    }
-  })
+    },
+    { badRequest: 'problem-details' },
+  )
 
   // Rename a canvas's slug in place: same canvasId, same branches/versions/blob,
   // just a new slug column. Old URLs carrying the old slug 404 by design — no
@@ -157,49 +155,46 @@ export function createWorkspacesRouter() {
   // Server-side foundation only: no MCP tool, CLI command, or apps/web
   // affordance calls this route yet. The apps/web slug-edit UI is a planned
   // follow-up, not dead code.
-  app.put('/api/workspaces/:workspaceId/canvases/:slug/slug', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
-      throw err
-    }
-    const raw = await c.req.json().catch(() => null)
-    if (raw === null) {
-      return c.json({ title: 'JSON body required' }, 400)
-    }
-    const parsed = renameCanvasSlugRequestSchema.safeParse(raw)
-    if (!parsed.success) {
-      return c.json({ title: 'slug is required' }, 400)
-    }
-    const newSlug = parsed.data.slug
-    try {
-      validateSlug(newSlug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
-      throw err
-    }
-    try {
-      const result = await renameCanvasSlug(workspaceId, slug, newSlug)
-      if (!result) {
-        return c.json({ title: `Canvas "${slug}" not found` }, 404)
+  onCanvasesRoute(
+    app,
+    'put',
+    ['slug'],
+    async (c, workspaceId, slug) => {
+      const raw = await c.req.json().catch(() => null)
+      if (raw === null) {
+        return c.json({ title: 'JSON body required' }, 400)
       }
-      const response: RenameCanvasSlugResponse = { slug: newSlug }
-      return c.json(response)
-    } catch (err) {
-      if (err instanceof ConflictError) {
-        return c.json({ title: `Canvas "${newSlug}" already exists` }, 409)
+      const parsed = renameCanvasSlugRequestSchema.safeParse(raw)
+      if (!parsed.success) {
+        return c.json({ title: 'slug is required' }, 400)
       }
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
-      getLogger('canvas').error({ err: err as Error }, 'renameCanvasSlug failed unexpectedly')
-      return c.json({ title: 'Failed to rename canvas.' }, 500)
-    }
-  })
+      const newSlug = parsed.data.slug
+      try {
+        validateSlug(newSlug)
+      } catch (err) {
+        const body = validationErrorBody(err)
+        if (body) return c.json({ title: body.message }, 400)
+        throw err
+      }
+      try {
+        const result = await renameCanvasSlug(workspaceId, slug, newSlug)
+        if (!result) {
+          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+        }
+        const response: RenameCanvasSlugResponse = { slug: newSlug }
+        return c.json(response)
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          return c.json({ title: `Canvas "${newSlug}" already exists` }, 409)
+        }
+        const issue = handleCorruptStoredData(err)
+        if (issue) return c.json(issue.body, issue.status)
+        getLogger('canvas').error({ err: err as Error }, 'renameCanvasSlug failed unexpectedly')
+        return c.json({ title: 'Failed to rename canvas.' }, 500)
+      }
+    },
+    { badRequest: 'problem-details' },
+  )
 
   return app
 }
