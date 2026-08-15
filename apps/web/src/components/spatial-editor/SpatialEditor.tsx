@@ -511,6 +511,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setTool(initialTool)
     }, [initialTool])
     const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
+    // Screen point of the last committed long-press, while its pulse plays.
+    const [longPressPulse, setLongPressPulse] = useState<Point | null>(null)
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -1449,6 +1451,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // keep that cue so the menu opening under a still-down finger
               // reads as deliberate, not glitchy.
               hapticTick()
+              setLongPressPulse(screen)
               openContextMenuAtRef.current(screen)
             }, LONG_PRESS_MENU_MS),
           }
@@ -2359,7 +2362,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     useEffect(() => {
       const root = rootRef.current
       if (root === null) return
-      const onTouchStart = (event: TouchEvent) => {
+      const refuseNativeTouch = (event: TouchEvent) => {
         if (
           event.target instanceof Element &&
           event.target.closest('[data-editor-overlay]') !== null
@@ -2368,8 +2371,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }
         event.preventDefault()
       }
-      root.addEventListener('touchstart', onTouchStart, { passive: false })
-      return () => root.removeEventListener('touchstart', onTouchStart)
+      root.addEventListener('touchstart', refuseNativeTouch, { passive: false })
+      // touchmove too, not just touchstart: an embedding sheet (iOS's
+      // SFSafariViewController in-app browser) decides from UNCONSUMED move
+      // events whether a drag is ITS drag — a canvas pan was dragging the
+      // whole sheet up and down. Canvas gestures are pointer-event driven
+      // and unaffected.
+      root.addEventListener('touchmove', refuseNativeTouch, { passive: false })
+      return () => {
+        root.removeEventListener('touchstart', refuseNativeTouch)
+        root.removeEventListener('touchmove', refuseNativeTouch)
+      }
     }, [])
 
     // out) would otherwise leave the browser holding capture for a pointer
@@ -3114,6 +3126,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               node.height * viewport.zoom >= EXPAND_MIN_H
             }
           />
+          {longPressPulse !== null && (
+            // The moment the long-press commits: one expanding ring at the
+            // pressed point. Haptics are best-effort at most (see
+            // haptics.ts), so this is the feedback channel that always
+            // works; removed on its own animationend (the reduced-motion
+            // floor shortens, never cancels, so cleanup still fires).
+            <div
+              data-testid="long-press-pulse"
+              aria-hidden="true"
+              className="long-press-pulse"
+              style={{ left: longPressPulse.x, top: longPressPulse.y }}
+              onAnimationEnd={() => setLongPressPulse(null)}
+            />
+          )}
           {marquee !== null && (
             <svg
               data-testid="marquee-rect"

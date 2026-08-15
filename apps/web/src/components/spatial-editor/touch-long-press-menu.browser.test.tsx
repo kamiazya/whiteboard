@@ -61,6 +61,9 @@ it('a stationary touch long-press opens the context menu without dragging the no
     expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
   })
   expect(container.textContent).toContain('Delete')
+  // The commit moment gives visible feedback at the pressed point — the
+  // always-available sibling of the best-effort haptic tick.
+  expect(container.querySelector('[data-testid="long-press-pulse"]')).not.toBeNull()
   // The press was a menu invocation, not a drag: lifting afterwards leaves
   // the node exactly where it was.
   touch(root, 'pointerup', 200, 130)
