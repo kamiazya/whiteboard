@@ -58,7 +58,10 @@ async function waitForSaved(): Promise<void> {
 }
 
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {
-  beforeEach(async () => {
+  beforeEach(async (ctx) => {
+    const w = window as unknown as { __pageTrace?: string[] }
+    w.__pageTrace = w.__pageTrace ?? []
+    w.__pageTrace.push(`TEST:${ctx.task.name.slice(0, 30)}`)
     await clearWhiteboardDb()
     spatialMounts = 0
   })
@@ -180,7 +183,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('リリース計画')
     await waitFor(() => {
       const trace = ((window as unknown as { __pageTrace?: string[] }).__pageTrace ?? [])
-        .slice(-14)
+        .slice(-20)
         .join('|')
       expect(
         (title as HTMLInputElement).value,
