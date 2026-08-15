@@ -42,11 +42,21 @@ import { parseServerTextMessage } from './ws-text-message.js'
  * apiFetch only resolves relative /api/... paths against the current page
  * origin, so a daemon paired from a different origin (apps/web talking to a
  * loopback daemon) needs its own fetch that targets the daemon's origin.
- * WS auth stays on readDaemonTokenOnce() regardless — it is subprotocol-based,
- * not header-based, so it is unaffected by this override.
  */
 export interface DaemonApiTransport {
   fetch: typeof globalThis.fetch
+  /**
+   * WS upgrade credential for a paired session. The server accepts an
+   * origin-scoped pairing session token through the same `daemon-token.`
+   * subprotocol as the shared daemon token (ws-auth.ts validates it against
+   * the upgrade's Origin), but that token lives in page memory — never in
+   * the `#wb=` bootstrap global readDaemonTokenOnce() reads. Without this,
+   * a pairing-grant session offers no credential at all and every upgrade
+   * is rejected 401 while the HTTP side keeps working. A function so a
+   * rotated session token is re-read on every reconnect attempt; the
+   * bootstrap global, when seeded, still wins.
+   */
+  wsToken?: () => string | undefined
 }
 
 // Browsers surface a WS handshake rejection (e.g. HTTP 401 on the upgrade
@@ -159,7 +169,7 @@ export class DaemonBackend implements CanvasBackend {
   private openSocket(handlers: CanvasBackendHandlers): void {
     if (this.cancelled) return
 
-    const daemonToken = readDaemonTokenOnce()
+    const daemonToken = readDaemonTokenOnce() ?? this.apiTransport?.wsToken?.() ?? null
 
     const ws = new WebSocket(
       buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.slug),
