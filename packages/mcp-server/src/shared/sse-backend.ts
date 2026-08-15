@@ -143,14 +143,17 @@ export class SseBackend implements CanvasBackend {
     this.ownedHub = null
   }
 
-  pushLocalUpdate(bytes: Uint8Array): void {
+  pushLocalUpdate(bytes: Uint8Array): void | Promise<void> {
     // Through the source, not straight to the daemon, because the source is
     // what knows where this document's authority lives. With no SharedWorker
     // that is the daemon and this is the same POST it always was; with one, the
     // worker's replica merges the bytes against everything else it has seen
     // and writes onward itself. Posting here regardless would write around
     // that replica and re-send state the daemon had just delivered.
-    this.resolveSource().push(this.docKey, bytes)
+    // Returned, not swallowed: `CanvasBackendHandlers` already treats a
+    // rejected push as the session's `error` status, and with no worker in
+    // front there is nothing else that will ever retry this write.
+    return this.resolveSource().push(this.docKey, bytes)
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
