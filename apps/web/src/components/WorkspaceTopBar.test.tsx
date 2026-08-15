@@ -1222,6 +1222,46 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(onCreateCanvas).toHaveBeenCalledTimes(1)
   })
 
+  it('announces the in-flight create through a region that was already there', async () => {
+    let resolveCreate: () => void = () => {}
+    const onCreateCanvas = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCreate = resolve
+        }),
+    )
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onToggleFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={onCreateCanvas}
+      />,
+      { container: document.body },
+    )
+
+    // Present and silent BEFORE anything happens: a polite region that
+    // arrives carrying its first message is announced unreliably.
+    const region = screen.getByRole('status', { name: 'New canvas status' })
+    expect(region.textContent).toBe('')
+
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    fireEvent.pointerUp(await screen.findByTestId('new-canvas-menu-item'))
+
+    await waitFor(() => expect(region.textContent).toBe('Creating canvas…'))
+    // The SAME element, not a replacement — this is what makes the update an
+    // announcement rather than an insertion.
+    expect(screen.getByRole('status', { name: 'New canvas status' })).toBe(region)
+
+    resolveCreate()
+    await waitFor(() => expect(region.textContent).toBe(''))
+  })
+
   it('never renders the daemon-only thumbnail <img> or the pin affordance in the canvas switcher', async () => {
     render(
       <WorkspaceTopBar

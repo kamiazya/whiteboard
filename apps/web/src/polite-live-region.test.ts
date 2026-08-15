@@ -48,10 +48,41 @@ function offendingLines(source: string): number[] {
   )
 }
 
+/**
+ * The opening tag of every `role="status"` element, so its own attributes can
+ * be examined.
+ */
+const STATUS_TAGS = /<[a-zA-Z][^<]*?role="status"[^<]*?>/gs
+
+/**
+ * `display: none` prunes a subtree from the accessibility tree, so a region
+ * hidden that way is not a live region at all while it is hidden — it starts
+ * existing, for assistive tech, in the same commit that gives it its text.
+ * That is the mount bug wearing a stylesheet. `sr-only` is the safe way to
+ * hide one: absolutely positioned and clipped, still in the tree, and out of
+ * flex flow so an empty region adds no gap.
+ */
+const DISPLAY_NONE_CLASSES = /\b(?:empty:)?hidden\b/
+
 describe('polite live regions are mounted before they speak', () => {
   it('scans a plausible number of sources, so a broken glob cannot pass vacuously', () => {
     expect(Object.keys(sourceModules).length).toBeGreaterThan(30)
     expect(Object.values(sourceModules).join('')).toContain('role="status"')
+  })
+
+  it('never hides a status region with display:none', () => {
+    const offenders = Object.entries(sourceModules)
+      .filter(([path]) => !path.includes('.test.'))
+      .flatMap(([path, source]) =>
+        [...source.matchAll(STATUS_TAGS)]
+          .filter((m) => DISPLAY_NONE_CLASSES.test(m[0]))
+          .map((m) => `${path}:${source.slice(0, m.index).split('\n').length}`),
+      )
+
+    expect(
+      offenders,
+      `Use sr-only, not a display:none class — a hidden region leaves the accessibility tree and re-enters it carrying its message, which is the bug this file exists to prevent: ${offenders.join(', ')}`,
+    ).toEqual([])
   })
 
   it('has no role="status" element behind a conditional render', () => {

@@ -303,12 +303,16 @@ export default function WorkspaceTopBar({
             flow's announced busy indication (accessibility criterion 5). */}
         {/* Mounted even while silent: a polite region that arrives already
             carrying its message is announced inconsistently, so this one is
-            always here and only its text changes. */}
+            always here and only its text changes.
+            `sr-only` rather than a `hidden` class while idle — display:none
+            would prune it from the accessibility tree, which is the same bug
+            with a stylesheet instead of a conditional. sr-only is absolutely
+            positioned, so an empty region also adds no gap to this flex row. */}
         <span
           aria-live="polite"
           role="status"
           aria-label="New canvas status"
-          className="text-xs text-muted-foreground empty:hidden"
+          className={newCanvasBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
         >
           {newCanvasBusy ? 'Creating canvas…' : ''}
         </span>

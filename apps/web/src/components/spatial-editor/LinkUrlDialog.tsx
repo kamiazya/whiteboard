@@ -104,7 +104,7 @@ export function LinkUrlDialog({ title, initialUrl, onSubmit, onCancel }: LinkUrl
           id={errorId}
           data-testid="link-url-error"
           role="status"
-          className="max-w-72 text-destructive text-xs empty:hidden"
+          className={refusal === null ? 'sr-only' : 'max-w-72 text-destructive text-xs'}
         >
           {refusal ?? ''}
         </p>
