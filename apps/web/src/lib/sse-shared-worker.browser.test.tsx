@@ -160,6 +160,32 @@ it('keeps two daemon origins that share a document id apart', async () => {
   expect(leaked).not.toHaveBeenCalled()
 }, 30_000)
 
+it('answers a document nobody has opened with an empty snapshot, not an error', async () => {
+  // Lives here rather than in the jsdom file because that file can host
+  // exactly one replica test — loro-crdt's WASM initialises once per realm and
+  // the polyfill runs every worker in the host's, so the second worker to
+  // import it is refused. The jsdom slot goes to the daemon case, which is the
+  // only one a real browser cannot run.
+  const port = openPort('whiteboard-sse-empty-snapshot-test')
+  const doc = `w/empty-${Date.now()}`
+  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+
+  const snapshot = await new Promise<string>((resolve, reject) => {
+    port.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; snapshot?: string }
+      if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
+    })
+    port.postMessage({ type: 'snapshot-request', doc })
+    setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
+  })
+
+  // Forkable is the property that matters: forking from empty and letting the
+  // daemon fill it in is the same path a first-ever open takes.
+  const forked = new LoroDoc()
+  forked.import(decode(snapshot))
+  expect(forked.getMap('anything').size).toBe(0)
+}, 30_000)
+
 it('hands a later tab a snapshot that already contains an earlier push', async () => {
   // The round trip a replica exists to remove: without it this snapshot would
   // be empty until the daemon echoed the work back.
