@@ -98,7 +98,7 @@ export const createCanvasResponseSchema = z.object({
   slug: z.string(),
 })
 
-// POST /api/canvas/:workspaceId/:slug/update — success body.
+// POST /api/w/:workspaceId/canvas/<path>/update — success body.
 export const updateCanvasResponseSchema = z.object({
   ok: z.literal(true),
 })
@@ -118,7 +118,7 @@ export const renameCanvasSlugResponseSchema = z.object({
   slug: z.string(),
 })
 
-// GET /api/canvas/:workspaceId/:slug/exists — success body. Read-only lookup
+// GET /api/w/:workspaceId/canvas/<path>/exists — success body. Read-only lookup
 // so callers can distinguish "canvas not yet created" from a live doc,
 // without the snapshot/update routes' silent lazy-create side effect.
 export const canvasExistsResponseSchema = z.object({

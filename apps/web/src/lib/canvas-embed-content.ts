@@ -93,7 +93,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  * The browser-local binding of the editor's file seams. Declared here beside
  * the four functions it wires so the page is left with no backend knowledge
  * of its own — the daemon page supplies its own adapter over the daemon's
- * `/api/canvas/:workspaceId/:slug/file/:fileId` endpoints.
+ * `/api/w/:workspaceId/canvas/:slug/file/:fileId` endpoints.
  */
 export const BROWSER_LOCAL_FILE_ADAPTER: CanvasFileAdapter = {
   isImageRef,

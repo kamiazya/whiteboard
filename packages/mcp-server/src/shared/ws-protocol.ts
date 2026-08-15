@@ -26,7 +26,7 @@ export function buildWhiteboardWsUrl(
 ): string {
   const url = new URL(locationHref)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.pathname = `/ws/${workspaceId}/${encodeURIComponent(slug)}`
+  url.pathname = `/ws/${workspaceId}/${slug.split('/').map(encodeURIComponent).join('/')}`
   url.search = ''
   url.hash = ''
   return url.toString()

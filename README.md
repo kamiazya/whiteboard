@@ -147,7 +147,7 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `wb_canvas_create({ workspaceId: "default", segment: "smoke" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/canvas/{workspaceId}/smoke` in a browser tab to see it.
+In your agent session, ask it to call `wb_document_create({ workspaceId: "default", path: "smoke", kind: "spatial" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/canvas/smoke` in a browser tab to see it.
 
 ## Pair with your local daemon
 
@@ -189,18 +189,19 @@ Three opinionated `SKILL.md` packs ship inside the npm package. The recommended 
 You    Use whiteboard to sketch the request flow for our auth service:
        client → API gateway → token service → DB. Highlight where caching lives.
 
-Agent  { canvasId } = wb_canvas_create({ workspaceId: "default", segment: "auth-flow" })
-       node_patch({ canvasId, nodes: [ /* 4 service boxes */ ] })
-       edge_patch({ canvasId, edges: [ /* arrows between them */ ] })
-       node_patch({ canvasId, nodes: [ { id: "cache-note", type: "text",
-                                         x: 240, y: 360, text: "cache lives here" } ] })
-       canvas_render_svg({ canvasId })
+Agent  { canvasId } = wb_document_create({ workspaceId: "default",
+                                          path: "auth-flow", kind: "spatial" })
+       wb_node_add({ canvasId, node: /* one of 4 service boxes */ })
+       wb_edge_add({ canvasId, edge: /* an arrow between two of them */ })
+       wb_node_add({ canvasId, node: { id: "cache-note", type: "text",
+                                       x: 240, y: 360, text: "cache lives here" } })
+       wb_scene_render({ canvasId })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed
        between API gateway and token service. SVG attached.
 ```
 
-The agent returns the `canvas_render_svg` result so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
+The agent returns the `wb_scene_render` result so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
 
 ## Documentation
 
@@ -218,7 +219,7 @@ The agent returns the `canvas_render_svg` result so the next turn can reason abo
 
 ## Limitations
 
-- No MCP tool currently returns a raster (PNG) image or `ImageContent` — `canvas_render_svg` is the closest equivalent for handing a rendered canvas back to an LLM.
+- No MCP tool currently returns a raster (PNG) image or `ImageContent` — `wb_scene_render` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.

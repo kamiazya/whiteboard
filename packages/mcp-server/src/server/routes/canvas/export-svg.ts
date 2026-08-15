@@ -11,8 +11,8 @@ import {
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { toCanvasOutputPathErrorBody } from '../canvas-output-path-error.js'
+import { onCanvasAction } from './path-route.js'
 
 // The body is a small JSON options object (padding/frameId/theme/outputPath),
 // never canvas content — the export itself is rendered server-side from the
@@ -20,7 +20,7 @@ import { toCanvasOutputPathErrorBody } from '../canvas-output-path-error.js'
 // bounding an adversarial request.
 const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 
-// POST /api/canvas/:workspaceId/:slug/export-svg
+// POST /api/w/:workspaceId/canvas/<path>/export-svg
 //
 // Unlike PNG export, this always renders headless straight from the
 // persisted LoroDoc — unlike export.ts (PNG, which prefers the browser). SVG
@@ -30,30 +30,11 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 export function createCanvasSvgExportRouter() {
   const app = new Hono()
 
-  app.post(
-    '/api/canvas/:workspaceId/:slug/export-svg',
-    bodyLimit({
-      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
-    async (c) => {
-      const { workspaceId, slug } = c.req.param()
-      try {
-        validateWorkspaceId(workspaceId)
-        validateSlug(slug)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json(body, 400)
-        throw err
-      }
-
+  onCanvasAction(
+    app,
+    'post',
+    'export-svg',
+    async (c, workspaceId, path) => {
       const rawText = await c.req.text()
       let body: ExportSvgRequest = {}
       if (rawText.length > 0) {
@@ -97,7 +78,9 @@ export function createCanvasSvgExportRouter() {
       try {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
-          slug,
+          // The store layer still speaks `slug`; renaming it through
+          // headless-export and canvas-store is its own sweep.
+          slug: path,
           options: { padding: body.padding, frameId: body.frameId, theme: body.theme },
         })
         svg = result.svg
@@ -109,23 +92,34 @@ export function createCanvasSvgExportRouter() {
         return c.json(errBody, 500)
       }
 
-      const filePath = outputPath ?? defaultSvgExportPath(workspaceId, slug)
+      const filePath = outputPath ?? defaultSvgExportPath(workspaceId, path)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, svg, 'utf-8')
       return c.json({ filePath })
     },
+    bodyLimit({
+      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
   )
 
   return app
 }
 
-function defaultSvgExportPath(workspaceId: string, slug: string): string {
+function defaultSvgExportPath(workspaceId: string, path: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   // The millisecond timestamp alone is not unique: two exports issued fast
   // enough to land in the same millisecond would collide and the second
   // write would silently clobber the first. The random suffix guarantees
   // uniqueness regardless of call timing, matching the PNG and JSON export
   // routes' default-path convention.
-  const fileName = `${slug}-${timestamp}-${nanoid(6)}.svg`
+  const fileName = `${path}-${timestamp}-${nanoid(6)}.svg`
   return join(getDataDir(), workspaceId, 'exports', fileName)
 }

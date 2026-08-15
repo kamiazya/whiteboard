@@ -267,7 +267,7 @@ try {
   // would no longer match.
   const snapshotARes = await authedFetch(
     daemonA,
-    `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
   )
   if (!snapshotARes.ok) {
     throw new Error(`daemon A snapshot fetch failed: ${snapshotARes.status}`)
@@ -399,7 +399,7 @@ try {
   // daemon B to actually `loadCanvas` the restored file.
   const snapshotBRes = await authedFetch(
     daemonB,
-    `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
   )
   if (!snapshotBRes.ok) {
     throw new Error(`daemon B snapshot fetch failed: ${snapshotBRes.status}`)

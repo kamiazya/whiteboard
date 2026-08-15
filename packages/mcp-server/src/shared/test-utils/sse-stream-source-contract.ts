@@ -57,6 +57,12 @@ export interface SseStreamSourceHarness {
    * addressing is half of what the push contract asserts.
    */
   daemonWrites(): { doc: string; body: Uint8Array }[]
+  /**
+   * Install pre-existing content for `doc` on the fake daemon's snapshot
+   * route, as Loro update/snapshot bytes. "Pre-existing" is the point: the
+   * snapshot contract is about state the source never saw arrive.
+   */
+  seedDaemonState(doc: string, bytes: Uint8Array): void
   /** Wait until the daemon has an open stream ready to receive frames. */
   ready(): Promise<void>
   /** End the current stream the way a dropped connection does. */
@@ -119,15 +125,22 @@ export function sseStreamSourceContract(
     h.cleanup()
   })
 
-  it('delivers an update for a subscribed document', async () => {
+  it('delivers a daemon change to a subscribed listener', async () => {
+    // Asserted by STATE, not by byte identity: the hub relays the daemon's
+    // frame verbatim, while the worker-backed source delivers its replica's
+    // delta — same state, not the same bytes. Valid Loro bytes on purpose:
+    // the replica drops a frame it cannot merge, so garbage bytes would make
+    // this case pass or fail on frame policy rather than on delivery.
     const h = await create()
     const doc = nextDoc()
     const { updates } = await subscribed(h, doc)
 
-    h.pushUpdate(doc, new Uint8Array([1, 2, 255]))
+    h.pushUpdate(doc, LORO_UPDATE)
 
-    await until(() => updates.length === 1)
-    expect(updates[0]).toEqual(new Uint8Array([1, 2, 255]))
+    await until(() => updates.length >= 1)
+    const reconstructed = new LoroDoc()
+    for (const bytes of updates) reconstructed.import(bytes)
+    expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
     h.cleanup()
   })
 
@@ -139,7 +152,9 @@ export function sseStreamSourceContract(
     const other = nextDoc()
     const { updates } = await subscribed(h, doc)
 
-    h.pushUpdate(other, new Uint8Array([9]))
+    // Valid Loro bytes: a replica-backed source drops garbage regardless of
+    // routing, which would let a broken router pass this case vacuously.
+    h.pushUpdate(other, LORO_UPDATE)
     await settle()
 
     expect(updates).toEqual([])
@@ -204,6 +219,29 @@ export function sseStreamSourceContract(
     h.cleanup()
   })
 
+  it('answers a snapshot with state the source did not witness arrive', async () => {
+    // The stream carries only incremental updates from subscription onward,
+    // so "the document's current state" is a question the stream cannot
+    // answer. The hub asks the daemon; the worker-backed source seeds its
+    // replica once and answers from memory. Either way, a document with
+    // PRE-EXISTING content must come back whole — an implementation that
+    // reconstructs from stream traffic alone passes every other case in this
+    // file and still hands a forking tab partial truth.
+    const h = await create()
+    const doc = nextDoc()
+    h.seedDaemonState(doc, LORO_UPDATE)
+    // BEFORE any subscription, because that is the order the backend uses: it
+    // seeds from the snapshot first so the stream's deltas have something to
+    // land on. An implementation that only answers documents it already has
+    // listeners for deadlocks that first open.
+    const bytes = await h.source.snapshot(doc)
+    expect(bytes).not.toBeNull()
+    const reconstructed = new LoroDoc()
+    reconstructed.import(bytes as Uint8Array)
+    expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
+    h.cleanup()
+  })
+
   it('tells its subscribers when the stream drops', async () => {
     // A subscriber told only about frames cannot tell "nothing has changed"
     // from "nothing is arriving", so a dropped stream looks exactly like a
@@ -235,7 +273,9 @@ export function sseStreamSourceContract(
 
     off()
     await until(() => h.unsubscribedDocs().includes(doc))
-    h.pushUpdate(doc, new Uint8Array([7]))
+    // Valid Loro bytes for the same reason as the other-document case: a
+    // replica would drop garbage even with the unsubscribe broken.
+    h.pushUpdate(doc, LORO_UPDATE)
     await settle()
 
     expect(updates).toEqual([])
@@ -251,9 +291,9 @@ export function sseStreamSourceContract(
     const second = collect(h.source, doc)
 
     first.off()
-    h.pushUpdate(doc, new Uint8Array([3]))
+    h.pushUpdate(doc, LORO_UPDATE)
 
-    await until(() => second.updates.length === 1)
+    await until(() => second.updates.length >= 1)
     expect(first.updates).toEqual([])
     h.cleanup()
   })

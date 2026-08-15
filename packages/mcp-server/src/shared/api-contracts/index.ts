@@ -20,6 +20,7 @@ export {
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
 export * from './canvas.js'
+export * from './canvas-url.js'
 export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
   listGrantsResponseSchema,

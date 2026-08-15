@@ -1,4 +1,4 @@
-import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -19,6 +19,7 @@ import {
   DocumentPathTakenError,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-canvas-ports'
+import { getLogger } from '../log.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -37,7 +38,7 @@ function toEntry(row: {
   return {
     canvasId: row.id,
     path: row.slug,
-    kind: row.kind as DocumentEntry['kind'],
+    ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
   }
 }
@@ -60,10 +61,13 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
  * New rows are assigned a ULID, not the nanoid `saveCanvas` mints for its own
  * rows: ADR-0007 point 5 fixed the ULID as the `canvasId` and the nanoid as a
  * storage detail, and `canvasIdSchema` in the port's `DocumentEntry` accepts
- * only the former. A row predating this therefore does not round-trip through
- * the port, which is a deliberate consequence of converging the two id spaces
- * rather than an oversight.
+ * only the former. A row predating this cannot round-trip through the port —
+ * a deliberate consequence of converging the two id spaces — so `listDocuments`
+ * skips such rows (see its comment) rather than letting one of them fail
+ * validation for the whole listing.
  */
+const log = getLogger('document-index')
+
 export class SqliteDocumentIndex implements DocumentIndex {
   constructor(private readonly db: Database) {}
 
@@ -126,7 +130,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', path)
       .executeTakeFirst()
-    if (!row?.kind) return null
+    if (!row) return null
     return toEntry(row)
   }
 
@@ -140,7 +144,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', canvasId)
       .executeTakeFirst()
-    if (!row?.kind) return null
+    if (!row) return null
     return toEntry(row)
   }
 
@@ -172,10 +176,27 @@ export class SqliteDocumentIndex implements DocumentIndex {
       .execute()
     // Sorted here rather than in SQL: segment-wise order is not what any
     // collation gives, and the row count per workspace is a list a human reads.
-    return rows
-      .filter((row) => row.kind !== null)
-      .map(toEntry)
-      .sort((left, right) => compareDocumentPaths(left.path, right.path))
+    //
+    // Rows whose id is not a canonical ULID are SKIPPED, not surfaced:
+    // `saveCanvas` minted nanoid row ids before the id spaces converged, and
+    // rows outlive minting policy. The port's DocumentEntry accepts only a
+    // ULID, so mapping such a row does not degrade to one bad entry — it
+    // fails output validation for the ENTIRE listing, and one legacy row per
+    // workspace turns the whole agent surface dark. Skipping keeps those
+    // rows exactly as reachable as they were before the convergence (the
+    // user's gallery), and the log is where the absence is said.
+    const entries: DocumentEntry[] = []
+    for (const row of rows) {
+      if (!canvasIdSchema.safeParse(row.id).success) {
+        log.warning(
+          { workspaceId, slug: row.slug },
+          'skipping a pre-convergence row the port cannot carry',
+        )
+        continue
+      }
+      entries.push(toEntry(row))
+    }
+    return entries.sort((left, right) => compareDocumentPaths(left.path, right.path))
   }
 
   async moveDocument({ workspaceId, from, to }: MoveDocumentInput): Promise<void> {

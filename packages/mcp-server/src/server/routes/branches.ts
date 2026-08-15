@@ -29,6 +29,7 @@ import {
   validateWorkspaceId,
   validationErrorBody,
 } from '../validators.js'
+import { onCanvasesRoute } from './canvas/path-route.js'
 
 // Branches router, spec §4.
 // Resolve fromVersionId through DI (resolveFromVersionFrontiers) to avoid a circular dependency.
@@ -132,16 +133,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   const branchNotFound = (message: string) => ({ error: 'branch_not_found', message })
 
   // ── GET /api/workspaces/:sid/canvases/:slug/branches ──
-  app.get('/api/workspaces/:sid/canvases/:slug/branches', async (c) => {
-    const { sid, slug } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'get', ['branches'], async (c, sid, slug) => {
     try {
       const state: CanvasBranchesState = await loadCanvasBranches(sid, slug)
       return c.json(state)
@@ -153,16 +145,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   })
 
   // ── POST /api/workspaces/:sid/canvases/:slug/branches ──
-  app.post('/api/workspaces/:sid/canvases/:slug/branches', async (c) => {
-    const { sid, slug } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'post', ['branches'], async (c, sid, slug) => {
     let rawBody: unknown
     try {
       rawBody = await c.req.json()
@@ -226,16 +209,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   })
 
   // ── DELETE /api/workspaces/:sid/canvases/:slug/branches/:name ──
-  app.delete('/api/workspaces/:sid/canvases/:slug/branches/:name', async (c) => {
-    const { sid, slug, name } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'delete', ['branches', ':name'], async (c, sid, slug, params) => {
+    const name = params.name as string
     const bn = validateBranchNameOrRespond(name)
     if (bn) return c.json(bn.body, bn.status)
     try {
@@ -266,16 +241,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // When getCurrentFrontiers / checkoutTo are provided, also:
   //   1) save the current doc.frontiers() onto the previous HEAD
   //   2) reconcile + broadcast when the new HEAD tipFrontiers is non-empty
-  app.put('/api/workspaces/:sid/canvases/:slug/head', async (c) => {
-    const { sid, slug } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'put', ['head'], async (c, sid, slug) => {
     const parsed = setHeadRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'branch is required' }, 400)
@@ -357,8 +323,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // withWorkspaceWriteLock, the same way PUT /head's own handler owns its
   // branches.json read+save. Locking here too would be redundant, not
   // protective.
-  app.post('/api/workspaces/:sid/canvases/:slug/branches/:source/merge', async (c) => {
-    const { sid, slug, source } = c.req.param()
+  onCanvasesRoute(app, 'post', ['branches', ':source', 'merge'], async (c, sid, slug, params) => {
+    const source = params.source as string
     try {
       validateWorkspaceId(sid)
       validateSlug(slug)
@@ -441,16 +407,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // ── GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats ──
   // Pre-check endpoint for the delete confirmation dialog.
   // Returns actual unmergedCommits plus isHead.
-  app.get('/api/workspaces/:sid/canvases/:slug/branches/:name/stats', async (c) => {
-    const { sid, slug, name } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'get', ['branches', ':name', 'stats'], async (c, sid, slug, params) => {
+    const name = params.name as string
     const bn = validateBranchNameOrRespond(name)
     if (bn) return c.json(bn.body, bn.status)
     try {
@@ -474,16 +432,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // ── PATCH /api/workspaces/:sid/canvases/:slug/branches/:name ──
   // Rename with body { name: newName }. main returns 409, conflicts return 409, missing returns 404.
   // version-store branchName updates are delegated to renameInVersions and default to 0 when omitted.
-  app.patch('/api/workspaces/:sid/canvases/:slug/branches/:name', async (c) => {
-    const { sid, slug, name } = c.req.param()
-    try {
-      validateWorkspaceId(sid)
-      validateSlug(slug)
-    } catch (err) {
-      const v = handleValidation(err)
-      if (v) return c.json(v.body, v.status)
-      throw err
-    }
+  onCanvasesRoute(app, 'patch', ['branches', ':name'], async (c, sid, slug, params) => {
+    const name = params.name as string
     const oldValidation = validateBranchNameOrRespond(name)
     if (oldValidation) return c.json(oldValidation.body, oldValidation.status)
 

@@ -39,7 +39,7 @@ function makeApp() {
   return app
 }
 
-describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
+describe('POST /api/w/:workspaceId/canvas/:slug/export-svg', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-svg-test-'))
     mockExportCanvasHeadlessSvg.mockReset()
@@ -53,7 +53,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
   it('renders headlessly and writes a real .svg file to the default exports dir', async () => {
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', { method: 'POST' })
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
@@ -74,8 +74,8 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
       const [resA, resB] = await Promise.all([
-        app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' }),
-        app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' }),
+        app.request('/api/w/s1/canvas/canvas-a/export-svg', { method: 'POST' }),
+        app.request('/api/w/s1/canvas/canvas-a/export-svg', { method: 'POST' }),
       ])
       const bodyA = (await resA.json()) as { filePath: string }
       const bodyB = (await resB.json()) as { filePath: string }
@@ -88,7 +88,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
   it('forwards padding, frameId, and theme to exportCanvasHeadlessSvg', async () => {
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
@@ -106,14 +106,14 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
 
   it('rejects invalid workspaceId or slug with 400', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/bad.sid/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request('/api/w/bad.sid/canvas/canvas-a/export-svg', { method: 'POST' })
     expect(res.status).toBe(400)
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
   it('rejects a whitespace-only body with 400 invalid_request instead of throwing', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '   ',
@@ -125,7 +125,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
 
   it('rejects an invalid theme with 400 invalid_request', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'sepia' }),
@@ -139,7 +139,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'custom.svg')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -152,7 +152,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
 
   it('rejects an outputPath outside the workspace exports dir with 400 invalid_output_path', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
@@ -168,7 +168,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, '<svg>OLD</svg>')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -184,7 +184,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, '<svg>OLD</svg>')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath, overwrite: true }),
@@ -196,7 +196,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
   it('rejects an oversized request body with 413 payload_too_large', async () => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: oversized,
@@ -209,7 +209,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
   it('returns 500 headless_export_failed when rendering throws', async () => {
     mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom'))
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export-svg', { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')

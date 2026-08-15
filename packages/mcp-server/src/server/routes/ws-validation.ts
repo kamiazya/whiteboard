@@ -10,17 +10,20 @@ export function parseWsTargetFromRequestUrl(
 ): { workspaceId: string; slug: string } {
   const url = new URL(rawUrl ?? '/', `http://${host}`)
   const parts = url.pathname.split('/')
-  if (parts.length !== 4 || parts[1] !== 'ws') {
+  // The tail is a document path, so anything from one segment up is valid —
+  // /ws/:workspaceId/<path...>. Each segment decodes separately; the
+  // separators are structure, not data.
+  if (parts.length < 4 || parts[1] !== 'ws') {
     throw new ValidationError(
       'invalid_ws_path',
-      `Invalid websocket path "${url.pathname}": expected /ws/:workspaceId/:slug`,
+      `Invalid websocket path "${url.pathname}": expected /ws/:workspaceId/<document path>`,
     )
   }
 
   const workspaceId = validateWorkspaceId(parts[2] ?? '')
   let slug = ''
   try {
-    slug = decodeURIComponent(parts[3] ?? '')
+    slug = parts.slice(3).map(decodeURIComponent).join('/')
   } catch {
     throw new ValidationError('invalid_slug', `Invalid slug in websocket path "${url.pathname}"`)
   }

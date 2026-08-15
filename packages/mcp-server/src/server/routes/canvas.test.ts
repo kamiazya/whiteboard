@@ -155,6 +155,116 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
+  it('serves a nested document path at /api/w/:workspaceId/canvas/*', async () => {
+    // The path-addressed shape (task #33, decided 2026-08-15): the document
+    // path is the URL tail, one segment per path segment, with the action
+    // suffix anchoring the parse. A nested path is exactly what the old
+    // :slug param could never match.
+    const app = createCanvasRouter()
+    const createRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'notes/2026/plan', kind: 'spatial' }),
+    })
+    expect(createRes.status).toBe(200)
+
+    const exists = await app.request('/api/w/ws1/canvas/notes/2026/plan/exists')
+    expect(exists.status).toBe(200)
+    expect(await exists.json()).toEqual({ exists: true })
+
+    const snapshot = await app.request('/api/w/ws1/canvas/notes/2026/plan/snapshot')
+    expect(snapshot.status).toBe(200)
+
+    // A document whose LAST segment is an action name stays unambiguous,
+    // because the action suffix is mandatory: /a/snapshot/snapshot is the
+    // document a/snapshot.
+    const collide = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'a/snapshot', kind: 'spatial' }),
+    })
+    expect(collide.status).toBe(200)
+    const collideSnapshot = await app.request('/api/w/ws1/canvas/a/snapshot/snapshot')
+    expect(collideSnapshot.status).toBe(200)
+  })
+
+  it('drives the whole canvases family against a nested document path', async () => {
+    // The second legacy family (already workspace-first, but :slug could not
+    // match a nested path): versions, thumbnails, restore, compact, name,
+    // pin, rename, delete. One scenario, so a regression in ANY of them on a
+    // nested path is loud.
+    const app = createCanvasRouter()
+    const create = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'notes/2026/plan', kind: 'spatial' }),
+    })
+    expect(create.status).toBe(200)
+    const P = '/api/workspaces/ws1/canvases/notes/2026/plan'
+
+    // name + pin (PUT with suffix)
+    expect(
+      (
+        await app.request(`${P}/name`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Plan 2026' }),
+        })
+      ).status,
+    ).toBe(200)
+    expect(
+      (
+        await app.request(`${P}/pin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned: true }),
+        })
+      ).status,
+    ).toBe(200)
+
+    // versions: create → list → thumbnail PUT/GET → restore
+    const created = await app.request(`${P}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(created.status).toBe(200)
+    const { version } = (await created.json()) as { version: { id: string } }
+    const versionId = version.id
+
+    const list = await app.request(`${P}/versions`)
+    expect(list.status).toBe(200)
+
+    const putThumb = await app.request(`${P}/versions/${versionId}/thumbnail`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    })
+    expect(putThumb.status).toBe(200)
+    expect((await app.request(`${P}/versions/${versionId}/thumbnail`)).status).toBe(200)
+    expect((await app.request(`${P}/latest-thumbnail`)).status).toBe(200)
+
+    const restore = await app.request(`${P}/versions/${versionId}/restore`, { method: 'POST' })
+    expect(restore.status).toBe(200)
+
+    // compact (POST with suffix)
+    expect((await app.request(`${P}/compact`, { method: 'POST' })).status).toBe(200)
+
+    // rename moves the whole subtree address
+    const renamed = await app.request(`${P}/slug`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'notes/2027/plan' }),
+    })
+    expect(renamed.status).toBe(200)
+
+    // delete at the NEW nested path
+    const del = await app.request('/api/workspaces/ws1/canvases/notes/2027/plan', {
+      method: 'DELETE',
+    })
+    expect(del.status).toBe(200)
+  })
+
   it('creates a kind:markdown canvas, and the list carries it back', async () => {
     const app = createCanvasRouter()
     const createRes = await app.request('/api/workspaces/ws1/canvases', {
@@ -173,7 +283,7 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
 
     // The empty LoroDoc a markdown-kind create saves loads without error —
     // an empty doc is a valid initial document for either kind.
-    const snapshotRes = await app.request('/api/canvas/ws1/note/snapshot')
+    const snapshotRes = await app.request('/api/w/ws1/canvas/note/snapshot')
     expect(snapshotRes.status).toBe(200)
   })
 
@@ -267,10 +377,10 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:slug', () => {
     const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
     expect(listJson.canvases.map((c) => c.slug)).not.toContain('canvas-a')
 
-    const existsRes = await app.request('/api/canvas/session1/canvas-a/exists')
+    const existsRes = await app.request('/api/w/session1/canvas/canvas-a/exists')
     expect(await existsRes.json()).toEqual({ exists: false })
 
-    const snapshotRes = await app.request('/api/canvas/session1/canvas-a/snapshot')
+    const snapshotRes = await app.request('/api/w/session1/canvas/canvas-a/snapshot')
     expect(snapshotRes.status).toBe(404)
   })
 
@@ -350,7 +460,7 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:slug', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request('/api/canvas/session1/cached/update', {
+    await app.request('/api/w/session1/canvas/cached/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -370,7 +480,7 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:slug', () => {
     })
     expect(createRes.status).toBe(200)
 
-    const snapshotRes = await app.request('/api/canvas/session1/cached/snapshot')
+    const snapshotRes = await app.request('/api/w/session1/canvas/cached/snapshot')
     expect(snapshotRes.status).toBe(200)
     const buf = await snapshotRes.arrayBuffer()
     const restored = LoroDoc.fromSnapshot(new Uint8Array(buf))
@@ -406,7 +516,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     expect(slugs).toContain('b')
     expect(slugs).not.toContain('a')
 
-    const oldSnapshotRes = await app.request('/api/canvas/session1/a/snapshot')
+    const oldSnapshotRes = await app.request('/api/w/session1/canvas/a/snapshot')
     expect(oldSnapshotRes.status).toBe(404)
 
     const recreateRes = await app.request('/api/workspaces/session1/canvases', {
@@ -484,7 +594,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
       return actual.getDoc(workspaceId, slug)
     })
 
-    const updatePromise = app.request('/api/canvas/session1/a/update', {
+    const updatePromise = app.request('/api/w/session1/canvas/a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -572,7 +682,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request('/api/canvas/session1/a/update', {
+    await app.request('/api/w/session1/canvas/a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -587,7 +697,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     expect(renameRes.status).toBe(200)
 
     // The renamed canvas keeps its content, now reachable at the new slug.
-    const bSnapshotRes = await app.request('/api/canvas/session1/b/snapshot')
+    const bSnapshotRes = await app.request('/api/w/session1/canvas/b/snapshot')
     expect(bSnapshotRes.status).toBe(200)
     const bBuf = await bSnapshotRes.arrayBuffer()
     const bRestored = LoroDoc.fromSnapshot(new Uint8Array(bBuf))
@@ -604,13 +714,13 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:slug/slug', () => {
     anotherM.set('id', 'fresh-element')
     anotherClientDoc.commit()
     const anotherUpdate = anotherClientDoc.export({ mode: 'update', from: anotherPrevVV })
-    await app.request('/api/canvas/session1/a/update', {
+    await app.request('/api/w/session1/canvas/a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: anotherUpdate,
     })
 
-    const freshSnapshotRes = await app.request('/api/canvas/session1/a/snapshot')
+    const freshSnapshotRes = await app.request('/api/w/session1/canvas/a/snapshot')
     expect(freshSnapshotRes.status).toBe(200)
     const freshBuf = await freshSnapshotRes.arrayBuffer()
     const freshRestored = LoroDoc.fromSnapshot(new Uint8Array(freshBuf))
@@ -726,7 +836,7 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
   })
 })
 
-describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
+describe('GET /api/w/:workspaceId/canvas/:slug/snapshot', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
@@ -744,7 +854,7 @@ describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
     await saveCanvas('session1', 'canvas-a', doc)
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/canvas-a/snapshot')
+    const res = await app.request('/api/w/session1/canvas/canvas-a/snapshot')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('application/octet-stream')
 
@@ -760,13 +870,13 @@ describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
 
   it('returns 400 for an invalid slug', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/bad.slug/snapshot')
+    const res = await app.request('/api/w/session1/canvas/bad.slug/snapshot')
     expect(res.status).toBe(400)
   })
 
   it('returns 404 with Problem Details { title } for a canvas that was never created', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/never-created/snapshot')
+    const res = await app.request('/api/w/session1/canvas/never-created/snapshot')
     expect(res.status).toBe(404)
     const json = (await res.json()) as { title?: string }
     // Same shape as DELETE's 404 — the client parses problem-details for
@@ -781,12 +891,12 @@ describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
     const app = createCanvasRouter()
     await app.request('/api/workspaces/session1/canvases/canvas-a', { method: 'DELETE' })
 
-    const res = await app.request('/api/canvas/session1/canvas-a/snapshot')
+    const res = await app.request('/api/w/session1/canvas/canvas-a/snapshot')
     expect(res.status).toBe(404)
   })
 })
 
-describe('GET /api/canvas/:workspaceId/:slug/exists', () => {
+describe('GET /api/w/:workspaceId/canvas/:slug/exists', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
@@ -800,26 +910,26 @@ describe('GET /api/canvas/:workspaceId/:slug/exists', () => {
     await saveCanvas('session1', 'canvas-a', doc)
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/canvas-a/exists')
+    const res = await app.request('/api/w/session1/canvas/canvas-a/exists')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: true })
   })
 
   it('returns exists:false for an unregistered canvas without creating it', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/never-created/exists')
+    const res = await app.request('/api/w/session1/canvas/never-created/exists')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: false })
 
     // GET /exists must never have the getDoc/loadCanvas side effect that
     // /snapshot has: the canvas should still be absent afterward.
-    const followUp = await app.request('/api/canvas/session1/never-created/exists')
+    const followUp = await app.request('/api/w/session1/canvas/never-created/exists')
     expect(await followUp.json()).toEqual({ exists: false })
   })
 
   it('returns 400 for an invalid slug', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/bad.slug/exists')
+    const res = await app.request('/api/w/session1/canvas/bad.slug/exists')
     expect(res.status).toBe(400)
   })
 })
@@ -984,7 +1094,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
 // failure modes covered above no longer apply. DB-side error handling is
 // exercised through unit tests on names-store directly.
 
-describe('POST /api/canvas/:workspaceId/:slug/update', () => {
+describe('POST /api/w/:workspaceId/canvas/:slug/update', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
@@ -1005,7 +1115,7 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+    const res = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -1029,7 +1139,7 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   it('rejects an oversized update body with 413 payload_too_large', async () => {
     const app = createCanvasRouter()
     const oversized = new Uint8Array(16 * 1024 * 1024 + 1)
-    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+    const res = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: oversized,
@@ -1051,7 +1161,7 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
     await saveCanvas('session1', 'canvas-a', initial)
 
     // Pull it into the doc-cache so there is a live cached doc to poison.
-    await app.request('/api/canvas/session1/canvas-a/snapshot')
+    await app.request('/api/w/session1/canvas/canvas-a/snapshot')
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
 
     // Build a client update that adds a second element.
@@ -1068,7 +1178,7 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
     const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
       throw new Error('simulated snapshot failure')
     })
-    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+    const res = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -1108,7 +1218,7 @@ describe('versions API', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 0 })
-    const resUpdate = await app.request('/api/canvas/session1/canvas-a/update', {
+    const resUpdate = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -1206,7 +1316,7 @@ describe('versions API', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 0 })
-    const resUpdate = await app.request('/api/canvas/session1/canvas-a/update', {
+    const resUpdate = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -1237,7 +1347,7 @@ describe('versions API', () => {
     m0.set('id', 'keep-me')
     m0.set('type', 'rectangle')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv0 }),
@@ -1261,7 +1371,7 @@ describe('versions API', () => {
     m2.set('id', 'added-2')
     m2.set('type', 'diamond')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv1 }),
@@ -1285,7 +1395,7 @@ describe('versions API', () => {
     const m0 = list.insertContainer(0, new LoroMap())
     m0.set('id', 'keep-me')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv0 }),
@@ -1304,7 +1414,7 @@ describe('versions API', () => {
     const m1 = list.insertContainer(list.length, new LoroMap())
     m1.set('id', 'added-after-v1')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv1 }),
@@ -1356,7 +1466,7 @@ describe('versions API', () => {
     const m0 = list.insertContainer(0, new LoroMap())
     m0.set('id', 'keep-me')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv0 }),
@@ -1372,7 +1482,7 @@ describe('versions API', () => {
     const m1 = list.insertContainer(list.length, new LoroMap())
     m1.set('id', 'added-after-v1')
     initial.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
+    await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: initial.export({ mode: 'update', from: vv1 }),
@@ -1439,7 +1549,7 @@ describe('versions API', () => {
       const m0 = list.insertContainer(0, new LoroMap())
       m0.set('id', 'keep-me')
       initial.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: initial.export({ mode: 'update', from: vv0 }),
@@ -1456,7 +1566,7 @@ describe('versions API', () => {
       const m1 = list.insertContainer(list.length, new LoroMap())
       m1.set('id', 'added-after-v1')
       initial.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: initial.export({ mode: 'update', from: vv1 }),
@@ -1499,7 +1609,7 @@ describe('versions API', () => {
       const m0 = list.insertContainer(0, new LoroMap())
       m0.set('id', 'keep-me')
       initial.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: initial.export({ mode: 'update', from: vv0 }),
@@ -1534,7 +1644,7 @@ describe('versions API', () => {
       const sm0 = sourceList.insertContainer(0, new LoroMap())
       sm0.set('id', 'keep-me')
       sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -1553,7 +1663,7 @@ describe('versions API', () => {
       const tm0 = targetList.insertContainer(0, new LoroMap())
       tm0.set('id', 'b-only')
       targetDoc.commit()
-      await app.request('/api/canvas/session1/canvas-b/update', {
+      await app.request('/api/w/session1/canvas/canvas-b/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: targetDoc.export({ mode: 'update', from: tvv0 }),
@@ -1589,7 +1699,7 @@ describe('versions API', () => {
       const sm0 = sourceList.insertContainer(0, new LoroMap())
       sm0.set('id', 'keep-me')
       sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -1631,7 +1741,7 @@ describe('versions API', () => {
       const svv0 = sourceDoc.version()
       sourceDoc.getText('body').insert(0, 'hello')
       sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -1678,7 +1788,7 @@ describe('versions API', () => {
       const svv0 = sourceDoc.version()
       sourceDoc.getText('body').insert(0, 'hello')
       sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -1716,7 +1826,7 @@ describe('versions API', () => {
       const sm0 = sourceList.insertContainer(0, new LoroMap())
       sm0.set('id', 'keep-me')
       sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
+      await app.request('/api/w/session1/canvas/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -1728,7 +1838,7 @@ describe('versions API', () => {
       })
       const saveBody = (await saveRes.json()) as { version: { id: string } }
 
-      await app.request('/api/canvas/session1/canvas-b/update', {
+      await app.request('/api/w/session1/canvas/canvas-b/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: sourceDoc.export({ mode: 'update', from: svv0 }),
@@ -2193,7 +2303,7 @@ describe('auto-version corruption handling', () => {
       autoVersionIntervalMs: 0,
       versionStore,
     })
-    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+    const res = await app.request('/api/w/session1/canvas/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,

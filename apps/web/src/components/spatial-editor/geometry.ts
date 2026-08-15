@@ -73,28 +73,82 @@ export interface ResizeHandle {
 /** Constant on-screen handle size in CSS px, at zoom 1. */
 const HANDLE_SIZE_PX = 8
 
+type CornerKind = Extract<ResizeHandleKind, 'nw' | 'ne' | 'se' | 'sw'>
+
+const CORNERS: ReadonlyArray<{
+  kind: CornerKind
+  cx: (b: Box) => number
+  cy: (b: Box) => number
+}> = [
+  { kind: 'nw', cx: (b) => b.x, cy: (b) => b.y },
+  { kind: 'ne', cx: (b) => b.x + b.width, cy: (b) => b.y },
+  { kind: 'se', cx: (b) => b.x + b.width, cy: (b) => b.y + b.height },
+  { kind: 'sw', cx: (b) => b.x, cy: (b) => b.y + b.height },
+]
+
+function cornerBoxes(box: Box, sizeCanvas: number): readonly ResizeHandle[] {
+  const half = sizeCanvas / 2
+  return CORNERS.map(({ kind, cx, cy }) => ({
+    kind,
+    box: { x: cx(box) - half, y: cy(box) - half, width: sizeCanvas, height: sizeCanvas },
+  }))
+}
+
 /**
- * Eight resize-handle hit boxes centered on a node's corners/edge midpoints,
- * in canvas space. Sized by `HANDLE_SIZE_PX / zoom` so the handle stays a
- * constant on-screen size regardless of viewport zoom.
+ * The four VISIBLE corner markers, in canvas space, sized by
+ * `HANDLE_SIZE_PX / zoom` so they stay a constant on-screen size. Edge
+ * midpoints no longer carry a marker: the whole edge is grabbable through
+ * `edgeBandBoxes`, which is what let the touch-size hit areas of
+ * `cornerHitBoxes` grow without colliding with a mid-edge neighbour.
  */
 export function resizeHandleBoxes(box: Box, zoom: number): readonly ResizeHandle[] {
-  const size = HANDLE_SIZE_PX / zoom
-  const half = size / 2
-  const centers: Array<{ kind: ResizeHandleKind; x: number; y: number }> = [
-    { kind: 'nw', x: box.x, y: box.y },
-    { kind: 'n', x: box.x + box.width / 2, y: box.y },
-    { kind: 'ne', x: box.x + box.width, y: box.y },
-    { kind: 'e', x: box.x + box.width, y: box.y + box.height / 2 },
-    { kind: 'se', x: box.x + box.width, y: box.y + box.height },
-    { kind: 's', x: box.x + box.width / 2, y: box.y + box.height },
-    { kind: 'sw', x: box.x, y: box.y + box.height },
-    { kind: 'w', x: box.x, y: box.y + box.height / 2 },
+  return cornerBoxes(box, HANDLE_SIZE_PX / zoom)
+}
+
+/**
+ * Invisible hit areas for the corners: `hitPx` on screen (24, or 32 where
+ * the pointer is coarse), centered on the same corners the visible 8px
+ * markers sit on. Drawing and hitting are separate questions — a marker any
+ * bigger overwhelms small nodes, a target any smaller cannot be touched.
+ */
+export function cornerHitBoxes(box: Box, zoom: number, hitPx: number): readonly ResizeHandle[] {
+  return cornerBoxes(box, hitPx / zoom)
+}
+
+/**
+ * Invisible resize bands along the four edges: `bandPx` thick on screen,
+ * centered on the edge, stopping short of the corner hit zones so a press
+ * near a corner always means the corner. Bands never invert on tiny nodes —
+ * they collapse to zero length instead.
+ */
+export function edgeBandBoxes(
+  box: Box,
+  zoom: number,
+  bandPx: number,
+  cornerHitPx: number,
+): readonly ResizeHandle[] {
+  const band = bandPx / zoom
+  const inset = cornerHitPx / 2 / zoom
+  const spanW = Math.max(0, box.width - inset * 2)
+  const spanH = Math.max(0, box.height - inset * 2)
+  return [
+    {
+      kind: 'n' as const,
+      box: { x: box.x + inset, y: box.y - band / 2, width: spanW, height: band },
+    },
+    {
+      kind: 'e' as const,
+      box: { x: box.x + box.width - band / 2, y: box.y + inset, width: band, height: spanH },
+    },
+    {
+      kind: 's' as const,
+      box: { x: box.x + inset, y: box.y + box.height - band / 2, width: spanW, height: band },
+    },
+    {
+      kind: 'w' as const,
+      box: { x: box.x - band / 2, y: box.y + inset, width: band, height: spanH },
+    },
   ]
-  return centers.map(({ kind, x, y }) => ({
-    kind,
-    box: { x: x - half, y: y - half, width: size, height: size },
-  }))
 }
 
 /** Cascade step (canvas-space px) used by `findFreeSpot` between successive placement attempts. */

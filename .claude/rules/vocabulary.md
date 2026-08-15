@@ -63,8 +63,9 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
 - The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not
-- `/canvas/:ws/:slug` and `/local/:canvasId` routes, and the UI copy around
-  them — published surface, so its own increment
+- `/local/:canvasId` and the UI copy around routes. The daemon URL is now
+  `/w/:ws/canvas/<document path>` end to end; what remains is internal
+  variable names still saying `slug` for what is a path
 - MCP tool names — ADR-0009 point 5, its own increment
 - Core facets written to spatial documents (`CanvasProperties` mounted for
   both kinds) — this one is a behaviour change, not a rename; see ADR-0009

@@ -11,6 +11,7 @@ import { mcpSourceAlias } from './mcp-source-alias.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
+import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -36,6 +37,9 @@ export default defineConfig({
       // entry vite already uses in dev via the `browser.development`
       // condition, so dev and prod behavior converge.
       'loro-crdt': 'loro-crdt/bundler',
+      // Without these, importing remark in a worker throws
+      // `document is not defined` at chunk evaluation — see the module.
+      ...workerSafeDepsAlias,
     },
   },
   build: {

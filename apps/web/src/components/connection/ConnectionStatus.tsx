@@ -65,13 +65,18 @@ export function ConnectionStatus({
   onDisconnect,
   children,
 }: ConnectionStatusProps) {
+  // Empty while sync is on: the region has to exist BEFORE the message, but
+  // an empty one must not claim a name either.
+  const syncOffAnnouncement = state === 'sync-off' ? 'Live sync off' : ''
+
   return (
     <Popover>
-      {state === 'sync-off' && (
-        <span role="status" aria-label="Live sync off" className="sr-only">
-          Live sync off
-        </span>
-      )}
+      {/* Always mounted, for the same reason as the busy line in
+          WorkspaceTopBar: sync going off is a CHANGE, and a live region that
+          appears together with its first message may never be announced. */}
+      <span role="status" aria-label={syncOffAnnouncement || undefined} className="sr-only">
+        {syncOffAnnouncement}
+      </span>
       <PopoverTrigger asChild>
         <button
           type="button"

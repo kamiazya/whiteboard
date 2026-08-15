@@ -22,6 +22,7 @@
  */
 
 import { apiFetch } from './api-client.js'
+import { canvasFileApiUrl } from './api-contracts/canvas-url.js'
 import type {
   BinaryFileDataLike,
   CanvasBackend,
@@ -129,9 +130,7 @@ export class DaemonBackend implements CanvasBackend {
 
   async getFile(fileId: string): Promise<Blob | null> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
-    const res = await fetchFn(
-      `/api/canvas/${this.workspaceId}/${encodeURIComponent(this.slug)}/file/${encodeURIComponent(fileId)}`,
-    )
+    const res = await fetchFn(canvasFileApiUrl(this.workspaceId, this.slug, fileId))
     if (!res.ok) return null
     return res.blob()
   }

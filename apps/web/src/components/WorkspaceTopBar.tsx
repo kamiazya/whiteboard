@@ -7,6 +7,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
+import { canvasPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
 import { CanvasActionsMenu } from './workspace-top-bar/CanvasActionsMenu'
@@ -204,7 +205,7 @@ export default function WorkspaceTopBar({
 
   // Kept outside copyCanvasUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
-  const canvasUrl = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
+  const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, slug)}`
   const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(
     canvasUrl,
     log,
@@ -301,11 +302,21 @@ export default function WorkspaceTopBar({
             failure states render here beside the switcher. The status line
             replaces the deleted dialog's disabled "Creating…" button as the
             flow's announced busy indication (accessibility criterion 5). */}
-        {newCanvasBusy && (
-          <span aria-live="polite" role="status" className="text-xs text-muted-foreground">
-            Creating canvas…
-          </span>
-        )}
+        {/* Mounted even while silent: a polite region that arrives already
+            carrying its message is announced inconsistently, so this one is
+            always here and only its text changes.
+            `sr-only` rather than a `hidden` class while idle — display:none
+            would prune it from the accessibility tree, which is the same bug
+            with a stylesheet instead of a conditional. sr-only is absolutely
+            positioned, so an empty region also adds no gap to this flex row. */}
+        <span
+          aria-live="polite"
+          role="status"
+          aria-label="New canvas status"
+          className={newCanvasBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
+        >
+          {newCanvasBusy ? 'Creating canvas…' : ''}
+        </span>
         {newCanvasError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newCanvasError}

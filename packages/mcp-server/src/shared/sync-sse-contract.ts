@@ -30,7 +30,7 @@ export const syncUpdateEventSchema = z.object({
   doc: z.string().min(1),
   // SSE frames are text, so Loro update bytes travel base64-encoded. Only
   // incremental updates go through here — the initial snapshot is served as
-  // binary by GET /api/canvas/:workspaceId/:slug/snapshot, so the largest
+  // binary by GET /api/w/:workspaceId/canvas/<path>/snapshot, so the largest
   // payload never pays the base64 inflation.
   update: z.string(),
 })

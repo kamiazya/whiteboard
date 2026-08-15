@@ -1,3 +1,4 @@
+import { canvasesApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
@@ -31,7 +32,7 @@ export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }:
   const daemonFetch = useDaemonApi()
   const [failed, setFailed] = useState(false)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const src = `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
+  const src = canvasesApiUrl(workspaceId, slug, 'latest-thumbnail')
   // Instances are reused across re-renders with a new slug/workspaceId (e.g.
   // the canvas switcher dropdown), so a stale `failed` flag from a previous
   // src must not leak into the next canvas's thumbnail. Reset during render

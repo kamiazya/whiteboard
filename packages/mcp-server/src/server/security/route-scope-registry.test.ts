@@ -185,7 +185,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   // (or POST) file route later silently authorizes a mutation with a
   // read-only credential.
   it('any write verb on a file route requires files:write, not just PUT', () => {
-    const filePath = '/api/canvas/ws1/main/file/abc'
+    const filePath = '/api/w/ws1/canvas/main/file/abc'
     expect(resolveApiRouteScope('GET', filePath)).toEqual({
       kind: 'scoped',
       scopes: ['files:read'],

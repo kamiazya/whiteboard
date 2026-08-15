@@ -4,7 +4,7 @@
 // Plain http fetch to loopback IS allowed from a secure page, so the same
 // sync protocol rides SSE downstream and POST upstream.
 //
-// The initial snapshot is NOT carried here: GET /api/canvas/:ws/:slug/snapshot
+// The initial snapshot is NOT carried here: GET /api/w/:ws/canvas/:slug/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
 import { afterEach, describe, expect, it } from 'vitest'

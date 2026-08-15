@@ -38,6 +38,14 @@ export function createSharedSseStreamSource(
   }
 
   const listeners = new Map<string, Set<DocListener>>()
+  /**
+   * Tabs waiting on a snapshot, keyed by doc. Keyed rather than queued
+   * because the worker's reply carries the doc and nothing else — two
+   * concurrent requests for the same document share whichever state the
+   * replica holds when it answers, which is exactly what they would have
+   * gotten asking separately.
+   */
+  const snapshotWaiters = new Map<string, Set<(bytes: Uint8Array) => void>>()
   const port = worker.port
 
   // A module worker that fails to LOAD does not throw above — construction
@@ -67,15 +75,24 @@ export function createSharedSseStreamSource(
     const parsed = sseWorkerEventSchema.safeParse(e.data)
     if (!parsed.success) return
     const evt = parsed.data
+    if (evt.type === 'snapshot') {
+      // Answered ahead of the listener gate below: the backend snapshots
+      // BEFORE it subscribes — the seed must exist before the stream's deltas
+      // land on it — so at reply time the document routinely has no listener
+      // yet, and gating this on one would deadlock every first open.
+      const waiters = snapshotWaiters.get(evt.doc)
+      if (!waiters) return
+      snapshotWaiters.delete(evt.doc)
+      const bytes = fromBase64(evt.snapshot)
+      for (const resolve of waiters) resolve(bytes)
+      return
+    }
     const set = listeners.get(evt.doc)
     if (!set) return
-    // The two inbound channels, deliberately both delivered. `update` is a raw
-    // daemon frame; `authority-update` has been through the worker's replica,
-    // so it also carries what a SIBLING TAB did — which never reaches the
-    // daemon and back in time to be useful, and is the whole point of the
-    // replica. Loro merges are idempotent, so anything that arrives on both is
-    // absorbed rather than double-applied.
-    if (evt.type === 'update' || evt.type === 'authority-update') {
+    // The ONE inbound channel. Every byte a tab applies has been through the
+    // worker's replica — ordered and deduplicated against the daemon's frames
+    // and every sibling tab's pushes — so all tabs observe the same sequence.
+    if (evt.type === 'authority-update') {
       const bytes = fromBase64(evt.update)
       for (const l of set) l.onUpdate(bytes)
       return
@@ -84,10 +101,6 @@ export function createSharedSseStreamSource(
       for (const l of set) l.onConnectionChange?.(evt.connected)
       return
     }
-    // Answered only when something asked, which nothing here does yet: a tab
-    // still builds its document from the daemon's export flow rather than
-    // forking the replica.
-    if (evt.type === 'snapshot') return
     for (const l of set) l.onMessage(evt.raw)
   }
   port.start()
@@ -123,6 +136,22 @@ export function createSharedSseStreamSource(
       // so a tab posting to the daemon itself would be writing around the very
       // thing meant to order these writes.
       port.postMessage({ type: 'push', doc, update: toBase64(update) })
+    },
+    snapshot(doc) {
+      // From the worker's replica, not the daemon: the worker seeds itself
+      // once per document and every later tab is answered from memory. The
+      // worker replies even for a document nobody has (an empty snapshot),
+      // so this resolves rather than racing a timeout — `null` is reserved
+      // for the hub implementation's 404, which has a daemon to ask.
+      return new Promise((resolve) => {
+        let waiters = snapshotWaiters.get(doc)
+        if (!waiters) {
+          waiters = new Set()
+          snapshotWaiters.set(doc, waiters)
+        }
+        waiters.add(resolve)
+        port.postMessage({ type: 'snapshot-request', doc })
+      })
     },
   }
 

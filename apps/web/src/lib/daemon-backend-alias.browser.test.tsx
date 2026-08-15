@@ -15,6 +15,6 @@ describe('daemon-backend alias resolution (browser)', () => {
 
     expect(injectedFetch).toHaveBeenCalledTimes(1)
     const [url] = injectedFetch.mock.calls[0]
-    expect(String(url)).toContain('/api/canvas/ws1/main/file/file-1')
+    expect(String(url)).toContain('/api/w/ws1/canvas/main/file/file-1')
   })
 })

@@ -110,7 +110,7 @@ describe('importOneCanvas', () => {
     })
 
     const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit]
-    expect(updateUrl).toBe(`http://127.0.0.1:3099/api/canvas/${encodedWs}/my-canvas/update`)
+    expect(updateUrl).toBe(`http://127.0.0.1:3099/api/w/${encodedWs}/canvas/my-canvas/update`)
     expect((updateInit.headers as Record<string, string>)['Content-Type']).toBe(
       'application/octet-stream',
     )

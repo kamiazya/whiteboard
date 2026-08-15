@@ -58,6 +58,18 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /*
+   * The manipulation layer's own vocabulary — selection, handles, connect,
+   * marquee (--manipulation) and snap guides (--manipulation-guide). The
+   * guide color is deliberately a THIRD hue: not the manipulation blue (a
+   * ruler must not read as a selection edge), not any node accent, and
+   * never red, which this product reserves for destruction. The halo is
+   * the touch-target cushion. manipulation-tokens.test.ts holds every
+   * overlay to these and rejects raw hex.
+   */
+  --manipulation: oklch(0.546 0.245 262.88);
+  --manipulation-guide: oklch(0.606 0.219 292.72);
+  --manipulation-halo: color-mix(in srgb, oklch(0.546 0.245 262.88) 12%, transparent);
 }
 
 .dark {
@@ -79,6 +91,9 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --manipulation: oklch(0.707 0.165 254.62);
+  --manipulation-guide: oklch(0.709 0.159 293.54);
+  --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
 }
 
 /*
@@ -119,6 +134,16 @@
    * `.cm-md-marker` is declared last to win the color and weight it shares
    * with the tokens that enclose it.
    */
+  /* The connect port's oversized hit circle is invisible until it matters:
+     hover or keyboard focus fills it with the halo so the target the finger
+     gets is also the target the eye can confirm. */
+  .connect-hit:hover,
+  .connect-hit:focus-visible,
+  .resize-hit:hover,
+  .resize-hit:focus-visible {
+    fill: var(--manipulation-halo);
+  }
+
   .cm-md-heading {
     font-weight: 700;
     color: var(--foreground);
@@ -186,6 +211,22 @@
    * a FINITE iteration count at the use site keeps it a pulse that
    * guides attention on entry, never a standing ping.
    */
+  /* The selection outline sketches itself in — draw once, hold, never
+     loop. A CSS animation on purpose: the global prefers-reduced-motion
+     collapse above turns it into the finished form with no JS branch. */
+  @keyframes selection-draw {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .selection-draw {
+    stroke-dasharray: 100;
+    animation: selection-draw var(--motion-duration-fast) var(--motion-ease-out) 1 both;
+  }
+
   @keyframes attention-pulse {
     from {
       transform: scale(1);

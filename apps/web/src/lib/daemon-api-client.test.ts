@@ -223,7 +223,7 @@ describe('getCanvasSnapshot', () => {
     )
     const result = await getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
     expect(new Uint8Array(result)).toEqual(bytes)
-    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/canvas/w1/main/snapshot`)
+    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/canvas/main/snapshot`)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -241,7 +241,7 @@ describe('updateCanvas', () => {
     const result = await updateCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'main', bytes)
     expect(result).toEqual({ ok: true })
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/canvas/w1/main/update`)
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/w/w1/canvas/main/update`)
     expect(initArg?.method).toBe('POST')
     expect(initArg?.body).toBe(bytes)
   })
