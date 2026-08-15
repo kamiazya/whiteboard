@@ -1,4 +1,5 @@
 import {
+  canvasesApiUrl,
   listVersionsResponseSchema,
   type OperatorInfo,
   type VersionEntry,
@@ -93,9 +94,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
-      const res = await fetchFn(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
-      )
+      const res = await fetchFn(canvasesApiUrl(workspaceId, slug, 'versions'))
       if (seq !== fetchSeqRef.current) return
       if (res.ok) {
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
@@ -178,10 +177,9 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     // actually happened. A failed request keeps the dialog open with an error
     // so the caller never discards undo history for a restore that didn't occur.
     try {
-      const res = await fetchFn(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
-        { method: 'POST' },
-      )
+      const res = await fetchFn(canvasesApiUrl(workspaceId, slug, `versions/${v.id}/restore`), {
+        method: 'POST',
+      })
       if (!res.ok) {
         log.error('restore request failed', { status: res.status, versionId: v.id })
         setRestoreError('Restore failed. Please try again.')

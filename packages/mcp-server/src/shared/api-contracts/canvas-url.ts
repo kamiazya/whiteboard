@@ -29,6 +29,17 @@ export function canvasFileApiUrl(workspaceId: string, path: string, fileId: stri
 }
 
 /**
+ * The `/api/workspaces/:workspaceId/canvases/<document path>[/<suffix...>]`
+ * family (create/list/delete/rename/name/pin/versions/thumbnails/restore/
+ * compact). Same rule as canvasApiUrl: each path segment is encoded, the
+ * separators are not, and any suffix is appended verbatim.
+ */
+export function canvasesApiUrl(workspaceId: string, path: string, suffix = ''): string {
+  const base = `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeCanvasPath(path)}`
+  return suffix === '' ? base : `${base}/${suffix}`
+}
+
+/**
  * Splits a request path in the shape above into its parts, or null when it
  * is not one. Written by hand rather than as a Hono `{.+}` param: Hono's
  * SmartRouter picks its underlying router on the FIRST request, and with the

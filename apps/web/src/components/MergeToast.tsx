@@ -1,3 +1,4 @@
+import { canvasesApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
@@ -96,7 +97,11 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       // Restore the canvas the merge actually happened on, not whichever
       // canvas is currently selected — the toast can outlive a canvas switch.
       const res = await fetchFn(
-        `/api/workspaces/${mergeWorkspaceId}/canvases/${encodeURIComponent(mergeSlug)}/versions/${encodeURIComponent(preMergeVersionId)}/restore`,
+        canvasesApiUrl(
+          mergeWorkspaceId,
+          mergeSlug,
+          `versions/${encodeURIComponent(preMergeVersionId)}/restore`,
+        ),
         { method: 'POST' },
       )
       if (res.ok) {

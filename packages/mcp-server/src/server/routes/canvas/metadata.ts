@@ -11,6 +11,7 @@ import {
 } from '../../store/names-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
+import { onCanvasesRoute } from './path-route.js'
 
 // User-facing workspace / canvas names.
 // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.
@@ -64,16 +65,7 @@ export function createCanvasMetadataRouter() {
     }
   })
 
-  app.put('/api/workspaces/:workspaceId/canvases/:slug/name', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'put', ['name'], async (c, workspaceId, slug) => {
     const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body' }, 400)
@@ -89,16 +81,7 @@ export function createCanvasMetadataRouter() {
   })
 
   // Idempotently set pin on/off and return the full updated WorkspaceNames payload.
-  app.put('/api/workspaces/:workspaceId/canvases/:slug/pin', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+  onCanvasesRoute(app, 'put', ['pin'], async (c, workspaceId, slug) => {
     const parsed = setPinnedRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'pinned must be boolean' }, 400)
