@@ -389,6 +389,14 @@ export function reduceGesture(
     case 'pointercancel':
     case 'cancel-text-edit':
       if (state.kind === 'editing-text' && state.createdForEdit === true) {
+        // Cancel discards what was TYPED, and takes the node with it only
+        // when there is typed text to discard. With nothing typed, Escape
+        // just closes the editor: an empty note is a layout tool (it is the
+        // rectangle this product deliberately does not have a second kind
+        // for), and eating it punished exactly the person sketching boxes.
+        if (state.pendingText === '') {
+          return { state: { kind: 'idle' }, commands: [], selectedId: state.nodeId }
+        }
         return {
           state: { kind: 'idle' },
           commands: [{ kind: 'delete-node', id: state.nodeId }],
