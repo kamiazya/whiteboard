@@ -22,12 +22,12 @@ describe('app-routes', () => {
     expect(workspacePath('w1')).toBe('/w/w1')
   })
 
-  it('builds a canvas path', () => {
-    expect(canvasPath('w1', 'main')).toBe('/canvas/w1/main')
+  it('builds a canvas path under the workspace it belongs to', () => {
+    expect(canvasPath('w1', 'main')).toBe('/w/w1/canvas/main')
   })
 
-  it('percent-encodes workspaceId and slug segments', () => {
-    expect(canvasPath('w 1', 'my/slug')).toBe('/canvas/w%201/my%2Fslug')
+  it('percent-encodes the workspace and the slug', () => {
+    expect(canvasPath('w 1', 'my/slug')).toBe('/w/w%201/canvas/my%2Fslug')
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
@@ -47,7 +47,7 @@ describe('parseDaemonRoute', () => {
   })
 
   it('parses a canvas route', () => {
-    expect(parseDaemonRoute('/canvas/w1/main')).toEqual({
+    expect(parseDaemonRoute('/w/w1/canvas/main')).toEqual({
       kind: 'canvas',
       workspaceId: 'w1',
       slug: 'main',
@@ -55,22 +55,39 @@ describe('parseDaemonRoute', () => {
   })
 
   it('decodes percent-encoded segments', () => {
-    expect(parseDaemonRoute('/canvas/w%201/my%2Fslug')).toEqual({
+    expect(parseDaemonRoute('/w/w%201/canvas/my%2Fslug')).toEqual({
       kind: 'canvas',
       workspaceId: 'w 1',
       slug: 'my/slug',
     })
   })
 
+  it('does not yet accept a multi-segment tail', () => {
+    // The shape leaves room for a document path here, but the page below
+    // still loads by slug through /api/canvas/:workspaceId/:slug — a URL the
+    // app cannot open is worse than a not-found, so it stays not-a-route
+    // until that data path converges too.
+    expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toBeNull()
+  })
+
+  it('is not confused by the workspace-index route it now nests under', () => {
+    // `/w/w1` and `/w/w1/canvas/...` share a prefix; the canvas branch must
+    // not swallow the bare workspace route, nor the reverse.
+    expect(parseDaemonRoute('/w/w1')).toEqual({ kind: 'index', workspaceId: 'w1' })
+    expect(parseDaemonRoute('/w/w1/canvas')).toBeNull()
+  })
+
   it('returns null for an unrelated path (e.g. the browser-local route space)', () => {
     expect(parseDaemonRoute('/local/abc')).toBeNull()
     expect(parseDaemonRoute('/something/else')).toBeNull()
+    // The retired shape is not a route any more.
+    expect(parseDaemonRoute('/canvas/w1/main')).toBeNull()
   })
 
   it('round-trips through daemonRoutePath', () => {
-    const route = parseDaemonRoute('/canvas/w1/main')
+    const route = parseDaemonRoute('/w/w1/canvas/main')
     expect(route).not.toBeNull()
-    expect(daemonRoutePath(route!)).toBe('/canvas/w1/main')
+    expect(daemonRoutePath(route!)).toBe('/w/w1/canvas/main')
   })
 })
 
@@ -85,7 +102,7 @@ describe('daemonRoutePath', () => {
 
   it('builds a canvas path', () => {
     expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', slug: 'main' })).toBe(
-      '/canvas/w1/main',
+      '/w/w1/canvas/main',
     )
   })
 })
@@ -97,7 +114,7 @@ describe('parseBrowserLocalRoute', () => {
 
   it('returns null for the bare /local index and unrelated paths', () => {
     expect(parseBrowserLocalRoute('/local')).toBeNull()
-    expect(parseBrowserLocalRoute('/canvas/w1/main')).toBeNull()
+    expect(parseBrowserLocalRoute('/w/w1/canvas/main')).toBeNull()
   })
 })
 
@@ -106,8 +123,8 @@ describe('parseBrowserLocalRoute', () => {
 // index.
 describe('malformed percent-encoding', () => {
   it('treats an undecodable segment as not-a-route instead of throwing', () => {
-    expect(parseDaemonRoute('/canvas/w%1/main')).toBeNull()
-    expect(parseDaemonRoute('/canvas/w1/ma%in')).toBeNull()
+    expect(parseDaemonRoute('/w/w%1/canvas/main')).toBeNull()
+    expect(parseDaemonRoute('/w/w1/canvas/ma%in')).toBeNull()
     expect(parseDaemonRoute('/w/%E0%A4%A')).toBeNull()
     expect(parseBrowserLocalRoute('/local/%zz')).toBeNull()
   })
@@ -118,7 +135,7 @@ describe('isKnownAppPath', () => {
     for (const p of [
       '/',
       '/w/ws1',
-      '/canvas/ws1/main',
+      '/w/ws1/canvas/main',
       '/local',
       '/local/c1',
       '/pair',
@@ -132,7 +149,14 @@ describe('isKnownAppPath', () => {
   })
 
   it('rejects unknown paths so App can show not-found instead of silently falling through', () => {
-    for (const p of ['/nope', '/canvas/onlyws', '/local/a/b', '/w/', '/settings/nope']) {
+    for (const p of [
+      '/nope',
+      '/canvas/ws1/main',
+      '/w/ws1/canvas',
+      '/local/a/b',
+      '/w/',
+      '/settings/nope',
+    ]) {
       expect(isKnownAppPath(p)).toBe(false)
     }
   })

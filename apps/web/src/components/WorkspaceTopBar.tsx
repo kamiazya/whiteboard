@@ -7,6 +7,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
+import { canvasPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
 import { CanvasActionsMenu } from './workspace-top-bar/CanvasActionsMenu'
@@ -204,7 +205,7 @@ export default function WorkspaceTopBar({
 
   // Kept outside copyCanvasUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
-  const canvasUrl = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
+  const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, slug)}`
   const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(
     canvasUrl,
     log,

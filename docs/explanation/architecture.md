@@ -49,7 +49,7 @@ This project is split into three main runtime layers:
 
 ### Browser collaboration path
 
-1. A browser opens `/canvas/{workspaceId}/{slug}`.
+1. A browser opens `/w/{workspaceId}/canvas/{slug}`.
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
 4. WebSocket events broadcast document changes, version events, and branch head changes.

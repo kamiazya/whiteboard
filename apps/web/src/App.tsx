@@ -210,7 +210,7 @@ export function App({ providerState }: AppProps) {
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
   // (local-daemon's runtime-config path, or a same-origin cold load of a
-  // `/canvas/:workspaceId/:slug` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // `/w/:workspaceId/canvas/:slug` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
   // mount time are fixed for the life of the mount.
