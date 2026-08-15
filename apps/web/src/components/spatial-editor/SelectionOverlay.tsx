@@ -132,6 +132,10 @@ export function SelectionOverlay({
           width={band.box.width}
           height={band.box.height}
           fill="transparent"
+          // Same legibility rule as .connect-hit: the band has no resting
+          // marker at all, so hover/focus paints the halo to say "this is
+          // grabbable" before anything is committed to.
+          className="resize-hit"
           style={{ pointerEvents: 'auto', cursor: `${band.kind}-resize` }}
           onPointerDown={(e) => {
             if (e.button !== 0) return
@@ -158,6 +162,7 @@ export function SelectionOverlay({
           width={hit.box.width}
           height={hit.box.height}
           fill="transparent"
+          className="resize-hit"
           style={{ pointerEvents: 'auto', cursor: `${hit.kind}-resize` }}
           onPointerDown={(e) => {
             if (e.button !== 0) return

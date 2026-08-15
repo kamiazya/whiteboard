@@ -138,7 +138,9 @@
      hover or keyboard focus fills it with the halo so the target the finger
      gets is also the target the eye can confirm. */
   .connect-hit:hover,
-  .connect-hit:focus-visible {
+  .connect-hit:focus-visible,
+  .resize-hit:hover,
+  .resize-hit:focus-visible {
     fill: var(--manipulation-halo);
   }
 

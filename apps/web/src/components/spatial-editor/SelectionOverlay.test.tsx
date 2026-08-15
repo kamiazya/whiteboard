@@ -153,3 +153,33 @@ describe('SelectionOverlay', () => {
     expect(onConnectKeyDown).toHaveBeenCalledTimes(2)
   })
 })
+
+it('grows the hit boxes to 32px where the pointer is coarse', () => {
+  const original = window.matchMedia
+  // The repo already stubs matchMedia in jsdom (useThemeMode.test.tsx) —
+  // this branch is plain JS, so unlike dock-button's CSS-only variant it
+  // is testable and therefore tested.
+  window.matchMedia = ((query: string) =>
+    ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }) as unknown as MediaQueryList) as typeof window.matchMedia
+  try {
+    const onHandlePointerDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={onHandlePointerDown}
+        onConnectPointerDown={vi.fn()}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('resize-handle-se'))
+    const [, box] = onHandlePointerDown.mock.calls[0] as [string, typeof BOX]
+    expect(box.width).toBe(32)
+  } finally {
+    window.matchMedia = original
+  }
+})
