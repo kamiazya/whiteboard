@@ -112,7 +112,6 @@ import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
-import { useGestureCaptured } from './use-gesture-captured.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -173,6 +172,7 @@ import {
   ToolPalette,
 } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
+import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
