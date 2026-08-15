@@ -72,6 +72,12 @@ export function useMarkdownCanvasDoc(
   const pending = pendingFlushes
 
   useEffect(() => {
+    // TEMP TRANSITION RECORDER (diagnostic commit — dropped before merge)
+    {
+      const w = window as unknown as { __pageTrace?: string[] }
+      w.__pageTrace ??= []
+      w.__pageTrace.push(`mdEff:en=${enabled};id=${canvasId?.slice(0, 6) ?? 'null'}`)
+    }
     if (!enabled || canvasId === null) {
       docRef.current = null
       setDoc(null)
