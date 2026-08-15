@@ -64,6 +64,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   EdgeSides,
   FacetCardData,
@@ -334,6 +335,13 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /**
+   * A referenced MARKDOWN document's parsed body, rendered inline in the
+   * node. Same contract as the seams around it: synchronous, host-cached,
+   * undefined falls through to the facet card. Parsed rather than raw so
+   * layout never runs a markdown parse per file node per frame.
+   */
+  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
   readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
   /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
   readonly resolveFileImage?: (
@@ -455,6 +463,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       missingFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileMarkdown,
       resolveFileFacets,
       resolveFileImage,
       onAddImage,
@@ -708,6 +717,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         resolveFileMissing: missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
@@ -716,6 +726,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,

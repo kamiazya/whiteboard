@@ -13,19 +13,31 @@
  * Totality mirrors the layout seam: any load failure resolves to `undefined`
  * and the editor keeps the card — a broken reference never takes down a page.
  */
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { FacetCardData } from '@kamiazya/whiteboard-canvas-render'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
 import { collectFileRefs } from '../lib/canvas-embed-content.js'
 
+const log = getAppLogger('canvas-file-seams')
+
 /**
- * What one reference resolves to. Both halves are optional and independent:
- * a markdown document has facets and no spatial content, and a canvas
- * written before facets existed has content and none.
+ * What one reference resolves to. Every half is optional and independent:
+ * a markdown document has a body and facets but no spatial content, and a
+ * canvas written before facets existed has content and none.
  */
 export interface LoadedFileDocument {
   readonly canvas?: SpatialCanvas
   readonly facets?: CoreFacets
+  /**
+   * A markdown document's raw body. Raw rather than parsed, because an
+   * adapter's job is to reach the backend — parsing is this hook's, done
+   * once per load rather than inside the resolver (canvas-render calls that
+   * during layout, for every file node, on every re-layout).
+   */
+  readonly body?: string
 }
 
 /** What a backend must supply for the seams to work against it. */
@@ -57,6 +69,7 @@ export interface UseCanvasFileSeamsOptions {
 
 export interface CanvasFileSeams {
   resolveFileCanvas: (file: string) => SpatialCanvas | undefined
+  resolveFileMarkdown: (file: string) => MdastRoot | undefined
   resolveFileFacets: (file: string) => FacetCardData | undefined
   resolveFileImage: (file: string) => { href: string } | undefined
   onAddImage: (file: File) => Promise<string | undefined>
@@ -157,13 +170,45 @@ export function useCanvasFileSeams({
 
   const resolveFileCanvas = useCallback(
     (file: string) => {
-      // A markdown document reads back as a canvas with no nodes. Embedding
-      // one draws an empty frame that outranks the facet card and shows
-      // strictly less, so "nothing to embed" is the honest answer.
-      const canvas = embedContent.get(file)?.canvas
+      const document = embedContent.get(file)
+      // A markdown document is not a canvas to embed, whichever way it was
+      // stored — and the two storage shapes differ, so a node-count test
+      // alone is not enough. Browser-local it reads back as a canvas with
+      // NO nodes; through the daemon it reads back as one holding a single
+      // text node (`okf-body`, which IS the body). Left to the canvas seam
+      // the first draws an empty frame and the second the same prose
+      // crushed to thumbnail size, both outranking the markdown seam and
+      // both showing strictly less. Having a body is what says "markdown
+      // document" independently of which side wrote it.
+      if (document?.body !== undefined) return undefined
+      const canvas = document?.canvas
       return canvas === undefined || canvas.nodes.length === 0 ? undefined : canvas
     },
     [embedContent],
+  )
+  // Parsed here rather than in the resolver, and memoized on the loaded
+  // content rather than per call: canvas-render invokes the seam during
+  // layout, for every file node, on every re-layout — so a parse inside it
+  // would re-run remark on every frame of a drag.
+  const markdownBodies = useMemo(() => {
+    const parsed = new Map<string, MdastRoot>()
+    for (const [ref, document] of embedContent) {
+      const body = document.body
+      if (body === undefined || body.trim().length === 0) continue
+      try {
+        parsed.set(ref, parseMarkdownBody(body))
+      } catch (err) {
+        // Same totality rule as the seams themselves: an unparseable body
+        // costs that one reference its prose, never the page.
+        log.warn('referenced markdown body failed to parse', { ref, err })
+      }
+    }
+    return parsed
+  }, [embedContent])
+
+  const resolveFileMarkdown = useCallback(
+    (file: string) => markdownBodies.get(file),
+    [markdownBodies],
   )
   const resolveFileFacets = useCallback(
     (file: string) => toFacetCard(file, embedContent.get(file)?.facets),
@@ -179,7 +224,14 @@ export function useCanvasFileSeams({
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
 
-  return { resolveFileCanvas, resolveFileFacets, resolveFileImage, onAddImage, isImageFileRef }
+  return {
+    resolveFileCanvas,
+    resolveFileMarkdown,
+    resolveFileFacets,
+    resolveFileImage,
+    onAddImage,
+    isImageFileRef,
+  }
 }
 
 /**
