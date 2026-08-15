@@ -11,6 +11,7 @@ import { dismissBootSplash } from './boot-splash.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
 import { initInstallPromptCapture } from './lib/install-prompt-store.js'
+import { installMobileAppShellGuards } from './lib/mobile-app-shell.js'
 import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
 import './pwa/bootstrap.js'
 
@@ -26,6 +27,11 @@ initInstallPromptCapture()
 // Apply the persisted theme class before React mounts so the first paint
 // matches the user's saved preference (avoids a light→dark flash on reload).
 applyThemeClass(resolveTheme(readPersistedTheme()))
+
+// Before React mounts, so no gesture can slip in during hydration: cancels
+// Safari's proprietary pinch events, which page-zoom regardless of the
+// viewport meta or touch-action (see mobile-app-shell.ts).
+installMobileAppShellGuards()
 
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found')

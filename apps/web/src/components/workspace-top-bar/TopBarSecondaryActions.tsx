@@ -1,4 +1,5 @@
 import { EllipsisVertical, Maximize2, Minimize2 } from 'lucide-react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -7,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { isFullscreenSupported } from '@/lib/fullscreen-support'
 
 interface TopBarSecondaryActionsProps {
   /**
@@ -27,6 +29,13 @@ export function TopBarSecondaryActions({
 }: TopBarSecondaryActionsProps) {
   const fullscreenLabel = isFullscreen ? 'Exit fullscreen' : 'Fullscreen'
   const FullscreenIcon = isFullscreen ? Minimize2 : Maximize2
+  // Hidden rather than disabled where the browser has no element
+  // fullscreen (iPhone Safari — video-only): a disabled control still
+  // claims header space and invites a tap that can never work, and there
+  // is nothing the user could change to enable it. Read once per mount,
+  // since it cannot change without a navigation.
+  const [fullscreenAvailable] = useState(isFullscreenSupported)
+  const showFullscreen = onToggleFullscreen !== undefined && fullscreenAvailable
 
   return (
     <>
@@ -34,7 +43,7 @@ export function TopBarSecondaryActions({
         data-testid="topbar-right-actions-exposed"
         className="flex shrink-0 items-center gap-1 max-[400px]:hidden"
       >
-        {onToggleFullscreen && (
+        {showFullscreen && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -64,7 +73,7 @@ export function TopBarSecondaryActions({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {onToggleFullscreen && (
+          {showFullscreen && (
             <DropdownMenuItem onSelect={onToggleFullscreen} className="gap-2">
               <FullscreenIcon className="size-3.5" />
               {fullscreenLabel}
