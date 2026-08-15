@@ -58,10 +58,7 @@ async function waitForSaved(): Promise<void> {
 }
 
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {
-  beforeEach(async (ctx) => {
-    const w = window as unknown as { __pageTrace?: string[] }
-    w.__pageTrace = w.__pageTrace ?? []
-    w.__pageTrace.push(`TEST:${ctx.task.name.slice(0, 30)}`)
+  beforeEach(async () => {
     await clearWhiteboardDb()
     spatialMounts = 0
   })
@@ -182,13 +179,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(title)
     await userEvent.keyboard('リリース計画')
     await waitFor(() => {
-      const trace = ((window as unknown as { __pageTrace?: string[] }).__pageTrace ?? [])
-        .slice(-26)
-        .join('|')
-      expect(
-        (title as HTMLInputElement).value,
-        `PROBE-R connected=${title.isConnected} trace=${trace}`,
-      ).toBe('リリース計画')
+      expect((title as HTMLInputElement).value).toBe('リリース計画')
     })
 
     // title and the canvas name are one concept: the switcher label is the

@@ -239,14 +239,6 @@ export function BrowserLocalCanvasPage({
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
-  // TEMP TRANSITION RECORDER (diagnostic commit — dropped before merge)
-  {
-    const w = window as unknown as { __pageTrace?: string[] }
-    w.__pageTrace ??= []
-    const last = w.__pageTrace[w.__pageTrace.length - 1]
-    const now = `k=${pageState.kind};id=${canvasId?.slice(0, 6)}`
-    if (last !== now) w.__pageTrace.push(now)
-  }
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
