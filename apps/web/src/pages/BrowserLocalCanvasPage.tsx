@@ -827,7 +827,7 @@ export function BrowserLocalCanvasPage({
                 // canvas is excluded (a self-reference card is pure noise).
                 fileRefOptions={canvases
                   .filter((entry) => entry.id !== canvasId)
-                  .map((entry) => ({ file: entry.id, label: entry.name }))}
+                  .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
                 onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
                 missingFileRef={missingFileRef}
                 {...fileSeams}

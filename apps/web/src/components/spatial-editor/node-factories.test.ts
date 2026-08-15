@@ -1,5 +1,9 @@
+import { SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
+import { NEW_NODE_WIDTH } from './gestures.js'
 import {
+  DOCUMENT_NODE_HEIGHT,
+  DOCUMENT_NODE_WIDTH,
   fileNodeDefaults,
   GROUP_FRAME_HEIGHT,
   GROUP_FRAME_WIDTH,
@@ -102,5 +106,29 @@ describe('groupEnclosure', () => {
       width: 30 + GROUP_PADDING_PX * 2,
       height: 20 + GROUP_PADDING_PX * 2,
     })
+  })
+})
+
+describe('fileNodeDefaults sizing', () => {
+  // Verified in the running app: at the reference-card height the padded
+  // content box is 44px, not one markdown block fits, and the referenced
+  // body renders as nothing at all. Every test passed while the feature was
+  // invisible at the size the app actually creates — which is why the
+  // geometry is pinned here rather than left to the constants.
+  it('gives a markdown reference room for prose', () => {
+    const node = fileNodeDefaults('n1', { x: 0, y: 0 }, 'notes', 'markdown')
+    expect(node.width).toBe(DOCUMENT_NODE_WIDTH)
+    expect(node.height).toBe(DOCUMENT_NODE_HEIGHT)
+    // The floor that matters is the padded content box, not the box: this
+    // is what `fitBodyInNode` measures blocks against.
+    expect(node.height - 2 * SPATIAL_THEME_GEOMETRY.paddingPx).toBeGreaterThan(120)
+  })
+
+  it('keeps the one-line card for a spatial reference and for an unknown kind', () => {
+    for (const kind of ['spatial', undefined] as const) {
+      const node = fileNodeDefaults('n1', { x: 0, y: 0 }, 'diagram', kind)
+      expect(node.height).toBe(LINK_NODE_HEIGHT)
+      expect(node.width).toBe(NEW_NODE_WIDTH)
+    }
   })
 })

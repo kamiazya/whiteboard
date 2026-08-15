@@ -142,6 +142,8 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
+  DOCUMENT_NODE_HEIGHT,
+  DOCUMENT_NODE_WIDTH,
   fileNodeDefaults,
   GROUP_FRAME_HEIGHT,
   GROUP_FRAME_WIDTH,
@@ -2613,6 +2615,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** File nodes are reference cards like links — same shorter default box. */
     const createFileRefAtViewportCenter = (file: string, at?: Point) => {
+      // The picked option's kind decides the box: a markdown document
+      // renders its prose inside the node and needs room a one-line
+      // reference card does not have.
+      const kind = fileRefOptions?.find((option) => option.file === file)?.kind
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
@@ -2621,12 +2627,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const point = resolveSpawnPoint(
         at,
         preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        kind === 'markdown'
+          ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
+          : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
         occupied,
         visibleCanvasRect(),
       )
       const id = newId()
-      const node = fileNodeDefaults(id, point, file)
+      const node = fileNodeDefaults(id, point, file, kind)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],

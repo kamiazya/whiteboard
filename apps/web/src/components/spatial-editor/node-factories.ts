@@ -15,7 +15,7 @@
  * injected-id-minting discipline the callers rely on for deterministic
  * tests.
  */
-import type { SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasKind, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { Box } from './geometry.js'
 import { findFreeSpot } from './geometry.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
@@ -24,6 +24,17 @@ import type { Point } from './viewport.js'
 /** Link nodes are label-only chrome — a note-height box would be mostly
  * empty, so they (and file-reference cards) get a shorter default. */
 export const LINK_NODE_HEIGHT = 60
+
+/**
+ * A file node that renders a referenced markdown document's PROSE, rather
+ * than a one-line reference card. At `LINK_NODE_HEIGHT` the padded content
+ * box is 44px and not even a single heading block fits, so the body renders
+ * as nothing and the node looks broken — verified in the running app. This
+ * is the height at which a heading plus a few lines are readable; a user
+ * who wants more resizes, which is the affordance that already exists.
+ */
+export const DOCUMENT_NODE_WIDTH = 320
+export const DOCUMENT_NODE_HEIGHT = 220
 /** Default frame for a created image node; the picture letterboxes into it. */
 export const IMAGE_NODE_WIDTH = 240
 export const IMAGE_NODE_HEIGHT = 180
@@ -76,9 +87,15 @@ export function fileNodeDefaults(
   id: string,
   point: Point,
   file: string,
+  /** What the reference points at; a markdown document gets a prose-sized box. */
+  kind?: CanvasKind,
 ): Extract<SpatialNode, { type: 'file' }> {
+  const box =
+    kind === 'markdown'
+      ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
+      : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }
   return {
-    ...centeredBox(id, point, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }),
+    ...centeredBox(id, point, box),
     type: 'file',
     file,
   }
