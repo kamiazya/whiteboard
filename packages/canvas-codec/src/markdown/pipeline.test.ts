@@ -1,7 +1,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { normalizeMdast } from './normalize.js'
-import { parseMarkdownBody, stringifyMarkdownBody } from './pipeline.js'
+import { parseMarkdownBlockLines, parseMarkdownBody, stringifyMarkdownBody } from './pipeline.js'
 
 describe('markdown pipeline pinned examples', () => {
   // fast-check counterexample (seed 1010669059, shrunk 17x) from the
@@ -95,5 +95,20 @@ describe('markdown pipeline pinned examples', () => {
       const [item] = list.children
       expect(item.checked).toBe(false)
     }
+  })
+})
+
+describe('parseMarkdownBlockLines', () => {
+  it('reports the 1-based start line of each top-level block, index-aligned with parseMarkdownBody', () => {
+    const body =
+      '# Title\n\npara one\nstill para one\n\n```ts\nconst x = 1\nconst y = 2\n```\n\n- item\n'
+    const lines = parseMarkdownBlockLines(body)
+    const root = parseMarkdownBody(body)
+    expect(lines).toHaveLength(root.children.length)
+    expect(lines).toEqual([1, 3, 6, 11])
+  })
+
+  it('is total: an empty body maps to no blocks', () => {
+    expect(parseMarkdownBlockLines('')).toEqual([])
   })
 })

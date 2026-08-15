@@ -41,6 +41,23 @@ export function parseMarkdownBody(body: string): MdastRoot {
   return mdastRootSchema.parse(converted)
 }
 
+/**
+ * Start line (1-based) of each TOP-LEVEL block in `body`, in document
+ * order — index-aligned with `parseMarkdownBody(body).children`, because
+ * `fromRemarkRoot` maps root children 1:1 with no filtering. Source
+ * positions deliberately never enter the model (they would break the
+ * round-trip properties: serialized text has different positions); this
+ * sidecar is the one place they surface, for consumers that correlate
+ * source lines with laid-out blocks (the preview's scroll sync). Total: a
+ * body remark cannot position defaults each block to its index order.
+ */
+export function parseMarkdownBlockLines(body: string): number[] {
+  const tree = parser.parse(body) as {
+    children?: { position?: { start?: { line?: number } } }[]
+  }
+  return (tree.children ?? []).map((child, index) => child.position?.start?.line ?? index + 1)
+}
+
 export function stringifyMarkdownBody(root: MdastRoot): string {
   const remarkTree = toRemarkRoot(root)
   // `toRemarkRoot`'s return type is this package's own narrow `RemarkNode`

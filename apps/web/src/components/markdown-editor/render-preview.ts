@@ -1,5 +1,6 @@
 import {
   type AliasResolver,
+  parseMarkdownBlockLines,
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-canvas-codec'
@@ -8,6 +9,7 @@ import {
   layoutMdastBlocks,
   renderSceneToSvg,
   SPATIAL_THEME_FONT_FAMILY,
+  sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 
 export interface RenderMarkdownPreviewOptions {
@@ -52,6 +54,40 @@ export interface RenderMarkdownPreviewOptions {
  */
 export function renderMarkdownPreviewSvg(
   value: string,
+  options: RenderMarkdownPreviewOptions,
+): string {
+  return renderMarkdownPreview(value, options).svg
+}
+
+/**
+ * One top-level block's scroll-sync anchor: its 1-based source start line
+ * paired with its top edge in the emitted SVG's own pixel space (viewBox
+ * origin already folded in, so `y` is directly comparable to a pixel
+ * offset inside the rendered element).
+ */
+export interface PreviewBlockAnchor {
+  readonly line: number
+  readonly y: number
+}
+
+export interface RenderedMarkdownPreview {
+  readonly svg: string
+  readonly anchors: readonly PreviewBlockAnchor[]
+}
+
+const PREVIEW_PADDING_PX = 8
+
+/**
+ * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
+ * anchors derived from a second layout could disagree with what is
+ * painted (fragment seams change block heights). Source lines come from
+ * canvas-codec's position sidecar, index-aligned with the scene's
+ * top-level nodes (both map `root.children` 1:1). Empty anchors (an
+ * unparseable mid-edit body) tell the caller to keep its proportional
+ * fallback.
+ */
+export function renderMarkdownPreview(
+  value: string,
   {
     measure,
     maxWidth,
@@ -61,21 +97,38 @@ export function renderMarkdownPreviewSvg(
     renderMath,
     renderDiagram,
   }: RenderMarkdownPreviewOptions,
-): string {
-  return renderSceneToSvg(
-    layoutScene(value, {
-      measure,
-      maxWidth,
-      resolveAlias,
-      resolveEmbed,
-      renderMath,
-      renderDiagram,
-    }),
-    {
-      padding: 8,
-      background,
-    },
-  )
+): RenderedMarkdownPreview {
+  const scene = layoutScene(value, {
+    measure,
+    maxWidth,
+    resolveAlias,
+    resolveEmbed,
+    renderMath,
+    renderDiagram,
+  })
+  const svg = renderSceneToSvg(scene, { padding: PREVIEW_PADDING_PX, background })
+  return { svg, anchors: blockAnchors(value, scene) }
+}
+
+function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[] {
+  if (scene.nodes.length === 0) return []
+  let lines: readonly number[]
+  try {
+    lines = parseMarkdownBlockLines(value)
+  } catch {
+    return []
+  }
+  // The SVG's pixel origin is the padded viewBox top (renderSceneToSvg
+  // derives viewBox = bounds expanded by padding).
+  const originY = sceneBounds(scene).y - PREVIEW_PADDING_PX
+  const anchors: PreviewBlockAnchor[] = []
+  for (let i = 0; i < Math.min(lines.length, scene.nodes.length); i++) {
+    const node = scene.nodes[i]
+    const line = lines[i]
+    if (node === undefined || line === undefined || !('bbox' in node)) continue
+    anchors.push({ line, y: node.bbox.y - originY })
+  }
+  return anchors
 }
 
 function layoutScene(

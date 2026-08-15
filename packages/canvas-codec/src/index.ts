@@ -1,6 +1,10 @@
 export type { CodecParseError, CodecParseResult, CodecParseStage } from './errors.js'
 export { normalizeMdast } from './markdown/normalize.js'
-export { parseMarkdownBody, stringifyMarkdownBody } from './markdown/pipeline.js'
+export {
+  parseMarkdownBlockLines,
+  parseMarkdownBody,
+  stringifyMarkdownBody,
+} from './markdown/pipeline.js'
 export { parseOkf } from './okf/parse.js'
 export type {
   OkfMarkdownDocument,
