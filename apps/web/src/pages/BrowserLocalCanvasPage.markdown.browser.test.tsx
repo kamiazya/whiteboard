@@ -183,7 +183,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('リリース計画')
     await waitFor(() => {
       const trace = ((window as unknown as { __pageTrace?: string[] }).__pageTrace ?? [])
-        .slice(-20)
+        .slice(-26)
         .join('|')
       expect(
         (title as HTMLInputElement).value,

@@ -1,7 +1,7 @@
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface CanvasPropertiesProps {
@@ -82,6 +82,16 @@ export function CanvasProperties({
   const [open, setOpen] = useState(false)
   const [draftTag, setDraftTag] = useState('')
   const suggestionsId = useId()
+  // TEMP DIAGNOSTIC (dropped before merge): mount/unmount beacon
+  useEffect(() => {
+    const w = window as unknown as { __pageTrace?: string[] }
+    w.__pageTrace = w.__pageTrace ?? []
+    w.__pageTrace.push('CP:mount')
+    return () => {
+      w.__pageTrace?.push('CP:unmount')
+    }
+  }, [])
+
   const tags = meta.tags ?? []
 
   // An absent optional field and an empty one are different documents in

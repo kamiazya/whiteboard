@@ -133,6 +133,16 @@ export default function WorkspaceTopBar({
 
   const [canvasSearch, setCanvasSearch] = useState('')
 
+  // TEMP DIAGNOSTIC (dropped before merge): mount/unmount beacon
+  useEffect(() => {
+    const w = window as unknown as { __pageTrace?: string[] }
+    w.__pageTrace = w.__pageTrace ?? []
+    w.__pageTrace.push('WTB:mount')
+    return () => {
+      w.__pageTrace?.push('WTB:unmount')
+    }
+  }, [])
+
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
   // → LoroDoc → WebSocket → daemon → SQLite blob in real time, so closing the
