@@ -1,3 +1,4 @@
+import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -244,6 +245,19 @@ export function DaemonCanvasPage({
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.slug,
     [],
   )
+
+  // A ref that matches NEITHER a live id nor a live slug points at a deleted
+  // canvas (or one imported from elsewhere): the editor renders it as a quiet
+  // "Missing reference" and hides the follow affordances — following would
+  // lazily create an empty canvas under the dangling ref. Image refs live in
+  // the file store, not the canvases list, so they are never "missing" here;
+  // undefined while the list has not loaded keeps everything ordinary.
+  const missingFileRef = useMemo(() => {
+    const entries = controller.canvases
+    if (entries.length === 0) return undefined
+    const known = new Set(entries.flatMap((entry) => [entry.slug, ...(entry.id ? [entry.id] : [])]))
+    return (ref: string) => !isImageRef(ref) && !known.has(ref)
+  }, [controller.canvases])
 
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
@@ -678,6 +692,7 @@ export function DaemonCanvasPage({
                 .filter((entry) => entry.slug !== canvas?.slug)
                 .map((entry) => ({ file: entry.id ?? entry.slug, label: entry.slug }))}
               onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
+              missingFileRef={missingFileRef}
               {...fileSeams}
               lockedNodeIds={lockedNodeIds}
               lockedEdgeIds={lockedEdgeIds}

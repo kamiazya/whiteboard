@@ -115,6 +115,17 @@ export interface SpatialLayoutOptions {
    */
   readonly resolveFileLabel?: (file: string) => string | undefined
   /**
+   * Marks a file node's reference as pointing at a target that no longer
+   * exists (deleted canvas, imported ref into a store that never had it).
+   * `true` renders a quiet "Missing reference" label instead of the raw
+   * reference — an opaque id tells a reader nothing — while `false`,
+   * absence, or a throw (total-layout rule) keeps the ordinary label
+   * path. This package only paints the state; deciding it (a lookup
+   * against the live document list) is the caller's job, same as every
+   * other injected resolver here.
+   */
+  readonly resolveFileMissing?: (file: string) => boolean
+  /**
    * Resolves a file node's reference to the referenced spatial canvas for
    * INLINE embedding. Absent, or `undefined` for a reference, keeps the
    * card-only rendering. Recursion is depth-capped (3) with path-local
@@ -297,6 +308,15 @@ function labelOf(
 ): string | undefined {
   switch (node.type) {
     case 'file': {
+      let missing = false
+      try {
+        missing = options.resolveFileMissing?.(node.file) === true
+      } catch {
+        missing = false
+      }
+      // The raw reference is an opaque id — useless to a reader — and the
+      // subpath is moot without a target, so neither appears.
+      if (missing) return 'Missing reference'
       let resolved: string | undefined
       try {
         resolved = options.resolveFileLabel?.(node.file)

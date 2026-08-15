@@ -127,6 +127,46 @@ it('the file context menu offers Open canvas and Change target retargets via the
   expect(latest.commands).toContain('set-node-file')
 })
 
+it('a missing reference renders a quiet missing label and hides the follow affordances', async () => {
+  const opened: string[] = []
+  const dangling: SpatialCanvas = {
+    nodes: [{ id: 'f1', type: 'file', x: 100, y: 100, width: 200, height: 60, file: 'gone-id' }],
+    edges: [],
+  }
+  function MissingHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(dangling)
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+          fileRefOptions={OPTIONS}
+          onOpenFileRef={(file) => opened.push(file)}
+          missingFileRef={(file) => file === 'gone-id'}
+        />
+      </div>
+    )
+  }
+  const { container } = render(<MissingHost />)
+
+  // The card says what happened instead of leaking the opaque ref string.
+  await vi.waitFor(() => expect(container.textContent).toContain('Missing reference'))
+  expect(container.textContent).not.toContain('gone-id')
+
+  // Double press does not follow a dead reference…
+  await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 130 } })
+  expect(opened).toEqual([])
+
+  // …and the context menu drops Open canvas but keeps Change target — the
+  // repair affordance.
+  rightClick(rootOf(container), 200, 130)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  expect(container.textContent).not.toContain('Open canvas')
+  expect(container.textContent).toContain('Change target')
+})
+
 it('without host seams, neither the Add canvas button nor file follow-affordances appear', async () => {
   const bare: SpatialCanvas = withFileNode
   function BareHost() {

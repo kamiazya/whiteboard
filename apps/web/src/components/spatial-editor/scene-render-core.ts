@@ -33,6 +33,7 @@ export interface RenderCanvasCoreOptions {
   readonly parseBody: (text: string) => MdastRoot
   readonly theme?: ResolvedTheme
   readonly resolveFileLabel?: (file: string) => string | undefined
+  readonly resolveFileMissing?: (file: string) => boolean
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
   readonly resolveFileImage?: (
@@ -56,6 +57,7 @@ export function renderCanvasToSvgWith(
     parseBody: options.parseBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
     resolveFileLabel: options.resolveFileLabel,
+    resolveFileMissing: options.resolveFileMissing,
     resolveFileCanvas: options.resolveFileCanvas,
     expandFileNode: options.expandFileNode,
     resolveFileImage: options.resolveFileImage,
