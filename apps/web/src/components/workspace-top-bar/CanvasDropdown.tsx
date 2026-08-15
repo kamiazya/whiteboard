@@ -105,7 +105,15 @@ export function CanvasDropdown({
   }
 
   return (
-    <DropdownMenu>
+    // modal={false}: Radix's modal menus TRAP focus for their whole
+    // lifetime, exit animation included. Selecting an item that swaps in a
+    // fresh editor races that animation — the editor mounts and autofocuses,
+    // the still-animating menu content yanks focus back into itself, then
+    // unmounts and drops it on <body>, permanently (the editor's focus is
+    // one-shot on mount). Captured live: cm-content gains focus, the
+    // bg-popover content steals it, then blurs to null. Every selection here
+    // navigates away, so the trap protects nothing worth that race.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

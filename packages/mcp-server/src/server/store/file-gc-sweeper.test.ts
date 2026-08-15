@@ -157,16 +157,24 @@ describe('createFileGcSweeper scheduling', () => {
     ] as const
     let passIndex = 0
     const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
+    const listWorkspaces = vi.fn(async () => [{ workspaceId: 'ws_a' }])
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces,
       discoverFsWorkspaces: async () => [],
       purge,
     })
     sweeper.start()
     await advanceTimersAndFlush(1000)
     await advanceUntilCalls(purge, 1)
-    expect(purge).toHaveBeenCalledTimes(1)
+    // The message discriminates the two ways this has flaked: listWs=0
+    // means the timer never fired; listWs>0 with purge=0 means the timer
+    // fired and the pass stalled between listWorkspaces and purge — i.e. in
+    // the real-fs containment check, the one unmocked dependency here.
+    expect(
+      purge,
+      `listWs=${listWorkspaces.mock.calls.length} purge=${purge.mock.calls.length}`,
+    ).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
     // Releasing gate 1 lets the pass settle, which is what arms the next
