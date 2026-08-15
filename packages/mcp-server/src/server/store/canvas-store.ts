@@ -1,9 +1,9 @@
 import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import { nanoid } from 'nanoid'
 import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -30,7 +30,7 @@ export class ConflictError extends Error {
 
 // ── canvas blob path helpers ──
 // Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{canvasId}.loro.
-// The canvasId is the stable nanoid PK from the canvases table, so renaming a
+// The canvasId is the stable row PK from the canvases table, so renaming a
 // canvas slug does not move blobs around.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
@@ -88,7 +88,11 @@ export async function saveCanvas(
     // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
     // transient corruption) we leave no DB row behind, so a retry can succeed
     // instead of hitting a phantom ConflictError on the orphan.
-    const canvasId = existingCanvasId ?? nanoid(12)
+    // A ULID, not a nanoid: the document index creates rows in this same
+    // table and the port's DocumentEntry accepts only a canonical ULID, so a
+    // second minting policy here would keep producing rows the agent surface
+    // has to skip. One table, one id space.
+    const canvasId = existingCanvasId ?? generateCanvasId()
     const path = canvasBlobPath(workspaceId, canvasId)
     await mkdir(dirname(path), { recursive: true })
     const snapshot = doc.export({ mode: 'snapshot' })
