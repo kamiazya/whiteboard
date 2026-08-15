@@ -13,20 +13,10 @@ describe('toInlineScriptJson', () => {
     expect(toInlineScriptJson({ port: 3099 })).toBe(JSON.stringify({ port: 3099 }))
   })
 
-  // Bias the generator toward '<'-bearing strings: JSON values drawn uniformly
-  // almost never contain '<', which would make this property pass vacuously
-  // even with the escape deleted.
-  const jsonValue = fc.letrec((tie) => ({
-    value: fc.oneof(
-      { depthSize: 'small' },
-      fc.constant(null),
-      fc.boolean(),
-      fc.double({ noNaN: true }),
-      fc.oneof(fc.string(), fc.constantFrom('</script>', '<img src=x onerror=alert(1)>')),
-      fc.array(tie('value') as fc.Arbitrary<unknown>, { maxLength: 5 }),
-      fc.dictionary(fc.string(), tie('value') as fc.Arbitrary<unknown>, { maxKeys: 5 }),
-    ),
-  })).value
+  // Bias string content toward '<': JSON values drawn uniformly almost never
+  // contain it, which would make this property pass vacuously even with the
+  // escape deleted.
+  const jsonValue = fc.jsonValue({ stringUnit: fc.constantFrom('<', '/script>', 'a') })
 
   fcTest.prop([jsonValue], withDefaults())(
     'escape is complete and semantics-preserving for any JSON value',
