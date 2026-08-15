@@ -11,7 +11,7 @@ import {
   requiredScopesForClientTextMessage,
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
-import { saveCanvas } from '../store/canvas-store.js'
+import { saveCanvas, workspaceExists } from '../store/canvas-store.js'
 import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
@@ -230,6 +230,22 @@ export async function handleWsUpgrade(
   }
 
   const key = `${workspaceId}/${slug}`
+
+  // Before anything is registered or served: a workspace this daemon has
+  // never heard of gets a refusal, not a phantom. getDoc() lazily creates an
+  // empty doc for any key, so without this a connect to an unknown workspace
+  // answered with an empty snapshot and a live socket — the tab shows
+  // "Synced" while editing into memory the next restart discards. Stale
+  // pairings make this reachable in practice: a browser keeps its paired
+  // workspace id in localStorage, and ids outlive the install that minted
+  // them. Workspace-level only — an unknown SLUG in a registered workspace
+  // keeps the lazy empty doc, which is how opening a just-deleted canvas
+  // degrades. 4404 because RFC 6455 reserves 4000-4999 for application use
+  // and no registered close code means "not found".
+  if (!(await workspaceExists(workspaceId))) {
+    ws.close(4404, `Workspace "${workspaceId}" not found`)
+    return
+  }
 
   // Register the connection.
   if (!connections.has(key)) {

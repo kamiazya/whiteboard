@@ -687,6 +687,20 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
     expect(res.status).toBe(400)
   })
 
+  it('returns 404 for a workspace that does not exist, not an empty list', async () => {
+    // A 200-empty here is a false statement of fact: the caller cannot tell
+    // "this workspace has no canvases" from "you asked about a workspace this
+    // daemon has never heard of", and the web app renders the first reading —
+    // an empty state with a Create button — for what is actually the second.
+    // A stale pairing (a workspace id minted by an earlier install and kept
+    // in the browser's localStorage) then looks exactly like data loss.
+    // The v1 document routes already 404 an unknown workspace; this brings
+    // the legacy list route into agreement.
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/never-registered/canvases')
+    expect(res.status).toBe(404)
+  })
+
   // listCanvases no longer walks per-workspace directories, so the previous
   // "broken session directory" 500 case no longer applies.
 })

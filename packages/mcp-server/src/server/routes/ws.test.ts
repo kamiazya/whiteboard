@@ -16,7 +16,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { clearCache } = await import('../store/doc-cache.js')
-const { loadCanvas } = await import('../store/canvas-store.js')
+const { loadCanvas, saveCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./canvas.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
@@ -75,10 +75,66 @@ class FakeWebSocket {
   }
 }
 
+describe('handleWsUpgrade workspace existence', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-test-'))
+    clearCache()
+  })
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+  })
+
+  it('refuses a workspace this daemon has never registered instead of serving a phantom', async () => {
+    // getDoc() lazily creates an empty doc for any key, so a connect to a
+    // workspace nobody registered used to answer with an empty snapshot and a
+    // live socket — "Synced" over a document that exists nowhere durable. A
+    // stale pairing (a workspace id from an earlier install, kept in the
+    // browser's localStorage) then edits into memory that the next daemon
+    // restart discards. 4404 is app-defined (RFC 6455 reserves 4000-4999 for
+    // private use); "not found" has no registered close code.
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      {
+        url: '/ws/never-registered/canvas-a',
+        headers: { host: 'localhost:3099' },
+      } as never,
+      ws as never,
+    )
+
+    expect(ws.closes).toEqual([{ code: 4404, reason: 'Workspace "never-registered" not found' }])
+    expect(ws.sent).toEqual([])
+  })
+
+  it('still serves an unknown slug inside a registered workspace', async () => {
+    // Workspace-level honesty only: a missing SLUG in a real workspace keeps
+    // the lazy empty-doc behavior, which is how opening a just-deleted canvas
+    // degrades. Refusing that too would be a behavior change this fix does
+    // not need.
+    await saveCanvas('session1', 'exists', new LoroDoc())
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      {
+        url: '/ws/session1/never-created',
+        headers: { host: 'localhost:3099' },
+      } as never,
+      ws as never,
+    )
+
+    expect(ws.closes).toEqual([])
+    // The initial snapshot for the lazily-created empty doc.
+    expect(ws.sent.length).toBe(1)
+  })
+})
+
 describe('handleWsUpgrade auto-version corruption', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect now requires a REGISTERED workspace (an unregistered one is
+    // refused with 4404 instead of served a phantom), which is also the shape
+    // production always has: a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -214,6 +270,10 @@ describe('handleWsUpgrade viewport replay', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-viewport-replay-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -327,6 +387,10 @@ describe('handleWsUpgrade ws_trace propagation', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-trace-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -435,6 +499,10 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-scope-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -576,6 +644,10 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-malformed-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -729,6 +801,10 @@ describe('handleWsUpgrade binary update persistence failure', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-persist-fail-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    // A connect requires a REGISTERED workspace (an unregistered one is
+    // refused 4404 instead of served a phantom) — the shape production
+    // always has, since a canvas is created before any tab opens it.
+    await saveCanvas('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 

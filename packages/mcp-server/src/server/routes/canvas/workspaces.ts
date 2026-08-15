@@ -18,6 +18,7 @@ import {
   listWorkspaces,
   renameCanvasSlug,
   saveCanvas,
+  workspaceExists,
 } from '../../store/canvas-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
@@ -64,6 +65,12 @@ export function createWorkspacesRouter() {
       throw err
     }
     try {
+      // "Empty" and "never registered" are different answers, and conflating
+      // them is what let a stale pairing render as an empty workspace with a
+      // Create button. Same problem-details shape as live-doc's snapshot 404.
+      if (!(await workspaceExists(workspaceId))) {
+        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
+      }
       const canvases = await listCanvases(workspaceId)
       const response: ListCanvasesResponse = { canvases }
       return c.json(response)
