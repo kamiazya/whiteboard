@@ -20,7 +20,36 @@ import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 
+const pendingFlushes = new Map<string, Promise<unknown>>()
+
 const SAVE_DEBOUNCE_MS = 500
+
+/**
+ * Every save for a document goes through one queue, and the load effect
+ * awaits it. Two invariants ride on that:
+ *
+ * - A load must not read the store while a save it should see is in flight,
+ *   or it reloads pre-edit state and the edit is gone (the debounce that
+ *   held it is already spent).
+ * - Two saves must not land out of order. Each is a full snapshot export, so
+ *   an earlier one landing last puts the document back to where it was.
+ *
+ * Keyed per document and module-level because the writers that need to share
+ * it — a cleanup closure and the next effect instance — share nothing else.
+ * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
+ * one was, so it cannot leave the queue permanently poisoned.
+ */
+function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array): Promise<void> {
+  const previous = pendingFlushes.get(canvasId)
+  const next = Promise.resolve(previous)
+    .then(() => store.save(canvasId, snapshot))
+    .catch(() => {})
+    .finally(() => {
+      if (pendingFlushes.get(canvasId) === next) pendingFlushes.delete(canvasId)
+    })
+  pendingFlushes.set(canvasId, next)
+  return next
+}
 
 /**
  * `type` is the one required core facet, so a canvas with nothing stored
@@ -61,6 +90,10 @@ export function useMarkdownCanvasDoc(
   const loroRef = useRef(loro)
   loroRef.current = loro
 
+  // See queueSave: the load below awaits whatever save is still in flight
+  // for this document before reading the store.
+  const pending = pendingFlushes
+
   useEffect(() => {
     if (!enabled || canvasId === null) {
       docRef.current = null
@@ -71,32 +104,35 @@ export function useMarkdownCanvasDoc(
     }
     let cancelled = false
     let unsubscribe: (() => void) | undefined
-    void loroRef.current.load(canvasId).then((result) => {
-      if (cancelled) return
-      const doc = new Loro()
-      if (result.kind === 'ok') {
-        try {
-          doc.import(result.snapshot)
-          for (const delta of result.deltas ?? []) doc.import(delta)
-        } catch {
-          // degrade to empty — see module doc
-        }
-      }
-      docRef.current = doc
-      // Subscribed AFTER the initial import, so loading never schedules a
-      // save of what was just loaded. This is how commits made OUTSIDE
-      // setBody — a CRDT binding mutating the 'body' container directly —
-      // still reach the body state (and the preview) and get persisted.
-      unsubscribe = doc.subscribe((event) => {
+    void Promise.resolve(pending.get(canvasId))
+      .catch(() => {})
+      .then(() => loroRef.current.load(canvasId))
+      .then((result) => {
         if (cancelled) return
+        const doc = new Loro()
+        if (result.kind === 'ok') {
+          try {
+            doc.import(result.snapshot)
+            for (const delta of result.deltas ?? []) doc.import(delta)
+          } catch {
+            // degrade to empty — see module doc
+          }
+        }
+        docRef.current = doc
+        // Subscribed AFTER the initial import, so loading never schedules a
+        // save of what was just loaded. This is how commits made OUTSIDE
+        // setBody — a CRDT binding mutating the 'body' container directly —
+        // still reach the body state (and the preview) and get persisted.
+        unsubscribe = doc.subscribe((event) => {
+          if (cancelled) return
+          setBodyState(doc.getText('body').toString())
+          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+          if (event.by === 'local') scheduleSaveRef.current?.()
+        })
+        setDoc(doc)
         setBodyState(doc.getText('body').toString())
         setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
-        if (event.by === 'local') scheduleSaveRef.current?.()
       })
-      setDoc(doc)
-      setBodyState(doc.getText('body').toString())
-      setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
-    })
     return () => {
       cancelled = true
       unsubscribe?.()
@@ -111,7 +147,7 @@ export function useMarkdownCanvasDoc(
         timerRef.current = null
         const doc = docRef.current
         if (doc !== null && canvasId !== null) {
-          void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
+          void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
         }
       }
     }
@@ -126,10 +162,13 @@ export function useMarkdownCanvasDoc(
     if (canvasId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
+      // Clearing the ref first means a cleanup arriving after this point
+      // finds no timer to flush — so this save has to enqueue itself, or the
+      // next load has nothing to wait on.
       timerRef.current = null
       const doc = docRef.current
       if (doc === null) return
-      void loroRef.current.save(canvasId, doc.export({ mode: 'snapshot' }))
+      void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
     }, SAVE_DEBOUNCE_MS)
   }, [canvasId])
   scheduleSaveRef.current = scheduleSave

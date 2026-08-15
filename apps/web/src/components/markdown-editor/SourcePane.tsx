@@ -229,7 +229,22 @@ export function SourcePane({
         },
       }
     }
-    if (autoFocus) view.focus()
+    // Autofocus etiquette: claim focus unless a REAL surface already holds
+    // it. This effect races two very different focus holders and must treat
+    // them oppositely:
+    // - the menu item that triggered the switch, inside a menu that is
+    //   already dismissing — transient; claiming from it is the entire
+    //   point of autofocus (left alone, it unmounts and drops focus on
+    //   <body>, permanently, since this focus() is one-shot);
+    // - the title input the user clicked BEFORE this deferred effect ran —
+    //   real; claiming from it steals keystrokes mid-typing.
+    // <body>/null also count as unclaimed.
+    const holder = document.activeElement
+    const holderIsTransient =
+      holder === null || holder === document.body || holder.closest('[role="menu"]') !== null
+    if (autoFocus && holderIsTransient) {
+      view.focus()
+    }
 
     return () => {
       view.destroy()
