@@ -2,9 +2,9 @@ import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/white
 import { setEdgeLock } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { EdgeNotFoundError } from './errors.js'
-import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
  * Edge counterpart to `wb_node_lock`. An edge is its own object here, so its
@@ -44,7 +44,7 @@ export function createEdgeLockTool(deps: ServerDeps) {
     inputSchema: edgeLockInputSchema,
     outputSchema: edgeLockOutputSchema,
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
       // Reject a ghost id rather than storing a lock nothing can ever

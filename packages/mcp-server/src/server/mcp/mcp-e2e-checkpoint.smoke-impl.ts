@@ -62,7 +62,7 @@ export function triggerDaemonCanvasCreate(
   const attempt = () =>
     callTool('wb_document_create', {
       workspaceId: WORKSPACE_ID,
-      segment: 'e2e-src',
+      path: 'e2e-src',
       // markdown, because the flow below sets a facet on it — facets are OKF
       // frontmatter, and nothing here needs a spatial canvas: version
       // save/list/restore is about history, not content shape.
@@ -252,7 +252,7 @@ export async function runE2eCheckpointSmoke({
       retryDaemonStartup: shouldRetryDaemonStartup,
       maxDaemonStartupRetries,
     })
-    if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
+    if (typeof created.canvasId !== 'string' || created.path !== 'e2e-src') {
       throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
     }
     const canvasId = created.canvasId

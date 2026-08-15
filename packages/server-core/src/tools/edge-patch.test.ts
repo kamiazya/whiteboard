@@ -7,7 +7,6 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
 import { createEdgeLockTool } from './edge-lock.js'
@@ -34,7 +33,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
 }
 
 const BASE_CANVAS: SpatialCanvas = {

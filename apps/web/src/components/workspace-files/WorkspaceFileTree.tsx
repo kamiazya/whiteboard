@@ -4,8 +4,7 @@ import { cn } from '../../lib/utils.js'
 
 export interface WorkspaceFileTreeCanvas {
   readonly canvasId: string
-  readonly segment: string
-  readonly alias: string
+  readonly path: string
 }
 
 export interface WorkspaceFileTreeProps {
@@ -23,8 +22,8 @@ interface TreeNode {
   readonly children: TreeNode[]
 }
 
-// Alias paths are derived root-to-leaf segment chains (see canvas-workspace):
-// splitting on '/' reconstructs the tree without a second source of truth.
+// A document path is its full slash-joined placement: splitting on '/'
+// reconstructs the tree without a second source of truth.
 function buildTree(canvases: readonly WorkspaceFileTreeCanvas[]): TreeNode[] {
   interface MutableNode {
     name: string
@@ -35,7 +34,7 @@ function buildTree(canvases: readonly WorkspaceFileTreeCanvas[]): TreeNode[] {
   const root = new Map<string, MutableNode>()
 
   for (const canvas of canvases) {
-    const segments = canvas.alias.split('/')
+    const segments = canvas.path.split('/')
     let level = root
     let path = ''
     for (const [i, name] of segments.entries()) {
@@ -125,9 +124,9 @@ function TreeItem({
 }
 
 /**
- * Read-only workspace file tree over derived alias paths. Nesting comes
- * entirely from the aliases the /api/v1 canvas list already carries — this
- * component never re-derives or stores tree structure of its own.
+ * Read-only workspace file tree over document paths. Nesting comes entirely
+ * from the paths the /api/v1 canvas list already carries — this component
+ * never re-derives or stores tree structure of its own.
  */
 export function WorkspaceFileTree({ canvases, onOpen, className }: WorkspaceFileTreeProps) {
   const tree = useMemo(() => buildTree(canvases), [canvases])

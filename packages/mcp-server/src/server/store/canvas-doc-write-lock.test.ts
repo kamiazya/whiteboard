@@ -4,6 +4,7 @@
 // that load the same base before either saves drop one of the changes.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import {
   writeSpatialCanvas as _w,
   readSpatialCanvas,
@@ -56,15 +57,13 @@ async function makeDeps() {
   const canvasDocStore = new InMemoryCanvasDocStore()
 
   // The patch tools assert the canvas belongs to the workspace, so the
-  // workspace tree has to name it before any of them will run.
-  const tree = new WorkspaceTree(new LoroDoc())
-  tree.createNode(CANVAS_ID, 'doc')
-  const treeChunks = chunkSnapshot(tree.exportSnapshot(), 1_000_000)
-  await canvasDocStore.saveSnapshot({
-    docRef: { kind: 'workspace-tree', workspaceId: WORKSPACE_ID },
-    manifest: treeChunks.manifest,
-    chunks: treeChunks.chunks,
-    frontier: tree.exportFrontier(),
+  // index has to name it before any of them will run.
+  const documentIndex = new InMemoryDocumentIndex()
+  documentIndex.seed({
+    workspaceId: WORKSPACE_ID,
+    canvasId: CANVAS_ID,
+    path: 'doc',
+    kind: 'spatial',
   })
 
   const seedDoc = new LoroDoc()
@@ -79,6 +78,7 @@ async function makeDeps() {
   return {
     canvasDocStore,
     blobStore: {} as never,
+    documentIndex,
   }
 }
 

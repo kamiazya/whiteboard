@@ -14,7 +14,7 @@ import type {
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-canvas-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
@@ -34,6 +34,14 @@ function docRefKey(docRef: DocRef): string {
  */
 export class FakeCanvasDocStore implements CanvasDocStore {
   private readonly saved = new Map<string, SaveSnapshotInput>()
+
+  /**
+   * The placement index that belongs with this store's documents. Carried
+   * here rather than constructed per test so a test cannot register a
+   * document in one index and have the tool read another — which is the
+   * only way these two doubles can disagree.
+   */
+  readonly documentIndex = new InMemoryDocumentIndex()
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const entry = this.saved.get(docRefKey(input.docRef))
@@ -97,16 +105,7 @@ export async function registerCanvasInWorkspace(
   store: FakeCanvasDocStore,
   workspaceId: WorkspaceId,
   canvasId: CanvasId,
-  segment = 'doc',
+  path = 'doc',
 ): Promise<void> {
-  const tree = new WorkspaceTree(new LoroDoc())
-  tree.createNode(canvasId, segment)
-  const bytes = tree.exportSnapshot()
-  const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
-  await store.saveSnapshot({
-    docRef: { kind: 'workspace-tree', workspaceId },
-    manifest,
-    chunks,
-    frontier: tree.exportFrontier(),
-  })
+  store.documentIndex.seed({ workspaceId, canvasId, path, kind: 'spatial' })
 }

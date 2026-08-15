@@ -1,17 +1,14 @@
-import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
-import { LoroDoc } from 'loro-crdt'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
 import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
-import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
-import { saveWorkspaceTree } from './tools/workspace-tree-io.js'
 
 function makeServer() {
   return createServer({
     canvasDocStore: createInMemoryCanvasDocStore(),
     blobStore: {} as never,
-    documentIndex: unusedDocumentIndex(),
+    documentIndex: new InMemoryDocumentIndex(),
   })
 }
 
@@ -25,11 +22,11 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(201)
     const body = createCanvasOutputSchema.parse(await res.json())
-    expect(body.segment).toBe('doc-a')
+    expect(body.path).toBe('doc-a')
     expect(typeof body.canvasId).toBe('string')
   })
 
@@ -38,7 +35,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: '-leading', kind: 'spatial' }),
+      body: JSON.stringify({ path: '-leading', kind: 'spatial' }),
     })
     expect(res.status).toBe(400)
   })
@@ -48,7 +45,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/..%2Ftraversal/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(400)
   })
@@ -58,7 +55,7 @@ describe('canvas CRUD routes', () => {
     const res = await app.request('/api/v1/workspaces/typo-probe-ws/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial' }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial' }),
     })
     expect(res.status).toBe(404)
   })
@@ -68,12 +65,12 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     expect(res.status).toBe(409)
   })
@@ -83,7 +80,7 @@ describe('canvas CRUD routes', () => {
     await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const res = await app.request('/api/v1/workspaces/ws-1/canvases')
     expect(res.status).toBe(200)
@@ -102,7 +99,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -120,7 +117,7 @@ describe('canvas CRUD routes', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'spatial', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
     const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
 
@@ -142,7 +139,7 @@ describe('canvas OKF read route', () => {
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: 'doc-a', kind: 'markdown', createWorkspace: true }),
+      body: JSON.stringify({ path: 'doc-a', kind: 'markdown', createWorkspace: true }),
     })
     const created = createCanvasOutputSchema.parse(await createRes.json())
     await tools.documentSet.execute({
@@ -157,21 +154,21 @@ describe('canvas OKF read route', () => {
     expect(body.markdown).toContain('Hello tree')
   })
 
-  it('GET okf for a tree node with no document returns 404', async () => {
+  it('GET okf for an indexed document with no stored bytes returns 404', async () => {
     // Creation now writes the document, so this state is no longer reachable
-    // by creating and not writing — it has to be built directly. It is still
-    // worth guarding: a node whose document was deleted, or written by an
-    // older build that created nodes lazily, lands here.
+    // by creating and not writing — it has to be built through the index
+    // alone. It is still worth guarding: a document whose bytes were deleted,
+    // or one written by an older build that created placements lazily, lands
+    // here.
     const store = createInMemoryCanvasDocStore()
-    const { app } = createServer({
-      canvasDocStore: store,
-      blobStore: {} as never,
-      documentIndex: unusedDocumentIndex(),
+    const documentIndex = new InMemoryDocumentIndex()
+    const { app } = createServer({ canvasDocStore: store, blobStore: {} as never, documentIndex })
+    await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    const { canvasId } = await documentIndex.createDocument({
+      workspaceId: 'ws-1',
+      path: 'orphan',
+      kind: 'spatial',
     })
-    const tree = new WorkspaceTree(new LoroDoc())
-    const canvasId = '01ARZ3NDEKTSV4RRFFQ69G5FAA'
-    tree.createNode(canvasId, 'orphan')
-    await saveWorkspaceTree(store, 'ws-1', tree)
 
     const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}/okf`)
     expect(res.status).toBe(404)

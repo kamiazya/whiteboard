@@ -10,13 +10,13 @@ export interface WorkspaceFilesPanelProps {
 
 type OkfPreview =
   | { kind: 'idle' }
-  | { kind: 'loading'; alias: string }
-  | { kind: 'loaded'; alias: string; markdown: string }
-  | { kind: 'empty'; alias: string }
-  | { kind: 'error'; alias: string }
+  | { kind: 'loading'; path: string }
+  | { kind: 'loaded'; path: string; markdown: string }
+  | { kind: 'empty'; path: string }
+  | { kind: 'error'; path: string }
 
 /**
- * The OpenCanvas workspace file tree (/api/v1): nested alias paths on the
+ * The OpenCanvas workspace file tree (/api/v1): nested document paths on the
  * left, a read-only OKF markdown preview of the clicked canvas on the
  * right. Read-only by design — editing OpenCanvas docs stays with the MCP
  * tools until the editor surfaces migrate to the v1 world.
@@ -51,21 +51,21 @@ export function WorkspaceFilesPanel({
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
   const openCanvas = (canvas: WorkspaceFileTreeCanvas) => {
-    setPreview({ kind: 'loading', alias: canvas.alias })
+    setPreview({ kind: 'loading', path: canvas.path })
     getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.canvasId)
       .then((res) => {
         setPreview((current) =>
-          current.kind === 'loading' && current.alias === canvas.alias
-            ? { kind: 'loaded', alias: canvas.alias, markdown: res.markdown }
+          current.kind === 'loading' && current.path === canvas.path
+            ? { kind: 'loaded', path: canvas.path, markdown: res.markdown }
             : current,
         )
       })
       .catch(() => {
         setPreview((current) =>
-          current.kind === 'loading' && current.alias === canvas.alias
+          current.kind === 'loading' && current.path === canvas.path
             ? // A created-but-never-written canvas 404s; show it as empty
               // rather than as a failure (see the /okf route's contract).
-              { kind: 'empty', alias: canvas.alias }
+              { kind: 'empty', path: canvas.path }
             : current,
         )
       })
@@ -97,19 +97,19 @@ export function WorkspaceFilesPanel({
           <p className="text-muted-foreground text-sm">Select a canvas to preview its content.</p>
         )}
         {preview.kind === 'loading' && (
-          <p className="text-muted-foreground text-sm">Loading {preview.alias}…</p>
+          <p className="text-muted-foreground text-sm">Loading {preview.path}…</p>
         )}
         {preview.kind === 'empty' && (
-          <p className="text-muted-foreground text-sm">{preview.alias} has no content yet.</p>
+          <p className="text-muted-foreground text-sm">{preview.path} has no content yet.</p>
         )}
         {preview.kind === 'error' && (
           <p role="alert" className="text-destructive text-sm">
-            Failed to load {preview.alias}.
+            Failed to load {preview.path}.
           </p>
         )}
         {preview.kind === 'loaded' && (
           <>
-            <h2 className="mb-2 font-mono text-xs text-muted-foreground">{preview.alias}</h2>
+            <h2 className="mb-2 font-mono text-xs text-muted-foreground">{preview.path}</h2>
             <pre className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3 text-sm">
               {preview.markdown}
             </pre>

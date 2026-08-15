@@ -10,13 +10,9 @@ import {
 } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
-import {
-  assertCanvasInWorkspace,
-  loadWorkspaceTree,
-  saveWorkspaceTree,
-} from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
 
@@ -70,7 +66,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
     inputSchema: documentSetInputSchema,
     outputSchema: documentSetOutputSchema,
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
 
       const parsed = parseOkf(input.markdown)
       if (!parsed.ok) {
@@ -117,12 +113,15 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // name, so omitting it must not erase one.
       const { facets, title, ...coreMeta } = frontmatter
       if (title !== undefined) {
-        const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-        const node = tree.snapshot().nodes.find((n) => n.canvasId === input.canvasId)
-        if (node !== undefined) {
-          tree.setDisplayName(node.id, title)
-          await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-        }
+        // A blank title is not a name, and the two are deliberately one
+        // state — so writing one clears the name rather than storing '' for
+        // a reader to fall back from a second time.
+        const trimmed = title.trim()
+        await deps.documentIndex.setDocumentName({
+          workspaceId: input.workspaceId,
+          canvasId: input.canvasId,
+          ...(trimmed === '' ? {} : { name: trimmed }),
+        })
       }
       writeCoreFacets(doc, coreMeta)
       if (facets) {

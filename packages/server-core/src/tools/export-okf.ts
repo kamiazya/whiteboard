@@ -5,7 +5,6 @@ import { readCoreFacets, readFacets } from '@kamiazya/whiteboard-canvas-workspac
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadWorkspaceTree } from './workspace-tree-io.js'
 
 /**
  * OKF-Markdown is a single-document format (frontmatter + body); a spatial
@@ -56,8 +55,10 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // there rather than from stored content — the frontmatter `title` this
   // emits is a projection, and an unnamed document emits none rather than
   // being handed its slug as a title.
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const displayName = tree.snapshot().nodes.find((n) => n.canvasId === input.canvasId)?.displayName
+  const entry = await deps.documentIndex.resolveDocumentById({
+    workspaceId: input.workspaceId,
+    canvasId: input.canvasId,
+  })
   const facets = readFacets(doc)
   const body = canvas.nodes.find((node) => node.type === 'text')?.text ?? ''
   const { title: _storedTitle, ...storedMeta } = coreMeta ?? {
@@ -65,7 +66,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   }
   const frontmatter: OkfMarkdownFrontmatter = {
     ...storedMeta,
-    ...(displayName === undefined ? {} : { title: displayName }),
+    ...(entry?.name === undefined ? {} : { title: entry.name }),
     facets,
   }
   const markdown = serializeOkf({ frontmatter, body })

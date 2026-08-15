@@ -14,84 +14,83 @@ const VALID_CANVAS_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const VALID_WORKSPACE_ID = 'my-workspace'
 
 describe('createCanvasInputSchema', () => {
-  it('accepts valid input with segment only', () => {
+  it('accepts valid input with a single-segment path', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'my-doc',
+      path: 'my-doc',
     })
     expect(result.success).toBe(true)
   })
 
-  it('accepts valid input with optional parentId', () => {
+  it('accepts a nested path', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'child',
-      parentId: 'some-tree-node-id',
+      path: 'parent/child',
     })
     expect(result.success).toBe(true)
   })
 
-  it('accepts single-character segment', () => {
+  it('accepts a single-character segment', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'a',
+      path: 'a',
     })
     expect(result.success).toBe(true)
   })
 
-  it('accepts segment with hyphens and underscores in the middle', () => {
+  it('accepts hyphens in the middle of a segment', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'my-doc_v2',
+      path: 'my-doc-v2',
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects segment with leading hyphen', () => {
+  it('rejects a leading hyphen', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: '-leading',
+      path: '-leading',
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects segment with trailing hyphen', () => {
+  it('rejects a trailing hyphen', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'trailing-',
+      path: 'trailing-',
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects empty segment', () => {
+  it('rejects an empty path', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: '',
+      path: '',
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects segment with spaces', () => {
+  it('rejects whitespace', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'has space',
+      path: 'has space',
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects segment with dots', () => {
+  it('rejects a dot, which is what forecloses traversal', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'file.txt',
+      path: 'file.txt',
     })
     expect(result.success).toBe(false)
   })
@@ -100,7 +99,7 @@ describe('createCanvasInputSchema', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: '',
       kind: 'spatial',
-      segment: 'doc',
+      path: 'doc',
     })
     expect(result.success).toBe(false)
   })
@@ -109,7 +108,7 @@ describe('createCanvasInputSchema', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'doc',
+      path: 'doc',
       extra: true,
     })
     expect(result.success).toBe(false)
@@ -119,7 +118,7 @@ describe('createCanvasInputSchema', () => {
     const result = createCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
       kind: 'spatial',
-      segment: 'doc',
+      path: 'doc',
       parentId: '',
     })
     expect(result.success).toBe(false)
@@ -130,7 +129,7 @@ describe('createCanvasOutputSchema', () => {
   it('accepts valid output', () => {
     const result = createCanvasOutputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
-      segment: 'my-doc',
+      path: 'my-doc',
     })
     expect(result.success).toBe(true)
   })
@@ -138,7 +137,7 @@ describe('createCanvasOutputSchema', () => {
   it('rejects invalid canvasId', () => {
     const result = createCanvasOutputSchema.safeParse({
       canvasId: 'not-a-ulid',
-      segment: 'my-doc',
+      path: 'my-doc',
     })
     expect(result.success).toBe(false)
   })
@@ -146,7 +145,7 @@ describe('createCanvasOutputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = createCanvasOutputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
-      segment: 'my-doc',
+      path: 'my-doc',
       extra: 1,
     })
     expect(result.success).toBe(false)
@@ -190,16 +189,14 @@ describe('getCanvasOutputSchema', () => {
   it('accepts valid canvas detail', () => {
     const result = getCanvasOutputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
-      segment: 'my-doc',
-      alias: '/w/ws/c/my-doc',
+      path: 'my-doc',
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects missing alias', () => {
+  it('rejects a missing path', () => {
     const result = getCanvasOutputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
-      segment: 'my-doc',
     })
     expect(result.success).toBe(false)
   })
@@ -207,8 +204,7 @@ describe('getCanvasOutputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = getCanvasOutputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
-      segment: 'my-doc',
-      alias: '/w/ws/c/my-doc',
+      path: 'my-doc',
       extra: true,
     })
     expect(result.success).toBe(false)
@@ -250,16 +246,16 @@ describe('listCanvasesOutputSchema', () => {
   it('accepts array with valid canvas details', () => {
     const result = listCanvasesOutputSchema.safeParse({
       canvases: [
-        { canvasId: VALID_CANVAS_ID, segment: 'doc-a', alias: '/c/doc-a' },
-        { canvasId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', segment: 'doc-b', alias: '/c/doc-b' },
+        { canvasId: VALID_CANVAS_ID, path: 'doc-a' },
+        { canvasId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'doc-b' },
       ],
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects canvas detail with missing segment', () => {
+  it('rejects a canvas detail with no path', () => {
     const result = listCanvasesOutputSchema.safeParse({
-      canvases: [{ canvasId: VALID_CANVAS_ID, alias: '/c/doc' }],
+      canvases: [{ canvasId: VALID_CANVAS_ID }],
     })
     expect(result.success).toBe(false)
   })

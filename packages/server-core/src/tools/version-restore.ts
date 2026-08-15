@@ -3,9 +3,9 @@ import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canv
 import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { parseVersionRecord } from './version-record.js'
-import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const versionRestoreInputSchema = z
   .object({
@@ -46,7 +46,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
       const versions = doc.getMap('versions')

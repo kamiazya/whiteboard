@@ -187,7 +187,7 @@ async function main() {
   // (workspaces never materialize implicitly from a typo'd workspaceId).
   await expectToolError(
     'wb_document_create',
-    { workspaceId: WORKSPACE_ID, segment: 'e2e-src', kind: 'spatial' },
+    { workspaceId: WORKSPACE_ID, path: 'e2e-src', kind: 'spatial' },
     'without createWorkspace',
     'Workspace not found',
   )
@@ -195,11 +195,11 @@ async function main() {
   // wb_document_create: first daemon-dependent RPC (cold-start latency).
   const created = await callTool('wb_document_create', {
     workspaceId: WORKSPACE_ID,
-    segment: 'e2e-src',
+    path: 'e2e-src',
     kind: 'spatial',
     createWorkspace: true,
   })
-  if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
+  if (typeof created.canvasId !== 'string' || created.path !== 'e2e-src') {
     throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
   }
   const canvasId = created.canvasId
@@ -209,7 +209,7 @@ async function main() {
   // it round-trips through create -> list without any document read.
   const named = await callTool('wb_document_create', {
     workspaceId: WORKSPACE_ID,
-    segment: 'e2e-named',
+    path: 'e2e-named',
     kind: 'markdown',
     name: 'リリース計画 2026 / v2',
   })
@@ -465,7 +465,7 @@ async function main() {
   // diagram for its markdown — exactly what wb_document_get stopped doing.
   const mdCreated = await callTool('wb_document_create', {
     workspaceId: WORKSPACE_ID,
-    segment: 'e2e-okf',
+    path: 'e2e-okf',
     kind: 'markdown',
   })
   const mdCanvasId = mdCreated.canvasId

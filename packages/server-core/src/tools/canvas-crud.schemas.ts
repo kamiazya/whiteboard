@@ -1,36 +1,25 @@
 import {
   canvasIdSchema,
   canvasKindSchema,
+  documentPathSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 
-// Matches WorkspaceTree's own segment validation
-// (packages/canvas-workspace/src/workspace-tree.ts) so a segment rejected
-// here is rejected identically inside the tree, and vice versa.
-const segmentSchema = z
-  .string()
-  .min(1)
-  .regex(/^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/, 'invalid segment')
-
-// TreeID (from loro-crdt) has no dedicated Zod schema in canvas-ports; it is
-// a nanoid-style opaque string identifying a node within one workspace's
-// tree, validated for existence (not shape) by the handler.
-const treeIdSchema = z.string().min(1)
-
 export const createCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    segment: segmentSchema,
+    path: documentPathSchema.describe(
+      'Where the document goes, as a slash-separated path from the workspace root. Hierarchy is the path: `plan/sub` sits under `plan`, and no separate parent id is involved.',
+    ),
     kind: canvasKindSchema.describe(
       'What the document is. `markdown` serialises as OKF, `spatial` as JSON Canvas. Required: the format follows from the document rather than from a read parameter, so a document created without one cannot be read back.',
     ),
-    parentId: treeIdSchema.optional(),
     name: z
       .string()
       .optional()
       .describe(
-        'What a human reads. Free text, unlike `segment`, which is a slug and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the slug as a title.',
+        'What a human reads. Free text, unlike `path`, which is a slug and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the slug as a title.',
       ),
     // Workspaces are never materialized implicitly: a typo'd or hallucinated
     // workspaceId must fail loudly instead of silently writing data into a
@@ -46,7 +35,7 @@ export const createCanvasInputSchema = z
 export const createCanvasOutputSchema = z
   .object({
     canvasId: canvasIdSchema,
-    segment: segmentSchema,
+    path: documentPathSchema,
   })
   .strict()
 
@@ -60,11 +49,10 @@ export const getCanvasInputSchema = z
 const canvasDetailSchema = z
   .object({
     canvasId: canvasIdSchema,
-    segment: z.string(),
-    alias: z.string(),
-    // Absent rather than defaulted to the segment: a reader that wants that
-    // fallback can choose it, and a listing that invents one reads as if
-    // somebody typed the slug as the title.
+    path: documentPathSchema,
+    // Absent rather than defaulted to the path's last segment: a reader that
+    // wants that fallback can choose it, and a listing that invents one reads
+    // as if somebody typed the slug as the title.
     name: z.string().optional(),
   })
   .strict()
@@ -102,10 +90,10 @@ export const deleteCanvasOutputSchema = z
  * than through a tool object, so they have nowhere else to live.
  */
 export const WB_DOCUMENT_CREATE_DESCRIPTION =
-  'Create an empty document in a workspace and place it in the workspace tree.'
+  'Create an empty document at a path in a workspace. The path is the placement: `plan/sub` sits under `plan`.'
 export const WB_DOCUMENT_LIST_DESCRIPTION =
   'List the documents in a workspace with their placement. An unknown workspace is an error rather than an empty list, so a mistyped workspaceId cannot be mistaken for a genuinely empty workspace.'
 export const WB_DOCUMENT_RESOLVE_DESCRIPTION =
-  'Resolve a document id to its placement — its segment and derived alias. Returns placement only, never content.'
+  'Resolve a document id to its path. Returns placement only, never content.'
 export const WB_DOCUMENT_DELETE_DESCRIPTION =
-  'Delete a document and remove it from the workspace tree.'
+  'Delete a document. Fails if documents sit below it — deletion is not recoverable, so the caller names what it destroys.'

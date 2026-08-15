@@ -1,151 +1,153 @@
 import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
-import { LoroDoc } from 'loro-crdt'
+import {
+  DocumentHasDescendantsError,
+  DocumentPathTakenError,
+} from '@kamiazya/whiteboard-canvas-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
-import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import {
-  CanvasNotFoundError,
-  CanvasParentNotFoundError,
-  CanvasSegmentConflictError,
-  WorkspaceNotFoundError,
-} from './canvas-crud.errors.js'
+import { CanvasNotFoundError, WorkspaceNotFoundError } from './canvas-crud.errors.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './canvas-crud.js'
-import { saveWorkspaceTree } from './workspace-tree-io.js'
 
 function makeDeps(): ServerDeps {
   return {
     canvasDocStore: createInMemoryCanvasDocStore(),
     blobStore: {} as never,
-    documentIndex: unusedDocumentIndex(),
+    documentIndex: new InMemoryDocumentIndex(),
   }
 }
 
 describe('wbCanvasCreate', () => {
-  it('creates a canvas and returns canvasId + segment', async () => {
+  it('creates a document and returns canvasId + path', async () => {
     const deps = makeDeps()
     const result = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'doc-a',
       kind: 'spatial',
       createWorkspace: true,
     })
-    expect(result.segment).toBe('doc-a')
+    expect(result.path).toBe('doc-a')
     expect(() => canvasIdSchema.parse(result.canvasId)).not.toThrow()
   })
 
-  it('creates a nested canvas under an existing parent and the alias reflects nesting', async () => {
-    const deps = makeDeps()
-    const parent = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'folder',
-      kind: 'spatial',
-      createWorkspace: true,
-    })
-    const parentNode = await wbCanvasGet(deps, {
-      workspaceId: 'ws-1',
-      canvasId: parent.canvasId,
-    })
-    expect(parentNode.alias).toBe('folder')
-
-    const tree = await loadTreeForAssertions(deps)
-    const parentTreeNode = tree.snapshot().nodes.find((n) => n.canvasId === parent.canvasId)
-    const child = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'child',
-      kind: 'spatial',
-      parentId: parentTreeNode?.id,
-    })
-    const childNode = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: child.canvasId })
-    expect(childNode.alias).toBe('folder/child')
-  })
-
-  it('throws CanvasSegmentConflictError when a sibling with the same segment already exists', async () => {
+  it('nests by path, with no parent id involved', async () => {
     const deps = makeDeps()
     await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'parent',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
+    const child = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'parent/child',
+      kind: 'spatial',
+    })
+    expect(child.path).toBe('parent/child')
+
+    // The hierarchy is readable from the listing without resolving anything:
+    // a path sorts before every path it prefixes.
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+    expect(canvases.map((c) => c.path)).toEqual(['parent', 'parent/child'])
+  })
+
+  it('refuses a path that is already taken', async () => {
+    const deps = makeDeps()
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'doc-a',
       kind: 'spatial',
       createWorkspace: true,
     })
     await expect(
-      wbCanvasCreate(deps, { workspaceId: 'ws-1', segment: 'doc-a', kind: 'spatial' }),
-    ).rejects.toThrow(CanvasSegmentConflictError)
+      wbCanvasCreate(deps, { workspaceId: 'ws-1', path: 'doc-a', kind: 'markdown' }),
+    ).rejects.toThrow(DocumentPathTakenError)
   })
 
-  it('throws CanvasParentNotFoundError when parentId does not exist', async () => {
+  it('throws WorkspaceNotFoundError for an unknown workspaceId, and list agrees', async () => {
     const deps = makeDeps()
     await expect(
-      wbCanvasCreate(deps, {
-        workspaceId: 'ws-1',
-        segment: 'doc-a',
-        kind: 'spatial',
-        parentId: 'does-not-exist',
-        createWorkspace: true,
-      }),
-    ).rejects.toThrow(CanvasParentNotFoundError)
-  })
-
-  it('throws WorkspaceNotFoundError for an unknown workspaceId without createWorkspace, and list agrees', async () => {
-    const deps = makeDeps()
-    await expect(
-      wbCanvasCreate(deps, { workspaceId: 'typo-probe-ws', segment: 'doc-a', kind: 'spatial' }),
+      wbCanvasCreate(deps, { workspaceId: 'nope', path: 'doc-a', kind: 'spatial' }),
     ).rejects.toThrow(WorkspaceNotFoundError)
-    // LIST and CREATE must derive workspace existence from the same signal —
-    // a typo'd workspace id should not look like an empty workspace.
-    await expect(wbCanvasList(deps, { workspaceId: 'typo-probe-ws' })).rejects.toThrow(
+    await expect(wbCanvasList(deps, { workspaceId: 'nope' })).rejects.toThrow(
       WorkspaceNotFoundError,
     )
   })
 
   it('materializes the workspace when createWorkspace: true is passed', async () => {
     const deps = makeDeps()
-    const created = await wbCanvasCreate(deps, {
-      workspaceId: 'brand-new-ws',
-      segment: 'doc-a',
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-new',
+      path: 'doc-a',
       kind: 'spatial',
       createWorkspace: true,
     })
-    expect(created.segment).toBe('doc-a')
-    const listed = await wbCanvasList(deps, { workspaceId: 'brand-new-ws' })
-    expect(listed.canvases.map((c) => c.canvasId)).toContain(created.canvasId)
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-new' })
+    expect(canvases).toHaveLength(1)
   })
 
-  it('succeeds without the flag when the workspace already exists', async () => {
+  it('succeeds without the flag once the workspace exists', async () => {
     const deps = makeDeps()
     await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'first',
       kind: 'spatial',
       createWorkspace: true,
     })
     const second = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-b',
+      path: 'second',
       kind: 'spatial',
     })
-    expect(second.segment).toBe('doc-b')
+    expect(second.path).toBe('second')
   })
 })
 
 describe('wbCanvasGet', () => {
-  it('returns the canvas with its resolved alias after create', async () => {
+  it('returns the document with its path', async () => {
     const deps = makeDeps()
     const created = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'parent/child',
       kind: 'spatial',
       createWorkspace: true,
     })
-    const result = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
-    expect(result).toEqual({ canvasId: created.canvasId, segment: 'doc-a', alias: 'doc-a' })
+    const got = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
+    expect(got).toEqual({ canvasId: created.canvasId, path: 'parent/child' })
   })
 
   it('throws CanvasNotFoundError for a canvasId that does not exist', async () => {
     const deps = makeDeps()
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
     await expect(
       wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+    ).rejects.toThrow(CanvasNotFoundError)
+  })
+
+  it('does not resolve a document from another workspace', async () => {
+    const deps = makeDeps()
+    const mine = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-2',
+      path: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
+    // An id is a handle within a workspace, not a capability that reaches
+    // across them.
+    await expect(
+      wbCanvasGet(deps, { workspaceId: 'ws-2', canvasId: mine.canvasId }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 })
@@ -153,103 +155,82 @@ describe('wbCanvasGet', () => {
 describe('wbCanvasList', () => {
   it('throws WorkspaceNotFoundError for a workspace that was never created', async () => {
     const deps = makeDeps()
-    await expect(wbCanvasList(deps, { workspaceId: 'ws-1' })).rejects.toThrow(
+    await expect(wbCanvasList(deps, { workspaceId: 'ghost' })).rejects.toThrow(
       WorkspaceNotFoundError,
     )
   })
 
-  it('returns an empty list for a workspace that was created but has no canvases', async () => {
-    const deps = makeDeps()
-    // Materialize the workspace tree without creating any canvas — existence
-    // is persisted-tree existence, never non-emptiness.
-    await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', new WorkspaceTree(new LoroDoc()))
-    const result = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-    expect(result.canvases).toEqual([])
-  })
-
-  it('returns all created canvases with resolved aliases', async () => {
+  it('returns an empty list for a workspace that exists and holds nothing', async () => {
     const deps = makeDeps()
     await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'only',
       kind: 'spatial',
       createWorkspace: true,
     })
-    await wbCanvasCreate(deps, { workspaceId: 'ws-1', segment: 'doc-b', kind: 'spatial' })
-    const result = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-    expect(result.canvases).toHaveLength(2)
-    expect(result.canvases.map((c) => c.alias).sort()).toEqual(['doc-a', 'doc-b'])
-  })
-
-  it('excludes a deleted canvas', async () => {
-    const deps = makeDeps()
-    const created = await wbCanvasCreate(deps, {
+    await wbCanvasDelete(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      canvasId: (await wbCanvasList(deps, { workspaceId: 'ws-1' })).canvases[0]!.canvasId,
+    })
+    expect((await wbCanvasList(deps, { workspaceId: 'ws-1' })).canvases).toEqual([])
+  })
+
+  it('returns every document, ordered so each subtree stays together', async () => {
+    const deps = makeDeps()
+    for (const path of ['b-side', 'a', 'a/deep', 'a-sibling']) {
+      await wbCanvasCreate(deps, {
+        workspaceId: 'ws-1',
+        path,
+        kind: 'spatial',
+        createWorkspace: true,
+      })
+    }
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+    // `a-sibling` after `a/deep`, because comparing whole strings would put
+    // it between `a` and its own child and split the subtree apart.
+    expect(canvases.map((c) => c.path)).toEqual(['a', 'a/deep', 'a-sibling', 'b-side'])
+  })
+
+  it('excludes a deleted document', async () => {
+    const deps = makeDeps()
+    const keep = await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'keep',
       kind: 'spatial',
       createWorkspace: true,
     })
-    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
-    const result = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-    expect(result.canvases).toEqual([])
-  })
+    const drop = await wbCanvasCreate(deps, { workspaceId: 'ws-1', path: 'drop', kind: 'spatial' })
+    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: drop.canvasId })
 
-  it('disambiguates a merge-produced duplicate sibling into a unique alias (ADR-0008 point 5)', async () => {
-    const deps = makeDeps()
-
-    // Two peers each create a root canvas segment 'notes' independently,
-    // then merge — the real CRDT production shape that
-    // #assertNoSiblingConflict cannot see coming, since it only guards a
-    // single doc's own local mutations.
-    const doc1 = new LoroDoc()
-    const tree1 = new WorkspaceTree(doc1)
-    tree1.createNode('canvas-b', 'notes')
-
-    const doc2 = new LoroDoc()
-    const tree2 = new WorkspaceTree(doc2)
-    tree2.createNode('canvas-a', 'notes')
-
-    doc1.import(doc2.export({ mode: 'snapshot' }))
-    const merged = new WorkspaceTree(doc1)
-    await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', merged)
-
-    const listed = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-    expect(listed.canvases).toHaveLength(2)
-    expect(listed.canvases.map((c) => c.alias).sort()).toEqual(['notes', 'notes-2'])
-
-    const winner = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: 'canvas-a' })
-    expect(winner.alias).toBe('notes')
-    const loser = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: 'canvas-b' })
-    expect(loser.alias).toBe('notes-2')
+    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
+    expect(canvases.map((c) => c.canvasId)).toEqual([keep.canvasId])
   })
 })
 
 describe('wbCanvasDelete', () => {
-  it('deletes a canvas so a later get throws CanvasNotFoundError', async () => {
+  it('deletes a document so a later get throws CanvasNotFoundError', async () => {
     const deps = makeDeps()
     const created = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'doc-a',
       kind: 'spatial',
       createWorkspace: true,
     })
-    const result = await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
-    expect(result).toEqual({ deleted: true })
+    expect(await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })).toEqual(
+      {
+        deleted: true,
+      },
+    )
     await expect(
       wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: created.canvasId }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
-  it('deletes the stored document, not only its place in the tree', async () => {
-    // Removing the tree node makes the document unreachable, which reads as
-    // deleted and leaves its snapshot behind for good. Nothing else ever
-    // refers to that id again, so the bytes are unreferenced rather than
-    // merely orphaned — and deletion is how a resolved item is closed, so
-    // the store grows once per completed piece of work.
+  it('deletes the stored document, not only its placement', async () => {
     const deps = makeDeps()
     const created = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'doc-a',
+      path: 'doc-a',
       kind: 'spatial',
       createWorkspace: true,
     })
@@ -261,114 +242,85 @@ describe('wbCanvasDelete', () => {
     expect(await deps.canvasDocStore.loadSnapshot({ docRef })).toBeNull()
   })
 
-  it('throws CanvasNotFoundError when deleting a non-existent canvasId', async () => {
+  it('throws CanvasNotFoundError when deleting a canvasId that does not exist', async () => {
     const deps = makeDeps()
+    await wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+    })
     await expect(
       wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
-  it('deletes a canvas that has children without throwing, and the child no longer resolves', async () => {
+  it('refuses to delete a document that still has documents below it', async () => {
     const deps = makeDeps()
     const parent = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'folder',
+      path: 'parent',
       kind: 'spatial',
       createWorkspace: true,
     })
-    const tree = await loadTreeForAssertions(deps)
-    const parentTreeNode = tree.snapshot().nodes.find((n) => n.canvasId === parent.canvasId)
     const child = await wbCanvasCreate(deps, {
       workspaceId: 'ws-1',
-      segment: 'child',
+      path: 'parent/child',
       kind: 'spatial',
-      parentId: parentTreeNode?.id,
     })
 
+    // Deleting the parent used to orphan the child silently. Deletion has
+    // nothing to undo it, so the caller has to name what it destroys.
     await expect(
       wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: parent.canvasId }),
-    ).resolves.toEqual({ deleted: true })
+    ).rejects.toThrow(DocumentHasDescendantsError)
+    expect(await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: parent.canvasId })).toBeTruthy()
 
-    await expect(
-      wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: child.canvasId }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: child.canvasId })
+    await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: parent.canvasId })
+    expect((await wbCanvasList(deps, { workspaceId: 'ws-1' })).canvases).toEqual([])
   })
 })
 
-// Test-only helper: reaches into the persisted tree to obtain a real TreeID
-// for nesting scenarios, since wbCanvasCreate's output intentionally does
-// not expose TreeID (only canvasId, a stable public identifier).
-async function loadTreeForAssertions(deps: ServerDeps) {
-  const { loadWorkspaceTree } = await import('./workspace-tree-io.js')
-  return loadWorkspaceTree(deps.canvasDocStore, 'ws-1')
-}
-
 describe('document name', () => {
-  // ADR-0009: the name lives in the workspace, not in the document's content.
-  // Until this, creation took a `segment` only — a slug — so a document had
-  // no name of its own and every reader fell back to showing the slug.
+  async function createNamed(deps: ServerDeps, name?: string) {
+    return wbCanvasCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'doc-a',
+      kind: 'spatial',
+      createWorkspace: true,
+      ...(name === undefined ? {} : { name }),
+    })
+  }
+
   it('creation accepts a name and the listing returns it', async () => {
     const deps = makeDeps()
-    const { canvasId } = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'release-plan',
-      kind: 'markdown',
-      createWorkspace: true,
-      name: 'リリース計画 2026',
-    })
-
+    await createNamed(deps, 'Quarterly plan')
     const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-
-    expect(canvases).toEqual([
-      { canvasId, segment: 'release-plan', alias: 'release-plan', name: 'リリース計画 2026' },
-    ])
+    expect(canvases[0]?.name).toBe('Quarterly plan')
   })
 
-  it('omits the name entirely when none was given, rather than echoing the segment', async () => {
-    // A reader that wants a fallback can choose one; a listing that invents
-    // `name: 'release-plan'` takes that choice away and reads as if someone
-    // typed the slug as the title.
+  it('omits the name entirely when none was given, rather than echoing the path', async () => {
     const deps = makeDeps()
-    await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'release-plan',
-      kind: 'markdown',
-      createWorkspace: true,
-    })
-
+    await createNamed(deps)
     const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-
-    expect(canvases[0]).not.toHaveProperty('name')
+    expect(canvases[0]).toBeDefined()
+    expect('name' in (canvases[0] as object)).toBe(false)
   })
 
-  it('a name is free text, not a second segment', async () => {
+  it('a name is free text, not a second path', async () => {
     const deps = makeDeps()
-    await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'plan',
-      kind: 'markdown',
-      createWorkspace: true,
-      name: 'Release plan 2026 / v2 (draft)',
-    })
-
-    const { canvases } = await wbCanvasList(deps, { workspaceId: 'ws-1' })
-
-    expect(canvases[0]?.name).toBe('Release plan 2026 / v2 (draft)')
-    expect(canvases[0]?.segment).toBe('plan')
+    const created = await createNamed(deps, 'Q3 / plan — draft')
+    const got = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
+    expect(got.name).toBe('Q3 / plan — draft')
+    // The name never becomes placement: the path is still what was asked for.
+    expect(got.path).toBe('doc-a')
   })
 
   it('wbCanvasGet returns the name too', async () => {
     const deps = makeDeps()
-    const { canvasId } = await wbCanvasCreate(deps, {
-      workspaceId: 'ws-1',
-      segment: 'doc',
-      kind: 'markdown',
-      createWorkspace: true,
-      name: 'Doc one',
-    })
-
-    await expect(wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId })).resolves.toMatchObject({
-      name: 'Doc one',
-    })
+    const created = await createNamed(deps, 'Named')
+    const got = await wbCanvasGet(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
+    expect(got.name).toBe('Named')
   })
 })

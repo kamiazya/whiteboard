@@ -9,6 +9,7 @@ import type {
   MoveDocumentInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
+  SetDocumentNameInput,
 } from '../index.js'
 import {
   compareDocumentPaths,
@@ -54,6 +55,20 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     return documents
   }
 
+  /**
+   * Place a document at a path with an id the CALLER chose. Deliberately not
+   * on `DocumentIndex`: assigning the id is the index's job, and an
+   * operation that lets a caller pick one would undo that for every store.
+   * A test that already holds an id — because it seeds a document store with
+   * the same one — needs the two to agree, and this is how a double lets it
+   * without the contract growing a hole.
+   */
+  seed(entry: DocumentEntry & { workspaceId: string }): void {
+    const { workspaceId, ...rest } = entry
+    this.#workspaces.add(workspaceId)
+    this.#inWorkspace(workspaceId).set(rest.path, rest)
+  }
+
   async createWorkspace({ workspaceId }: CreateWorkspaceInput): Promise<void> {
     this.#workspaces.add(workspaceId)
   }
@@ -96,6 +111,17 @@ export class InMemoryDocumentIndex implements DocumentIndex {
       if (entry.canvasId === canvasId) return entry
     }
     return null
+  }
+
+  async setDocumentName({ workspaceId, canvasId, name }: SetDocumentNameInput): Promise<void> {
+    const documents = this.#inWorkspace(workspaceId)
+    for (const [path, entry] of documents) {
+      if (entry.canvasId !== canvasId) continue
+      const { name: _dropped, ...rest } = entry
+      documents.set(path, { ...rest, ...(name === undefined ? {} : { name }) })
+      return
+    }
+    throw new DocumentNotFoundError(workspaceId, canvasId)
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {
