@@ -27,6 +27,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
@@ -113,10 +114,17 @@ export function DaemonCanvasPage({
       if (injected) return injected
       // A secure page cannot open a ws:// socket to an http daemon at all, so
       // the transport is decided up front rather than attempted and retried.
-      const transport = selectCanvasTransport({
-        pageOrigin: window.location.origin,
-        daemonBaseUrl,
-      })
+      //
+      // The override in front is development-only and compiles away entirely
+      // in a production build. It exists because the rule below is correct AND
+      // makes the SSE path — and the SharedWorker behind it — unreachable from
+      // `pnpm dev`, which serves plain http.
+      const transport =
+        devTransportOverride() ??
+        selectCanvasTransport({
+          pageOrigin: window.location.origin,
+          daemonBaseUrl,
+        })
       if (transport !== 'sse') {
         // wsToken carries the pairing session token into the WS upgrade —
         // without it a pairing-grant session authenticates HTTP but opens
