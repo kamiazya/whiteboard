@@ -64,9 +64,9 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not
 - `/w/:ws/canvas/:slug` and `/local/:canvasId` routes, and the UI copy around
-  them. The shape is now workspace-first, but the tail is still a `slug` rather
-  than the document's path — it stays that way until the page stops loading
-  through `/api/canvas/:workspaceId/:slug`
+  them. The UI tail is still one segment, but the data path under it
+  (`/api/w/:ws/canvas/<path>/*`) now takes a document path — widening the UI
+  regex is the remaining step
 - MCP tool names — ADR-0009 point 5, its own increment
 - Core facets written to spatial documents (`CanvasProperties` mounted for
   both kinds) — this one is a behaviour change, not a rename; see ADR-0009

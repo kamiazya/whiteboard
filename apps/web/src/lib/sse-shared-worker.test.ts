@@ -85,7 +85,7 @@ const server = setupServer(
   // Addressed by workspace and slug rather than by the document key the rest
   // of the worker routes on — the key IS `${workspaceId}/${slug}`, which is
   // what lets the worker reconstruct this URL at all.
-  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
     updateWrites.push({
       workspaceId: String(params.workspaceId),
       slug: String(params.slug),

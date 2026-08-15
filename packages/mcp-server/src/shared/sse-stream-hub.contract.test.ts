@@ -45,7 +45,7 @@ function createHarness(): SseStreamSourceHarness {
     }
     // The canvas update route, which is where a push lands. Matched before the
     // JSON parse below: its body is raw update bytes, not JSON.
-    const canvasUpdate = /\/api\/canvas\/([^/]+)\/([^/]+)\/update$/.exec(url)
+    const canvasUpdate = /\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
       const [, workspaceId, slug] = canvasUpdate
       daemonWrites.push({

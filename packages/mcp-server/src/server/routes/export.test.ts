@@ -75,7 +75,7 @@ function makeApp() {
 const SAMPLE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
-describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
+describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
@@ -99,7 +99,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
@@ -118,7 +118,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
 
     mockGetClientCount.mockReturnValue(0)
-    const resNoClient = await makeApp().request('/api/canvas/s1/canvas-a/export', {
+    const resNoClient = await makeApp().request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 20 }),
@@ -127,7 +127,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
     mockExportCanvasHeadless.mockClear()
     mockGetClientCount.mockReturnValue(3)
-    const resWithClients = await makeApp().request('/api/canvas/s1/canvas-a/export', {
+    const resWithClients = await makeApp().request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 20 }),
@@ -150,8 +150,8 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
       const [resA, resB] = await Promise.all([
-        app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' }),
-        app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' }),
+        app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' }),
+        app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' }),
       ])
       const bodyA = (await resA.json()) as { filePath: string }
       const bodyB = (await resB.json()) as { filePath: string }
@@ -169,7 +169,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     mockCanvasExists.mockResolvedValueOnce(false)
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/missing-canvas/export', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/missing-canvas/export', { method: 'POST' })
 
     expect(res.status).toBe(404)
     const body = (await res.json()) as { error: string; message?: string }
@@ -181,7 +181,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   it('returns 500 with headless_export_failed when headless rendering throws', async () => {
     mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
@@ -199,7 +199,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
         }),
     )
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
     expect(res.status).toBe(200)
   })
 
@@ -211,7 +211,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 48 }),
@@ -230,7 +230,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 32, scale: 2, minFontPx: 14 }),
@@ -250,7 +250,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'dark', padding: 16 }),
@@ -267,7 +267,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
   it('rejects invalid theme values with 400 invalid_request', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'sepia' }),
@@ -280,7 +280,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   it('rejects an oversized request body with 413 payload_too_large', async () => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: oversized,
@@ -298,7 +298,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ frameId: 'frame-abc', padding: 24 }),
@@ -319,7 +319,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     const app = makeApp()
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toMatch(/canvas-a-.*\.png$/)
@@ -341,9 +341,9 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
-      const resA = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+      const resA = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
       const bodyA = (await resA.json()) as { filePath: string }
-      const resB = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+      const resB = await app.request('/api/w/s1/canvas/canvas-a/export', { method: 'POST' })
       const bodyB = (await resB.json()) as { filePath: string }
 
       expect(resA.status).toBe(200)
@@ -366,7 +366,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const app = makeApp()
 
     // MCP sends the slug through encodeURIComponent, so it arrives as one segment with `%2F`.
-    const res = await app.request('/api/canvas/s1/architecture%2Foverview/export', {
+    const res = await app.request('/api/w/s1/canvas/architecture%2Foverview/export', {
       method: 'POST',
     })
     expect(res.status).toBe(200)
@@ -377,12 +377,12 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   it('returns 400 for invalid workspaceId or slug without reaching the headless renderer', async () => {
     const app = makeApp()
 
-    const badSession = await app.request('/api/canvas/bad.sid/canvas-a/export', {
+    const badSession = await app.request('/api/w/bad.sid/canvas/canvas-a/export', {
       method: 'POST',
     })
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/canvas/s1/bad.slug/export', {
+    const badSlug = await app.request('/api/w/s1/canvas/bad.slug/export', {
       method: 'POST',
     })
     expect(badSlug.status).toBe(400)
@@ -398,7 +398,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -415,7 +415,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const app = makeApp()
     // ${DATA_DIR}/daemon.json is inside DATA_DIR but not inside ${DATA_DIR}/s1/exports
     const daemonFile = join(tempDir, 'daemon.json')
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: daemonFile }),
@@ -429,7 +429,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const app = makeApp()
     // ${DATA_DIR}/s1/.checkpoints is inside DATA_DIR/s1 but not in ${DATA_DIR}/s1/exports
     const checkpointFile = join(tempDir, 's1', '.checkpoints', 'v1.json')
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: checkpointFile }),
@@ -441,7 +441,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
   it('rejects outputPath fully outside DATA_DIR', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: '/tmp/attack.png' }),
@@ -453,7 +453,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
   it('does not leak internal paths in invalid_output_path error response', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
@@ -470,7 +470,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const outputPath = join(tempDir, 's1', 'exports', 'exists.png')
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -484,7 +484,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
   it('rejects a relative PNG outputPath with 400 invalid_output_path', async () => {
     const app = makeApp()
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: 'relative/out.png' }),
@@ -505,7 +505,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -527,7 +527,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+    const res = await app.request('/api/w/s1/canvas/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath, overwrite: true }),

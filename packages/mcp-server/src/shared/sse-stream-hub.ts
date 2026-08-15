@@ -11,7 +11,9 @@
  * verbatim inside a SharedWorker, which is what makes the sharing span tabs
  * rather than just the canvases within one tab.
  */
+
 import type { z } from 'zod'
+import { canvasApiUrl } from './api-contracts/canvas-url.js'
 import {
   syncMessageEventSchema,
   syncReadyEventSchema,
@@ -169,7 +171,7 @@ export function canvasUpdateUrl(baseUrl: string, doc: string): string | null {
   if (slash <= 0 || slash === doc.length - 1) return null
   const workspaceId = encodeURIComponent(doc.slice(0, slash))
   const slug = encodeURIComponent(doc.slice(slash + 1))
-  return `${baseUrl.replace(/\/$/, '')}/api/canvas/${workspaceId}/${slug}/update`
+  return `${baseUrl.replace(/\/$/, '')}${canvasApiUrl(workspaceId, slug, 'update')}`
 }
 
 export class SseStreamHub implements SseStreamSource {

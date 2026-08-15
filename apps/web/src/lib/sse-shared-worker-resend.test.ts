@@ -50,7 +50,7 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
     // A refusal that ANSWERS rather than drops the connection: a 5xx is the
     // shape a restarting daemon actually produces, and it is the one a
     // `fetch().catch()` cannot see — fetch resolves, so a writer that only

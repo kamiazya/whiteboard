@@ -514,7 +514,7 @@ const REQUIRED_FLAGS = [
     }
 
     // Protected route with no auth → 401
-    const noAuthResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`)
+    const noAuthResp = await fetch(`${baseUrl}/api/w/test-ws/canvas/test-canvas/viewport`)
     if (noAuthResp.status !== 401)
       fail(`scenario 8: no-auth protected route expected 401, got ${noAuthResp.status}`)
     const noAuthBody = await noAuthResp.text()
@@ -534,7 +534,7 @@ const REQUIRED_FLAGS = [
         exp: now + 3600,
       },
     )
-    const authResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
+    const authResp = await fetch(`${baseUrl}/api/w/test-ws/canvas/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${validJwt}` },
     })
     if (authResp.status === 401 || authResp.status === 403)
@@ -556,7 +556,7 @@ const REQUIRED_FLAGS = [
         exp: now + 3600,
       },
     )
-    const scopeResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
+    const scopeResp = await fetch(`${baseUrl}/api/w/test-ws/canvas/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${wrongScopeJwt}` },
     })
     if (scopeResp.status !== 403)

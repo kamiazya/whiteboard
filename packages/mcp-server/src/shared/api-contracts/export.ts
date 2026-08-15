@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Request / response schemas for POST /api/canvas/:workspaceId/:slug/export.
+// Request / response schemas for POST /api/w/:workspaceId/canvas/<path>/export.
 // Imported by the route handler, which validates incoming bodies against
 // exportRequestSchema and types its `c.json(...)` responses via the
 // ExportResponse/ExportErrorBody types derived below.

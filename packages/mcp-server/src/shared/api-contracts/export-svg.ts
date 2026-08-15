@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Request schema for POST /api/canvas/:workspaceId/:slug/export-svg.
+// Request schema for POST /api/w/:workspaceId/canvas/<path>/export-svg.
 // Imported by the route handler so the wire format has exactly one place
 // to update. Unlike PNG export, SVG rendering always runs headless from
 // the persisted document (see routes/canvas/export-svg.ts) — there is no
