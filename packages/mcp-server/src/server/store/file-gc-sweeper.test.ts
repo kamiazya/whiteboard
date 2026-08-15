@@ -146,7 +146,17 @@ describe('createFileGcSweeper scheduling', () => {
   })
 
   it('runs a pass after intervalMs elapses and reschedules', async () => {
-    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    // Each pass blocks on its own gate until the test releases it. The
+    // sweeper schedules the next timeout from the completed pass's `finally`
+    // handler, so while a gate is held no further pass can fire — releasing
+    // a gate is the explicit boundary between passes that makes the exact
+    // call counts below deterministic under any scheduler load.
+    const gates = [
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+    ] as const
+    let passIndex = 0
+    const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
       listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
@@ -159,16 +169,14 @@ describe('createFileGcSweeper scheduling', () => {
     expect(purge).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
-    // The completion-reschedule arm lands after the pass settles; under
-    // heavy parallel-worker load that can slip past a single advance, so
-    // advance bounded extra intervals until the second pass fires. The
-    // invariant under test is "reschedules after completion", not exact
-    // phase alignment (single-flight/stop have their own deterministic
-    // tick()-based tests).
-    for (let i = 0; i < 5 && purge.mock.calls.length < 2; i++) {
-      await advanceTimersAndFlush(1000)
-    }
+    // Releasing gate 1 lets the pass settle, which is what arms the next
+    // interval — the reschedule under test.
+    gates[0].resolve({ purgedCount: 0, purgedBytes: 0 })
+    await advanceTimersAndFlush(1000)
+    await advanceUntilCalls(purge, 2)
     expect(purge).toHaveBeenCalledTimes(2)
+
+    gates[1].resolve({ purgedCount: 0, purgedBytes: 0 })
     await sweeper.stop()
   })
 

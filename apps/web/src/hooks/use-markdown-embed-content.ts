@@ -70,12 +70,16 @@ export function useMarkdownEmbedContent({
   // be dropped with nothing left to ever re-fire it (the stuck-placeholder
   // bug). A completed load is valid whenever the component still lives.
   const unmounted = useRef(false)
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Reset on the effect BODY, not just initialization: StrictMode's dev
+    // double-mount runs this cleanup once before the real session, and a
+    // flag that only ever goes true would silently drop every completion
+    // for the component's whole life (dev-only, invisible in prod builds).
+    unmounted.current = false
+    return () => {
       unmounted.current = true
-    },
-    [],
-  )
+    }
+  }, [])
 
   useEffect(() => {
     // The wanted set is the closure over what has already loaded: each

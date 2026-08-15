@@ -55,12 +55,14 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
       return
     }
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
+    const missingRefs = new Set(request.missingFileRefs ?? [])
     const bodies = new Map(request.bodies.map((b) => [b.text, b.mdast]))
     let missing: string | undefined
     const { svg, bounds, scene } = renderCanvasToSvgWith(request.canvas, {
       measure,
       theme: request.theme,
       resolveFileLabel: labels.size === 0 ? undefined : (file) => labels.get(file),
+      resolveFileMissing: missingRefs.size === 0 ? undefined : (file) => missingRefs.has(file),
       parseBody: (text: string) => {
         const parsed = bodies.get(text)
         if (parsed === undefined) {

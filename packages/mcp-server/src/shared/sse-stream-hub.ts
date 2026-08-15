@@ -63,6 +63,25 @@ export interface SseStreamSource {
    * the worker's, not the caller's.
    */
   sendMessage(doc: string, message: unknown): void
+  /**
+   * Get a document's new state to the authority for it.
+   *
+   * Which authority that is, is exactly what the two implementations disagree
+   * about, and why this belongs on the source rather than at the call site.
+   * The hub writes straight to the daemon. The SharedWorker-backed source
+   * hands the bytes to the worker's replica, which merges them in arrival
+   * order against everything else it knows — its own tabs and the daemon —
+   * and writes onward itself. A caller that posted to the daemon directly
+   * would be writing around the replica that is meant to be authoritative,
+   * and would re-send state the daemon had just delivered.
+   *
+   * A returned promise REJECTS when the authority did not take the bytes, so
+   * a caller holding the only copy can keep holding it. The worker-backed
+   * implementation resolves immediately instead — it has handed the bytes to
+   * the replica, which owns the retry from there, and a tab that waited on
+   * the daemon would be waiting on the wrong thing.
+   */
+  push(doc: string, update: Uint8Array): void | Promise<void>
 }
 
 export interface SseStreamHubOptions {
@@ -130,6 +149,29 @@ export function fromBase64(value: string): Uint8Array {
   return bytes
 }
 
+/** The mirror of `fromBase64`, exported for the same reason: the worker and the
+ *  tab-side source both encode update bytes, and two copies drift. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+/**
+ * The daemon's update route for a document.
+ *
+ * A document key IS `${workspaceId}/${slug}`, which is the only reason
+ * anything holding just the key can address this route. First slash only: a
+ * slug may contain more, a workspace id never does.
+ */
+export function canvasUpdateUrl(baseUrl: string, doc: string): string | null {
+  const slash = doc.indexOf('/')
+  if (slash <= 0 || slash === doc.length - 1) return null
+  const workspaceId = encodeURIComponent(doc.slice(0, slash))
+  const slug = encodeURIComponent(doc.slice(slash + 1))
+  return `${baseUrl.replace(/\/$/, '')}/api/canvas/${workspaceId}/${slug}/update`
+}
+
 export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
   /**
@@ -194,6 +236,30 @@ export class SseStreamHub implements SseStreamSource {
     // control messages are inert server-side, so dropping them costs nothing.
     if (this.streamId === null) return
     void this.post('/api/sync/message', { streamId: this.streamId, doc, message })
+  }
+
+  /**
+   * Straight to the daemon: with no worker in front, the daemon IS the
+   * authority. The existing update route already imports, persists and
+   * broadcasts, and its broadcast reaches SSE subscribers, so sync needs no
+   * endpoint of its own.
+   */
+  async push(doc: string, update: Uint8Array): Promise<void> {
+    const url = canvasUpdateUrl(this.options.baseUrl, doc)
+    if (url === null) throw new Error(`not a document key: ${doc}`)
+    const res = await this.options.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      // `.buffer` of a fresh slice, not the view: this module is also built
+      // for Node's dts pass, where the DOM's BodyInit type is unavailable.
+      body: update.slice().buffer as ArrayBuffer,
+    })
+    // A refusal that ANSWERS is the shape a restarting daemon produces, and it
+    // is the one a bare `.catch()` cannot see: fetch resolves for a 503, so a
+    // writer that only guards against rejection counts it as delivered and
+    // moves its acknowledged version forward over an edit the daemon never
+    // took. Failing loudly here is what lets a caller keep the bytes.
+    if (!res.ok) throw new Error(`update refused: ${res.status}`)
   }
 
   private async post(path: string, body: unknown): Promise<void> {

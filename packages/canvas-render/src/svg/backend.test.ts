@@ -106,18 +106,23 @@ describe('renderSceneToSvg', () => {
     expect(svg).toContain('<text x="0" y="10">hi</text>')
   })
 
-  it('emits an already-validated SVG fragment verbatim, wrapped in a group', () => {
+  it('emits an already-validated SVG fragment verbatim, positioned at its bbox', () => {
     const scene: Scene = {
       nodes: [
         {
           kind: 'svgFragment',
-          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          bbox: { x: 5, y: 40, w: 10, h: 10 },
           svg: '<circle r="5"/>',
         },
       ],
     }
     const svg = renderSceneToSvg(scene)
-    expect(svg).toContain('<g><circle r="5"/></g>')
+    // A nested <svg> carries the position: the fragment's own coordinates
+    // stay untouched (verbatim), the wrapper moves them into document flow,
+    // and overflow stays visible so a fragment is never silently clipped.
+    expect(svg).toContain(
+      '<svg x="5" y="40" width="10" height="10" overflow="visible"><circle r="5"/></svg>',
+    )
   })
 
   it('marks an svgFragment with role: presentation as decorative', () => {
@@ -132,7 +137,23 @@ describe('renderSceneToSvg', () => {
       ],
     }
     const svg = renderSceneToSvg(scene)
-    expect(svg).toContain('<g role="presentation"><circle r="5"/></g>')
+    expect(svg).toContain(
+      '<svg x="0" y="0" width="10" height="10" overflow="visible" role="presentation"><circle r="5"/></svg>',
+    )
+  })
+
+  it('degrades an svgFragment with a non-finite bbox to the unpositioned group form', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'svgFragment',
+          bbox: { x: Number.NaN, y: 0, w: 10, h: 10 },
+          svg: '<circle r="5"/>',
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<g><circle r="5"/></g>')
   })
 
   it('produces well-formed XML (balanced, single-root, no unescaped raw &/</>)', () => {

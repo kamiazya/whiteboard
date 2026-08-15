@@ -24,6 +24,8 @@ export interface RenderCanvasOptions {
   readonly theme?: ResolvedTheme
   /** Passed through to layout: opaque file references become readable labels. */
   readonly resolveFileLabel?: (file: string) => string | undefined
+  /** Passed through to layout: dangling references render a quiet missing state. */
+  readonly resolveFileMissing?: (file: string) => boolean
   /** Passed through to layout: referenced canvas content for inline embeds. */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */

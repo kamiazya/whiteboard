@@ -25,6 +25,10 @@ export interface RenderMarkdownPreviewOptions {
    * (canvas-render's layout seam, threaded through verbatim).
    */
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /** Renders math blocks (canvas-render's layout seam, threaded verbatim). */
+  readonly renderMath?: MdastLayoutOptions['renderMath']
+  /** Renders diagram fences (canvas-render's layout seam, threaded verbatim). */
+  readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
 }
 
 /**
@@ -41,26 +45,49 @@ export interface RenderMarkdownPreviewOptions {
  * (e.g. mid-edit) degrades to an empty scene instead of crashing the editor
  * on a keystroke.
  *
- * No `renderMath` is supplied — math blocks fall back to canvas-render's
- * documented escaped-source placeholder rather than silently vanishing;
- * injecting a real MathJax renderer is out of scope for this slice.
+ * `renderMath` / `renderDiagram` come from the host (useMarkdownFragments'
+ * cache-backed sync resolvers over the async MathJax/mermaid engines);
+ * absent, math keeps canvas-render's documented escaped-source placeholder
+ * and a diagram fence renders as a plain code block.
  */
 export function renderMarkdownPreviewSvg(
   value: string,
-  { measure, maxWidth, background, resolveAlias, resolveEmbed }: RenderMarkdownPreviewOptions,
-): string {
-  return renderSceneToSvg(layoutScene(value, measure, maxWidth, resolveAlias, resolveEmbed), {
-    padding: 8,
+  {
+    measure,
+    maxWidth,
     background,
-  })
+    resolveAlias,
+    resolveEmbed,
+    renderMath,
+    renderDiagram,
+  }: RenderMarkdownPreviewOptions,
+): string {
+  return renderSceneToSvg(
+    layoutScene(value, {
+      measure,
+      maxWidth,
+      resolveAlias,
+      resolveEmbed,
+      renderMath,
+      renderDiagram,
+    }),
+    {
+      padding: 8,
+      background,
+    },
+  )
 }
 
 function layoutScene(
   value: string,
-  measure: MeasureText,
-  maxWidth: number,
-  resolveAlias?: AliasResolver,
-  resolveEmbed?: MdastLayoutOptions['resolveEmbed'],
+  {
+    measure,
+    maxWidth,
+    resolveAlias,
+    resolveEmbed,
+    renderMath,
+    renderDiagram,
+  }: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Scene {
   try {
     return layoutMdastBlocks(resolveReferences(parseMarkdownBody(value), resolveAlias), {
@@ -68,6 +95,8 @@ function layoutScene(
       maxWidth,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
       ...(resolveEmbed !== undefined ? { resolveEmbed } : {}),
+      ...(renderMath !== undefined ? { renderMath } : {}),
+      ...(renderDiagram !== undefined ? { renderDiagram } : {}),
     })
   } catch {
     return { nodes: [] }

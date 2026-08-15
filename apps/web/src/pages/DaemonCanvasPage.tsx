@@ -1,3 +1,4 @@
+import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -27,6 +28,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
@@ -113,10 +115,17 @@ export function DaemonCanvasPage({
       if (injected) return injected
       // A secure page cannot open a ws:// socket to an http daemon at all, so
       // the transport is decided up front rather than attempted and retried.
-      const transport = selectCanvasTransport({
-        pageOrigin: window.location.origin,
-        daemonBaseUrl,
-      })
+      //
+      // The override in front is development-only and compiles away entirely
+      // in a production build. It exists because the rule below is correct AND
+      // makes the SSE path — and the SharedWorker behind it — unreachable from
+      // `pnpm dev`, which serves plain http.
+      const transport =
+        devTransportOverride() ??
+        selectCanvasTransport({
+          pageOrigin: window.location.origin,
+          daemonBaseUrl,
+        })
       if (transport !== 'sse') {
         // wsToken carries the pairing session token into the WS upgrade —
         // without it a pairing-grant session authenticates HTTP but opens
@@ -244,6 +253,19 @@ export function DaemonCanvasPage({
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.slug,
     [],
   )
+
+  // A ref that matches NEITHER a live id nor a live slug points at a deleted
+  // canvas (or one imported from elsewhere): the editor renders it as a quiet
+  // "Missing reference" and hides the follow affordances — following would
+  // lazily create an empty canvas under the dangling ref. Image refs live in
+  // the file store, not the canvases list, so they are never "missing" here;
+  // undefined while the list has not loaded keeps everything ordinary.
+  const missingFileRef = useMemo(() => {
+    const entries = controller.canvases
+    if (entries.length === 0) return undefined
+    const known = new Set(entries.flatMap((entry) => [entry.slug, ...(entry.id ? [entry.id] : [])]))
+    return (ref: string) => !isImageRef(ref) && !known.has(ref)
+  }, [controller.canvases])
 
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
@@ -678,6 +700,7 @@ export function DaemonCanvasPage({
                 .filter((entry) => entry.slug !== canvas?.slug)
                 .map((entry) => ({ file: entry.id ?? entry.slug, label: entry.slug }))}
               onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
+              missingFileRef={missingFileRef}
               {...fileSeams}
               lockedNodeIds={lockedNodeIds}
               lockedEdgeIds={lockedEdgeIds}

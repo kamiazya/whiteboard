@@ -14,8 +14,22 @@
  * inside either suite. Only a contract run against every implementation makes
  * a new implementation's untested behaviour a failure rather than a silence.
  */
+import { LoroDoc } from 'loro-crdt'
 import { expect, it, vi } from 'vitest'
 import type { SseStreamSource } from '../sse-stream-hub.js'
+
+/**
+ * Real Loro bytes, so an implementation that merges the push through a replica
+ * produces something and one that forwards it verbatim stays comparable.
+ * Arbitrary bytes would be dropped by the replica as unparseable and the case
+ * would pass or fail for the wrong reason.
+ */
+const LORO_UPDATE: Uint8Array = (() => {
+  const doc = new LoroDoc()
+  doc.getMap('contract').set('pushed', 'through')
+  doc.commit()
+  return doc.export({ mode: 'update' })
+})()
 
 /**
  * A running implementation plus the daemon-side observations the contract
@@ -37,6 +51,12 @@ export interface SseStreamSourceHarness {
   controlMessages(): { streamId: string; doc: string; message: unknown }[]
   /** Stream ids the daemon minted for this source. */
   openedStreamIds(): string[]
+  /**
+   * Update bodies the daemon received on its own canvas route, with the
+   * document each was addressed to — reassembled from the URL, since that
+   * addressing is half of what the push contract asserts.
+   */
+  daemonWrites(): { doc: string; body: Uint8Array }[]
   /** Wait until the daemon has an open stream ready to receive frames. */
   ready(): Promise<void>
   /** End the current stream the way a dropped connection does. */
@@ -157,6 +177,30 @@ export function sseStreamSourceContract(
     const sent = h.controlMessages().find((m) => m.doc === doc)
     expect(sent?.message).toEqual({ type: 'client_ready' })
     expect(h.openedStreamIds()).toContain(sent?.streamId)
+    h.cleanup()
+  })
+
+  it('gets a pushed update to the daemon, addressed by workspace and slug', async () => {
+    // Both implementations reach the daemon, by different routes — the hub
+    // posts, the worker-backed source hands the bytes to a replica that posts
+    // — and a caller cannot tell which it has. If either stopped arriving, an
+    // edit would be applied locally, shown to the user, echoed to sibling
+    // tabs, and never persisted: the failure looks exactly like success until
+    // the page is reloaded.
+    const h = await create()
+    const doc = nextDoc()
+    await subscribed(h, doc)
+
+    h.source.push(doc, LORO_UPDATE)
+
+    await until(() => h.daemonWrites().some((w) => w.doc === doc))
+    const write = h.daemonWrites().find((w) => w.doc === doc)
+    // Reconstructed, not compared byte-for-byte: an implementation that merges
+    // through a replica sends that replica's delta, which carries the same
+    // state without being the same bytes.
+    const received = new LoroDoc()
+    received.import(write?.body as Uint8Array)
+    expect(received.getMap('contract').get('pushed')).toBe('through')
     h.cleanup()
   })
 

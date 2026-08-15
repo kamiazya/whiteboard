@@ -351,6 +351,48 @@ describe('layoutSpatialCanvas', () => {
     )
   })
 
+  it('resolveFileMissing renders a quiet missing label instead of the raw reference', () => {
+    const node: Extract<SpatialNode, { type: 'file' }> = {
+      id: 'f1',
+      type: 'file',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      file: 'dangling-id-123',
+      subpath: '#heading',
+    }
+    const missing = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileMissing: (file) => file === 'dangling-id-123',
+    })
+    // The raw reference is an opaque id — useless to a reader — and the
+    // subpath is moot without a target, so neither appears.
+    expect(missing.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
+      'Missing reference',
+    )
+
+    // Not missing -> the ordinary label path (raw ref + subpath) is untouched.
+    const present = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileMissing: () => false,
+    })
+    expect(present.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
+      'dangling-id-123#heading',
+    )
+
+    // A throwing callback degrades to not-missing (total-layout rule).
+    const throwing = layoutSpatialCanvas(canvas([node]), {
+      ...baseOptions(),
+      resolveFileMissing: () => {
+        throw new Error('boom')
+      },
+    })
+    expect(throwing.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
+      'dangling-id-123#heading',
+    )
+  })
+
   it('renders a link node as chrome plus a label containing the url', () => {
     const node: Extract<SpatialNode, { type: 'link' }> = {
       id: 'l1',

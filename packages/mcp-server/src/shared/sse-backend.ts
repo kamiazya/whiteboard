@@ -143,25 +143,17 @@ export class SseBackend implements CanvasBackend {
     this.ownedHub = null
   }
 
-  pushLocalUpdate(bytes: Uint8Array): void {
-    // The existing update route already imports, persists and broadcasts, and
-    // its broadcast now reaches SSE subscribers too — no sync-specific upstream
-    // endpoint is needed.
-    void this.fetchFn(
-      this.url(
-        `/api/canvas/${encodeURIComponent(this.workspaceId)}/${encodeURIComponent(this.slug)}/update`,
-      ),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        // `.buffer` of a fresh slice, not the view: this module is also built
-        // for Node's dts pass, where the DOM's BodyInit type is unavailable.
-        body: bytes.slice().buffer as ArrayBuffer,
-      },
-    ).catch(() => {
-      // Dropping a local update here would lose the edit silently; the caller's
-      // CRDT still holds it and the next update carries the same state forward.
-    })
+  pushLocalUpdate(bytes: Uint8Array): void | Promise<void> {
+    // Through the source, not straight to the daemon, because the source is
+    // what knows where this document's authority lives. With no SharedWorker
+    // that is the daemon and this is the same POST it always was; with one, the
+    // worker's replica merges the bytes against everything else it has seen
+    // and writes onward itself. Posting here regardless would write around
+    // that replica and re-send state the daemon had just delivered.
+    // Returned, not swallowed: `CanvasBackendHandlers` already treats a
+    // rejected push as the session's `error` status, and with no worker in
+    // front there is nothing else that will ever retry this write.
+    return this.resolveSource().push(this.docKey, bytes)
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
