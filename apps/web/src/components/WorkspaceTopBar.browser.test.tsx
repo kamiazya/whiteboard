@@ -456,7 +456,7 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // The announcement is still reachable in the accessibility tree even
     // though it is no longer a DOM child of the menu.
-    const status = screen.getByRole('status')
+    const status = screen.getByRole('status', { name: 'Copy status' })
     expect(status.textContent).toContain("Couldn't copy the canvas URL automatically.")
     expect(menu.contains(status)).toBe(false)
 
