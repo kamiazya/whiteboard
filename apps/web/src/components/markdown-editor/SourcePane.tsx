@@ -77,6 +77,13 @@ const markdownHighlightStyle = HighlightStyle.define([
 export interface SourcePaneApi {
   wrapSelection: (delimiter: string) => void
   focus: () => void
+  /**
+   * The 1-based document line at the top of the visible scroll area, plus
+   * the scrolled-past fraction of that line's own height — wrapped lines
+   * make line height non-uniform, so this goes through CodeMirror's block
+   * geometry rather than dividing scrollTop by an assumed line height.
+   */
+  topVisibleLine: () => number
 }
 
 export interface SourcePaneProps {
@@ -187,6 +194,13 @@ export function SourcePane({
           view.focus()
         },
         focus: () => view.focus(),
+        topVisibleLine: () => {
+          const scrollTop = view.scrollDOM.scrollTop
+          const block = view.lineBlockAtHeight(scrollTop)
+          const line = view.state.doc.lineAt(block.from).number
+          const fraction = block.height > 0 ? (scrollTop - block.top) / block.height : 0
+          return line + Math.max(0, Math.min(1, fraction))
+        },
       }
     }
     if (autoFocus) view.focus()

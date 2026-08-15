@@ -1,9 +1,9 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { type CSSProperties, useMemo } from 'react'
+import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
-import { renderMarkdownPreviewSvg } from './render-preview.js'
+import { type PreviewBlockAnchor, renderMarkdownPreview } from './render-preview.js'
 
 export interface PreviewPaneProps {
   value: string
@@ -19,6 +19,14 @@ export interface PreviewPaneProps {
   renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences; see render-preview.ts. */
   renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /**
+   * Filled with the current render's per-block scroll-sync anchors (see
+   * render-preview.ts). A ref, not a callback into state: the consumer is
+   * a scroll handler that reads lazily, and routing anchors through state
+   * would re-render the whole editor once per preview render for data
+   * only that handler looks at.
+   */
+  anchorsRef?: MutableRefObject<readonly PreviewBlockAnchor[]>
 }
 
 /**
@@ -47,10 +55,11 @@ export function PreviewPane({
   resolveEmbed,
   renderMath,
   renderDiagram,
+  anchorsRef,
 }: PreviewPaneProps) {
-  const svg = useMemo(
+  const { svg, anchors } = useMemo(
     () =>
-      renderMarkdownPreviewSvg(value, {
+      renderMarkdownPreview(value, {
         measure,
         maxWidth,
         background,
@@ -61,6 +70,9 @@ export function PreviewPane({
       }),
     [value, measure, maxWidth, background, resolveAlias, resolveEmbed, renderMath, renderDiagram],
   )
+  useEffect(() => {
+    if (anchorsRef) anchorsRef.current = anchors
+  }, [anchors, anchorsRef])
 
   const fill = editorTextFill(theme)
   return (

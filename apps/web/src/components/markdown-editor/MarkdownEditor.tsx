@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { PreviewPane } from './PreviewPane.js'
+import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 
@@ -134,6 +135,50 @@ function isCanvasIdHref(href: string): boolean {
   return canvasIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
+function totalSourceLines(value: string): number {
+  return value.split('\n').length
+}
+
+/**
+ * Maps the top visible source line onto a preview scrollTop through the
+ * per-block anchors, interpolating linearly inside the band between two
+ * consecutive blocks (blank separator lines belong to the band above, so
+ * scrolling through them eases toward the next block instead of jumping).
+ * `undefined` means the anchored path cannot answer — no anchors yet, no
+ * source API, no rendered SVG — and the caller keeps its proportional
+ * fallback.
+ */
+function anchoredPreviewTop(
+  anchors: readonly PreviewBlockAnchor[],
+  api: SourcePaneApi | null,
+  preview: HTMLElement,
+  totalLines: number,
+): number | undefined {
+  const first = anchors[0]
+  if (first === undefined || api === null || typeof api.topVisibleLine !== 'function') {
+    return undefined
+  }
+  const svg = preview.querySelector('svg')
+  if (!(svg instanceof SVGElement)) return undefined
+  const line = api.topVisibleLine()
+  // The SVG's own offset inside the scroll content (the document column
+  // wrapper adds padding above it), measured live so pane resizes and
+  // header changes never go stale.
+  const svgTop =
+    svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
+  if (line <= first.line) return svgTop + first.y * Math.max(0, line / first.line)
+  let index = anchors.length - 1
+  while (index > 0 && (anchors[index]?.line ?? Number.POSITIVE_INFINITY) > line) index--
+  const current = anchors[index]
+  if (current === undefined) return undefined
+  const next = anchors[index + 1]
+  const bandEndLine = next?.line ?? totalLines + 1
+  const bandEndY = next?.y ?? svg.getBoundingClientRect().height
+  const span = Math.max(1, bandEndLine - current.line)
+  const t = Math.min(1, Math.max(0, (line - current.line) / span))
+  return svgTop + current.y + t * (bandEndY - current.y)
+}
+
 export function MarkdownEditor({
   value,
   onChange,
@@ -188,6 +233,8 @@ export function MarkdownEditor({
   const sourceWrapRef = useRef<HTMLDivElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const sourceApiRef = useRef<SourcePaneApi | null>(null)
+  // Filled by PreviewPane on every render; read lazily by the scroll handler.
+  const anchorsRef = useRef<readonly PreviewBlockAnchor[]>([])
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -241,16 +288,30 @@ export function MarkdownEditor({
     setSplitRatio((current) => clampRatio(current + delta))
   }
 
-  // Proportional scroll sync, source -> preview. Line-accurate mapping
-  // would need source-position anchors in the rendered SVG; the ratio map
-  // keeps the preview in the neighborhood, which is what split editors
-  // (VS Code's markdown preview default, HackMD) ship as their baseline.
+  // Scroll sync, source -> preview. Line-accurate: the preview render
+  // reports each top-level block's source start line and laid-out Y (see
+  // render-preview.ts), so the top visible source line maps onto the
+  // block band it falls in, interpolated linearly inside the band. The
+  // proportional ratio map stays as the fallback for the moments anchors
+  // are unavailable (unparseable mid-edit body, first render) — it keeps
+  // the preview in the neighborhood, which is what split editors (VS
+  // Code's markdown preview default, HackMD) ship as their baseline.
   useEffect(() => {
     const scroller = sourceWrapRef.current?.querySelector('.cm-scroller')
     if (!(scroller instanceof HTMLElement)) return
     const onScroll = () => {
       const preview = previewScrollRef.current
       if (!preview) return
+      const anchored = anchoredPreviewTop(
+        anchorsRef.current,
+        sourceApiRef.current,
+        preview,
+        totalSourceLines(value),
+      )
+      if (anchored !== undefined) {
+        preview.scrollTop = anchored
+        return
+      }
       const sourceRange = scroller.scrollHeight - scroller.clientHeight
       const previewRange = preview.scrollHeight - preview.clientHeight
       if (sourceRange <= 0 || previewRange <= 0) return
@@ -258,7 +319,7 @@ export function MarkdownEditor({
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [value])
 
   // Layout width the preview typesets at: what the pane can actually offer
   // (minus the document column's padding), clamped to a readable measure.
@@ -352,6 +413,7 @@ export function MarkdownEditor({
                   resolveEmbed={resolveEmbed}
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
+                  anchorsRef={anchorsRef}
                 />
               )}
             </div>
