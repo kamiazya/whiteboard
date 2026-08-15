@@ -1,12 +1,12 @@
-import type { DocumentIndex } from '@kamiazya/whiteboard-canvas-ports'
+import { expect, it } from 'vitest'
+import type { DocumentIndex } from '../index.js'
 import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-canvas-ports'
-import { expect, it } from 'vitest'
+} from '../index.js'
 
 /**
  * The `DocumentIndex` guarantees that a TypeScript signature cannot carry,
@@ -60,6 +60,17 @@ export function describeDocumentIndexConformance(
       const readBack = await index.resolveDocument({ workspaceId: WS, path: 'anonymous' })
       expect(readBack).not.toBeNull()
       expect('name' in (readBack as object)).toBe(false)
+    })
+  })
+
+  it('refuses to LIST a workspace that does not exist, rather than reporting it empty', async () => {
+    await withIndex(async (index) => {
+      // An empty answer would make a typo'd workspaceId indistinguishable
+      // from a workspace that genuinely holds nothing.
+      await expect(index.listDocuments({ workspaceId: 'never-created' })).rejects.toThrow(
+        WorkspaceNotFoundError,
+      )
+      await expect(index.listDocuments({ workspaceId: WS })).resolves.toEqual([])
     })
   })
 

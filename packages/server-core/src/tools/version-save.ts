@@ -1,9 +1,8 @@
-import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import { encodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
-import { generateCanvasId } from './generate-canvas-id.js'
 import { versionRecordSchema } from './version-record.js'
 
 export const versionSaveInputSchema = z

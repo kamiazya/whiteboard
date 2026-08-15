@@ -1,3 +1,4 @@
+import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -17,7 +18,6 @@ import {
   DocumentPathTakenError,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-canvas-ports'
-import { generateCanvasId } from '@kamiazya/whiteboard-server-core'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -144,6 +144,14 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {
+    const workspace = await this.db
+      .selectFrom('workspaces')
+      .select('id')
+      .where('id', '=', workspaceId)
+      .executeTakeFirst()
+    if (!workspace) {
+      throw new WorkspaceNotFoundError(workspaceId)
+    }
     const rows = await this.db
       .selectFrom('canvases')
       .select(['id', 'slug', 'kind', 'displayName'])

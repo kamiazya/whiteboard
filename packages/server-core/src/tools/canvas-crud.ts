@@ -1,3 +1,4 @@
+import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import { WorkspaceTree, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc, type TreeID } from 'loro-crdt'
 import type { z } from 'zod'
@@ -19,7 +20,6 @@ import type {
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
 import { saveDocSnapshot } from './canvas-doc-io.js'
-import { generateCanvasId } from './generate-canvas-id.js'
 import {
   loadWorkspaceTree,
   loadWorkspaceTreeIfExists,
