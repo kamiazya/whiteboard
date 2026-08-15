@@ -15,6 +15,10 @@ export interface PreviewPaneProps {
   resolveAlias?: AliasResolver
   /** Resolves `![[embed]]` bodies for inline rendering; see render-preview.ts. */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /** Renders math blocks; see render-preview.ts. */
+  renderMath?: MdastLayoutOptions['renderMath']
+  /** Renders diagram fences; see render-preview.ts. */
+  renderDiagram?: MdastLayoutOptions['renderDiagram']
 }
 
 /**
@@ -24,8 +28,13 @@ export interface PreviewPaneProps {
  * as `packages/canvas-viewer/src/CanvasViewer.tsx`: canvas-render's
  * serializer is the SOLE producer of this string and escapes text content
  * (`&`/`<`/`>`) and attribute values (`"`/`'`) — there is no untrusted-HTML
- * injection path here. Do not add a sanitizer dependency; if this string
- * ever stops being canvas-render's own output, this reasoning no longer
+ * injection path here. The one addition to that reasoning: `renderMath` /
+ * `renderDiagram` fragments are emitted verbatim by the backend, so they
+ * must come only from engines safe against untrusted document text —
+ * MathJax typesets into its own glyph paths, and mermaid runs at
+ * securityLevel 'strict' (see markdown-fragment-renderers.ts). Do not add
+ * a sanitizer dependency; if this string ever stops being canvas-render's
+ * own output plus those two engines' fragments, this reasoning no longer
  * holds and must be revisited.
  */
 export function PreviewPane({
@@ -36,6 +45,8 @@ export function PreviewPane({
   theme = 'light',
   resolveAlias,
   resolveEmbed,
+  renderMath,
+  renderDiagram,
 }: PreviewPaneProps) {
   const svg = useMemo(
     () =>
@@ -45,8 +56,10 @@ export function PreviewPane({
         background,
         resolveAlias,
         resolveEmbed,
+        renderMath,
+        renderDiagram,
       }),
-    [value, measure, maxWidth, background, resolveAlias, resolveEmbed],
+    [value, measure, maxWidth, background, resolveAlias, resolveEmbed, renderMath, renderDiagram],
   )
 
   const fill = editorTextFill(theme)
