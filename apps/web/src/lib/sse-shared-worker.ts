@@ -128,6 +128,57 @@ function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['Loro
  */
 const replicaFeeds = new Map<string, { off: () => void; ports: number }>()
 
+/**
+ * Whether the replica has been given the document's PRE-EXISTING state.
+ *
+ * The SSE stream carries only incremental updates from subscription onward —
+ * the daemon's subscribe route registers routing and seeds nothing — so a
+ * replica fed by the stream alone holds a document's history since this
+ * worker booted, and a snapshot answered from it silently omits everything
+ * older. The seed is one snapshot fetch per origin+document per worker
+ * lifetime, done HERE so no tab pays it on the main thread and every later
+ * tab is answered from memory.
+ *
+ * A daemon that answers 404 counts as seeded: empty IS that document's
+ * state, and re-asking on every request would reintroduce the round trip
+ * the replica exists to remove. A transport failure does NOT count, so the
+ * next request retries.
+ */
+const seededDocs = new Set<string>()
+
+function ensureSeeded(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  if (seededDocs.has(key)) return
+  // Marked before the await and unmarked on failure, not the other way
+  // around: two callers racing this (a subscribe and a snapshot-request)
+  // must not start two fetches.
+  seededDocs.add(key)
+  queueReplicaWork(async () => {
+    try {
+      const bytes = await hubFor(baseUrl).snapshot(doc)
+      if (bytes === null || bytes.byteLength === 0) return
+      const replica = replicaFor(baseUrl, doc)
+      if (replica === undefined) return
+      // Straight into the replica, NOT through ingest(): the seed is state
+      // the daemon already holds, so it must never be written back
+      // (scheduleWrite) nor broadcast as an authority-update to ports that
+      // will fetch their own snapshot anyway. It also must not advance
+      // ackedVersions here — the acked baseline moves only on a successful
+      // write, and the seed is not a write.
+      const before = replica.version()
+      replica.import(bytes)
+      // The daemon HAS this state by definition, so acknowledge it: without
+      // this, the first tab push would re-send the entire seeded document.
+      const acked = ackedVersions.get(key)
+      if (acked !== undefined && acked.compare(before) === 0) {
+        ackedVersions.set(key, replica.version())
+      }
+    } catch {
+      seededDocs.delete(key)
+    }
+  })
+}
+
 function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): void {
   const key = replicaKey(baseUrl, doc)
   const existing = replicaFeeds.get(key)
@@ -135,6 +186,7 @@ function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): voi
     existing.ports += 1
     return
   }
+  ensureSeeded(baseUrl, doc)
   const off = hub.subscribe(doc, {
     // `null`: the daemon is the source, so nobody is excluded from the fan-out.
     onUpdate: (bytes) => ingest(baseUrl, doc, bytes, null),
@@ -347,10 +399,15 @@ function handle(port: MessagePort, raw: unknown): void {
   }
 
   if (msg.type === 'snapshot-request') {
+    // Seed first: a request can arrive before any subscribe (the backend
+    // snapshots, then subscribes), and the replica queue serialises the seed
+    // ahead of the answer below, so the reply carries the document's real
+    // pre-existing state rather than only what this worker has seen.
+    ensureSeeded(state.baseUrl, msg.doc)
     queueReplicaWork(() => {
-      // An empty snapshot for a document nobody has opened yet is the right
-      // answer, not an error: forking from empty and letting the daemon fill
-      // it in is the same path a first-ever open already takes.
+      // An empty snapshot for a document the daemon does not know is the
+      // right answer, not an error: forking from empty and letting updates
+      // fill it in is the same path a first-ever open already takes.
       const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
       if (snapshot === undefined) return
       port.postMessage({ type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
@@ -370,14 +427,13 @@ function handle(port: MessagePort, raw: unknown): void {
     if (state.subscriptions.has(msg.doc)) return
     retainReplicaFeed(hub, state.baseUrl, msg.doc)
     const off = hub.subscribe(msg.doc, {
-      onUpdate: (bytes) => {
-        // Relay only. The replica is fed by its own subscription above, once
-        // per document rather than once per tab watching it. Both paths carry
-        // the same frame for now: the raw one is what today's clients consume
-        // and the replica is what forks will, and one of the two goes away
-        // once every client has moved.
-        port.postMessage({ type: 'update', doc: msg.doc, update: toBase64(bytes) })
-      },
+      // No raw relay: a daemon frame reaches this port as an
+      // `authority-update`, after the replica has ordered and deduplicated it
+      // against everything else the worker knows. One inbound channel means
+      // every tab observes the SAME sequence — the raw per-port relay was the
+      // transition path while clients moved, and delivering both meant every
+      // daemon frame crossed each port twice.
+      onUpdate: () => {},
       onMessage: (text) => {
         port.postMessage({ type: 'message', doc: msg.doc, raw: text })
       },

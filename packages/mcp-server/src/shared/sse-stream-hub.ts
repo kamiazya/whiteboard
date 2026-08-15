@@ -82,6 +82,17 @@ export interface SseStreamSource {
    * the daemon would be waiting on the wrong thing.
    */
   push(doc: string, update: Uint8Array): void | Promise<void>
+  /**
+   * The document's current state, for a caller about to reconstruct it.
+   *
+   * On the source rather than the caller for the same reason `push` is:
+   * which authority answers is what the implementations disagree about. The
+   * hub asks the daemon; the worker-backed source asks the worker's replica,
+   * which is what lets a second tab open a document without any daemon round
+   * trip. `null` means the authority does not know the document — fork from
+   * empty, the same path a first-ever open takes.
+   */
+  snapshot(doc: string): Promise<Uint8Array | null>
 }
 
 export interface SseStreamHubOptions {
@@ -165,11 +176,20 @@ export function toBase64(bytes: Uint8Array): string {
  * slug may contain more, a workspace id never does.
  */
 export function canvasUpdateUrl(baseUrl: string, doc: string): string | null {
+  return canvasDocUrl(baseUrl, doc, 'update')
+}
+
+/** The snapshot twin of `canvasUpdateUrl`, splitting on the same first slash. */
+export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
+  return canvasDocUrl(baseUrl, doc, 'snapshot')
+}
+
+function canvasDocUrl(baseUrl: string, doc: string, tail: string): string | null {
   const slash = doc.indexOf('/')
   if (slash <= 0 || slash === doc.length - 1) return null
   const workspaceId = encodeURIComponent(doc.slice(0, slash))
   const slug = encodeURIComponent(doc.slice(slash + 1))
-  return `${baseUrl.replace(/\/$/, '')}/api/canvas/${workspaceId}/${slug}/update`
+  return `${baseUrl.replace(/\/$/, '')}/api/canvas/${workspaceId}/${slug}/${tail}`
 }
 
 export class SseStreamHub implements SseStreamSource {
@@ -260,6 +280,26 @@ export class SseStreamHub implements SseStreamSource {
     // moves its acknowledged version forward over an edit the daemon never
     // took. Failing loudly here is what lets a caller keep the bytes.
     if (!res.ok) throw new Error(`update refused: ${res.status}`)
+  }
+
+  /**
+   * The document's current state, from the daemon. The SSE stream carries
+   * only INCREMENTAL updates from subscription onward — the subscribe route
+   * registers routing and seeds nothing — so anything reconstructing a
+   * document needs this once before the stream's deltas mean anything.
+   *
+   * `null` for a document the daemon does not know: forking from empty is
+   * the same path a first-ever open takes, and conflating that answer with a
+   * transport failure is how a reachable daemon gets treated as an absent
+   * one. Everything else non-ok throws, same reasoning as `push`.
+   */
+  async snapshot(doc: string): Promise<Uint8Array | null> {
+    const url = canvasSnapshotUrl(this.options.baseUrl, doc)
+    if (url === null) throw new Error(`not a document key: ${doc}`)
+    const res = await this.options.fetch(url)
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(`snapshot refused: ${res.status}`)
+    return new Uint8Array(await res.arrayBuffer())
   }
 
   private async post(path: string, body: unknown): Promise<void> {

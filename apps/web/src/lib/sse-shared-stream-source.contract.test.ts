@@ -25,6 +25,7 @@ const BASE = 'http://127.0.0.1:3099'
 let streamOpens = 0
 const openedStreamIds: string[] = []
 const daemonWrites: { doc: string; body: Uint8Array }[] = []
+const daemonState = new Map<string, Uint8Array>()
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
@@ -52,6 +53,17 @@ const server = setupServer(
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
     subscribeBodies.push((await request.json()) as (typeof subscribeBodies)[number])
     return HttpResponse.json({ ok: true })
+  }),
+  // The daemon's snapshot route: what the worker seeds its replica from on
+  // first touch of a document. Pre-existing content lives here.
+  http.get(`${BASE}/api/canvas/:workspaceId/:slug/snapshot`, ({ params }) => {
+    const doc = `${String(params.workspaceId)}/${String(params.slug)}`
+    const bytes = daemonState.get(doc)
+    if (!bytes) return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+    return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
+      status: 200,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
   }),
   // The canvas update route: where a push lands, after the worker's replica
   // has merged it. Addressed by workspace and slug, which the worker
@@ -95,6 +107,7 @@ function createHarness(): SseStreamSourceHarness {
     controlMessages: () => controlMessages,
     openedStreamIds: () => openedStreamIds,
     daemonWrites: () => daemonWrites,
+    seedDaemonState: (doc, bytes) => daemonState.set(doc, bytes),
     ready: async () => {
       await vi.waitFor(() => {
         if (pushFrame === null) throw new Error('stream not open')
