@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
@@ -12,22 +11,9 @@ import { mcpSourceAlias } from './mcp-source-alias.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
+import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-/**
- * decode-named-character-reference (micromark's entity decoder, deep in the
- * remark graph) maps its `browser` condition to `index.dom.js`, which calls
- * `document.createElement` AT MODULE TOP LEVEL — so any worker whose chunk
- * contains remark dies on evaluation, dev and production alike. The package
- * ships a `worker` condition pointing at the DOM-free build, but Vite
- * resolves `browser` first even for worker chunks, so the alias pins the
- * DOM-free entry for every context. `require.resolve` applies Node's own
- * conditions (no `browser`), which lands on exactly that build.
- */
-const workerSafeEntityDecoder = createRequire(import.meta.url).resolve(
-  'decode-named-character-reference',
-)
 
 export default defineConfig({
   // Both workers are constructed with `type: 'module'`, but Vite's default
@@ -51,9 +37,9 @@ export default defineConfig({
       // entry vite already uses in dev via the `browser.development`
       // condition, so dev and prod behavior converge.
       'loro-crdt': 'loro-crdt/bundler',
-      // See workerSafeEntityDecoder above: without this, importing remark in
-      // a worker throws `document is not defined` at chunk evaluation.
-      'decode-named-character-reference': workerSafeEntityDecoder,
+      // Without these, importing remark in a worker throws
+      // `document is not defined` at chunk evaluation — see the module.
+      ...workerSafeDepsAlias,
     },
   },
   build: {

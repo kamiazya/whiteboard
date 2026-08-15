@@ -103,6 +103,9 @@ export function useWorkerScene(
   const workerRef = useRef<Worker | null>(null)
   /** Latched: a realm that cannot load the face never will within a session. */
   const fontDegraded = useRef(false)
+  /** Latched on a worker `error` event: module evaluation that failed once
+   * fails identically on every reconstruction, so the session stays sync. */
+  const workerDead = useRef(false)
   const requestRef = useRef(0)
   const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
@@ -121,7 +124,7 @@ export function useWorkerScene(
       shownFor.current = inputs
       return
     }
-    if (fontDegraded.current) {
+    if (fontDegraded.current || workerDead.current) {
       shownFor.current = inputs
       setRendered(renderNow())
       return
@@ -152,6 +155,23 @@ export function useWorkerScene(
       setRendered(response.type === 'laid-out' ? response : renderNow())
     }
     worker.addEventListener('message', onMessage)
+    // A worker whose MODULE fails to evaluate never throws at construction —
+    // it fires this event instead, and no `message` will ever come. Without a
+    // listener the request would hang and the previous scene would stay on
+    // screen for every later edit, which breaks this file's own "a degraded
+    // worker costs responsiveness, never content" invariant. Eval failure is
+    // as permanent as a missing font face, so the worker is retired the same
+    // way and the session stays synchronous.
+    const onError = () => {
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+      worker.terminate()
+      workerRef.current = null
+      workerDead.current = true
+      shownFor.current = inputs
+      setRendered(renderNow())
+    }
+    worker.addEventListener('error', onError)
     const request: LayoutRequest = {
       type: 'layout',
       id,
@@ -161,7 +181,10 @@ export function useWorkerScene(
       missingFileRefs: inputs.missingFileRefs,
     }
     worker.postMessage(request)
-    return () => worker.removeEventListener('message', onMessage)
+    return () => {
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+    }
     // `renderNow` closes over the current inputs by design: a fallback must
     // lay out what was asked for, not what the effect last saw.
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
@@ -173,7 +196,7 @@ export function useWorkerScene(
   // moment, since it is also a user's first impression of the canvas. Warming
   // it while they are still reading brings that edit back to the steady state.
   useEffect(() => {
-    if (!offloadable || fontDegraded.current) return
+    if (!offloadable || fontDegraded.current || workerDead.current) return
     workerRef.current ??= createLayoutWorker()
   }, [offloadable])
 

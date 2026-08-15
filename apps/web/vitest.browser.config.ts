@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
@@ -10,6 +9,7 @@ import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -42,12 +42,7 @@ export default defineConfig({
         __dirname,
         '../../packages/canvas-viewer/src/index.ts',
       ),
-      // Same pin as vite.config.ts: the package's `browser` entry touches
-      // `document` at module top level, which kills any worker chunk that
-      // contains remark. Node's resolver lands on the DOM-free build.
-      'decode-named-character-reference': createRequire(import.meta.url).resolve(
-        'decode-named-character-reference',
-      ),
+      ...workerSafeDepsAlias,
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real
