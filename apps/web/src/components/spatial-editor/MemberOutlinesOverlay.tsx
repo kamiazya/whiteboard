@@ -54,7 +54,7 @@ export function MemberOutlinesOverlay({
               data-edge-id={id}
               points={path.map((p) => `${p.x},${p.y}`).join(' ')}
               fill="none"
-              stroke="#2563eb"
+              stroke="var(--manipulation)"
               strokeWidth={2.5 / zoom}
               strokeLinecap="round"
               opacity={0.5}
@@ -69,7 +69,7 @@ export function MemberOutlinesOverlay({
           width={box.width}
           height={box.height}
           fill="none"
-          stroke="#2563eb"
+          stroke="var(--manipulation)"
           strokeWidth={1.5 / zoom}
           opacity={0.7}
         />

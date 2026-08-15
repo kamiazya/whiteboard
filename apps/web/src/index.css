@@ -58,6 +58,18 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /*
+   * The manipulation layer's own vocabulary — selection, handles, connect,
+   * marquee (--manipulation) and snap guides (--manipulation-guide). The
+   * guide color is deliberately a THIRD hue: not the manipulation blue (a
+   * ruler must not read as a selection edge), not any node accent, and
+   * never red, which this product reserves for destruction. The halo is
+   * the touch-target cushion. manipulation-tokens.test.ts holds every
+   * overlay to these and rejects raw hex.
+   */
+  --manipulation: oklch(0.546 0.245 262.88);
+  --manipulation-guide: oklch(0.606 0.219 292.72);
+  --manipulation-halo: color-mix(in srgb, oklch(0.546 0.245 262.88) 12%, transparent);
 }
 
 .dark {
@@ -79,6 +91,9 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --manipulation: oklch(0.707 0.165 254.62);
+  --manipulation-guide: oklch(0.709 0.159 293.54);
+  --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
 }
 
 /*

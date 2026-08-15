@@ -32,7 +32,7 @@ export interface SelectionOverlayProps {
   readonly onEditRequest?: () => void
 }
 
-const SELECTION_STROKE = '#2563eb'
+const SELECTION_STROKE = 'var(--manipulation)'
 const HANDLE_LABEL: Record<ResizeHandleKind, string> = {
   nw: 'Resize north-west',
   n: 'Resize north',
@@ -111,7 +111,7 @@ export function SelectionOverlay({
           y={handle.box.y}
           width={handle.box.width}
           height={handle.box.height}
-          fill="#fff"
+          fill="var(--background)"
           stroke={SELECTION_STROKE}
           strokeWidth={1 / zoom}
           style={{ pointerEvents: 'auto', cursor: `${handle.kind}-resize` }}
@@ -187,7 +187,7 @@ export function SelectionOverlay({
             y={box.y - 12 / zoom}
             textAnchor="middle"
             fontSize={12 / zoom}
-            fill="#ffffff"
+            fill="var(--background)"
             style={{ userSelect: 'none' }}
           >
             ✎

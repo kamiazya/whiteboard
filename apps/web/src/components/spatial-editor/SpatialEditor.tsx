@@ -3009,9 +3009,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 y={Math.min(marquee.start.y, marquee.current.y)}
                 width={Math.abs(marquee.current.x - marquee.start.x)}
                 height={Math.abs(marquee.current.y - marquee.start.y)}
-                fill="#2563eb"
+                fill="var(--manipulation)"
                 fillOpacity={0.08}
-                stroke="#2563eb"
+                stroke="var(--manipulation)"
                 strokeWidth={1 / viewport.zoom}
                 strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
               />
@@ -3037,7 +3037,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   x2={x}
                   y1={guideSpan.minY}
                   y2={guideSpan.maxY}
-                  stroke="#e11d48"
+                  stroke="var(--manipulation-guide)"
                   strokeWidth={1 / viewport.zoom}
                 />
               ))}
@@ -3049,7 +3049,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   x2={guideSpan.maxX}
                   y1={y}
                   y2={y}
-                  stroke="#e11d48"
+                  stroke="var(--manipulation-guide)"
                   strokeWidth={1 / viewport.zoom}
                 />
               ))}
@@ -3161,7 +3161,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     data-testid="edge-selection-highlight"
                     points={selected.path.map((p) => `${p.x},${p.y}`).join(' ')}
                     fill="none"
-                    stroke="#2563eb"
+                    stroke="var(--manipulation)"
                     strokeWidth={3}
                     strokeLinecap="round"
                   />
