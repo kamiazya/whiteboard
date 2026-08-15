@@ -10,7 +10,7 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
-import { fromBase64, SseStreamHub } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
+import { fromBase64, SseStreamHub, toBase64 } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
@@ -174,12 +174,6 @@ function hubFor(baseUrl: string): SseStreamHub {
   return hub
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
-
 /**
  * Merge bytes into a document's replica and tell the interested tabs what
  * actually changed.
@@ -216,6 +210,11 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // the round trip from looping back out as authority state.
     const merged = replica.export({ mode: 'update', from: before })
     if (merged.byteLength === 0) return
+    // Tab-originated work goes on to the daemon; daemon-originated work is
+    // already there. The empty-diff return above is what makes that split safe
+    // to state so plainly — a tab re-pushing what the daemon just sent never
+    // reaches here to be written back.
+    if (from !== null) hubFor(baseUrl).push(doc, merged)
     const encoded = toBase64(merged)
     for (const [target, state] of ports) {
       if (target === from) continue

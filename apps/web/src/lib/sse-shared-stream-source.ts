@@ -7,7 +7,7 @@
  * stream — correct, just without the cross-tab sharing.
  */
 import type { DocListener, SseStreamSource } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
-import { fromBase64 } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
+import { fromBase64, toBase64 } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
 import { sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
@@ -69,7 +69,13 @@ export function createSharedSseStreamSource(
     const evt = parsed.data
     const set = listeners.get(evt.doc)
     if (!set) return
-    if (evt.type === 'update') {
+    // The two inbound channels, deliberately both delivered. `update` is a raw
+    // daemon frame; `authority-update` has been through the worker's replica,
+    // so it also carries what a SIBLING TAB did — which never reaches the
+    // daemon and back in time to be useful, and is the whole point of the
+    // replica. Loro merges are idempotent, so anything that arrives on both is
+    // absorbed rather than double-applied.
+    if (evt.type === 'update' || evt.type === 'authority-update') {
       const bytes = fromBase64(evt.update)
       for (const l of set) l.onUpdate(bytes)
       return
@@ -78,10 +84,10 @@ export function createSharedSseStreamSource(
       for (const l of set) l.onConnectionChange?.(evt.connected)
       return
     }
-    // The authority replica's own traffic. This source consumes the raw daemon
-    // frames above; the fork-based client that consumes these is a separate
-    // seam, and answering them here would deliver every update twice.
-    if (evt.type === 'snapshot' || evt.type === 'authority-update') return
+    // Answered only when something asked, which nothing here does yet: a tab
+    // still builds its document from the daemon's export flow rather than
+    // forking the replica.
+    if (evt.type === 'snapshot') return
     for (const l of set) l.onMessage(evt.raw)
   }
   port.start()
@@ -109,6 +115,14 @@ export function createSharedSseStreamSource(
     },
     sendMessage(doc, message) {
       port.postMessage({ type: 'control', doc, message })
+    },
+    push(doc, update) {
+      // To the worker's replica, not to the daemon. The replica merges this
+      // against everything it already has — the other tabs' work and the
+      // daemon's — and is what carries the result onward in both directions,
+      // so a tab posting to the daemon itself would be writing around the very
+      // thing meant to order these writes.
+      port.postMessage({ type: 'push', doc, update: toBase64(update) })
     },
   }
 

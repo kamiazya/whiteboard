@@ -35,6 +35,12 @@ let streamSeq = 0
 let subscribeBodies: string[] = []
 let subscribeAuth: (string | null)[] = []
 let messageBodies: string[] = []
+let updateWrites: {
+  workspaceId: string
+  slug: string
+  auth: string | null
+  body: Uint8Array
+}[] = []
 /**
  * Keyed by stream id, NOT a single "most recent" handle. Workers from earlier
  * tests cannot be terminated and keep opening streams of their own, so a lone
@@ -75,6 +81,19 @@ const server = setupServer(
     messageBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
+  // The daemon's own update route, which the worker writes a tab's work to.
+  // Addressed by workspace and slug rather than by the document key the rest
+  // of the worker routes on — the key IS `${workspaceId}/${slug}`, which is
+  // what lets the worker reconstruct this URL at all.
+  http.post(`${BASE}/api/canvas/:workspaceId/:slug/update`, async ({ request, params }) => {
+    updateWrites.push({
+      workspaceId: String(params.workspaceId),
+      slug: String(params.slug),
+      auth: request.headers.get('Authorization'),
+      body: new Uint8Array(await request.arrayBuffer()),
+    })
+    return HttpResponse.json({ ok: true })
+  }),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -83,6 +102,7 @@ beforeEach(() => {
   subscribeBodies = []
   subscribeAuth = []
   messageBodies = []
+  updateWrites = []
   pushByStream.clear()
 })
 afterEach(() => server.resetHandlers())
@@ -387,6 +407,35 @@ describe('authority replica', () => {
     const forked = new LoroDoc()
     forked.import(decode(await authority))
     expect(forked.getMap('m').get('k')).toBe('from-daemon')
+
+    // The return leg, in the same case because the file has room for exactly
+    // one replica test (see above) and a one-way authority is not the claim
+    // worth making. A tab pushes to the worker and nowhere else; the worker is
+    // what reaches the daemon.
+    const tab = new LoroDoc()
+    tab.getMap('m').set('from-tab', 'written-through')
+    tab.commit()
+    port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+    await until(() => updateWrites.length >= 1)
+    const write = updateWrites[0]
+    if (!write) throw new Error('no write')
+    // The document key is `${workspaceId}/${slug}`, so the worker addressing
+    // the route correctly is the whole reason it can own this write at all.
+    expect(`${write.workspaceId}/${write.slug}`).toBe(doc)
+    // The credential travels with the write. `daemon-auth-seam.test.ts` scans
+    // the source to prove no OTHER place assembles this header; only an actual
+    // request proves the one place that should, does — and an unauthenticated
+    // write is silently dropped by the daemon, which looks exactly like a tab
+    // whose edits never persist.
+    expect(write.auth).toBe('Bearer t')
+    // What travels is the replica's delta, and it must carry the tab's work
+    // WITHOUT re-sending what the daemon just told us: a write that echoed the
+    // inbound frame back would loop.
+    const received = new LoroDoc()
+    received.import(write.body)
+    expect(received.getMap('m').get('from-tab')).toBe('written-through')
+    expect(received.getMap('m').get('k')).toBeUndefined()
     // Its own budget: this is the only case in the block that waits for a
     // stream to open, and the sibling describe's 5s default is not a wait,
     // it is a coin flip under a loaded suite.
