@@ -131,3 +131,6 @@ allowBuilds:
   msw: false
   sharp: false
   workerd: false
+
+patchedDependencies:
+  mdast-util-gfm-task-list-item@2.0.0: patches/mdast-util-gfm-task-list-item@2.0.0.patch
