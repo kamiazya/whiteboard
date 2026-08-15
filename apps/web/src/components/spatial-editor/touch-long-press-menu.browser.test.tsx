@@ -86,6 +86,22 @@ it('lifting before the delay never opens the menu (a tap is a tap)', async () =>
   expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
 })
 
+it('cancels touchstart on the canvas so iOS cannot claim the press, but not on overlays', () => {
+  const { container } = mount(withNode)
+  const root = rootOf(container)
+  // Canvas surface: the native gesture claim (selection loupe, haptic-touch
+  // takeover — the thing that fires pointercancel and disarms the menu
+  // timer) must be refused at touchstart.
+  const onCanvas = new TouchEvent('touchstart', { bubbles: true, cancelable: true })
+  root.dispatchEvent(onCanvas)
+  expect(onCanvas.defaultPrevented).toBe(true)
+  // Overlays hold real form controls and keep native touch semantics.
+  const palette = container.querySelector('[data-editor-overlay]') as HTMLElement
+  const onOverlay = new TouchEvent('touchstart', { bubbles: true, cancelable: true })
+  palette.dispatchEvent(onOverlay)
+  expect(onOverlay.defaultPrevented).toBe(false)
+})
+
 it('hand mode stays navigation-only: long-press opens nothing', async () => {
   const { container } = mount(withNode, 'hand')
   const root = rootOf(container)

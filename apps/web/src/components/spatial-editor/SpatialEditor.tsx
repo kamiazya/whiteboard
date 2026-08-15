@@ -2337,6 +2337,36 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // something this effect needs to do. What React does NOT do for us is
     // release pointer capture the platform is still holding on our behalf;
     // an unmount mid-drag (route change, a parent swapping this component
+    // iOS Safari's native long-press behaviors (selection loupe, callout,
+    // the haptic-touch takeover) ignore `touch-action` and CSS user-select
+    // suppression in practice: the system claims the press and fires
+    // pointercancel, which disarms the app's own long-press menu timer —
+    // the press is "hijacked". preventDefault on `touchstart` is the one
+    // reliable off-switch for that entire family, and it must be a
+    // NON-PASSIVE native listener (React's synthetic handlers don't
+    // guarantee that, and browsers default touch listeners to passive).
+    // Canvas interactions are pointer-event driven and unaffected —
+    // pointerdown has already fired by the time touchstart is cancelled;
+    // what this suppresses is the native gesture claim plus the synthetic
+    // mouse-compatibility events the canvas never uses. Overlays
+    // (`data-editor-overlay`: text editor, palette, menus, dialogs) keep
+    // native touch semantics — they hold real form controls.
+    useEffect(() => {
+      const root = rootRef.current
+      if (root === null) return
+      const onTouchStart = (event: TouchEvent) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-editor-overlay]') !== null
+        ) {
+          return
+        }
+        event.preventDefault()
+      }
+      root.addEventListener('touchstart', onTouchStart, { passive: false })
+      return () => root.removeEventListener('touchstart', onTouchStart)
+    }, [])
+
     // out) would otherwise leave the browser holding capture for a pointer
     // no element can any longer respond to. Best-effort/never-throw, same
     // reasoning as `trySetPointerCapture`.
