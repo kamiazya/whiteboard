@@ -7,6 +7,7 @@ import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
@@ -31,7 +32,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 }
 
 describe('wb_body_patch tool', () => {

@@ -4,6 +4,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
@@ -17,6 +18,7 @@ function makeDeps(): ServerDeps {
   return {
     canvasDocStore: createInMemoryCanvasDocStore(),
     blobStore: {} as never,
+    documentIndex: unusedDocumentIndex(),
   }
 }
 

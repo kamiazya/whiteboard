@@ -12,6 +12,7 @@ import {
   registerCanvasInWorkspace,
   seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
+import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { loadCanvasDoc } from './canvas-doc-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createTidyCanvasTool } from './tidy-canvas.js'
@@ -38,7 +39,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never }
+  return { canvasDocStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 }
 
 const box = (id: string, x: number, y: number) => ({
@@ -171,7 +172,11 @@ describe('wb_canvas_tidy on a markdown document', () => {
         edges: [],
       })
     })
-    const deps = { canvasDocStore: store, blobStore: {} as never }
+    const deps = {
+      canvasDocStore: store,
+      blobStore: {} as never,
+      documentIndex: unusedDocumentIndex(),
+    }
 
     await expect(
       createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),

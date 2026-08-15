@@ -1,6 +1,10 @@
 import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
 import { ContainerModule } from 'inversify'
-import { InMemoryBlobStore, InMemoryCanvasDocStore } from '../server/store/inmemory/index.js'
+import {
+  InMemoryBlobStore,
+  InMemoryCanvasDocStore,
+  InMemoryDocumentIndex,
+} from '../server/store/inmemory/index.js'
 
 /**
  * Binds the storage ports to their in-memory test doubles. Test-level
@@ -13,5 +17,8 @@ export const storeMemoryModule = new ContainerModule(({ bind }) => {
     .inSingletonScope()
   bind(TOKENS.BlobStore)
     .toDynamicValue(() => new InMemoryBlobStore())
+    .inSingletonScope()
+  bind(TOKENS.DocumentIndex)
+    .toDynamicValue(() => new InMemoryDocumentIndex())
     .inSingletonScope()
 })
