@@ -212,6 +212,13 @@ function releaseReplicaFeed(baseUrl: string, doc: string): void {
   if (feed.ports > 0) return
   replicaFeeds.delete(key)
   feed.off()
+  // The seed is only current while the stream covers the document: releasing
+  // the last claim deregisters the daemon's routing, so anything written in
+  // the gap (an MCP tool, another device) never reaches this replica. The
+  // next subscriber must pay one fresh snapshot fetch — the same price as a
+  // first open — or it would be served the pre-gap state for the worker's
+  // whole lifetime.
+  seededDocs.delete(key)
 }
 
 interface PortState {
