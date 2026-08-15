@@ -24,7 +24,7 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, EdgeAnchorPair, Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
@@ -50,6 +50,10 @@ export type LayoutResponse =
       readonly svg: string
       readonly bounds: BoundingBox
       readonly scene: Scene
+      /** The layout's own anchor pass, carried out with the scene: Maps
+       * survive structuredClone, and the drag overlay pins bystander edges
+       * to exactly these without re-running the pass on the main thread. */
+      readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
     }
   | {
       // A worker that throws, or that is asked to lay out a body nobody
