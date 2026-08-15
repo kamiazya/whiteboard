@@ -13,11 +13,13 @@ export function workspacePath(workspaceId: string): string {
   return `/w/${encodeURIComponent(workspaceId)}`
 }
 
-// Nested under the workspace it belongs to, so the URL reads as placement
-// rather than as two unrelated ids. The tail is one encoded segment: the
-// page below still loads by slug, so a document path cannot go here yet.
+// Nested under the workspace it belongs to, so the URL reads as placement.
+// The tail is the document's path, one URL segment per path segment: each
+// segment is encoded, the separators are not — encoding them would collapse
+// the hierarchy the workspace shows into one opaque URL segment.
 export function canvasPath(workspaceId: string, slug: string): string {
-  return `${workspacePath(workspaceId)}/canvas/${encodeURIComponent(slug)}`
+  const tail = slug.split('/').map(encodeURIComponent).join('/')
+  return `${workspacePath(workspaceId)}/canvas/${tail}`
 }
 
 export function browserLocalIndexPath(): string {
@@ -40,12 +42,14 @@ export function parseDaemonRoute(pathname: string): DaemonRoute | null {
   // The canvas branch is checked first: `/w/:ws` and `/w/:ws/canvas/...`
   // share a prefix, and the workspace pattern below is anchored so it cannot
   // swallow a canvas URL either way.
-  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/canvas\/([^/]+)\/?$/)
+  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/canvas\/(.+?)\/?$/)
   if (canvasMatch) {
     const workspaceId = decodeSegment(canvasMatch[1])
-    const slug = decodeSegment(canvasMatch[2])
-    if (workspaceId === null || slug === null) return null
-    return { kind: 'canvas', workspaceId, slug }
+    const segments = (canvasMatch[2] as string).split('/').map(decodeSegment)
+    if (workspaceId === null || segments.some((segment) => segment === null || segment === '')) {
+      return null
+    }
+    return { kind: 'canvas', workspaceId, slug: segments.join('/') }
   }
   const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
   if (workspaceMatch) {
