@@ -381,6 +381,15 @@ function labelEditorStyle(theme: ResolvedTheme) {
 /** Screen-space px within which a press/right-click counts as hitting an
  * edge line; divided by the zoom for the canvas-space comparison. */
 const EDGE_HIT_TOLERANCE_PX = 6
+
+/**
+ * Touch long-press → context menu. 500ms matches the platform long-press
+ * feel (and Android's own contextmenu synthesis delay, so the two paths
+ * agree on timing there); the slop is finger-sized jitter, not intent to
+ * drag — past it the press is a drag and the menu must not interrupt.
+ */
+const LONG_PRESS_MENU_MS = 500
+const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 /**
  * Window for OUR double-press detection (see handlePointerDown). Matches the
@@ -563,6 +572,36 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const prevCanvasRef = useRef(canvas)
     const prevExternalVersionRef = useRef(externalVersion)
     canvasRef.current = canvas
+
+    // Mirror for callbacks that outlive their render — the long-press timer
+    // fires ~500ms after the closure that armed it, by which time the press
+    // itself has usually advanced the gesture ('pressing'/'moving'); reducing
+    // a cancel against the ARM-time state would mis-apply it.
+    const gestureStateRef = useRef(gestureState)
+    gestureStateRef.current = gestureState
+
+    /**
+     * Touch long-press -> context menu. iOS Safari never synthesises a
+     * `contextmenu` event from a touch long-press (Android Chrome does), so
+     * without this the app's object menu is simply unreachable on an iPhone
+     * — the press reads as a drag start and the menu never opens. Armed on
+     * a single stationary touch, cancelled by movement past the slop, a
+     * second finger, or lift.
+     */
+    const longPressRef = useRef<{
+      timer: ReturnType<typeof setTimeout>
+      pointerId: number
+      screen: Point
+    } | null>(null)
+    const clearLongPress = () => {
+      if (longPressRef.current !== null) {
+        clearTimeout(longPressRef.current.timer)
+        longPressRef.current = null
+      }
+    }
+    // The timer must call the LATEST render's opener (fresh viewport/boxes/
+    // selection), not the one captured when the finger landed.
+    const openContextMenuAtRef = useRef<(screen: Point) => void>(() => {})
 
     // Controlled-prop-swap policy: a sync-driven parent can replace `canvas`
     // mid-gesture. Feed the reducer a `canvas-replaced` event so it can abort
@@ -1354,6 +1393,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             isPanningRef.current = false
             lastPressRef.current = null
             doublePressRef.current = null
+            clearLongPress()
             toggleSelectionMember(anchorPrimary, gathered)
             return
           }
@@ -1379,7 +1419,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             trySetPointerCapture(root, pointerId)
           }
           activePointerIdRef.current = e.pointerId
+          clearLongPress()
           return
+        }
+        if (touchPointsRef.current.size === 1) {
+          // Arm the long-press menu. Firing abandons whatever the press
+          // started (a node move's 'pressing' state, marquee arming): the
+          // press has become a menu invocation, not a drag.
+          clearLongPress()
+          const screen = clientPointToRootLocal(e, root)
+          longPressRef.current = {
+            pointerId: e.pointerId,
+            screen,
+            timer: setTimeout(() => {
+              longPressRef.current = null
+              if (gestureStateRef.current.kind !== 'idle') {
+                applyResult(
+                  reduceGesture(gestureStateRef.current, canvasRef.current, {
+                    type: 'pointercancel',
+                  }),
+                )
+              }
+              setMarquee(null)
+              isPanningRef.current = false
+              lastPressRef.current = null
+              doublePressRef.current = null
+              openContextMenuAtRef.current(screen)
+            }, LONG_PRESS_MENU_MS),
+          }
         }
       }
       const screenPointForPan = clientPointToRootLocal(e, root)
@@ -1496,14 +1563,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       // Replace the browser menu with the object's own action menu.
       e.preventDefault()
-      // Hand mode is navigation-ONLY: a touch long-press synthesises a
-      // contextmenu, and surfacing the edit menu there made phone panning
-      // fall into editing mid-gesture (user report 2026-08-08). Switching
-      // to Select is the explicit gate into editing affordances.
-      if (tool === 'hand') return
       const root = rootRef.current
       if (root === null) return
-      const screenPoint = clientPointToRootLocal(e, root)
+      openContextMenuAt(clientPointToRootLocal(e, root))
+    }
+
+    const openContextMenuAt = (screenPoint: Point) => {
+      // Hand mode is navigation-ONLY: surfacing the edit menu on a touch
+      // long-press there made phone panning fall into editing mid-gesture
+      // (user report 2026-08-08). Switching to Select is the explicit gate
+      // into editing affordances.
+      if (tool === 'hand') return
       const point = screenToCanvas(screenPoint, viewport)
       // The MENU hit-tests every node, locked included — a locked node has
       // to stay right-clickable or Unlock would be unreachable. Only the
@@ -1546,10 +1616,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         point,
       })
     }
+    openContextMenuAtRef.current = openContextMenuAt
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      // Movement past finger-jitter slop turns the press into a drag: the
+      // armed long-press menu must not interrupt it.
+      const armed = longPressRef.current
+      if (armed !== null && armed.pointerId === e.pointerId) {
+        const now = clientPointToRootLocal(e, root)
+        if (Math.hypot(now.x - armed.screen.x, now.y - armed.screen.y) > LONG_PRESS_SLOP_PX) {
+          clearLongPress()
+        }
+      }
       // A gathering finger has already acted on its press, and the anchor's
       // own gesture was cancelled when gathering began — neither may resume
       // dragging the canvas while the other is still down.
@@ -1615,6 +1695,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
       const root = rootRef.current
       // Gathering fingers act on the press, so their release carries no
       // meaning — running the click/marquee logic here would re-collapse the
@@ -1781,6 +1862,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
       // Pointer ids are reused, so a gathering finger left in these refs by a
       // cancel would silently deaden whichever later touch inherits its id.
       gatherPointersRef.current.delete(e.pointerId)
@@ -2265,6 +2347,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // cleanup time would always see `null` and silently skip the release.
       const root = rootRef.current
       return () => {
+        // A long-press timer must not fire into an unmounted editor.
+        if (longPressRef.current !== null) {
+          clearTimeout(longPressRef.current.timer)
+          longPressRef.current = null
+        }
         const pointerId = activePointerIdRef.current
         if (root === null || pointerId === null) return
         try {
