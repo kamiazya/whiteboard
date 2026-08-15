@@ -2,7 +2,7 @@ import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
+import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -179,7 +179,9 @@ export function BrowserLocalCanvasPage({
   // the button's label follows the DOCUMENT rather than our own click.
   const [isFullscreen, setIsFullscreen] = useState(false)
   useEffect(() => {
-    const sync = () => setIsFullscreen(document.fullscreenElement !== null)
+    // Boolean(): jsdom leaves fullscreenElement undefined rather than null,
+    // and `undefined !== null` read as "in fullscreen" on first mount there.
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
     sync()
     document.addEventListener('fullscreenchange', sync)
     return () => document.removeEventListener('fullscreenchange', sync)
@@ -651,71 +653,89 @@ export function BrowserLocalCanvasPage({
     // background no longer shows. Anything this element does not paint itself
     // falls through to the browser's default black backdrop — which turned
     // the canvas area black under a light theme.
-    <main ref={mainRef} className="bg-background grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
+    <main
+      ref={mainRef}
+      className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)] bg-background"
+    >
       <div className="min-w-0">
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
           accessibility trees. */}
         <h1 className="sr-only">{pageState.snapshot.name}</h1>
-        <Suspense
-          fallback={
-            <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-          }
-        >
-          <WorkspaceTopBar
-            titleSlot={canvasTitleSlot}
-            statusSlot={
-              <ConnectionStatus state="local">
-                <p className="text-muted-foreground">
-                  Connect a local daemon (MCP) to unlock version history, workspaces, variations,
-                  and combining changes
-                </p>
-                <Suspense fallback={null}>
-                  <DaemonDetectedBanner
-                    settingsStore={settingsStore}
-                    fetch={window.fetch.bind(window)}
-                  />
-                </Suspense>
-              </ConnectionStatus>
+        {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
+            switcher, rename, menus — steps aside. The floating control below
+            replaces its exit path, Escape still works natively, and the dock
+            stays because editing is what the extra space is FOR. */}
+        {!isFullscreen && (
+          <Suspense
+            fallback={
+              <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
             }
-            dataMode="local"
-            workspaceId="local"
-            slug={pageState.snapshot.id}
-            canvases={switcherOptions.map((c) => ({
-              slug: c.id,
-              name: c.name,
-              updatedAt: c.updatedAt,
-            }))}
-            onNavigateToCanvas={(id) => void switchCanvas(id)}
-            onRenameCanvas={renameCanvas}
-            onCreateCanvas={async () => {
-              const created = await createCanvas()
-              await switchCanvas(created.id)
-            }}
-            onCreateMarkdownCanvas={async () => {
-              const created = await createCanvas(undefined, 'markdown')
-              await switchCanvas(created.id)
-            }}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={() => {
-              // The header lives INSIDE the fullscreen element, so it stays on
-              // screen and is the only way back out — entering without a
-              // matching exit left the user stuck with the Escape key.
-              if (document.fullscreenElement) void document.exitFullscreen()
-              else void mainRef.current?.requestFullscreen()
-            }}
-            capabilities={{
-              versions: capabilities.versions,
-              branches: capabilities.branches,
-              merge: capabilities.merge,
-            }}
-          />
-        </Suspense>
+          >
+            <WorkspaceTopBar
+              titleSlot={canvasTitleSlot}
+              statusSlot={
+                <ConnectionStatus state="local">
+                  <p className="text-muted-foreground">
+                    Connect a local daemon (MCP) to unlock version history, workspaces, variations,
+                    and combining changes
+                  </p>
+                  <Suspense fallback={null}>
+                    <DaemonDetectedBanner
+                      settingsStore={settingsStore}
+                      fetch={window.fetch.bind(window)}
+                    />
+                  </Suspense>
+                </ConnectionStatus>
+              }
+              dataMode="local"
+              workspaceId="local"
+              slug={pageState.snapshot.id}
+              canvases={switcherOptions.map((c) => ({
+                slug: c.id,
+                name: c.name,
+                updatedAt: c.updatedAt,
+              }))}
+              onNavigateToCanvas={(id) => void switchCanvas(id)}
+              onRenameCanvas={renameCanvas}
+              onCreateCanvas={async () => {
+                const created = await createCanvas()
+                await switchCanvas(created.id)
+              }}
+              onCreateMarkdownCanvas={async () => {
+                const created = await createCanvas(undefined, 'markdown')
+                await switchCanvas(created.id)
+              }}
+              isFullscreen={isFullscreen}
+              onToggleFullscreen={() => {
+                // Entering hides this whole bar; the floating exit control and
+                // native Escape are the ways back out.
+                if (document.fullscreenElement) void document.exitFullscreen()
+                else void mainRef.current?.requestFullscreen()
+              }}
+              capabilities={{
+                versions: capabilities.versions,
+                branches: capabilities.branches,
+                merge: capabilities.merge,
+              }}
+            />
+          </Suspense>
+        )}
       </div>
       {/* The snapshot's kind picks the editor: markdown canvases open the
           markdown editor (body and OKF core facets persisted as containers
           of one Loro document — see use-markdown-canvas-doc.ts), everything
           else the spatial editor. */}
+      {isFullscreen && (
+        <button
+          type="button"
+          aria-label="Exit fullscreen"
+          onClick={() => void document.exitFullscreen()}
+          className="absolute top-3 right-3 z-20 rounded-md border bg-background/80 p-2 text-muted-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-foreground"
+        >
+          <Minimize2 aria-hidden="true" className="size-4" />
+        </button>
+      )}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
         {canvasKind === 'markdown' ? (
           markdownDoc.body !== null &&
