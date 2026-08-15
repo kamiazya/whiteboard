@@ -126,3 +126,66 @@ describe('rows written before canvasIds were ULIDs', () => {
     })
   })
 })
+
+describe('rows written before documents had a kind', () => {
+  // A document created before `kind` existed has bytes on disk and a row in
+  // `canvases`, but kind IS NULL. Hiding it from every listing while its
+  // content sits on disk is the same dishonest surface a 200-empty workspace
+  // was: the row must surface — without a kind — and the READ path is where
+  // "format unknown" is said (wb_document_get already refuses one with
+  // advice, rather than the listing pretending it does not exist).
+  async function withKindlessRow(
+    body: (index: SqliteDocumentIndex, canvasId: string) => Promise<void>,
+  ): Promise<void> {
+    const tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-kindless-'))
+    const handle = await createIsolatedDb({ dataDir: tempDir })
+    const canvasId = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    try {
+      await handle.db
+        .insertInto('workspaces')
+        .values({ id: 'ws-k', createdAt: 0, updatedAt: 0 })
+        .execute()
+      await handle.db
+        .insertInto('canvases')
+        .values({
+          id: canvasId,
+          workspaceId: 'ws-k',
+          slug: 'pre-kind-doc',
+          displayName: 'Old diagram',
+          isPinned: 0,
+          pinOrder: null,
+          currentBranch: 'main',
+          createdAt: 0,
+          updatedAt: 0,
+          kind: null,
+        })
+        .execute()
+      await body(new SqliteDocumentIndex(handle.db), canvasId)
+    } finally {
+      await handle.dispose()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  it('lists the document, without a kind, and the entry satisfies the schema', async () => {
+    await withKindlessRow(async (index) => {
+      const entries = await index.listDocuments({ workspaceId: 'ws-k' })
+      expect(entries.map((entry) => entry.path)).toContain('pre-kind-doc')
+      const entry = entries.find((candidate) => candidate.path === 'pre-kind-doc')
+      expect(entry?.kind).toBeUndefined()
+      expect(entry?.name).toBe('Old diagram')
+      expect(documentEntrySchema.safeParse(entry).success).toBe(true)
+    })
+  })
+
+  it('resolves the document by id and by path', async () => {
+    await withKindlessRow(async (index, canvasId) => {
+      const byId = await index.resolveDocumentById({ workspaceId: 'ws-k', canvasId })
+      expect(byId?.path).toBe('pre-kind-doc')
+      expect(byId?.kind).toBeUndefined()
+
+      const byPath = await index.resolveDocument({ workspaceId: 'ws-k', path: 'pre-kind-doc' })
+      expect(byPath?.canvasId).toBe(canvasId)
+    })
+  })
+})
