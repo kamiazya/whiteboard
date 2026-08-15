@@ -136,6 +136,19 @@ describe('DaemonCanvasPage file refs', () => {
     )
   })
 
+  it('marks refs matching neither a live id nor a live slug as missing, sparing image refs', async () => {
+    await renderPage()
+    const missing = capturedEditorProps?.missingFileRef
+    expect(missing).toBeDefined()
+    // Live id and live slug (a legacy ref) are both known; a ref matching
+    // neither points at a deleted canvas. Image refs live in the file
+    // store, not the canvases list, so they are never "missing" here.
+    expect(missing?.('id-second')).toBe(false)
+    expect(missing?.('second')).toBe(false)
+    expect(missing?.('deleted-canvas-id')).toBe(true)
+    expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
+  })
+
   it('falls back to slug refs for entries an older daemon lists without ids', async () => {
     mockListCanvases.mockResolvedValue({
       canvases: [

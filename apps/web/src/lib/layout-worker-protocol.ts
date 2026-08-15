@@ -42,6 +42,10 @@ export type LayoutRequest = {
   readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
   readonly fileRefLabels?: readonly FileRefLabel[]
+  /** File refs the host resolved as dangling — the plain-data form of the
+   * resolveFileMissing seam, precomputed against THIS canvas's file nodes
+   * (a function cannot cross the wire; a small ref list can). */
+  readonly missingFileRefs?: readonly string[]
   readonly bodies: readonly ParsedBody[]
 }
 

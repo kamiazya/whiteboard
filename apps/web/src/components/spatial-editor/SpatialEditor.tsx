@@ -314,6 +314,15 @@ export interface SpatialEditorProps {
   /** Follows a file node's reference (navigation). Absent → follow hides. */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   /**
+   * Marks a file reference whose target no longer exists (deleted canvas,
+   * ref imported into a store that never had it). The card renders a quiet
+   * "Missing reference" label and the follow affordances (context menu,
+   * double-click) hide — following would dead-end, or worse lazily create
+   * an empty canvas under the dangling ref. Deciding missing is the host's
+   * lookup against its live document list; absent → nothing is missing.
+   */
+  readonly missingFileRef?: (file: string) => boolean
+  /**
    * Host controls (undo/redo/version history) docked as the palette's
    * leading group — the palette is the single bottom-chrome container.
    */
@@ -433,6 +442,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onToggleNodeLock,
       fileRefOptions,
       onOpenFileRef,
+      missingFileRef,
       paletteLeading,
       resolveFileCanvas,
       resolveFileFacets,
@@ -654,13 +664,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const fileSeamOptions = useMemo(
       () => ({
         resolveFileLabel,
+        resolveFileMissing: missingFileRef,
         resolveFileCanvas,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
       }),
-      [resolveFileLabel, resolveFileCanvas, expandFileNode, resolveFileImage, resolveFileFacets],
+      [
+        resolveFileLabel,
+        missingFileRef,
+        resolveFileCanvas,
+        expandFileNode,
+        resolveFileImage,
+        resolveFileFacets,
+      ],
     )
+    // The plain-data twin of the resolveFileMissing seam, so the worker path
+    // (which cannot take a function) sees the same missing set the
+    // synchronous and drag paths compute through the callback.
+    const missingFileRefs = useMemo(() => {
+      if (missingFileRef === undefined) return undefined
+      const refs = new Set<string>()
+      for (const node of canvas.nodes) {
+        if (node.type === 'file' && missingFileRef(node.file)) refs.add(node.file)
+      }
+      return refs.size === 0 ? undefined : [...refs]
+    }, [canvas, missingFileRef])
     // The COMMITTED scene, laid out in a worker when it can be. The drag
     // layers below keep their own synchronous paths: a gesture already has a
     // fast route through carried-side caching, and a round trip per frame
@@ -671,6 +700,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       { measure: resolvedMeasure, theme },
       fileSeamOptions,
       fileRefOptions,
+      missingFileRefs,
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
@@ -1713,7 +1743,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         if (
           node?.type === 'file' &&
           onOpenFileRef !== undefined &&
-          isImageFileRef?.(node.file) !== true
+          isImageFileRef?.(node.file) !== true &&
+          missingFileRef?.(node.file) !== true
         ) {
           applyResult(result)
           onOpenFileRef(node.file, node.subpath)
@@ -2828,6 +2859,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             selectedId={selectedId}
             groupSelection={groupSelection}
             isImageFileRef={isImageFileRef}
+            missingFileRef={missingFileRef}
             onOpenFileRef={onOpenFileRef}
             openLinkNode={openLinkNode}
             copySelection={copySelection}

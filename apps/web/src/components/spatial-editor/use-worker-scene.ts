@@ -91,6 +91,10 @@ export function useWorkerScene(
   base: { readonly measure: MeasureText; readonly theme: ResolvedTheme },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
   fileRefLabels: readonly FileRefLabel[] | undefined,
+  // The plain-data twin of fileSeamOptions.resolveFileMissing: the refs the
+  // host resolved as dangling in THIS canvas. The function serves the
+  // synchronous path; only this list can cross to the worker.
+  missingFileRefs?: readonly string[],
 ): RenderedCanvas {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
@@ -120,8 +124,8 @@ export function useWorkerScene(
   const shownFor = useRef<unknown>(null)
 
   const inputs = useMemo(
-    () => ({ canvas, theme: options.theme, fileRefLabels }),
-    [canvas, options.theme, fileRefLabels],
+    () => ({ canvas, theme: options.theme, fileRefLabels, missingFileRefs }),
+    [canvas, options.theme, fileRefLabels, missingFileRefs],
   )
 
   useEffect(() => {
@@ -168,6 +172,7 @@ export function useWorkerScene(
       canvas: inputs.canvas,
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
+      missingFileRefs: inputs.missingFileRefs,
       bodies: parseBodies(inputs.canvas),
     }
     worker.postMessage(request)

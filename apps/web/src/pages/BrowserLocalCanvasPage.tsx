@@ -1,5 +1,6 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { Braces, Copy, Download, EllipsisVertical, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -192,6 +193,16 @@ export function BrowserLocalCanvasPage({
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
   const listGenerationRef = useRef(0)
+  // A ref that matches no live canvas id points at a deleted canvas: the
+  // editor renders a quiet "Missing reference" and hides the follow
+  // affordances instead of navigating to a dead route. Image refs live in
+  // the file store, not this list; undefined while the list has not loaded
+  // keeps everything ordinary.
+  const missingFileRef = useMemo(() => {
+    if (canvases.length === 0) return undefined
+    const known = new Set(canvases.map((entry) => entry.id))
+    return (ref: string) => !isImageRef(ref) && !known.has(ref)
+  }, [canvases])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
@@ -744,6 +755,7 @@ export function BrowserLocalCanvasPage({
                   .filter((entry) => entry.id !== canvasId)
                   .map((entry) => ({ file: entry.id, label: entry.name }))}
                 onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
+                missingFileRef={missingFileRef}
                 {...fileSeams}
                 lockedNodeIds={lockedNodeIds}
                 lockedEdgeIds={lockedEdgeIds}
