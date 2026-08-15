@@ -269,3 +269,53 @@
     }
   }
 }
+
+/*
+ * Mobile app-shell hardening (kept un-layered, so it outranks layered
+ * styles). A canvas tool on a touch browser must behave like an app, not a
+ * document: long-pressing chrome or canvas must not start iOS text
+ * selection or the copy/lookup callout, pinch must not zoom the PAGE (the
+ * canvas owns pinch; Safari's gesture events are cancelled in
+ * mobile-app-shell.ts), scrolling past an edge must not rubber-band or
+ * pull-to-refresh out from under a canvas pan, and taps must not flash
+ * the default highlight. Real text surfaces opt back IN to selection
+ * below — an app is selectable where text is the content, nowhere else.
+ */
+html,
+body {
+  overscroll-behavior: none;
+  /* Keep text at authored size when iOS rotates to landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  /* Kill double-tap-to-zoom (and its 300ms tap delay) on every surface;
+   * the spatial editor sets touch-action: none on its own element and
+   * implements pinch/double-tap itself. */
+  touch-action: manipulation;
+  /* viewport-fit=cover extends the app under the notch and home indicator
+   * in the installed PWA; give the shell its floor back. In-browser every
+   * inset is 0 and this is inert. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+#root {
+  user-select: none;
+  -webkit-user-select: none;
+  /* No long-press callout on chrome or canvas. */
+  -webkit-touch-callout: none;
+}
+
+/* Text-content surfaces stay selectable: the source editor, form fields,
+ * anything contenteditable, and the rendered markdown preview (a reading
+ * surface — copying from it is legitimate use). */
+#root .cm-content,
+#root input,
+#root textarea,
+#root [contenteditable='true'],
+#root .markdown-preview-pane {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}

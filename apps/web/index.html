@@ -2,7 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      App-like viewport: user scaling off (mobile Chrome honors it, and
+      maximum-scale=1 is also what stops iOS Safari auto-zooming a focused
+      input; Safari's pinch itself is cancelled in mobile-app-shell.ts),
+      viewport-fit=cover so the installed PWA extends under the notch/home
+      indicator with index.css's safe-area padding taking over.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>Whiteboard</title>
     <meta
       name="description"
