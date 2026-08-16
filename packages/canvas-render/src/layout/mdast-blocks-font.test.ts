@@ -6,7 +6,7 @@
 // did not account for, and the error shows up as visibly uneven word gaps
 // (the defect this file exists to pin). Labels already hold this invariant
 // via `resolveLabel()`; this covers the markdown body path.
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { Scene, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

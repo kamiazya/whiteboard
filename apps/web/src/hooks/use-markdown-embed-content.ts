@@ -11,8 +11,8 @@ import {
   type AliasResolver,
   parseMarkdownBody,
   resolveReferences,
-} from '@kamiazya/whiteboard-canvas-codec'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-codec'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { loadMarkdownEmbedSource } from '../lib/canvas-embed-content.js'

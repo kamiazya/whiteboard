@@ -1,5 +1,5 @@
-import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-canvas-model'
+import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 

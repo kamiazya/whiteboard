@@ -88,10 +88,10 @@ jobs:
         if: matrix.shard == 2
         run: >-
           pnpm exec vitest run
-          --project=canvas-model-node
-          --project=canvas-ports-node
-          --project=canvas-codec-node
-          --project=canvas-workspace-node
+          --project=model-node
+          --project=ports-node
+          --project=codec-node
+          --project=crdt-node
           --project=server-core-node
           --project=canvas-render-node
           --project=arch-lint-node

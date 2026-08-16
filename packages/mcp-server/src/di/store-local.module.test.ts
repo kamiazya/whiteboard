@@ -1,5 +1,5 @@
-import type { BlobStore, DocumentStore } from '@kamiazya/whiteboard-canvas-ports'
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import type { BlobStore, DocumentStore } from '@kamiazya/whiteboard-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'

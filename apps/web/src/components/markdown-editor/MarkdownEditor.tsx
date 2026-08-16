@@ -1,8 +1,8 @@
 import type { Extension } from '@codemirror/state'
-import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
-import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import type { AliasResolver } from '@kamiazya/whiteboard-codec'
+import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -47,7 +47,7 @@ export interface MarkdownEditorProps {
    */
   title?: string
   /**
-   * Maps `[[Name]]` aliases to canvas ids for the preview (canvas-codec's
+   * Maps `[[Name]]` aliases to canvas ids for the preview (codec's
    * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
    */
   resolveAlias?: AliasResolver

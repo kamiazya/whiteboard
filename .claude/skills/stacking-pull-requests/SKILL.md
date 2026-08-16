@@ -28,7 +28,7 @@ This repo's dependency direction is already fixed by `.claude/rules/architecture
 and a stack must follow it — a lower layer cannot depend on a higher one:
 
 ```
-canvas-model → canvas-codec / canvas-render / canvas-ports → canvas-workspace
+model → codec / canvas-render / ports → workspace
              → server-core → mcp-server | apps/web
 ```
 
@@ -40,7 +40,7 @@ the surface that consumes it goes above it.
 Two consequences worth stating:
 
 - **Each PR loads its own layer's review criteria.** `.claude/rules/package-*.md` are
-  path-scoped, so a `canvas-model` PR carries the Zod-discipline rules while an
+  path-scoped, so a `model` PR carries the Zod-discipline rules while an
   `apps/web` PR carries the accessibility and reachability ones. The per-layer review
   concerns follow the stack for free.
 - **The bottom layers answer `userReach` with `foundation:`, and the named follow-up

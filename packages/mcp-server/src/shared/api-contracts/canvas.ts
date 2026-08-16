@@ -1,4 +1,4 @@
-import { documentKindSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.

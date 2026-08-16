@@ -1,7 +1,7 @@
 // Duplicate (editor-completeness slice 3): Cmd/Ctrl+D and the context
 // menu's Duplicate item clone the selection as ONE batch command —
 // reminted ids, +16px offset, edge properties preserved, copies selected.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

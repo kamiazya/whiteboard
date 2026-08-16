@@ -1,4 +1,4 @@
-import type { DocumentId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentId, WorkspaceId } from '@kamiazya/whiteboard-model'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -12,9 +12,9 @@ import type {
   ReadFrontierInput,
   ReadFrontierResult,
   SaveSnapshotInput,
-} from '@kamiazya/whiteboard-canvas-ports'
-import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+} from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000

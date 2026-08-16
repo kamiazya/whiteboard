@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 /**
  * Canvas picker — the reference-entry surface for file nodes, used by the
  * palette's Document entry (create) and the context menu's "Change target"

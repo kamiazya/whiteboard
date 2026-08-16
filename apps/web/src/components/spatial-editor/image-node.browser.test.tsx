@@ -2,7 +2,7 @@
 // seam (picker input, drop, paste) and render as <image> elements filling
 // the node's padded box. The reference is opaque to the editor; the host
 // resolves it to an href.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

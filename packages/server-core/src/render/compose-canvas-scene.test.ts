@@ -1,11 +1,11 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   assignEdgeAnchors,
   createSpatialTheme,
   layoutSpatialCanvas,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
 import { composeCanvasScene } from './compose-canvas-scene.js'
@@ -105,8 +105,8 @@ describe('composeCanvasScene', () => {
   })
 
   test('HTML embedded in a text body renders as a literal rawHtml run instead of throwing', () => {
-    // canvas-model's mdast subset accepts a raw `html` node verbatim (see
-    // package-canvas-model.md) — parseMarkdownBody is total over any string
+    // model's mdast subset accepts a raw `html` node verbatim (see
+    // package-model.md) — parseMarkdownBody is total over any string
     // a real editor can produce, so this is not the failure path (that one
     // needs an actually-unrecognized node kind, exercised below via a node
     // with a type outside the closed union).

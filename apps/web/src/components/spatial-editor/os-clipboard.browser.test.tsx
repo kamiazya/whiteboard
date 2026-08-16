@@ -3,7 +3,7 @@
 // keydown preventDefault would suppress the very event that carries
 // `clipboardData` — and that data is what lets a fragment cross tabs and
 // what lets foreign text degrade into a note.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'

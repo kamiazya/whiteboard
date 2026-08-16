@@ -2,7 +2,7 @@
 // node count survive the remint+offset pipeline regardless of which offset
 // mode fires. Mutation-checked by temporarily breaking the offset/remint
 // rule in commands.ts and confirming this goes red (recorded in the commit).
-import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'

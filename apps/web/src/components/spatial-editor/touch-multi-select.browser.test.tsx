@@ -9,7 +9,7 @@
 // A second finger otherwise means pinch, so the two are told apart by STATE,
 // not by timing: only while the first finger holds a node does a second-finger
 // tap gather instead of zoom.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

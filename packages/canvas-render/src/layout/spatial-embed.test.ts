@@ -2,7 +2,7 @@
 // miniature inside the node's content area, gated by the caller's
 // expansion policy, with the depth cap and path-local cycle handling this
 // package's embed contract already promises.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type {
   EmbedResolvedNode,

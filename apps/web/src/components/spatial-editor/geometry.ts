@@ -5,7 +5,7 @@
  * selection and rendering can never disagree about where a node is. See
  * `scene-render.test.ts`'s drift guard.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
 export interface Box {

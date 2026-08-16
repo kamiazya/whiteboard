@@ -1,8 +1,4 @@
-import {
-  readDocumentKind,
-  writeDocumentKind,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+import { readDocumentKind, writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,

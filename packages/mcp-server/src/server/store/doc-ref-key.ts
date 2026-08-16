@@ -1,4 +1,4 @@
-import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
+import type { DocRef } from '@kamiazya/whiteboard-ports'
 
 /**
  * Canonical map key for a DocRef. Encodes `kind` into the key so a

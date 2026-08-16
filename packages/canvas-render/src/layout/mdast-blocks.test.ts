@@ -1,4 +1,4 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
@@ -714,7 +714,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
   const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
   const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
   const D = '01BX5ZZKBKACTAV9WEVGEMMVS1'
-  type Flow = import('@kamiazya/whiteboard-canvas-model/mdast').MdastFlowContent
+  type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
   const para = (text: string): Flow => ({
     type: 'paragraph',
     children: [{ type: 'text', value: text }],

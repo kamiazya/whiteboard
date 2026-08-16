@@ -2,7 +2,7 @@
 // palette's canvas picker, followed via double press or the context menu,
 // retargeted via "Change target". The reference string is opaque to the
 // editor — the host page owns its meaning.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

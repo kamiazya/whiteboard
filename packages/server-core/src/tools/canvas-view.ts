@@ -2,8 +2,8 @@ import {
   documentIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-model'
+import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import { resolveFileReferences } from '../render/resolve-file-references.js'

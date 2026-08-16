@@ -1,4 +1,4 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'

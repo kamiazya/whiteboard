@@ -15,7 +15,7 @@
  * injected-id-minting discipline the callers rely on for deterministic
  * tests.
  */
-import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Box } from './geometry.js'
 import { findFreeSpot } from './geometry.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'

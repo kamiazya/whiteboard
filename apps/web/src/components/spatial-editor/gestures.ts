@@ -12,7 +12,7 @@
  *    coordinates) — a deliberate last-writer-wins simplification left for
  *    the CRDT slice to refine.
  *
- * Note: `SpatialCanvas` (canvas-model) carries no document-level identity
+ * Note: `SpatialCanvas` (model) carries no document-level identity
  * field, so "the same document, different content" and "an unrelated
  * document" are indistinguishable here — both are handled by the same
  * per-node existence/type check above.
@@ -28,7 +28,7 @@
  * discard, and it discards the whole node when the node existed only to
  * hold that edit.
  */
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from './commands.js'
 import { type Box, type ResizeHandleKind, resizeBoxByDelta, scaleBoxWithin } from './geometry.js'
 import type { Point } from './viewport.js'

@@ -1,7 +1,7 @@
 // The selection highlight follows the DRAWN line — including line-jump
 // hops. A highlight built from the raw waypoints cuts straight through
 // every hop the ink arcs over.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'

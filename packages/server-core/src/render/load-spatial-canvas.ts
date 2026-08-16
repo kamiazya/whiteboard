@@ -1,6 +1,6 @@
-import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
 

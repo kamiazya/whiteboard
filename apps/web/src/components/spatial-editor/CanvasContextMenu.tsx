@@ -1,16 +1,17 @@
 /** Right-click menu: node, edge, and empty-canvas actions. */
-import type {
-  CanvasColor,
-  ClipboardFragment,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-canvas-model'
+
 import type { SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  CanvasColor,
+  ClipboardFragment,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,

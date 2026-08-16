@@ -1,5 +1,5 @@
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { ContainerModule } from 'inversify'
 import { InMemoryBlobStore, InMemoryDocumentStore } from '../server/store/inmemory/index.js'
 

@@ -1,10 +1,10 @@
+import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-crdt'
 import {
   documentIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'

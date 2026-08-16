@@ -4,14 +4,15 @@
  * a thin composition of `layoutSpatialCanvas` + `sceneBounds` +
  * `renderSceneToSvg`, exactly as `CanvasViewer` does in canvas-viewer.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
   SPATIAL_THEME_GEOMETRY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { type RenderedCanvas, renderCanvasToSvgWith } from './scene-render-core.js'

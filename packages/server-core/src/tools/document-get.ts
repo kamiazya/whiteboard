@@ -1,10 +1,6 @@
-import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-canvas-codec'
-import {
-  documentIdSchema,
-  documentKindSchema,
-  workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
+import { readDocumentKind } from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, documentKindSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'

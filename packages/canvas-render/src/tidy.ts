@@ -273,7 +273,7 @@ export function tidyNodes(
       if (node === undefined) continue
       const x = Math.round(node.x + unit.dx)
       const y = Math.round(node.y + unit.dy)
-      // Defensive twin of the canvas-workspace write guard: tidy must
+      // Defensive twin of the workspace write guard: tidy must
       // never emit a position the doc layer would refuse.
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue
       if (x === node.x && y === node.y) continue

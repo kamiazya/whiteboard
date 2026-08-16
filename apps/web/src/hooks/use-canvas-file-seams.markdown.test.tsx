@@ -7,7 +7,7 @@
  * because canvas-render calls the seam during layout — on every re-layout,
  * for every file node.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { type CanvasFileAdapter, useCanvasFileSeams } from './use-canvas-file-seams.js'

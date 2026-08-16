@@ -12,7 +12,7 @@
 // point: `routeEdge` drops both endpoint nodes from its obstacle list, so a
 // route through its own target's body is invisible to the search that picks
 // it, and only the side-choice penalties upstream ever priced it.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { clusteredLayout, ROUTING_CORPUS, syntheticLayouts } from '../test-utils/routing-corpus.js'
 import {

@@ -4,7 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
+import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import {

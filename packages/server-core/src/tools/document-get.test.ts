@@ -1,4 +1,4 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'

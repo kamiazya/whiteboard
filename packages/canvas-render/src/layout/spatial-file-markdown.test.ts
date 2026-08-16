@@ -3,8 +3,8 @@
 // spatial-embed.test.ts. Ranked between that seam and the facet card: a
 // document's own prose says more than its facets, and less than a spatial
 // canvas or an image the caller already resolved.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { EmbedResolvedNode, ImageSceneNode, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

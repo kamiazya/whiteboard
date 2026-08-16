@@ -1,4 +1,4 @@
-import { documentPathSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentPathSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {

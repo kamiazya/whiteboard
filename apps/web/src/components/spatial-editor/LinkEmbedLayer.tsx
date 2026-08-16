@@ -16,7 +16,7 @@
  * auto-degrade; the "open in new tab" affordance next to the collapse
  * control is the escape hatch when a site refuses to render.
  */
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { ExternalLink, Play, X } from 'lucide-react'
 import { useState } from 'react'
 import { isFollowableUrl } from './followable-url.js'

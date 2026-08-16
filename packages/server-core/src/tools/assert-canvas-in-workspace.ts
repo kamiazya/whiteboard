@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
-import type { DocumentIndex } from '@kamiazya/whiteboard-canvas-ports'
+import type { WorkspaceId } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 
 /**

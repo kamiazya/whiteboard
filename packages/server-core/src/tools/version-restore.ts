@@ -1,5 +1,5 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

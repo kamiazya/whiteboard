@@ -3,8 +3,9 @@
 // hand-restated values that drift when the theme changes. (The wrapping
 // engines still differ — CSS vs the injected measurer — a documented
 // ceiling, not pinned here.)
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import { BODY_FONT_SIZE_PX, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

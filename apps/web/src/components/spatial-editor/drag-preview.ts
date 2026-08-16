@@ -14,7 +14,7 @@
  * package-canvas-render.md's "scene graph stays plain TS" decision) — so per
  * YAGNI + zod-schema-discipline this type deliberately carries no Zod schema.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import {
   assignEdgeAnchors,
   type EdgeSides,
@@ -22,6 +22,7 @@ import {
   flattenDrawnEdgePath,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Box, NodeBox } from './geometry.js'
 import { hitTest, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'

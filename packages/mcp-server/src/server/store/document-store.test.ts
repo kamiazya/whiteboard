@@ -121,7 +121,7 @@ describe('saveDocument / loadDocument', () => {
   // outside the canvas value.
   it('round-trips node and edge locks, which live outside the canvas value', async () => {
     const { setEdgeLock, setNodeLock, readEdgeLocks, readNodeLocks, writeSpatialCanvas } =
-      await import('@kamiazya/whiteboard-canvas-workspace')
+      await import('@kamiazya/whiteboard-crdt')
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [

@@ -6,16 +6,12 @@
  * OpenCanvas-shaped surface this session now owns.
  */
 
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import {
-  readSpatialCanvas,
-  setNodeLock,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas, setNodeLock, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
@@ -919,7 +915,7 @@ describe('createCanvasSyncSession', () => {
   })
 
   // Batch commands (editor-completeness slice 1): one user action of N leaf
-  // commands = ONE Loro commit via canvas-workspace's withSpatialBatch, so
+  // commands = ONE Loro commit via crdt's withSpatialBatch, so
   // one session.undo() reverts the whole action.
   describe('batch commands', () => {
     it('a batch of create+connect+delete lands as ONE update payload and ONE undo step', async () => {

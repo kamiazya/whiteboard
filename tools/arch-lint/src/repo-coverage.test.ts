@@ -10,11 +10,11 @@ import { scanSourceForBoundaryViolations } from './scanner.js'
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
 const SHARED_LAYER_PACKAGES = [
-  'packages/canvas-model',
-  'packages/canvas-codec',
+  'packages/model',
+  'packages/codec',
   'packages/canvas-render',
-  'packages/canvas-ports',
-  'packages/canvas-workspace',
+  'packages/ports',
+  'packages/crdt',
   'packages/server-core',
   // Browser-runtime UI package, not a "shared" model/codec/... layer package
   // in the architecture-map.md sense, but scanned the same way — see its
@@ -154,8 +154,8 @@ describe('architecture-map.md doc sync', () => {
     expect(missing).toHaveLength(0)
   })
 
-  it('no longer contains the stale "currently covers canvas-model and canvas-codec" claim', () => {
-    expect(doc).not.toContain('It currently covers `canvas-model` and `canvas-codec`')
+  it('no longer contains the stale "currently covers model and codec" claim', () => {
+    expect(doc).not.toContain('It currently covers `model` and `codec`')
   })
 
   // The rule file answers "is this checked?", and for a composition root the

@@ -1,7 +1,7 @@
 // Z-order manipulation: [ / ] / Shift+[ / Shift+] via the shortcut catalog
 // (shortcuts.ts), and the context menu's Order row as the touch path.
 // Array order IS z-order — assertions read the canvas node order directly.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

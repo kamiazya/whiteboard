@@ -1,5 +1,5 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import '../index.css'

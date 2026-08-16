@@ -1,5 +1,5 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -23,7 +23,7 @@ const appearance: SpatialAppearanceResolver = {
  * A tiny fake mdast parser mirroring the one in spatial-canvas.test.ts:
  * `'__THROW__'` simulates a markdown construct outside the caller's
  * accepted subset, exercising `layoutSpatialCanvas`'s own body-parse
- * degradation path rather than canvas-codec's real parser (a
+ * degradation path rather than codec's real parser (a
  * cross-package dependency this package must not take).
  */
 function fakeParseBody(text: string): MdastRoot {

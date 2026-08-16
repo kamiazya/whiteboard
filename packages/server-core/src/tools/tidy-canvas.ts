@@ -1,11 +1,11 @@
+import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-crdt'
 import {
   documentIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
-import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'

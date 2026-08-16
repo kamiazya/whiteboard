@@ -26,9 +26,10 @@
 // `CanvasViewer` and `mountCanvasViewer`, whose module graphs touch
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
+
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import {
   composeReferenceSeam,

@@ -3,7 +3,7 @@
 // route. Fired on click, not pointerdown — opening the editor inside a
 // discrete pointerdown loses the focus fight with mousedown's default
 // action (see SelectionOverlay's onEditRequest doc).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

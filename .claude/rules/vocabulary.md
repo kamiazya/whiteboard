@@ -58,7 +58,7 @@ Bounds, so this does not turn every change into a rename PR:
   obscure your actual change, leave it and say so rather than doing it badly.
 
 Backward compatibility is not a consideration, and not only for internal
-names. Every `@kamiazya/whiteboard-canvas-*` package is **private**; only
+names. Every workspace package except one is **private**; only
 `@kamiazya/whiteboard-mcp` publishes, and it is `0.0.x` with no users. A
 deprecation alias buys nobody anything and doubles the surface that has to be
 read.
@@ -93,13 +93,18 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   `document-store.ts` and `file-gc-sweeper.ts` both hardcode. Left because
   moving it means walking every workspace's blob tree at boot — a
   migration-bearing increment, not a rename.
-- The `@kamiazya/whiteboard-canvas-{model,codec,ports,workspace}` package
-  names — all four `private`, so nothing outside the repo breaks; `render`
-  and `viewer` are arguably correct (they are about the spatial scene) and
-  stay. What makes this one bigger than its refs suggest is everything that
-  names a package by string: tsconfig paths, the vitest project list,
-  `tools/arch-lint`'s `architecture-map.ts`, `.claude/rules/package-*.md`,
-  and `architecture-map.md`'s own table.
+
+The four mis-prefixed package names are DONE: `@kamiazya/whiteboard-{model,
+codec,ports,crdt}`, with directories and vitest projects following. `render`
+and `viewer` keep `canvas-` because they ARE about the spatial scene.
+
+The fourth is worth knowing, because the obvious name was the wrong one:
+dropping the prefix from `canvas-workspace` gives `workspace`, which is a
+domain noun this rule defines as the tree that holds documents — and that
+package explicitly knows nothing about placement. Its own comments came out
+reading `workspace's withSpatialBatch`, indistinguishable from the dozens of
+correct uses of the domain word around them. `crdt` names what it is (the
+merge-aware LoroDoc bridge) and collides with nothing.
 
 `slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
 is what keeps it retired — the one part of this rule that could stop being

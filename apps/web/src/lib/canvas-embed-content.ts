@@ -8,13 +8,10 @@
  * `undefined` and the editor keeps the card — a broken reference must never
  * take down the page.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import {
-  readCoreFacets,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+
+import { readCoreFacets, readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter, LoadedFileDocument } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'

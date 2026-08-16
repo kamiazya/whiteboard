@@ -11,7 +11,7 @@
  * cross-canvas paste resolves them as-is. Inline `files` assets are the
  * OS-clipboard slice's concern.
  */
-import type { ClipboardFragment } from '@kamiazya/whiteboard-canvas-model'
+import type { ClipboardFragment } from '@kamiazya/whiteboard-model'
 
 let current: ClipboardFragment | null = null
 

@@ -7,8 +7,8 @@
 // separate file loader took an explicit dataDir; tying both ends to the
 // same canonical path closes that mismatch.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'

@@ -11,7 +11,7 @@
  *
  * `applyCommand` is total: a command whose target id is missing, or whose
  * kind does not apply to the target node's type, returns the INPUT canvas
- * unchanged rather than throwing. `create-node` carries a full canvas-model
+ * unchanged rather than throwing. `create-node` carries a full model
  * `SpatialNode` (rather than a flattened x/y/w/h/text tuple) so a later node
  * kind needs no command-shape change; a colliding id is likewise a no-op.
  * `delete-node` cascades: it also removes every edge whose `fromNode`/
@@ -26,7 +26,7 @@ import type {
   LineJumps,
   SpatialCanvas,
   SpatialNode,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import type { Point } from './viewport.js'
 
@@ -245,7 +245,7 @@ function createNode(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
 /**
  * Removes the node with `id` plus every edge that references it as
  * `fromNode`/`toNode` — the command-layer half of the edge-referential-
- * integrity invariant `deleteSpatialNode` (canvas-workspace) also enforces
+ * integrity invariant `deleteSpatialNode` (workspace) also enforces
  * on the Loro side. A no-op (returns the input) when `id` is missing.
  */
 function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {

@@ -1,4 +1,3 @@
-import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import {
   readDocumentKind,
   readFacets,
@@ -6,7 +5,8 @@ import {
   readSpatialCanvas,
   writeDocumentKind,
   writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-crdt'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {

@@ -58,12 +58,6 @@
  * diagram that needs a shape uses an image node.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type {
-  ClipboardFragment,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-canvas-model'
 import type {
   EdgeSides,
   MeasureText,
@@ -84,6 +78,8 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   forwardRef,
   type ReactNode,

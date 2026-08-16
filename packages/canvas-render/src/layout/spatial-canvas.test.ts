@@ -1,5 +1,5 @@
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it, vi } from 'vitest'
 import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
@@ -40,7 +40,7 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
 
 // A tiny fake mdast parser: '#'-prefixed text becomes a heading, everything
 // else becomes a single paragraph — enough to exercise layoutMdastBlocks
-// without depending on canvas-codec (a cross-package dependency this
+// without depending on codec (a cross-package dependency this
 // package must not take). `__THROW__` simulates a construct outside the
 // caller's accepted subset.
 function fakeParseBody(text: string): MdastRoot {

@@ -1,5 +1,5 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'

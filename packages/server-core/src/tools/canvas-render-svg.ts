@@ -1,5 +1,5 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'

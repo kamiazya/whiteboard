@@ -24,13 +24,13 @@
  * Dates that a JSON round trip would quietly drop.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type {
   BoundingBox,
   EdgeAnchorPair,
   ResolvedReference,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */

@@ -3,11 +3,7 @@
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
  * (J5b) silently did nothing there while working in browser-local mode.
  */
-import {
-  writeCoreFacets,
-  writeDocumentKind,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+import { writeCoreFacets, writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDaemonFileAdapter } from './daemon-file-adapter.js'

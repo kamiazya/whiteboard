@@ -12,11 +12,11 @@
  * canvas-viewer's font.ts already documents having shipped once.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   createBrowserMeasureText,
   ensureViewerFontLoaded,
 } from '@kamiazya/whiteboard-canvas-viewer'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'

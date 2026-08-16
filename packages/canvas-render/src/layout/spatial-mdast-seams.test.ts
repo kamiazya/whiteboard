@@ -6,8 +6,8 @@
 // mermaid fences in the markdown editor and rendered them as placeholders
 // the moment it was laid out inside a canvas node — one engine, two
 // answers, depending on which surface called it.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode, SvgFragmentNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

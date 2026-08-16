@@ -7,7 +7,7 @@
 // list — was strictly better on every tier. Neither number was visible to a
 // search that never aligns, so the fix is the second, fully-aligned run
 // `assignEdgeAnchors` makes over the settled configuration.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { pathLength } from '../test-utils/routing-metrics.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'

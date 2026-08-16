@@ -1,4 +1,4 @@
-import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
+import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { InMemoryDocumentStore } from './in-memory-document-store.js'
 

@@ -1,9 +1,5 @@
-import {
-  documentIdSchema,
-  nodeIdSchema,
-  workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { setNodeLock } from '@kamiazya/whiteboard-canvas-workspace'
+import { setNodeLock } from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
@@ -16,7 +12,7 @@ import { NodeNotFoundError } from './errors.js'
  * the keyboard to undo an agent's own mistake.
  *
  * The lock itself is editor state, not canvas content — it lives in the
- * doc's sidecar map (see canvas-workspace's `setNodeLock`), so it is
+ * doc's sidecar map (see crdt's `setNodeLock`), so it is
  * durable and syncs to peers, yet never appears in an export, a render,
  * or a JSON Canvas file.
  */

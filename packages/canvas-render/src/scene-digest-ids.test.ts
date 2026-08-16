@@ -3,8 +3,8 @@
 // the entries by array position gave it names that mean nothing outside the
 // digest and that shift whenever a node is added or removed — the reader
 // could see "these two overlap" and had no way to say which two.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from './layout/spatial-appearance.js'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'

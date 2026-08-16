@@ -14,14 +14,15 @@
  * the store cannot decode should degrade to "empty, editable, next save
  * overwrites" rather than a dead page.
  */
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
+
 import {
   MARKDOWN_BODY_KEY,
   readCoreFacets,
   readMarkdownBody,
   writeCoreFacets,
   writeMarkdownBody,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-crdt'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'

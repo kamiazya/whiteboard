@@ -3,7 +3,7 @@
 // while the dominant-axis opposing pair needs a Z with two — and may share
 // a side other edges already occupy. The derivation now ranks side pairs
 // by estimated bends, breaking L-ties toward the less crowded side.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

@@ -3,7 +3,7 @@
 // the promise held only when midpoints happened to align (offset stacked
 // nodes got a Z in orthogonal, a diagonal in straight, where a clean
 // vertical exists).
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

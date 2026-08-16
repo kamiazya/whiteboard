@@ -4,7 +4,7 @@
 // keeps its long-standing behaviour (viewport centre), while dragging one
 // onto the canvas places it where it is dropped — the viewport never moves,
 // so nothing has to pan to show what was just made.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

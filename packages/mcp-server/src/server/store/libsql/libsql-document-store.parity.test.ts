@@ -10,7 +10,7 @@ import type {
   ReadFrontierResult,
   SnapshotChunk,
   SnapshotManifest,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import { describe, expect } from 'vitest'
 import { fc, fcTest } from '../../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../db/test-helpers.js'

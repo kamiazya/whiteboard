@@ -3,7 +3,7 @@
 // border-tracing (edge-border-trace.test.ts) pins the complementary
 // outline-riding invariant on this same canvas; this file pins interior
 // ink, which border-tracing's collinear-ON-the-border check cannot see.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

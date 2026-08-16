@@ -1,7 +1,7 @@
-import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
-import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
+import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
+import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-codec'
+import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -12,7 +12,7 @@ import type { ServerDeps } from '../server-deps.js'
  * targets only the FIRST text node found (or an empty body when none
  * exists) — a real "canvas -> OKF" mapping for a full multi-node spatial
  * canvas is deferred to a future slice once the OKF-vs-spatial duality is
- * resolved in canvas-workspace.
+ * resolved in workspace.
  *
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with the workspace-scoped tools and as a
@@ -31,7 +31,7 @@ export type ExportOkfOutput = z.infer<typeof exportOkfOutputSchema>
 /**
  * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has
  * no notion of an OKF core-facet `type` of its own — the two formats are
- * deliberately distinct document shapes (package-canvas-codec.md). `canvas`
+ * deliberately distinct document shapes (package-codec.md). `canvas`
  * is the fallback value used ONLY when no core meta was ever persisted for
  * this doc (every canvas created before this bridge existed, or a
  * spatial-only canvas that never went through `wb_document_set`). Once a

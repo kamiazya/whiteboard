@@ -1,4 +1,3 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
@@ -20,6 +19,7 @@ import {
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 // Re-exported so existing callers keep one import site; the implementation
 // lives in its own module so a SharedWorker can use it without this file's

@@ -4,7 +4,7 @@
  * editor arms its own timer on a single stationary touch. Real browser:
  * the behavior hangs off genuine pointer-event dispatch and hit geometry.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

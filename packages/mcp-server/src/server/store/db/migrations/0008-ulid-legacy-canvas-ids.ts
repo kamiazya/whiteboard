@@ -1,6 +1,6 @@
 import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
-import { generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { Kysely } from 'kysely'
 import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'

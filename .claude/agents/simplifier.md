@@ -40,7 +40,7 @@ Before writing anything, check whether it already exists here — the shared lay
 factored, and re-implementing what lives a few files over is the most common slop in this codebase:
 
 - A scene/layout/measure helper → `canvas-render` almost certainly has it.
-- A parse/serialize path → `canvas-codec`. A schema → `canvas-model`, as `z.infer`, never a
+- A parse/serialize path → `codec`. A schema → `model`, as `z.infer`, never a
   hand-written interface beside it.
 - A logger → `getLogger`, never `console.*` in server code.
 

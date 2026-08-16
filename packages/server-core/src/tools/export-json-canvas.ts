@@ -1,5 +1,5 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'

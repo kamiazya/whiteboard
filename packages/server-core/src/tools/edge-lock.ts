@@ -1,9 +1,5 @@
-import {
-  documentIdSchema,
-  nodeIdSchema,
-  workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { setEdgeLock } from '@kamiazya/whiteboard-canvas-workspace'
+import { setEdgeLock } from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
@@ -24,7 +20,7 @@ export const edgeLockInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    // canvas-model has no distinct edgeIdSchema — see edge-patch.ts for why
+    // model has no distinct edgeIdSchema — see edge-patch.ts for why
     // reusing nodeIdSchema here is deliberate.
     edgeId: nodeIdSchema,
     locked: z.boolean(),

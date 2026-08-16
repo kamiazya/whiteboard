@@ -1,4 +1,4 @@
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 
 export interface DocumentHeaderProps {
   /**

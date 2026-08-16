@@ -1,4 +1,3 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
   readEdgeLocks,
@@ -11,9 +10,10 @@ import {
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-crdt'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
@@ -139,7 +139,7 @@ export interface CanvasSyncSession {
   // since pushes happen on COMMIT, after the canvas publish that triggered
   // the consumer's last render.
   subscribeHistory(listener: () => void): () => void
-  // Node lock lives in the doc's sidecar map (canvas-workspace's
+  // Node lock lives in the doc's sidecar map (crdt's
   // readNodeLocks/setNodeLock): durable and peer-synced, yet never part of
   // the canvas value, so it never reaches an export.
   getNodeLocks(): ReadonlySet<string>
@@ -161,7 +161,7 @@ export interface CanvasSyncSession {
 
 /**
  * Writes exactly the node/edge the command targets into its own LoroMap
- * entry (via canvas-workspace's `writeSpatialNode`/`writeSpatialEdge`, the
+ * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
  * same field-projection `writeSpatialCanvas` uses), and returns whether it
  * could — false when the command's target id is missing from `next` (see
  * commitToDoc's fallback rule). This is what preserves the node-level CRDT

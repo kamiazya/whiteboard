@@ -74,7 +74,7 @@ describe('SourcePane markdown highlighting (real browser)', () => {
     expect(getComputedStyle(marker).color).not.toBe(getComputedStyle(heading).color)
   })
 
-  // The preview pane parses through canvas-codec's pipeline
+  // The preview pane parses through codec's pipeline
   // (remark-gfm + remark-math), so a source pane on plain CommonMark
   // silently disagrees with it: GFM constructs render in the preview while
   // staying unrecognized — and therefore unstyled — in the source.

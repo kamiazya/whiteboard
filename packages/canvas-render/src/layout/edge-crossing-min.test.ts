@@ -3,7 +3,7 @@
 // routed configuration and adopts a strictly better one — so a crossing
 // that exists only because two edges guessed conflicting sides gets
 // routed away entirely, not merely jumped.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

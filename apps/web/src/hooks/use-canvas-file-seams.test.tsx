@@ -5,7 +5,7 @@
  * same-instance guard, URL revocation) are subtle enough that a second
  * hand-written copy is exactly what should not happen.
  */
-import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type CanvasFileAdapter, toFacetCard, useCanvasFileSeams } from './use-canvas-file-seams.js'

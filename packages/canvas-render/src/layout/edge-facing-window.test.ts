@@ -4,7 +4,7 @@
 // realize the promised straight segment — the anchors land outside the
 // sliver and the route degrades to a shallow near-horizontal diagonal —
 // so they must take the one-bend L through the perpendicular sides instead.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

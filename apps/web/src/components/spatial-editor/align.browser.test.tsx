@@ -2,7 +2,7 @@
 // align.test.ts; this pins the wiring: which selections get the affordance,
 // that one action is one undo step, and that a locked node is never moved
 // by it.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

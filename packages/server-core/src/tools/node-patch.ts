@@ -1,3 +1,4 @@
+import { readNodeLocks } from '@kamiazya/whiteboard-crdt'
 import {
   canvasColorSchema,
   documentIdSchema,
@@ -5,8 +6,7 @@ import {
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'

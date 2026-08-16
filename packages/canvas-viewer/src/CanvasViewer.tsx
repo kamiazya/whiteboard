@@ -1,5 +1,3 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
@@ -7,6 +5,8 @@ import {
   renderSceneToSvg,
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'

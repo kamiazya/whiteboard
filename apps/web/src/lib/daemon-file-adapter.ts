@@ -8,13 +8,10 @@
  * success either — an upload that failed returns undefined rather than a
  * reference to bytes the daemon never stored.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import {
-  readCoreFacets,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+
+import { readCoreFacets, readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'

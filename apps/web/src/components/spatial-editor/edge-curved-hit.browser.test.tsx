@@ -2,7 +2,7 @@
 // hit-test and highlight the raw waypoint polyline: tapping the visible curve
 // missed the edge, and the blue highlight ran square through corners the ink
 // never touches. Both must follow the geometry actually drawn.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'

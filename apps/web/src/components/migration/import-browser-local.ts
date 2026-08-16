@@ -1,4 +1,3 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   canvasApiUrl,
   createCanvasRequestSchema,
@@ -6,6 +5,7 @@ import {
   problemDetailsErrorSchema,
   updateCanvasResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 

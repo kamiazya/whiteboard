@@ -1,4 +1,4 @@
-import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
 import { encodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

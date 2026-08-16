@@ -3,7 +3,7 @@
  * of its own.
  *
  * Split out of scene-render.ts so the layout worker can import it: that module
- * supplies canvas-codec's `parseMarkdownBody` as the default, and a static
+ * supplies codec's `parseMarkdownBody` as the default, and a static
  * import of the codec drags remark and unified into whatever imports it —
  * a worker chunk that has no use for them, and (under the dev server) cannot
  * even evaluate them. This is NOT a second scene builder: scene-render.ts
@@ -11,8 +11,6 @@
  * of `layoutSpatialCanvas` + `sceneBounds` + `renderSceneToSvg`.
  */
 
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   BoundingBox,
   EdgeAnchorPair,
@@ -25,6 +23,8 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
 

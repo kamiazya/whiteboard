@@ -1,5 +1,4 @@
-import { parseOkf } from '@kamiazya/whiteboard-canvas-codec'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { parseOkf } from '@kamiazya/whiteboard-codec'
 import {
   readDocumentKind,
   readSpatialCanvas,
@@ -8,7 +7,8 @@ import {
   writeDocumentKind,
   writeFacets,
   writeMarkdownBody,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-crdt'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'

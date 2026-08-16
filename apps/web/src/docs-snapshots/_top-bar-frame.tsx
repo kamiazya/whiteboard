@@ -3,8 +3,8 @@
 // filling the rest of a fixed-size white card. Only the framing dimensions,
 // the canvas list, and the scene differ.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { CanvasViewer } from '@kamiazya/whiteboard-canvas-viewer'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import type { CanvasInfo } from '../components/workspace-top-bar/types.js'
 

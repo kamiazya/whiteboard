@@ -1,4 +1,4 @@
-import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -10,7 +10,7 @@ import type {
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import {
   compareDocumentPaths,
   DocumentHasDescendantsError,
@@ -18,7 +18,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'

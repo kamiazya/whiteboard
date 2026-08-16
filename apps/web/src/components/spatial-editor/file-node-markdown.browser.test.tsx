@@ -10,8 +10,8 @@
  * every unit test passed while it was broken.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DOCUMENT_NODE_HEIGHT, DOCUMENT_NODE_WIDTH } from './node-factories.js'

@@ -1,4 +1,4 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
 import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'

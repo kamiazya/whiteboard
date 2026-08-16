@@ -1,4 +1,4 @@
-import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-canvas-ports'
+import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 
 export interface ServerDeps {
   documentStore: DocumentStore

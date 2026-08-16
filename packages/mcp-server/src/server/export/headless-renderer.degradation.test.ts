@@ -3,15 +3,15 @@
 // `getLogger`, even though canvas-render itself has no logger to fall back
 // on. Only `parseMarkdownBody('__THROW__')` is mocked to throw; every other
 // input goes through the real parser, isolating this totality behavior from
-// having to find a markdown string that reliably falls outside canvas-codec's
+// having to find a markdown string that reliably falls outside codec's
 // own versioned mdast subset.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 
 import { captureLogsForTests } from '../log.js'
 
-vi.mock('@kamiazya/whiteboard-canvas-codec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@kamiazya/whiteboard-canvas-codec')>()
+vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@kamiazya/whiteboard-codec')>()
   return {
     ...actual,
     parseMarkdownBody: (body: string) => {

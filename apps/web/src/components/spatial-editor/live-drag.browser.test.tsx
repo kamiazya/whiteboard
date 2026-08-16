@@ -3,7 +3,7 @@
 // scene hides what the ghost layer is already drawing — no duplicate node
 // left behind at the start position. Real pointer input, assertions taken
 // MID-drag before any pointerup.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

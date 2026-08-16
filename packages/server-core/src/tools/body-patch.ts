@@ -4,7 +4,7 @@ import {
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
@@ -64,7 +64,7 @@ export type BodyPatchOutput = z.infer<typeof bodyPatchOutputSchema>
  * `text` and inserts `replacement`'s lines in their place. Out-of-range
  * indices are rejected by the caller before this runs — silently
  * clamping would partial-apply the patch without telling the caller,
- * which is the failure mode canvas-codec's own parsers reject rather
+ * which is the failure mode codec's own parsers reject rather
  * than degrade.
  */
 function spliceLines(text: string, range: BodyPatchRange): string {

@@ -13,7 +13,7 @@ import type {
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import { docRefKey } from '../doc-ref-key.js'
 import { cloneBytes } from './clone-bytes.js'
 
@@ -88,7 +88,7 @@ export class InMemoryDocumentStore implements DocumentStore {
   /**
    * `sinceFrontier` is intentionally ignored: comparing frontiers is a
    * loro-crdt runtime concern (frontiers are an opaque `Uint8Array` at the
-   * `canvas-ports` contract layer), not something this in-memory test
+   * `ports` contract layer), not something this in-memory test
    * double can do on its own. It always returns the full accumulated delta
    * log for the doc; a future libSQL-backed store that actually filters by
    * frontier remains behaviorally compatible with every caller of this

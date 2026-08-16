@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
@@ -88,7 +88,7 @@ interface DocumentSnapshotChunksTable {
 }
 
 // Append-only delta log. `frontier` is the batch's resulting frontier,
-// duplicated onto every update row of that batch since canvas-ports'
+// duplicated onto every update row of that batch since ports'
 // DeltaBatch carries one frontier per batch, not per update.
 interface DocumentDeltasTable {
   docKey: string

@@ -63,7 +63,7 @@ paths:
 
 ## Dependency rules
 
-- Runtime dependencies: `@kamiazya/whiteboard-canvas-model` (spatial nodes/
+- Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset) and `zod` (via `catalog:`), for
   `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
@@ -93,7 +93,7 @@ paths:
    a newline to `measure`, and clamps any non-finite `advanceWidth` to `0`
    (`clampAdvance`) before it reaches geometry.
 4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
-   internal/versioned shape consumed later by canvas-workspace's View-
+   internal/versioned shape consumed later by crdt's View-
    resolution layer. Root depth is `0`; a 4th nesting level is the cap
    hit (depth cap `3`). Cycle detection is PATH-LOCAL — a re-visit on the
    *current* recursion path is a placeholder, but the same doc reached
@@ -190,8 +190,8 @@ paths:
    (`layout/spatial-canvas.ts`), replacing two independently-grown builders
    in mcp-server and canvas-viewer. A markdown parser is an injection seam,
    the same class as `measure`/`renderMath`: this package never depends on
-   canvas-codec, so `parseBody: (text: string) => MdastRoot` is supplied by
-   the caller (both current consumers pass canvas-codec's
+   codec, so `parseBody: (text: string) => MdastRoot` is supplied by
+   the caller (both current consumers pass codec's
    `parseMarkdownBody`). Appearance is likewise injected via a
    `SpatialAppearanceResolver` (`layout/spatial-appearance.ts`) — a set of
    FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static

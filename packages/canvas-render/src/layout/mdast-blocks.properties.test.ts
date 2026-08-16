@@ -8,7 +8,7 @@
  * module without a property test while `spatial-canvas` and `edge-routing`
  * had one each.
  *
- * The generator is LOCAL rather than canvas-model's shared
+ * The generator is LOCAL rather than model's shared
  * `mdastRootArbitrary` for one reason: density. The shared generator's
  * leaves include html/image/math/wikiLink/embed, which do not become text
  * runs at all, and its text is `fc.string()`, which almost never contains
@@ -32,7 +32,7 @@ import type {
   MdastFlowContent,
   MdastPhrasingContent,
   MdastRoot,
-} from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect } from 'vitest'
 import type { Scene, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

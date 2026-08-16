@@ -10,7 +10,7 @@
  * belongs to the workspace (ADR-0009 decision 2), so it arrives as its own
  * prop and leaves through its own callback.
  */
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CanvasProperties } from './CanvasProperties.js'

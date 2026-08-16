@@ -25,12 +25,12 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
  */
 const SCAN_DIRS = [
   'apps/web/src',
-  'packages/canvas-codec/src',
-  'packages/canvas-model/src',
-  'packages/canvas-ports/src',
+  'packages/codec/src',
+  'packages/model/src',
+  'packages/ports/src',
   'packages/canvas-render/src',
   'packages/canvas-viewer/src',
-  'packages/canvas-workspace/src',
+  'packages/crdt/src',
   'packages/mcp-server/src',
   'packages/server-core/src',
 ]

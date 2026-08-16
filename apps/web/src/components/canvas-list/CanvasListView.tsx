@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { FileBox, FileText, Plus } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import {

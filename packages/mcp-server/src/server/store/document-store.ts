@@ -11,8 +11,8 @@
  */
 import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
-import { generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'

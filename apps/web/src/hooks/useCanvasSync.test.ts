@@ -10,13 +10,13 @@
  * derivation.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'

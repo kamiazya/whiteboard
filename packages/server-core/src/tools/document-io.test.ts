@@ -1,4 +1,4 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
@@ -35,8 +35,8 @@ describe('document-io', () => {
 
     // Seed the store directly (bypassing the tool under test).
     const { LoroDoc } = await import('loro-crdt')
-    const { writeSpatialCanvas } = await import('@kamiazya/whiteboard-canvas-workspace')
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-canvas-ports')
+    const { writeSpatialCanvas } = await import('@kamiazya/whiteboard-crdt')
+    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const seedDoc = new LoroDoc()
     writeSpatialCanvas(seedDoc, canvas)
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)

@@ -1,4 +1,4 @@
-import { documentIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'

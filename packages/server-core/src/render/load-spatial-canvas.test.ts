@@ -1,4 +1,4 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
+import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql-document-store.js'

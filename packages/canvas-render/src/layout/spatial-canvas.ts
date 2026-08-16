@@ -5,8 +5,8 @@
 // zod-schema-discipline no Zod schema is warranted.
 //
 // A markdown parser is an injected dependency, the same seam class as
-// `measure`/`renderMath`: this package never imports canvas-codec, so
-// `parseBody` is supplied by the caller (canvas-codec's
+// `measure`/`renderMath`: this package never imports codec, so
+// `parseBody` is supplied by the caller (codec's
 // `parseMarkdownBody` in both current consumers). Likewise `appearance` is
 // an injected `SpatialAppearanceResolver` (spatial-appearance.ts) — layout
 // never chooses a color.
@@ -24,8 +24,8 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
@@ -70,7 +70,7 @@ export type SpatialLayoutDegradation =
 
 /**
  * Presentation-shaped card content for a file node, mapped by the caller
- * from its own facet data (canvas-model's `coreFacetsSchema` and friends).
+ * from its own facet data (model's `coreFacetsSchema` and friends).
  * Deliberately NOT domain-shaped: this package renders "one bare heading
  * line, then labelled rows" and learns nothing about what a facet MEANS —
  * the semantic mapping (`title = facets.title ?? facets.type`, one row per

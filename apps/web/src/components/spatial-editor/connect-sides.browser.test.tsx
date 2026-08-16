@@ -1,7 +1,7 @@
 // Edge creation from every side, not only the right — reported as friction
 // after real use. Each handle starts the same connecting gesture; the edge's
 // path is routed from geometry at layout time, so no side is persisted.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

@@ -4,7 +4,7 @@
 // opaque and typographically match the rendered text (Roboto 16px, the
 // node's own fill and padding), so entering edit mode reads as "the text
 // became editable", not "a second box appeared over my text".
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

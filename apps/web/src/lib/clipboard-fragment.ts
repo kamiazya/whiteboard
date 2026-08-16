@@ -1,6 +1,6 @@
 /**
  * Pure clipboard-fragment helpers (editor-completeness slice 2). The
- * fragment format itself is canvas-model's `clipboardFragmentSchema`;
+ * fragment format itself is model's `clipboardFragmentSchema`;
  * these two functions are the only bridge between a live canvas and that
  * envelope:
  *
@@ -18,8 +18,8 @@ import type {
   ClipboardFragment,
   SpatialCanvas,
   SpatialNode,
-} from '@kamiazya/whiteboard-canvas-model'
-import { clipboardFragmentSchema } from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema } from '@kamiazya/whiteboard-model'
 
 /**
  * Our fragment parsed out of clipboard TEXT, or null for anything else —

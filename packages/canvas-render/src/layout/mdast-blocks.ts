@@ -4,7 +4,7 @@ import type {
   MdastListItem,
   MdastPhrasingContent,
   MdastRoot,
-} from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
 import type {

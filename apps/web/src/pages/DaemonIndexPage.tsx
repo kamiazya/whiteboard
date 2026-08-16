@@ -1,5 +1,5 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'

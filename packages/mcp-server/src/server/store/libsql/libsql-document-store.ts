@@ -12,7 +12,7 @@ import type {
   ReadFrontierResult,
   SaveSnapshotInput,
   SnapshotChunk,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import type { Kysely, Transaction } from 'kysely'
 import { getLogger } from '../../log.js'
 import type { DatabaseSchema } from '../db/schema.js'

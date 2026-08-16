@@ -1,4 +1,4 @@
-import { documentKindSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**

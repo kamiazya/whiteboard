@@ -1,9 +1,9 @@
-import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
+import { isImageRef } from '@kamiazya/whiteboard-model'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -664,7 +664,7 @@ export function DaemonCanvasPage({
           </div>
         ) : (
           // Spatial is the only view this slice supports; markdown-view
-          // persistence is deferred (canvas-workspace has no markdown-body
+          // persistence is deferred (workspace has no markdown-body
           // container to write to yet).
           <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
             {/* Keyed on canvas identity: the editor's pan/zoom, in-flight

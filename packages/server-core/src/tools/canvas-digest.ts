@@ -1,6 +1,6 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import type { SceneDigest } from '@kamiazya/whiteboard-canvas-render'
 import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'

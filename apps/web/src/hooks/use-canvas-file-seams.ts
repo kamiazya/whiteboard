@@ -14,10 +14,11 @@
  * layout seam: any load failure resolves to `undefined` and the editor keeps
  * the card — a broken reference never takes down a page.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+
 import type { FacetCardData, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { collectFileRefs } from '../lib/canvas-embed-content.js'

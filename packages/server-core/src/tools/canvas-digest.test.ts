@@ -1,5 +1,5 @@
 import { sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'

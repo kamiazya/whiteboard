@@ -25,7 +25,7 @@ import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
  *
  * Nothing here interprets the document. The replica merges opaque update bytes
  * and answers with opaque update bytes, which is why this file needs no
- * canvas-workspace and stays as light as the stream multiplexer it grew from.
+ * workspace and stays as light as the stream multiplexer it grew from.
  */
 /**
  * Loro is imported DYNAMICALLY, and that is load-bearing rather than a style

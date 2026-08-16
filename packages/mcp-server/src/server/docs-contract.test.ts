@@ -46,11 +46,11 @@ describe('docs/ contract', () => {
     // of requiring an exact directory-name match.
     const docMentionTokenForPackageDir: Record<string, string> = {
       'packages/mcp-server': 'mcp',
-      'packages/canvas-model': 'canvas-model',
-      'packages/canvas-ports': 'canvas-ports',
-      'packages/canvas-codec': 'canvas-codec',
+      'packages/model': 'model',
+      'packages/ports': 'ports',
+      'packages/codec': 'codec',
       'packages/canvas-render': 'canvas-render',
-      'packages/canvas-workspace': 'canvas-workspace',
+      'packages/crdt': 'workspace',
       'packages/server-core': 'server-core',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',

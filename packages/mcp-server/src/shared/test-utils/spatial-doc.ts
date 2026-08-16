@@ -1,7 +1,7 @@
 /**
  * Shared fixture for seeding a LoroDoc in the CURRENT nodes/edges spatial
  * model — the shape every production doc is actually written in (see
- * package-canvas-workspace.md's "LoroDoc spatial layout"). Mirrors
+ * package-crdt.md's "LoroDoc spatial layout"). Mirrors
  * apps/web/src/test-utils/browser-local-canvas.ts in spirit: build via the
  * real writeSpatialCanvas bridge rather than poking at LoroDoc internals, so
  * a fixture never drifts from what saveDocument actually persists.
@@ -11,9 +11,10 @@
  * collector — keep seeding it directly where a test's whole point is that
  * legacy shape.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { newImageRef } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 
 /** A doc holding the given nodes-model spatial canvas, saved through the real bridge. */

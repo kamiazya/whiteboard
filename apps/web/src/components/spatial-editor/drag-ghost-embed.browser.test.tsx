@@ -2,7 +2,7 @@
 // expanded canvas embed. Omitting the embed resolvers from the ghost's
 // one-shot render made an inline miniature drag as a plain card and snap
 // back to a miniature on drop.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'

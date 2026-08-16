@@ -1,12 +1,12 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { BlockList, isIP } from 'node:net'
-import { DOCUMENT_PATH_SEGMENT_PATTERN } from '@kamiazya/whiteboard-canvas-model'
+import { DOCUMENT_PATH_SEGMENT_PATTERN } from '@kamiazya/whiteboard-model'
 import {
   isExternalUrlPolicyError,
   validateBrowserExternalUrl,
 } from '../shared/external-url-policy.js'
 
-// The path-segment rule itself is imported from canvas-model so the shared
+// The path-segment rule itself is imported from model so the shared
 // layer and this validator cannot drift apart; what stays here is only how a
 // rejection is explained, which the schema's single message cannot do per
 // cause.

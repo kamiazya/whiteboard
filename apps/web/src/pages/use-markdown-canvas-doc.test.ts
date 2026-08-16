@@ -12,7 +12,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-crdt'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { type Loro, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'

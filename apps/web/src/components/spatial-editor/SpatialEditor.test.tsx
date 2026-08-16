@@ -4,7 +4,7 @@
  * for that) and for the `externalVersion`-driven local/external origin
  * distinction on a mid-gesture canvas prop swap.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

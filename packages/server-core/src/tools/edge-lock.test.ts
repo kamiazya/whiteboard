@@ -1,6 +1,6 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readEdgeLocks, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readEdgeLocks, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
@@ -120,7 +120,7 @@ describe('wb_edge_lock tool', () => {
     })
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(stored!.manifest, stored!.chunks))
-    const { readNodeLocks } = await import('@kamiazya/whiteboard-canvas-workspace')
+    const { readNodeLocks } = await import('@kamiazya/whiteboard-crdt')
     expect(readNodeLocks(doc)).toEqual(new Set())
   })
 })

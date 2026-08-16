@@ -1,4 +1,4 @@
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
 import { storeMemoryModule } from './store-memory.module.js'

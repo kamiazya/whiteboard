@@ -8,8 +8,9 @@
  * layout keeps its documented fallback) and is never re-attempted in a
  * retry storm.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
+
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { useCallback } from 'react'
 import { renderDiagramFragment, renderMathFragment } from '../lib/markdown-fragment-renderers.js'
 import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'

@@ -1,13 +1,13 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
+import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-crdt'
 import {
   documentIdSchema,
   documentPathSchema,
   type SpatialCanvas,
   type WorkspaceId,
-} from '@kamiazya/whiteboard-canvas-model'
-import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
-import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'

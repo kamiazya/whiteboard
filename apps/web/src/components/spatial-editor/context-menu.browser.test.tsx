@@ -2,8 +2,9 @@
 // right-click empty space to create "here". Real pointer input throughout —
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

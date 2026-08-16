@@ -1,5 +1,5 @@
-import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-canvas-ports'
-import { writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeDocumentKind } from '@kamiazya/whiteboard-crdt'
+import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

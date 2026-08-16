@@ -2,7 +2,7 @@ import type { EmbedPlaceholderNode, EmbedResolvedNode } from '../scene-graph.js'
 
 /**
  * Minimal, internal/versioned input seam for embed recursion. Consumed
- * later by canvas-workspace's View-resolution layer; this package treats it
+ * later by crdt's View-resolution layer; this package treats it
  * as an opaque lookup and extends it additively if a future slice needs
  * more fields.
  */

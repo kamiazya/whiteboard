@@ -22,8 +22,9 @@
  * Markdown is parsed in the WORKER along with layout (see the protocol's
  * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {

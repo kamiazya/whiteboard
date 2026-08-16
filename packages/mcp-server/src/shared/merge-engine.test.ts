@@ -1,4 +1,4 @@
-import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
+import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import type { PeerID } from 'loro-crdt'
 import { VersionVector } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'

@@ -4,7 +4,7 @@
 // start (single-node render, ~0.4ms) and travels via a per-frame CSS
 // transform; the committed full-canvas render stays untouched during the
 // drag, which is the property that keeps this smooth on large canvases.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

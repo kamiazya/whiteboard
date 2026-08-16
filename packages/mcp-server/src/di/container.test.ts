@@ -1,4 +1,4 @@
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
@@ -44,9 +44,9 @@ describe('resolveServerDeps', () => {
   })
 })
 
-describe('canvas-ports TOKENS identity', () => {
+describe('ports TOKENS identity', () => {
   it('is the same Symbol across separate imports (global registry)', async () => {
-    const reimported = await import('@kamiazya/whiteboard-canvas-ports')
+    const reimported = await import('@kamiazya/whiteboard-ports')
     expect(reimported.TOKENS.DocumentStore).toBe(TOKENS.DocumentStore)
     expect(typeof TOKENS.DocumentStore).toBe('symbol')
     expect(Symbol.for('whiteboard.ports.DocumentStore')).toBe(TOKENS.DocumentStore)

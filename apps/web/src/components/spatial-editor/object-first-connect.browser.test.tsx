@@ -2,7 +2,7 @@
 // nodes is click A, then click B — no drag, no keyboard, no handle hunting.
 // The tool is additive: Select stays the default and double-click creation
 // survives in every mode (S6 decisions, 2026-08-08).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

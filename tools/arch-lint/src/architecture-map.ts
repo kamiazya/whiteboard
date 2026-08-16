@@ -25,12 +25,12 @@ export interface PackageArchEntry {
 }
 
 export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
-  '@kamiazya/whiteboard-canvas-model': {
+  '@kamiazya/whiteboard-model': {
     allowedInternalDeps: [],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-codec': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+  '@kamiazya/whiteboard-codec': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [
       'zod',
       'unified',
@@ -42,37 +42,37 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     ],
   },
   '@kamiazya/whiteboard-canvas-render': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-ports': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+  '@kamiazya/whiteboard-ports': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-workspace': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model', '@kamiazya/whiteboard-canvas-ports'],
+  '@kamiazya/whiteboard-crdt': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-ports'],
     // loro-crdt: this package owns the LoroDoc<->model bridge (see
-    // .claude/rules/package-canvas-workspace.md), so it's the one shared-
+    // .claude/rules/package-crdt.md), so it's the one shared-
     // layer package (besides server-core, which re-exposes the bridge via
     // its Loro-backed store ports) allowed to import it directly.
     // zod: the bridge validates the persisted `core` LoroMap entries against
-    // canvas-model's storedCoreFacetsSchema field-by-field on read.
+    // model's storedCoreFacetsSchema field-by-field on read.
     allowedThirdParty: ['loro-crdt', 'zod'],
   },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-canvas-ports',
-      '@kamiazya/whiteboard-canvas-workspace',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-crdt',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
     ],
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
@@ -103,10 +103,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // Node entrypoints are not reachable from here.
   '@kamiazya/whiteboard-web': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-canvas-workspace',
+      '@kamiazya/whiteboard-crdt',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
     ],

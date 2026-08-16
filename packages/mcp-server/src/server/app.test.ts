@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { deleteSpatialNode } from '@kamiazya/whiteboard-canvas-workspace'
+import { deleteSpatialNode } from '@kamiazya/whiteboard-crdt'
 import {
   Client,
   LATEST_PROTOCOL_VERSION,
@@ -1084,7 +1084,7 @@ describe('createApp daemon mutation auth', () => {
   it('committed merge returns newElementIds/changedElementIds derived from the nodes model', async () => {
     const { saveDocument, loadDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
-    const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
+    const { writeSpatialNode } = await import('@kamiazya/whiteboard-crdt')
 
     const app = createApp(createRuntimeOptions())
 
@@ -1146,7 +1146,7 @@ describe('createApp daemon mutation auth', () => {
   it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
     const { saveDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
-    const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
+    const { writeSpatialNode } = await import('@kamiazya/whiteboard-crdt')
 
     const app = createApp(createRuntimeOptions())
 

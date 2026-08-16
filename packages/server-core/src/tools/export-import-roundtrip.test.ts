@@ -1,10 +1,6 @@
-import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import {
-  readFacets,
-  readMarkdownBody,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+import { parseSpatial } from '@kamiazya/whiteboard-codec'
+import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'

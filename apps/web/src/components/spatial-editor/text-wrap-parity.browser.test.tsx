@@ -6,8 +6,9 @@
 // CURRENT relationship for one canonical fixture; it does NOT unify them
 // (see text-edit-style-parity.browser.test.tsx's header, which names the
 // same divergence and defers pinning it to here).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import { BODY_FONT_SIZE_PX, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

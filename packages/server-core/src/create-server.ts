@@ -1,4 +1,4 @@
-import { DocumentPathTakenError } from '@kamiazya/whiteboard-canvas-ports'
+import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { CanvasNotFoundError as SnapshotNotFoundError } from './render/load-spatial-canvas.js'

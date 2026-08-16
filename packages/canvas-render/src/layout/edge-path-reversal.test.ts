@@ -3,7 +3,7 @@
 // the node even though no other tier (overlap, border-tracing,
 // endpoint-body-ink) prices it — the two retrograde segments are a few px
 // apart, never collinear, so nothing catches it before path-reversal.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import {
   assertQuantumSeparated,

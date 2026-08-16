@@ -1,5 +1,5 @@
-import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
@@ -31,7 +31,7 @@ export interface PreviewPaneProps {
 
 /**
  * Renders `value` through the SVG string produced by
- * `renderMarkdownPreviewSvg` (canvas-codec -> canvas-render). Injecting that
+ * `renderMarkdownPreviewSvg` (codec -> canvas-render). Injecting that
  * string via `dangerouslySetInnerHTML` carries the same soundness rationale
  * as `packages/canvas-viewer/src/CanvasViewer.tsx`: canvas-render's
  * serializer is the SOLE producer of this string and escapes text content

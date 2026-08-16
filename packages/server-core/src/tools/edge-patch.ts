@@ -1,3 +1,4 @@
+import { readEdgeLocks } from '@kamiazya/whiteboard-crdt'
 import {
   canvasColorSchema,
   canvasEdgeSchema,
@@ -5,8 +6,7 @@ import {
   nodeIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readEdgeLocks } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
@@ -31,7 +31,7 @@ export const edgePatchInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    // canvas-model has no distinct edgeIdSchema — edges and nodes share
+    // model has no distinct edgeIdSchema — edges and nodes share
     // the same nanoid-style id shape (`nodeIdSchema` only enforces
     // non-emptiness), so reusing it here is deliberate, not a copy-paste
     // mistake.

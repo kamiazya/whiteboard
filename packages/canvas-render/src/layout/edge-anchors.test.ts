@@ -3,7 +3,7 @@
 // (node, side) the renderer is free to spread them. Stacked ends at the
 // side midpoint made two edges with different colors/arrowheads read as
 // one line — the anchors now distribute deterministically along the side.
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'

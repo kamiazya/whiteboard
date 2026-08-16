@@ -3,7 +3,7 @@
 // miniature; smaller ones stay cards. The decision follows zoom — zooming
 // out far enough collapses the miniature back to a card (hysteresis keeps
 // the boundary from flickering).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

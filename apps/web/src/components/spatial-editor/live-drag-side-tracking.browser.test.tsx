@@ -3,7 +3,7 @@
 // where the drop will land instead of pointing out of the gesture-start
 // side long after the geometry stopped supporting it. Bystander edges stay
 // frozen for route stability; the drop still runs the full optimization.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

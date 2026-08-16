@@ -1,10 +1,10 @@
+import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-crdt'
 import {
   documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
@@ -13,7 +13,7 @@ import { DocumentKindMismatchError } from './errors.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
- * pattern (canvas-model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
+ * pattern (model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
  * never use this tool to set a core facet (`type`/`title`/`tags`/`view`) or
  * the raw `facets` root key itself — those don't match the pattern and are
  * rejected at parse time rather than needing a separate namespace guard.

@@ -1,9 +1,6 @@
-import { documentIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import {
-  DocumentHasDescendantsError,
-  DocumentPathTakenError,
-} from '@kamiazya/whiteboard-canvas-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
+import { DocumentHasDescendantsError, DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'

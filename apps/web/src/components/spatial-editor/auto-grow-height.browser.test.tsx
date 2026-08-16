@@ -4,7 +4,7 @@
 // their border and overlapped neighbours. Contract pinned here: committing
 // text GROWS the node to fit its laid-out content (grow-only — a roomy box
 // stays at its authored size, and manual enlargement is never fought).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

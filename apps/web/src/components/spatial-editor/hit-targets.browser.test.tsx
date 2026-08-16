@@ -4,7 +4,7 @@
 // inside the invisible hit shape — the exact press that used to fall
 // through to the canvas and start a marquee instead of the resize the
 // person aimed for.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

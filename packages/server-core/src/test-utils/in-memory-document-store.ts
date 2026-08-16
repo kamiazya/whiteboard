@@ -11,7 +11,7 @@ import type {
   ReadFrontierInput,
   ReadFrontierResult,
   SaveSnapshotInput,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 
 function docRefKey(docRef: DocRef): string {
   return docRef.kind === 'canvas'

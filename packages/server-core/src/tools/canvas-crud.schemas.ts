@@ -3,7 +3,7 @@ import {
   documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const createCanvasInputSchema = z

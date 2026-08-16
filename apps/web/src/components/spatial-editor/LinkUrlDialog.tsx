@@ -2,7 +2,7 @@
  * URL entry surface for link nodes — used both by the palette's Link entry
  * (create) and the context menu's "Edit URL" (rewrite).
  *
- * Validation delegates to the same rule the canvas-model schema enforces
+ * Validation delegates to the same rule the model schema enforces
  * (`z.url()`), so a URL this dialog accepts can never fail schema
  * validation downstream — one authority, no drift.
  *

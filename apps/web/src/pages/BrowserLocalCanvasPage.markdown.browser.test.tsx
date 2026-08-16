@@ -9,8 +9,8 @@
  * what jsdom cannot exercise.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
