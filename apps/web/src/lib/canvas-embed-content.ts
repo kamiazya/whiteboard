@@ -1,7 +1,7 @@
 /**
  * Content loading for inline canvas embeds (embed spec J5a-2), browser-local
  * flavor: a file node's reference is a browser-local canvas id, and the
- * editor's `resolveFileCanvas` seam is SYNCHRONOUS by contract — so the page
+ * editor's `resolveReference` seam is SYNCHRONOUS by contract — so the page
  * pre-fetches referenced canvases here and hands the editor a cache lookup.
  *
  * Totality mirrors the layout seam: any load/import failure resolves to

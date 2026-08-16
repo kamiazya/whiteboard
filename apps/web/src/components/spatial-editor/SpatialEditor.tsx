@@ -64,11 +64,10 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   EdgeSides,
-  FacetCardData,
   MeasureText,
+  ResolvedReference,
   SpatialPresetKey,
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -100,6 +99,7 @@ import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
 import { hapticTick } from '../../lib/haptics.js'
+import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -332,23 +332,21 @@ export interface SpatialEditorProps {
    */
   readonly paletteLeading?: ReactNode
   /**
-   * Referenced canvas CONTENT for inline embeds (embed spec J5a-2). Must
-   * be synchronous — hosts pre-fetch and cache; an unresolved reference
+   * Reference CONTENT — an embedded canvas (J5a-2), an image (J5b), a
+   * referenced markdown document's parsed body, a facet card. Must be
+   * synchronous: hosts pre-fetch and cache, and an unresolved reference
    * returns undefined and the card renders. Absent → embeds never expand.
+   *
+   * Content only. The readable LABEL comes from `fileRefOptions` and the
+   * dangling state from `missingFileRef`, both of which this component
+   * layers on top — they are plain data, so they can cross to the layout
+   * worker while this cannot, and keeping them apart is what lets a canvas
+   * with labelled references still lay out off the main thread.
+   *
+   * A markdown body arrives parsed rather than raw so layout never runs a
+   * markdown parse per file node per frame.
    */
-  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
-  /**
-   * A referenced MARKDOWN document's parsed body, rendered inline in the
-   * node. Same contract as the seams around it: synchronous, host-cached,
-   * undefined falls through to the facet card. Parsed rather than raw so
-   * layout never runs a markdown parse per file node per frame.
-   */
-  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
-  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
-  /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
-  readonly resolveFileImage?: (
-    file: string,
-  ) => { readonly href: string; readonly alt?: string } | undefined
+  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /**
    * Stores a picked/dropped/pasted image and returns the reference to put
    * in the created file node, or undefined on failure (nothing is
@@ -464,10 +462,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       missingFileRef,
       paletteLeading,
-      resolveFileCanvas,
-      resolveFileMarkdown,
-      resolveFileFacets,
-      resolveFileImage,
+      resolveReference,
       onAddImage,
       isImageFileRef,
     },
@@ -677,7 +672,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const EMBED_BUDGET = 8
     const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
     useEffect(() => {
-      if (resolveFileCanvas === undefined) return
+      if (resolveReference === undefined) return
       const zoom = viewport.zoom
       const candidates = canvas.nodes
         .filter((node): node is Extract<SpatialNode, { type: 'file' }> => node.type === 'file')
@@ -694,57 +689,59 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const unchanged =
         next.size === expandedFileIds.size && [...next].every((id) => expandedFileIds.has(id))
       if (!unchanged) setExpandedFileIds(next)
-    }, [canvas, viewport.zoom, resolveFileCanvas, expandedFileIds])
+    }, [canvas, viewport.zoom, resolveReference, expandedFileIds])
     const expandFileNode = useMemo(
       () =>
-        resolveFileCanvas === undefined
+        resolveReference === undefined
           ? undefined
           : (node: Extract<SpatialNode, { type: 'file' }>) => expandedFileIds.has(node.id),
-      [resolveFileCanvas, expandedFileIds],
+      [resolveReference, expandedFileIds],
     )
 
     // Opaque file references (browser-local canvas ids) become readable
     // card labels through the host-supplied options list.
-    const resolveFileLabel = useMemo(() => {
-      if (fileRefOptions === undefined) return undefined
-      const byFile = new Map(fileRefOptions.map((option) => [option.file, option.label]))
-      return (file: string) => byFile.get(file)
-    }, [fileRefOptions])
-    // ONE object for every render path below (committed scene, drag ghost,
-    // drag-static backdrop, resize preview). Four hand-listed copies is how a
-    // seam ends up wired into the committed render and missing from the drag
-    // overlay, which reads as content vanishing mid-gesture.
-    const fileSeamOptions = useMemo(
-      () => ({
-        resolveFileLabel,
-        resolveFileMissing: missingFileRef,
-        resolveFileCanvas,
-        resolveFileMarkdown,
-        expandFileNode,
-        resolveFileImage,
-        resolveFileFacets,
-      }),
-      [
-        resolveFileLabel,
-        missingFileRef,
-        resolveFileCanvas,
-        resolveFileMarkdown,
-        expandFileNode,
-        resolveFileImage,
-        resolveFileFacets,
-      ],
+    const fileRefLabelMap = useMemo(
+      () =>
+        fileRefOptions === undefined
+          ? undefined
+          : new Map(fileRefOptions.map((option) => [option.file, option.label])),
+      [fileRefOptions],
     )
-    // The plain-data twin of the resolveFileMissing seam, so the worker path
+    // The plain-data twin of the seam's `missing` field, so the worker path
     // (which cannot take a function) sees the same missing set the
     // synchronous and drag paths compute through the callback.
-    const missingFileRefs = useMemo(() => {
+    const missingRefSet = useMemo(() => {
       if (missingFileRef === undefined) return undefined
       const refs = new Set<string>()
       for (const node of canvas.nodes) {
         if (node.type === 'file' && missingFileRef(node.file)) refs.add(node.file)
       }
-      return refs.size === 0 ? undefined : [...refs]
+      return refs.size === 0 ? undefined : refs
     }, [canvas, missingFileRef])
+    const missingFileRefs = useMemo(
+      () => (missingRefSet === undefined ? undefined : [...missingRefSet]),
+      [missingRefSet],
+    )
+    // ONE object for every render path below (committed scene, drag ghost,
+    // drag-static backdrop, resize preview). Four hand-listed copies is how a
+    // seam ends up wired into the committed render and missing from the drag
+    // overlay, which reads as content vanishing mid-gesture.
+    //
+    // `resolveReferenceContent` rides along UNCOMPOSED so the worker gate can
+    // still tell content (which cannot be serialized) from label/missing
+    // (which already cross as data).
+    const fileSeamOptions = useMemo(
+      () => ({
+        resolveReference: composeReferenceSeam({
+          content: resolveReference,
+          labels: fileRefLabelMap,
+          missing: missingRefSet,
+        }),
+        resolveReferenceContent: resolveReference,
+        expandFileNode,
+      }),
+      [resolveReference, fileRefLabelMap, missingRefSet, expandFileNode],
+    )
     // The COMMITTED scene, laid out in a worker when it can be. The drag
     // layers below keep their own synchronous paths: a gesture already has a
     // fast route through carried-side caching, and a round trip per frame

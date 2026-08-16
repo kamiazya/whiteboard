@@ -1,6 +1,7 @@
 /**
- * The editor's four file seams — referenced-canvas embeds (J5a) and image
- * nodes (J5b) — with the backend factored out behind `CanvasFileAdapter`.
+ * The editor's file-reference seam — referenced-canvas embeds (J5a), image
+ * nodes (J5b), markdown bodies and facet cards — with the backend factored
+ * out behind `CanvasFileAdapter`.
  *
  * This exists because the logic was written inline in one page, so the other
  * page shipped without any of it: canvas embeds and image nodes worked in
@@ -8,15 +9,15 @@
  * rules here (staleness stamps, the same-instance guard, URL revocation) are
  * subtle enough that a second hand-written copy is the wrong answer.
  *
- * `resolveFileCanvas`/`resolveFileImage` are SYNCHRONOUS by the editor's
- * contract, so both are cache lookups over content this hook pre-fetches.
- * Totality mirrors the layout seam: any load failure resolves to `undefined`
- * and the editor keeps the card — a broken reference never takes down a page.
+ * `resolveReference` is SYNCHRONOUS by the editor's contract, so it is a
+ * cache lookup over content this hook pre-fetches. Totality mirrors the
+ * layout seam: any load failure resolves to `undefined` and the editor keeps
+ * the card — a broken reference never takes down a page.
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
-import type { FacetCardData } from '@kamiazya/whiteboard-canvas-render'
+import type { FacetCardData, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { collectFileRefs } from '../lib/canvas-embed-content.js'
@@ -68,10 +69,12 @@ export interface UseCanvasFileSeamsOptions {
 }
 
 export interface CanvasFileSeams {
-  resolveFileCanvas: (file: string) => SpatialCanvas | undefined
-  resolveFileMarkdown: (file: string) => MdastRoot | undefined
-  resolveFileFacets: (file: string) => FacetCardData | undefined
-  resolveFileImage: (file: string) => { href: string } | undefined
+  /**
+   * Everything this hook has loaded for one reference, in canvas-render's
+   * own record. The layout ranks the fields; this hook only says which of
+   * them it can answer.
+   */
+  resolveReference: (ref: string) => ResolvedReference | undefined
   onAddImage: (file: File) => Promise<string | undefined>
   isImageFileRef: (file: string) => boolean
 }
@@ -168,23 +171,24 @@ export function useCanvasFileSeams({
     }
   }, [canvas, imageUrls])
 
-  const resolveFileCanvas = useCallback(
-    (file: string) => {
-      const document = embedContent.get(file)
-      // A markdown document is not a canvas to embed, whichever way it was
-      // stored — and the two storage shapes differ, so a node-count test
-      // alone is not enough. Browser-local it reads back as a canvas with
-      // NO nodes; through the daemon it reads back as one holding a single
-      // text node (`okf-body`, which IS the body). Left to the canvas seam
-      // the first draws an empty frame and the second the same prose
-      // crushed to thumbnail size, both outranking the markdown seam and
-      // both showing strictly less. Having a body is what says "markdown
-      // document" independently of which side wrote it.
-      if (document?.body !== undefined) return undefined
-      const canvas = document?.canvas
+  /**
+   * A markdown document is not a canvas to embed, whichever way it was
+   * stored — and the two storage shapes differ, so a node-count test alone
+   * is not enough. Written through the container it reads back as a canvas
+   * with NO nodes; a document predating that reads back as one holding a
+   * single text node (`okf-body`, which IS the body). Offered as a canvas,
+   * the first draws an empty frame and the second the same prose crushed to
+   * thumbnail size — both outrank the markdown rank and both show strictly
+   * less. Having a body is what says "markdown document" independently of
+   * which side wrote it.
+   */
+  const embeddableCanvas = useCallback(
+    (document: LoadedFileDocument): SpatialCanvas | undefined => {
+      if (document.body !== undefined) return undefined
+      const canvas = document.canvas
       return canvas === undefined || canvas.nodes.length === 0 ? undefined : canvas
     },
-    [embedContent],
+    [],
   )
   // Parsed here rather than in the resolver, and memoized on the loaded
   // content rather than per call: canvas-render invokes the seam during
@@ -206,32 +210,31 @@ export function useCanvasFileSeams({
     return parsed
   }, [embedContent])
 
-  const resolveFileMarkdown = useCallback(
-    (file: string) => markdownBodies.get(file),
-    [markdownBodies],
-  )
-  const resolveFileFacets = useCallback(
-    (file: string) => toFacetCard(file, embedContent.get(file)?.facets),
-    [embedContent],
-  )
-  const resolveFileImage = useCallback(
-    (file: string) => {
-      const href = imageUrls.get(file)
-      return href === undefined ? undefined : { href }
+  const resolveReference = useCallback(
+    (ref: string): ResolvedReference | undefined => {
+      // Checked first and returned alone: an image reference is never loaded
+      // as a document, so there is nothing else to carry, and the layout
+      // ranks an image above everything anyway.
+      const href = imageUrls.get(ref)
+      if (href !== undefined) return { image: { href } }
+
+      const document = embedContent.get(ref)
+      if (document === undefined) return undefined
+      const canvas = embeddableCanvas(document)
+      const markdown = markdownBodies.get(ref)
+      const facets = toFacetCard(ref, document.facets)
+      return {
+        ...(canvas !== undefined ? { canvas } : {}),
+        ...(markdown !== undefined ? { markdown } : {}),
+        ...(facets !== undefined ? { facets } : {}),
+      }
     },
-    [imageUrls],
+    [embedContent, embeddableCanvas, imageUrls, markdownBodies],
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
 
-  return {
-    resolveFileCanvas,
-    resolveFileMarkdown,
-    resolveFileFacets,
-    resolveFileImage,
-    onAddImage,
-    isImageFileRef,
-  }
+  return { resolveReference, onAddImage, isImageFileRef }
 }
 
 /**

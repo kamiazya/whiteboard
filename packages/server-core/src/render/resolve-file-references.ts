@@ -5,24 +5,14 @@ import {
   type SpatialCanvas,
   type WorkspaceId,
 } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 
 const log = getLogger('resolve-file-references')
-
-/**
- * What one file reference resolved to, for the seams canvas-render takes.
- * Both halves are independent: a reference can have a readable name and no
- * markdown content (a spatial document), or content and no name.
- */
-export interface ResolvedFileReference {
-  readonly label?: string
-  readonly body?: MdastRoot
-}
 
 /** Every file reference in a canvas, deduplicated. */
 function fileRefs(canvas: SpatialCanvas): readonly string[] {
@@ -73,8 +63,12 @@ export async function resolveFileReferences(
   deps: ServerDeps,
   workspaceId: WorkspaceId,
   canvas: SpatialCanvas,
-): Promise<ReadonlyMap<string, ResolvedFileReference>> {
-  const resolved = new Map<string, ResolvedFileReference>()
+): Promise<ReadonlyMap<string, ResolvedReference>> {
+  // canvas-render's own record, not a parallel shape mapped at the seam:
+  // every field it carries is something this function can answer, and two
+  // near-identical types for one resolution is the drift class this repo
+  // keeps paying for.
+  const resolved = new Map<string, ResolvedReference>()
 
   await Promise.all(
     fileRefs(canvas).map(async (ref) => {
@@ -102,9 +96,9 @@ export async function resolveFileReferences(
         const body = readMarkdownBody(doc)
         resolved.set(ref, {
           ...(label !== undefined ? { label } : {}),
-          // An empty body has no blocks, so the seam degrades to the card on
-          // its own — no need to special-case it here.
-          body: parseMarkdownBody(body),
+          // An empty body has no blocks, so the layout degrades to the card
+          // on its own — no need to special-case it here.
+          markdown: parseMarkdownBody(body),
         })
       } catch (err) {
         log.warning('file reference did not resolve; rendering it as a plain card', {

@@ -16,8 +16,8 @@ import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   BoundingBox,
   EdgeAnchorPair,
-  FacetCardData,
   MeasureText,
+  ResolvedReference,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -33,15 +33,8 @@ export interface RenderCanvasCoreOptions {
   /** Required here; scene-render.ts is where the codec default is applied. */
   readonly parseBody: (text: string) => MdastRoot
   readonly theme?: ResolvedTheme
-  readonly resolveFileLabel?: (file: string) => string | undefined
-  readonly resolveFileMissing?: (file: string) => boolean
-  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
-  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
+  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
-  readonly resolveFileImage?: (
-    file: string,
-  ) => { readonly href: string; readonly alt?: string } | undefined
-  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
 }
 
 export interface RenderedCanvas {
@@ -65,13 +58,8 @@ export function renderCanvasToSvgWith(
     measure: options.measure,
     parseBody: options.parseBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
-    resolveFileLabel: options.resolveFileLabel,
-    resolveFileMissing: options.resolveFileMissing,
-    resolveFileCanvas: options.resolveFileCanvas,
-    resolveFileMarkdown: options.resolveFileMarkdown,
+    resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
-    resolveFileImage: options.resolveFileImage,
-    resolveFileFacets: options.resolveFileFacets,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })

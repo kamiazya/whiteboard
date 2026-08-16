@@ -59,7 +59,7 @@ describe('file-node inline embeds', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileCanvas: (file) => (file === 'child' ? childCanvas : undefined),
+        resolveReference: (ref) => (ref === 'child' ? { canvas: childCanvas } : undefined),
         expandFileNode: () => true,
       }),
     )
@@ -92,7 +92,7 @@ describe('file-node inline embeds', () => {
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
-      baseOptions({ resolveFileCanvas: () => tiny, expandFileNode: () => true }),
+      baseOptions({ resolveReference: () => ({ canvas: tiny }), expandFileNode: () => true }),
     )
     const shape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
     expect(shape?.bbox.w).toBe(40)
@@ -104,13 +104,16 @@ describe('file-node inline embeds', () => {
 
     const collapsed = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
-      baseOptions({ resolveFileCanvas: () => childCanvas, expandFileNode: () => false }),
+      baseOptions({
+        resolveReference: () => ({ canvas: childCanvas }),
+        expandFileNode: () => false,
+      }),
     )
     expect(embedOf(collapsed)).toBeUndefined()
 
     const unresolvable = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
-      baseOptions({ resolveFileCanvas: () => undefined, expandFileNode: () => true }),
+      baseOptions({ resolveReference: () => undefined, expandFileNode: () => true }),
     )
     expect(embedOf(unresolvable)).toBeUndefined()
   })
@@ -119,9 +122,14 @@ describe('file-node inline embeds', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileCanvas: (file) => (file === 'child' ? childCanvas : undefined),
+        resolveReference: (ref) =>
+          ref === 'child'
+            ? {
+                canvas: childCanvas,
+                facets: { title: 'Card', rows: [{ label: 'type', value: 'note' }] },
+              }
+            : undefined,
         expandFileNode: () => true,
-        resolveFileFacets: () => ({ title: 'Card', rows: [{ label: 'type', value: 'note' }] }),
       }),
     )
     expect(embedOf(scene)).toBeDefined()
@@ -147,7 +155,7 @@ describe('file-node inline embeds', () => {
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
-      baseOptions({ resolveFileCanvas: () => crossing, expandFileNode: () => true }),
+      baseOptions({ resolveReference: () => ({ canvas: crossing }), expandFileNode: () => true }),
     )
     const edges = (embedOf(scene)?.children ?? []).filter(
       (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
@@ -168,7 +176,8 @@ describe('file-node inline embeds', () => {
     const scene = layoutSpatialCanvas(
       a,
       baseOptions({
-        resolveFileCanvas: (file) => (file === 'a' ? a : file === 'b' ? b : undefined),
+        resolveReference: (ref) =>
+          ref === 'a' ? { canvas: a } : ref === 'b' ? { canvas: b } : undefined,
         expandFileNode: () => true,
       }),
     )
@@ -192,7 +201,13 @@ describe('file-node inline embeds', () => {
     canvases.c6 = { nodes: [], edges: [] }
     const scene = layoutSpatialCanvas(
       canvases.c0 as SpatialCanvas,
-      baseOptions({ resolveFileCanvas: (file) => canvases[file], expandFileNode: () => true }),
+      baseOptions({
+        resolveReference: (ref) => {
+          const canvas = canvases[ref]
+          return canvas === undefined ? undefined : { canvas }
+        },
+        expandFileNode: () => true,
+      }),
     )
     let depth = 0
     let current = embedOf(scene)
@@ -209,8 +224,10 @@ describe('file-node images', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileImage: (file) =>
-          file === 'child' ? { href: 'data:image/png;base64,AAA', alt: 'A chart' } : undefined,
+        resolveReference: (ref) =>
+          ref === 'child'
+            ? { image: { href: 'data:image/png;base64,AAA', alt: 'A chart' } }
+            : undefined,
       }),
     )
     const image = scene.nodes.find((n) => n.kind === 'image')
@@ -230,8 +247,10 @@ describe('file-node images', () => {
     const both = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileImage: () => ({ href: 'data:image/png;base64,AAA' }),
-        resolveFileCanvas: () => childCanvas,
+        resolveReference: () => ({
+          image: { href: 'data:image/png;base64,AAA' },
+          canvas: childCanvas,
+        }),
         expandFileNode: () => true,
       }),
     )
@@ -241,7 +260,7 @@ describe('file-node images', () => {
     const throwing = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileImage: () => {
+        resolveReference: () => {
           throw new Error('boom')
         },
       }),
@@ -255,8 +274,10 @@ describe('file-node images', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileImage: () => ({ href: 'data:image/png;base64,AAA' }),
-        resolveFileFacets: () => ({ title: 'Card', rows: [{ label: 'type', value: 'note' }] }),
+        resolveReference: () => ({
+          image: { href: 'data:image/png;base64,AAA' },
+          facets: { title: 'Card', rows: [{ label: 'type', value: 'note' }] },
+        }),
       }),
     )
     expect(scene.nodes.some((n) => n.kind === 'image')).toBe(true)
@@ -276,7 +297,7 @@ describe('file-node facet cards', () => {
   it("renders the card's title and rows, replacing the plain label", () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
-      baseOptions({ resolveFileFacets: (file) => (file === 'child' ? card : undefined) }),
+      baseOptions({ resolveReference: (ref) => (ref === 'child' ? { facets: card } : undefined) }),
     )
     const heading = scene.nodes.find((n): n is HeadingBlockNode => n.kind === 'heading')
     expect(heading?.runs.map((run) => run.text).join('')).toBe('Ship it')
@@ -303,8 +324,7 @@ describe('file-node facet cards', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({
-        resolveFileLabel: () => 'A human title',
-        resolveFileFacets: () => card,
+        resolveReference: () => ({ label: 'A human title', facets: card }),
       }),
     )
     expect(scene.nodes.some((n) => n.kind === 'textRun')).toBe(false)
@@ -320,16 +340,16 @@ describe('file-node facet cards', () => {
     expect(noResolverScene).toEqual(baseline)
     expect(renderSceneToSvg(noResolverScene)).toBe(baselineSvg)
 
-    const resolvers: Array<() => FacetCardData | undefined> = [
+    const resolvers: Array<() => { facets?: FacetCardData } | undefined> = [
       () => undefined,
       () => {
         throw new Error('boom')
       },
-      () => ({ rows: [] }),
-      () => ({ title: '   ', rows: [{ label: '', value: '' }] }),
+      () => ({ facets: { rows: [] } }),
+      () => ({ facets: { title: '   ', rows: [{ label: '', value: '' }] } }),
     ]
-    for (const resolveFileFacets of resolvers) {
-      const scene = layoutSpatialCanvas(canvas, baseOptions({ resolveFileFacets }))
+    for (const resolveReference of resolvers) {
+      const scene = layoutSpatialCanvas(canvas, baseOptions({ resolveReference }))
       expect(scene).toEqual(baseline)
       expect(renderSceneToSvg(scene)).toBe(baselineSvg)
     }
@@ -343,7 +363,7 @@ describe('file-node facet cards', () => {
     }
     const scene = layoutSpatialCanvas(
       { nodes: [shortNode], edges: [] },
-      baseOptions({ resolveFileFacets: () => manyRows }),
+      baseOptions({ resolveReference: () => ({ facets: manyRows }) }),
     )
     const blocks = scene.nodes.filter((n) => n.kind === 'heading' || n.kind === 'paragraph')
     expect(blocks.length).toBeGreaterThan(0)
@@ -358,19 +378,19 @@ describe('file-node facet cards', () => {
     expect(() =>
       layoutSpatialCanvas(
         { nodes: [zeroNode], edges: [] },
-        baseOptions({ resolveFileFacets: () => card }),
+        baseOptions({ resolveReference: () => ({ facets: card }) }),
       ),
     ).not.toThrow()
     const scene = layoutSpatialCanvas(
       { nodes: [zeroNode], edges: [] },
-      baseOptions({ resolveFileFacets: () => card }),
+      baseOptions({ resolveReference: () => ({ facets: card }) }),
     )
     expect(scene.nodes.some((n) => n.kind === 'heading' || n.kind === 'paragraph')).toBe(false)
   })
 
   it('renders byte-identical SVG for the same canvas laid out twice (determinism)', () => {
     const canvas: SpatialCanvas = { nodes: [fileNode()], edges: [] }
-    const options = baseOptions({ resolveFileFacets: () => card })
+    const options = baseOptions({ resolveReference: () => ({ facets: card }) })
     const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas, options))
     const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas, options))
     expect(svgA).toBe(svgB)
@@ -388,7 +408,7 @@ describe('file-node facet cards', () => {
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode(), textNode], edges: [] },
-      baseOptions({ resolveFileFacets: () => card }),
+      baseOptions({ resolveReference: () => ({ facets: card }) }),
     )
     const headingIndex = scene.nodes.findIndex((n) => n.kind === 'heading')
     const textChromeIndex = scene.nodes.findIndex(

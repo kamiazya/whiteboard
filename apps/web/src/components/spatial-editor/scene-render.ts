@@ -6,8 +6,7 @@
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
-import type { FacetCardData, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
   SPATIAL_THEME_GEOMETRY,
@@ -23,22 +22,10 @@ export interface RenderCanvasOptions {
   readonly measure: MeasureText
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
   readonly theme?: ResolvedTheme
-  /** Passed through to layout: opaque file references become readable labels. */
-  readonly resolveFileLabel?: (file: string) => string | undefined
-  /** Passed through to layout: dangling references render a quiet missing state. */
-  readonly resolveFileMissing?: (file: string) => boolean
-  /** Passed through to layout: referenced canvas content for inline embeds. */
-  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
-  /** Passed through to layout: a referenced markdown document's parsed body. */
-  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
+  /** Passed through to layout: what the host resolved for one reference. */
+  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
-  /** Passed through to layout: image content for media file nodes. */
-  readonly resolveFileImage?: (
-    file: string,
-  ) => { readonly href: string; readonly alt?: string } | undefined
-  /** Passed through to layout: the referenced document's facets as card content. */
-  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
 }
 
 /**

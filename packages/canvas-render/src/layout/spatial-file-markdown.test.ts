@@ -12,6 +12,7 @@ import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import {
   type FacetCardData,
   layoutSpatialCanvas,
+  type ResolvedReference,
   type SpatialLayoutOptions,
 } from './spatial-canvas.js'
 
@@ -92,7 +93,7 @@ describe('file-node markdown bodies', () => {
     const scene = layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        resolveFileMarkdown: (file) => (file === 'notes' ? BODY : undefined),
+        resolveReference: (ref) => (ref === 'notes' ? { markdown: BODY } : undefined),
       }),
     )
 
@@ -111,8 +112,7 @@ describe('file-node markdown bodies', () => {
     const scene = layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        resolveFileMarkdown: () => BODY,
-        resolveFileLabel: () => 'Release notes doc',
+        resolveReference: () => ({ markdown: BODY, label: 'Release notes doc' }),
       }),
     )
     const label = runsOf(scene.nodes).find((run) => run.text === 'Release notes doc')
@@ -127,7 +127,10 @@ describe('file-node markdown bodies', () => {
       type: 'root',
       children: Array.from({ length: 40 }, (_, i) => paragraph(`line ${i}`)),
     }
-    const scene = layoutSpatialCanvas(canvasOf(), baseOptions({ resolveFileMarkdown: () => long }))
+    const scene = layoutSpatialCanvas(
+      canvasOf(),
+      baseOptions({ resolveReference: () => ({ markdown: long }) }),
+    )
     const bottom = NODE.y + NODE.height - SPATIAL_THEME_GEOMETRY.paddingPx
     const blocks = scene.nodes.filter((node) => node.kind === 'paragraph')
     expect(blocks.length).toBeGreaterThan(0)
@@ -142,8 +145,10 @@ describe('file-node markdown bodies', () => {
       const scene = layoutSpatialCanvas(
         canvasOf(),
         baseOptions({
-          resolveFileImage: () => ({ href: 'data:image/png;base64,AAAA' }),
-          resolveFileMarkdown: () => BODY,
+          resolveReference: () => ({
+            image: { href: 'data:image/png;base64,AAAA' },
+            markdown: BODY,
+          }),
         }),
       )
       expect(scene.nodes.some((node): node is ImageSceneNode => node.kind === 'image')).toBe(true)
@@ -158,9 +163,8 @@ describe('file-node markdown bodies', () => {
       const scene = layoutSpatialCanvas(
         canvasOf(),
         baseOptions({
-          resolveFileCanvas: () => child,
+          resolveReference: () => ({ canvas: child, markdown: BODY }),
           expandFileNode: () => true,
-          resolveFileMarkdown: () => BODY,
         }),
       )
       expect(
@@ -173,8 +177,7 @@ describe('file-node markdown bodies', () => {
       const scene = layoutSpatialCanvas(
         canvasOf(),
         baseOptions({
-          resolveFileMarkdown: () => BODY,
-          resolveFileFacets: () => CARD,
+          resolveReference: () => ({ markdown: BODY, facets: CARD }),
         }),
       )
       expect(textOf(scene.nodes)).toContain('Release notes')
@@ -183,31 +186,42 @@ describe('file-node markdown bodies', () => {
   })
 
   describe('totality', () => {
-    const fallsBack: Array<[string, () => MdastRoot | undefined]> = [
-      ['an undefined result', () => undefined],
-      [
-        'a throwing resolver',
-        () => {
-          throw new Error('boom')
-        },
-      ],
-      ['an empty body', () => ({ type: 'root', children: [] })],
+    const fallsBack: Array<[string, ResolvedReference]> = [
+      ['a resolution carrying no body', { facets: CARD }],
+      ['an empty body', { markdown: { type: 'root', children: [] }, facets: CARD }],
     ]
 
-    for (const [name, resolveFileMarkdown] of fallsBack) {
+    for (const [name, resolution] of fallsBack) {
       it(`falls through to the facet card for ${name}`, () => {
         const scene = layoutSpatialCanvas(
           canvasOf(),
-          baseOptions({ resolveFileMarkdown, resolveFileFacets: () => CARD }),
+          baseOptions({ resolveReference: () => resolution }),
         )
         expect(textOf(scene.nodes)).toContain('Card')
       })
     }
 
+    it('falls all the way to the plain label when the resolver throws', () => {
+      // Not to the card, unlike the cases above. One resolver answers for
+      // every content kind, so a throw loses the whole resolution rather
+      // than one rank of it — the price of collapsing six seams into one,
+      // and the reason the caller's lookup, not the layout, is where a
+      // partial failure has to be handled.
+      const scene = layoutSpatialCanvas(
+        canvasOf(),
+        baseOptions({
+          resolveReference: () => {
+            throw new Error('boom')
+          },
+        }),
+      )
+      expect(textOf(scene.nodes)).toEqual(['notes'])
+    })
+
     it('falls through to the plain label when nothing else resolves', () => {
       const scene = layoutSpatialCanvas(
         canvasOf(),
-        baseOptions({ resolveFileMarkdown: () => undefined }),
+        baseOptions({ resolveReference: () => undefined }),
       )
       expect(textOf(scene.nodes)).toEqual(['notes'])
     })
@@ -215,7 +229,7 @@ describe('file-node markdown bodies', () => {
     it('keeps the card when the node is too small for even one block', () => {
       const scene = layoutSpatialCanvas(
         canvasOf({ width: 4, height: 4 }),
-        baseOptions({ resolveFileMarkdown: () => BODY, resolveFileFacets: () => CARD }),
+        baseOptions({ resolveReference: () => ({ markdown: BODY, facets: CARD }) }),
       )
       expect(textOf(scene.nodes)).not.toContain('Release notes')
     })
@@ -263,8 +277,7 @@ describe('malformed bodies never abort the canvas', () => {
               type: 'root',
               children: [{ type: 'paragraph', children: [{ type: 'text', value: 'SIBLING' }] }],
             }),
-            resolveFileMarkdown: () => body,
-            resolveFileFacets: () => CARD,
+            resolveReference: () => ({ markdown: body, facets: CARD }),
           }),
         )
       }).not.toThrow()
@@ -281,7 +294,9 @@ describe('malformed bodies never abort the canvas', () => {
     layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        resolveFileMarkdown: () => ({ type: 'root', children: [null] }) as unknown as MdastRoot,
+        resolveReference: () => ({
+          markdown: { type: 'root', children: [null] } as unknown as MdastRoot,
+        }),
         onDegrade: (event) => events.push(event.kind),
       }),
     )

@@ -38,7 +38,7 @@ describe('CanvasViewer file-reference seams', () => {
     const { container } = render(
       <CanvasViewer
         canvas={canvas}
-        resolveFileMarkdown={(file) => (file === 'notes' ? BODY : undefined)}
+        resolveReference={(ref) => (ref === 'notes' ? { markdown: BODY } : undefined)}
       />,
     )
     expect(svgText(container)).toContain('Weekly notes')
@@ -52,7 +52,9 @@ describe('CanvasViewer file-reference seams', () => {
   })
 
   it('uses the resolved label instead of the raw reference', () => {
-    const { container } = render(<CanvasViewer canvas={canvas} resolveFileLabel={() => 'Weekly'} />)
+    const { container } = render(
+      <CanvasViewer canvas={canvas} resolveReference={() => ({ label: 'Weekly' })} />,
+    )
     expect(svgText(container)).toContain('Weekly')
   })
 })

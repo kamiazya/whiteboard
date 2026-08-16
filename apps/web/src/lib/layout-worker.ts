@@ -30,7 +30,12 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
-import { FONT_DEGRADED, type LayoutRequest, type LayoutResponse } from './layout-worker-protocol.js'
+import {
+  composeReferenceSeam,
+  FONT_DEGRADED,
+  type LayoutRequest,
+  type LayoutResponse,
+} from './layout-worker-protocol.js'
 
 const measure = createBrowserMeasureText()
 
@@ -60,8 +65,7 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(request.canvas, {
       measure,
       theme: request.theme,
-      resolveFileLabel: labels.size === 0 ? undefined : (file) => labels.get(file),
-      resolveFileMissing: missingRefs.size === 0 ? undefined : (file) => missingRefs.has(file),
+      resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),
       parseBody: parseMarkdownBody,
     })
     const response: LayoutResponse = {

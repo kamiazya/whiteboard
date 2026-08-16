@@ -52,7 +52,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={(file) => (file === 'notes' ? BODY : undefined)}
+        resolveReference={(ref) => (ref === 'notes' ? { markdown: BODY } : undefined)}
       />,
     )
 
@@ -66,8 +66,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => BODY}
-        resolveFileFacets={() => CARD}
+        resolveReference={() => ({ markdown: BODY, facets: CARD })}
       />,
     )
 
@@ -80,8 +79,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => undefined}
-        resolveFileFacets={() => CARD}
+        resolveReference={() => ({ facets: CARD })}
       />,
     )
 
@@ -96,7 +94,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => long}
+        resolveReference={() => ({ markdown: long })}
       />,
     )
 

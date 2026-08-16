@@ -104,7 +104,7 @@ paths:
    The mdast layout carries the CONTENT-bearing sibling of this contract:
    `MdastLayoutOptions.resolveEmbed?: (canvasId) => { title?, root:
    MdastRoot } | undefined` (same injected-resolver class as `renderMath` /
-   `resolveFile*`). A paragraph whose SOLE child is an `embed` node lays
+   `resolveReference`). A paragraph whose SOLE child is an `embed` node lays
    the resolved body out inline under an `embedResolved` node whose
    children stay ABSOLUTE (no SVG transform — the listItem/tableCell
    transform-boundary set is untouched); an embed mixed into prose stays a
@@ -274,15 +274,15 @@ paths:
    constants naming the same string remains a deliberate, documented
    duplication rather than a shared import.
 
-9. **`ImageSceneNode` and the `resolveFileImage` seam** (J5b): the scene
+9. **`ImageSceneNode` and the resolved `image`** (J5b): the scene
    graph's one raster/vector image node — `bbox` is the FRAME (aspect always
    preserved via `preserveAspectRatio="xMidYMid meet"`), `href` is emitted
    verbatim (data: URI in exports, blob:/app URL live), `alt` renders as a
-   `<title>` child and its absence marks the image presentation.
-   `layoutSpatialCanvas`'s `resolveFileImage` is checked BEFORE the
-   canvas-embed seam and is not LOD-gated (a scaled-down image is still a
-   meaningful thumbnail); any failure keeps the card. Image nodes are
-   bbox-only leaves for sceneBounds/translate/scale.
+   `<title>` child and its absence marks the image presentation. A
+   resolution's `image` is checked BEFORE its `canvas` and is not LOD-gated
+   (a scaled-down image is still a meaningful thumbnail); any failure keeps
+   the card. Image nodes are bbox-only leaves for
+   sceneBounds/translate/scale.
 
 10. **The render-style seam** (rendering-foundation initiative, human
     decisions 2026-08-12). Recorded BEFORE any style ships so the sketchy/
@@ -448,30 +448,57 @@ paths:
       parallel executor through a seam, which is a larger design than the
       search itself.
     - **Facet-driven rendering rides the injected-resolver pattern.**
-      Shipped: `SpatialLayoutOptions.resolveFileFacets?: (file: string) =>
-      FacetCardData | undefined` (`layout/spatial-canvas.ts`), same seam
-      class as `resolveFileCanvas`/`resolveFileImage` — synchronous,
-      optional, caller-supplied, total (a throw or `undefined` degrades to
-      the plain chrome+label rendering rather than aborting layout).
+      Shipped as the `facets` field of `ResolvedReference`
+      (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
+      total (a throw or `undefined` degrades to the plain chrome+label
+      rendering rather than aborting layout).
       `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
       string; value: string }> }`) is plain TS, not Zod — it never crosses a
       process boundary; the caller maps its own facet data
       (`coreFacetsSchema` and friends) into it in-process, and this package
       learns nothing about what a facet MEANS. `composeFileFacets` is
-      checked LAST in the file-node pre-pass — after `composeFileImage` and
-      `composeFileEmbed` — so a resolved image or canvas embed always
-      outranks a facet card, and the card in turn always outranks the plain
-      label it replaces. Card text goes through `layoutMdastBlocks`
+      checked LAST in the file-node pre-pass — after `composeFileImage`,
+      `composeFileEmbed` and `composeFileMarkdown` — so a resolved image,
+      canvas embed or markdown body always outranks a facet card, and the
+      card in turn always outranks the plain label it replaces. Card text goes through `layoutMdastBlocks`
       (`heading`+`paragraph` blocks only, never `list`/`table`, to stay out
       of the `subtreeOffsetX` transform-boundary class); content that
       overflows the node's padded box is truncated at whole-block
       granularity with no "more" affordance (ponytail: that needs a
       focusable DOM-overlay/keyboard treatment this pure-geometry package
       cannot own — upgrade path is an editor-side overlay in a later
-      slice). No consumer passes the seam yet — export stays a pure
-      function of the canvas snapshot by default, exactly parallel to the
-      style opt-in above; wiring `apps/web` to paint a card on a real screen
-      is a separate, later increment.
+      slice). `apps/web` supplies the card (`toFacetCard` in
+      `use-canvas-file-seams.ts`); export still resolves nothing by default,
+      so it stays a pure function of the canvas snapshot, exactly parallel
+      to the style opt-in above.
+
+11. **ONE reference seam, not one per content kind.** `SpatialLayoutOptions`
+    carries a single `resolveReference?: (ref: string) => ResolvedReference
+    | undefined`, where `ResolvedReference` is a record of independent
+    optional fields — `label`, `missing`, `image`, `canvas`, `markdown`,
+    `facets` — ranked in that order by `composeNode`. It replaced six
+    parallel callbacks (`resolveFileLabel`/`Missing`/`Canvas`/`Image`/
+    `Markdown`/`Facets`).
+    Three things the six could not do. A caller has ONE document per
+    reference, so six closures over the same lookup meant the same key was
+    resolved four times per file node. A record is plain DATA, which a
+    function can never be — the layout worker refuses a canvas whose file
+    seams are wired precisely because a function cannot cross
+    `postMessage`, and `apps/web`'s `composeReferenceSeam` is now the ONE
+    producer both threads build their seam through. And a content kind added
+    later is a field rather than a seventh callback threaded through every
+    consumer, of which there are four.
+    The price, stated because it is a real behaviour change: one resolver
+    means one failure. A throw used to cost the reference one RANK and now
+    costs it the whole resolution, falling straight to the plain label. A
+    caller that can partially fail has to handle that in its own lookup,
+    which is where it has the information to.
+    `expandFileNode` stays a separate seam: it is the caller's POLICY over a
+    node (the editor decides by on-screen size, export by intrinsic size),
+    not something known about the reference.
+    `MdastLayoutOptions.resolveEmbed` also stays its own — it is keyed by a
+    canvasId appearing in PROSE, a different key space from a spatial node's
+    reference, and it serves markdown documents with no file nodes at all.
 
 ## Conventions
 

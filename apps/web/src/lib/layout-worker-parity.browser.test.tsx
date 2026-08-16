@@ -114,7 +114,10 @@ it('carries the file-label seam across the wire', async () => {
   const onMain = renderCanvasToSvg(withFile, {
     measure: createBrowserMeasureText(),
     theme: 'light',
-    resolveFileLabel: (file) => labels.find((l) => l.file === file)?.label,
+    resolveReference: (ref) => {
+      const label = labels.find((l) => l.file === ref)?.label
+      return label === undefined ? undefined : { label }
+    },
   })
   const fromWorker = await layoutInWorker({
     type: 'layout',

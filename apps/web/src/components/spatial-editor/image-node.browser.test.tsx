@@ -44,8 +44,10 @@ function makeHost(initial: SpatialCanvas) {
             latest.stored.push(file)
             return Promise.resolve(`asset:${latest.stored.length}`)
           }}
-          resolveFileImage={(file) =>
-            file.startsWith('asset:') ? { href: PNG_HREF, alt: 'stored image' } : undefined
+          resolveReference={(ref) =>
+            ref.startsWith('asset:')
+              ? { image: { href: PNG_HREF, alt: 'stored image' } }
+              : undefined
           }
           isImageFileRef={(file) => file.startsWith('asset:')}
           onOpenFileRef={(file) => latest.opened.push(file)}

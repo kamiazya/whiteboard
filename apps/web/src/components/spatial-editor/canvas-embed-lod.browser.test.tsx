@@ -30,7 +30,7 @@ function makeHost(initial: SpatialCanvas) {
           onChange={(next) => setCanvas(next)}
           theme="light"
           fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-          resolveFileCanvas={(file) => (file === 'ref-1' ? referenced : undefined)}
+          resolveReference={(ref) => (ref === 'ref-1' ? { canvas: referenced } : undefined)}
         />
       </div>
     )

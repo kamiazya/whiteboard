@@ -51,7 +51,7 @@ it('drags an expanded embed with its miniature content in the ghost', async () =
         onChange={() => {}}
         theme="light"
         fileRefOptions={[{ file: 'child', label: 'child canvas' }]}
-        resolveFileCanvas={(file) => (file === 'child' ? inner : undefined)}
+        resolveReference={(ref) => (ref === 'child' ? { canvas: inner } : undefined)}
       />
     </div>,
   )

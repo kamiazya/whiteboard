@@ -77,7 +77,20 @@ export function createCanvasViewTool(deps: ServerDeps) {
       return {
         canvasId: input.canvasId,
         scene: canvas,
-        references: Object.fromEntries(resolved),
+        // `markdown` -> `body` is the one place the internal record and the
+        // wire disagree. The record is canvas-render's `ResolvedReference`,
+        // which names every content kind it can carry; this schema names
+        // only the two a widget receives, and renaming a published tool's
+        // field is its own increment (vocabulary.md).
+        references: Object.fromEntries(
+          [...resolved].map(([ref, { label, markdown }]) => [
+            ref,
+            {
+              ...(label !== undefined ? { label } : {}),
+              ...(markdown !== undefined ? { body: markdown } : {}),
+            },
+          ]),
+        ),
       }
     },
   }

@@ -112,7 +112,7 @@ function textOf(nodes: readonly SceneNode[]): string[] {
 
 describe.each([
   ['a text node body', textCanvas, {} as Partial<SpatialLayoutOptions>],
-  ['a markdown file node body', fileCanvas, { resolveFileMarkdown: () => BODY }],
+  ['a markdown file node body', fileCanvas, { resolveReference: () => ({ markdown: BODY }) }],
 ])('mdast content seams reach %s', (_name, canvas, extra) => {
   it('renders math through the injected renderer', () => {
     const scene = layoutSpatialCanvas(canvas, baseOptions({ ...extra, ...SEAMS }))
