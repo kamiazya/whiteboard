@@ -526,7 +526,23 @@ function composeFileMarkdown(
   }
   if (root === undefined) return undefined
 
-  const body = fitBodyInNode(node, root, options)
+  // The LAYOUT is guarded too, not just the resolver call. This seam is the
+  // first to feed caller-supplied mdast straight into `layoutMdastBlocks`:
+  // `composeTextNode` parses its own via `parseBody` (and catches), and
+  // `composeFileFacets` builds its blocks internally, so both were total by
+  // construction. `layoutBlock`'s switch has no default case and dereferences
+  // per-kind fields, so a child the caller's own validation let through — a
+  // null, a primitive, an unrecognised `type` — throws from here and, with no
+  // per-node guard in the composition loop, takes the WHOLE canvas with it.
+  // That would break this package's documented never-throw rule
+  // (package-canvas-render.md) at the one seam that made it reachable.
+  let body: Scene | undefined
+  try {
+    body = fitBodyInNode(node, root, options)
+  } catch (err) {
+    options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
+    return undefined
+  }
   if (body === undefined) return undefined
 
   const chrome = chromeShape(node, options)

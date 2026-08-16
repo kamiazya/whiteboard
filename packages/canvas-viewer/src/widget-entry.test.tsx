@@ -335,6 +335,60 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(button?.style.display).toBe('block')
   })
 
+  it("forwards canvas_view's references to the viewer so a file node can show its document", async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 320, height: 220, file: 'notes' }],
+    }
+    const body = { type: 'root', children: [{ type: 'paragraph', children: [] }] }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: {
+        canvasId: 'ws/slug',
+        scene,
+        references: { notes: { label: 'W', body } },
+      },
+    })
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    expect(mountCanvasViewer).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ references: { notes: { label: 'W', body } } }),
+    )
+  })
+
+  it('drops a reference whose body is not real mdast, keeping the rest of the payload', async () => {
+    // The host is not trusted: `references` is parsed against the canonical
+    // mdastRootSchema. A root-shaped body with an undispatchable child would
+    // otherwise reach layout, where one bad child aborts the whole canvas.
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 320, height: 220, file: 'notes' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: {
+        canvasId: 'ws/slug',
+        scene,
+        references: { notes: { body: { type: 'root', children: [null] } } },
+      },
+    })
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    const opts = vi.mocked(mountCanvasViewer).mock.calls.at(-1)?.[1]
+    // The scene still mounted; only the unparseable references were dropped.
+    expect(opts?.scene).toEqual(scene)
+    expect(opts?.references).toBeUndefined()
+  })
+
   it('never mounts the sticky-note control, since the tool behind it no longer exists', async () => {
     // Not "absence of something that never existed": the control DID ship,
     // and was unwired because every submission failed at the host with an

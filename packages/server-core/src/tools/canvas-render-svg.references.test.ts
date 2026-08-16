@@ -161,6 +161,46 @@ describe('wb_scene_render reference resolution', () => {
   })
 })
 
+describe('reference resolution edge cases', () => {
+  test('keeps a resolved NAME for an indexed document whose snapshot is gone', async () => {
+    // The index and the doc store are separate: a row can outlive its
+    // snapshot (an interrupted delete, a restored index). The reference is
+    // still nameable even though its content is not readable, and the
+    // label is strictly better than showing a raw id.
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    await store.deleteDoc({ docRef: { kind: 'canvas', canvasId: NOTE_ID } })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly')
+    expect(result.svg).not.toContain('Weekly notes')
+  })
+
+  test('labels a reference with its document name instead of its raw id', async () => {
+    // The label seam is wired from the same `references` map as the body,
+    // so it needs its own assertion — a body-only test passes while the
+    // label wiring is missing entirely.
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly')
+    expect(result.svg).not.toContain(NOTE_ID)
+  })
+})
+
 describe('wb_scene_render input schema', () => {
   test('defaults embedReferences to false, so an existing caller keeps the pure render', () => {
     const parsed = canvasRenderSvgInputSchema.parse({

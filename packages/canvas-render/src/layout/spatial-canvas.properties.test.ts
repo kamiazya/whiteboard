@@ -212,6 +212,25 @@ function fakeResolveFileMarkdown(file: string): MdastRoot | undefined {
   return undefined
 }
 
+/**
+ * Root-shaped bodies whose CHILDREN layout cannot dispatch on. Every one
+ * passes a `{type:'root', children: unknown[]}` shape check, which is what
+ * a caller validating only the envelope would apply.
+ */
+const malformedBodyArb: fc.Arbitrary<MdastRoot> = fc
+  .array(
+    fc.oneof(
+      fc.constant(null),
+      fc.constant(undefined),
+      fc.string(),
+      fc.integer(),
+      fc.record({ type: fc.constantFrom('bogus', 'heading', 'code', 'list', 'table') }),
+      fc.record({ type: fc.constant('heading'), depth: fc.integer({ min: 1, max: 6 }) }),
+    ),
+    { minLength: 1, maxLength: 4 },
+  )
+  .map((children) => ({ type: 'root', children }) as unknown as MdastRoot)
+
 describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
   const bare = { measure, parseBody: fakeParseBody, appearance }
   const withMarkdown = { ...bare, resolveFileMarkdown: fakeResolveFileMarkdown }
@@ -246,6 +265,20 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
         },
       })
       expect(withThrowingSeam).toEqual(layoutSpatialCanvas(canvas, bare))
+    },
+  )
+
+  fcTest.prop([spatialCanvasArb, malformedBodyArb], withDefaults())(
+    'a body that is root-shaped but structurally invalid never aborts the canvas',
+    (canvas, body) => {
+      // The throwing-resolver property above only covers the resolver CALL,
+      // which was already guarded. This covers the return VALUE: a caller
+      // whose own validation checks only `{type:'root', children:[...]}`
+      // can hand over children layout cannot dispatch on, and those throw
+      // from inside the layout call rather than the resolver.
+      expect(() =>
+        layoutSpatialCanvas(canvas, { ...bare, resolveFileMarkdown: () => body }),
+      ).not.toThrow()
     },
   )
 

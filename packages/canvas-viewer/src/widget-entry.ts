@@ -4,6 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
+import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import {
@@ -103,22 +104,46 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // boundary, so it gets a Zod schema instead of a cast; `scene` stays
 // deliberately unknown here — parseViewerScene is its real validator.
 // `references` is validated HERE rather than trusted: it arrives from the
-// host, and a malformed entry would otherwise reach canvas-render's seams
-// as an arbitrary object. Declared loosely on purpose — `body` is checked
-// for shape, not against the full mdast schema, because a body this widget
-// cannot fully validate is still better dropped per-reference than having
-// the whole payload rejected. canvas-render is total over what it gets.
+// host, and a malformed entry reaches canvas-render's layout seams as
+// whatever the host sent.
+//
+// Validated against the CANONICAL, fully-recursive `mdastRootSchema` — the
+// same schema `canvas_view` declares its payload with server-side — not a
+// looser shape check. A root-shaped body with an unrecognised child is not
+// something layout shrugs off: `layoutBlock`'s switch has no default case,
+// so one bad child throws out of `layoutSpatialCanvas` and takes the whole
+// canvas with it. Checking only `{type:'root', children: unknown[]}` here
+// and casting past the rest let exactly that through.
+//
+// Applied PER REFERENCE, so strictness costs only the reference that fails.
 const referenceSchema = z.object({
   label: z.string().optional(),
-  body: z.object({ type: z.literal('root'), children: z.array(z.unknown()) }).optional(),
+  body: mdastRootSchema.optional(),
 })
+
+/** Keeps the references that parse, drops the ones that do not. */
+function parseReferences(raw: Record<string, unknown> | undefined) {
+  if (raw === undefined) return undefined
+  const kept: Record<string, z.infer<typeof referenceSchema>> = {}
+  for (const [ref, value] of Object.entries(raw)) {
+    const parsed = referenceSchema.safeParse(value)
+    if (parsed.success) kept[ref] = parsed.data
+    else console.error('[whiteboard-widget] dropping unparseable reference:', ref, parsed.error)
+  }
+  return Object.keys(kept).length > 0 ? kept : undefined
+}
 
 const toolResultEnvelopeSchema = z.object({
   structuredContent: z
     .object({
       canvasId: z.string().optional(),
       scene: z.unknown().optional(),
-      references: z.record(z.string(), referenceSchema).optional(),
+      // Deliberately `unknown` HERE, then parsed per entry below. Putting
+      // the strict schema inline would make one bad reference fail the
+      // whole envelope, discarding a perfectly good scene along with it —
+      // the widget would go blank because a document it merely POINTS AT
+      // was malformed.
+      references: z.record(z.string(), z.unknown()).optional(),
     })
     .catchall(z.unknown())
     .optional(),
@@ -135,10 +160,7 @@ function extractCanvasIdAndScene(payload: unknown): {
   return {
     canvasId: structuredContent?.canvasId,
     scene: structuredContent?.scene,
-    // Cast at this one boundary: the envelope validates `body` as a root
-    // with children, which is the shape the seam needs; canvas-render
-    // degrades on anything inside it that it cannot lay out.
-    references: structuredContent?.references as MountCanvasViewerOptions['references'],
+    references: parseReferences(structuredContent?.references),
   }
 }
 

@@ -226,3 +226,65 @@ describe('file-node markdown bodies', () => {
     })
   })
 })
+
+describe('malformed bodies never abort the canvas', () => {
+  // A resolver is caller-supplied, so its RETURN VALUE is caller-supplied
+  // too. Every body below is `{type:'root', children:[...]}` — root-shaped,
+  // so a shape-only check at the caller's boundary lets it through — with a
+  // child `layoutBlock`'s switch cannot handle. Each one threw out of
+  // `layoutSpatialCanvas` before the layout call was guarded, taking the
+  // whole canvas with it, including nodes that have nothing to do with the
+  // reference.
+  const malformed: Array<[string, unknown]> = [
+    ['a null child', null],
+    ['a primitive child', 'hi'],
+    ['an unrecognised type', { type: 'bogus' }],
+    ['a heading with no children', { type: 'heading', depth: 1 }],
+    ['a code node with no value', { type: 'code' }],
+  ]
+
+  const withSibling = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>): SpatialCanvas => ({
+    nodes: [
+      { ...NODE, ...over },
+      { id: 'sibling', type: 'text', x: 500, y: 0, width: 200, height: 100, text: 'SIBLING' },
+    ],
+    edges: [],
+  })
+
+  for (const [name, child] of malformed) {
+    it(`degrades to the card for ${name}, and still renders the rest of the canvas`, () => {
+      const body = { type: 'root', children: [child] } as unknown as MdastRoot
+      let scene!: ReturnType<typeof layoutSpatialCanvas>
+      expect(() => {
+        scene = layoutSpatialCanvas(
+          withSibling(),
+          baseOptions({
+            parseBody: () => ({
+              type: 'root',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'SIBLING' }] }],
+            }),
+            resolveFileMarkdown: () => body,
+            resolveFileFacets: () => CARD,
+          }),
+        )
+      }).not.toThrow()
+
+      // The unrelated node still rendered — the point of the guard.
+      expect(proseOf(scene.nodes)).toContain('SIBLING')
+      // And the file node fell through to the next-ranked seam.
+      expect(textOf(scene.nodes)).toContain('Card')
+    })
+  }
+
+  it('reports the degradation rather than swallowing it', () => {
+    const events: string[] = []
+    layoutSpatialCanvas(
+      canvasOf(),
+      baseOptions({
+        resolveFileMarkdown: () => ({ type: 'root', children: [null] }) as unknown as MdastRoot,
+        onDegrade: (event) => events.push(event.kind),
+      }),
+    )
+    expect(events).toContain('body-parse-failed')
+  })
+})
