@@ -84,7 +84,13 @@ export function useCanvasFileSeams({
   adapter,
   stampOf,
 }: UseCanvasFileSeamsOptions): CanvasFileSeams {
-  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, LoadedFileDocument>>(
+  // `null` = the adapter answered "there is nothing here". It has to OCCUPY
+  // the slot rather than leave it absent: absent means "not fetched yet", so
+  // dropping the result made the next staleness pass ask again — while the
+  // drop itself published a new map instance and scheduled that pass. The
+  // image loop below already guards this exact shape by returning the SAME
+  // instance when nothing was added.
+  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, LoadedFileDocument | null>>(
     new Map(),
   )
   const embedStampsRef = useRef<Map<string, string>>(new Map())
@@ -128,9 +134,9 @@ export function useCanvasFileSeams({
         const next = new Map(prev)
         for (const [ref, document] of loaded) {
           // A document with facets but no canvas is still a cache HIT — it is
-          // what renders the facet card.
-          if (document !== undefined) next.set(ref, document)
-          else next.delete(ref)
+          // what renders the facet card. So is one that resolved to nothing;
+          // the stamp is what brings it back if the target later appears.
+          next.set(ref, document ?? null)
           embedStampsRef.current.set(ref, stampOf.get(ref) ?? '')
         }
         return next
@@ -197,7 +203,7 @@ export function useCanvasFileSeams({
   const markdownBodies = useMemo(() => {
     const parsed = new Map<string, MdastRoot>()
     for (const [ref, document] of embedContent) {
-      const body = document.body
+      const body = document?.body
       if (body === undefined || body.trim().length === 0) continue
       try {
         parsed.set(ref, parseMarkdownBody(body))
@@ -219,7 +225,7 @@ export function useCanvasFileSeams({
       if (href !== undefined) return { image: { href } }
 
       const document = embedContent.get(ref)
-      if (document === undefined) return undefined
+      if (document === undefined || document === null) return undefined
       const canvas = embeddableCanvas(document)
       const markdown = markdownBodies.get(ref)
       const facets = toFacetCard(ref, document.facets)

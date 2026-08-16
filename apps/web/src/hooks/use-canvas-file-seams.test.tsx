@@ -248,6 +248,23 @@ describe('useCanvasFileSeams facets', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
   })
+
+  it('settles at one load for a reference that resolves to nothing', async () => {
+    // The sibling above covers a reference the adapter ANSWERS for. This is
+    // the one it cannot: a deleted document, an imported ref into a store
+    // that never had it. Its result is dropped from the cache, so the next
+    // staleness pass finds it absent and asks again — while the drop itself
+    // published a new map instance and scheduled that pass. The image loop
+    // in the same hook already guards this exact shape by returning the SAME
+    // instance when nothing was added; this loop did not.
+    const adapter = makeAdapter({ loadDocument: vi.fn(async () => undefined) })
+    const canvas = canvasWith('gone')
+    renderHook(() => useCanvasFileSeams({ canvas, adapter, stampOf: new Map() }))
+
+    await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('useCanvasFileSeams empty canvases', () => {
