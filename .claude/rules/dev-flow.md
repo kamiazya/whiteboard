@@ -80,6 +80,16 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Measure before you change what you cannot see in the diff.** A heuristic, a cost model, a search or an optimisation is correct-looking code whose worth is entirely in numbers nobody has taken — so the INSTRUMENT lands first, in its own commit, and the change is judged by it. Two exist: `edge-routing-quality.test.ts` (quality: a corpus plus aggregate counts pinned EXACTLY, so an improvement is as loud as a regression, with debt metrics separated from price metrics) and `pnpm bench` (performance: `vitest bench`, compared across INTERLEAVED paired runs because machine drift between separate runs exceeds the effect). For a behaviour-preserving optimisation the scoreboard NOT moving is the proof. This is not ceremony: the instruments rejected three changes that were obviously right on argument — per-blocker detours, a placement cache, and an excess-length penalty tier — and one cheap reachability probe (67 of 68 remaining defects had a clean path available) retired a planned task and redirected the work. They also **rescued** one: an aligned re-score was rejected in its first two shapes on cost (13x, then 4.5x layout time) and shipped in a third that reused machinery already in the file, at 2x — the measurement did not veto the idea, it priced each shape until one was worth paying for. Load the `measured-change` skill. When a change buys one metric with another, `PENALTY_RULES`' declared tier order decides it; when the currencies are genuinely different, that is a human decision worth interrupting for.
 
+**The same scepticism applies one step earlier, to a DIAGNOSIS.** A failure message, a "not a
+regression", a mutation check, a hand-verified fix — each arrives looking like evidence while
+saying nothing about what was actually exercised. In one session that produced three published
+wrong conclusions: a cause read off an assertion string without checking which of two identical
+assertions failed; a regression denied by a property of the diff instead of an A/B of the
+behaviour; and a mutation check whose restore had already run, so eleven "mutated" runs used the
+original file. Each was one printed line away from being caught. Load the `diagnosis-evidence` skill before
+reporting ANY diagnostic or verification conclusion — a cause, a "not a regression", a mutation
+result, or a fix you are calling verified by hand.
+
 **Visual evidence for a change that moves pixels** is a repeatable procedure, not a screenshot of whatever was on screen: render the SAME canvas through the real pipeline before and after, side by side, chosen by the metric the change targets rather than by eye. Load the `visual-evidence` skill — its traps (a no-op `git stash` producing identical panels, unfilled rects rendering black) have each produced a misleading figure at least once.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
@@ -92,7 +102,7 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 ## Skills (load for detail)
 
-`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `measured-change`, `visual-evidence`, `docs-sync`, `whiteboard-mcp-smoke`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`.
+`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `measured-change`, `diagnosis-evidence`, `visual-evidence`, `docs-sync`, `whiteboard-mcp-smoke`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`.
 
 ## Gates: local + cloud
 
