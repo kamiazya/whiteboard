@@ -180,6 +180,51 @@ it('the ⋯ vessel is an icon grid: verbs are icon-only with accessible names in
   expect(listMenu.textContent).toContain('Copy')
 })
 
+it('under 768px of editor width, the ⋯ opens a bottom sheet instead of a popover', async () => {
+  function NarrowHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    return (
+      <div style={{ width: 390, height: 640 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<NarrowHost />)
+  await userEvent.click(rootOf(container), { position: { x: 150, y: 150 } })
+  await userEvent.click(page.getByTestId('more-actions-handle'))
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // The ⋯ is the touch entrance, so what it opens is touch-first below the
+  // minimap breakpoint: a bottom sheet in the thumb zone, full width, with
+  // the selection still visible above it. Keyed off the CONTAINER, exactly
+  // like the minimap — a narrow editor column on a wide screen needs the
+  // sheet the same way.
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  expect(menu.dataset.variant).toBe('sheet')
+  const root = rootOf(container)
+  const menuRect = menu.getBoundingClientRect()
+  const rootRect = root.getBoundingClientRect()
+  expect(Math.abs(menuRect.bottom - rootRect.bottom)).toBeLessThan(2)
+  expect(menuRect.width).toBeGreaterThan(rootRect.width * 0.9)
+  // Same catalog: the icon-grid verbs and the isolated Delete are all here.
+  expect(menu.querySelector('[role="menuitem"][aria-label="Edit text"]')).not.toBeNull()
+  expect(menu.querySelector('[role="menuitem"][aria-label="Delete"]')).not.toBeNull()
+
+  // The right-click vessel stays a popover at any width.
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 150, clientY: r.top + 150 })
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const listMenu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  expect(listMenu.dataset.variant).toBe('list')
+})
+
 it('arrow keys nudge the selected node; Shift enlarges the step', async () => {
   const { container } = render(<Host />)
   const root = rootOf(container)

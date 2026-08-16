@@ -79,13 +79,16 @@ export interface ContextMenuProps {
   readonly items: readonly ContextMenuItem[]
   readonly onClose: () => void
   /**
-   * One catalog, two vessels: 'list' is the right-click reading surface
-   * (icon + label rows); 'grid' is the ⋯ object-action surface, which
+   * One catalog, three vessels: 'list' is the right-click reading surface
+   * (icon + label rows); 'grid' is the ⋯ object-action popover, which
    * renders runs of verbs as icon-only buttons (aria-label + tooltip carry
-   * the name). Property option rows and separators render identically in
-   * both, so what is learned in one vessel transfers to the other.
+   * the name); 'sheet' is the same grid content anchored to the bottom
+   * edge, full width with thicker targets — the touch-first form the ⋯
+   * takes in a narrow editor. Property option rows and separators render
+   * identically in all three, so what is learned in one vessel transfers
+   * to the others.
    */
-  readonly variant?: 'list' | 'grid'
+  readonly variant?: 'list' | 'grid' | 'sheet'
 }
 
 /** Consecutive action items collapse into one icon row in the grid vessel. */
@@ -154,7 +157,10 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
   // so the requested position is nudged back inside once the real menu size
   // is measurable. useLayoutEffect corrects before paint — no visible jump.
   const [pos, setPos] = useState({ x, y })
+  const sheet = variant === 'sheet'
   useLayoutEffect(() => {
+    // A sheet is edge-anchored, not point-anchored — nothing to clamp.
+    if (sheet) return
     const el = menuRef.current
     const parent = el?.offsetParent
     if (el == null || !(parent instanceof HTMLElement)) {
@@ -171,7 +177,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
       y: clamp(y, parent.clientHeight - Math.ceil(menuRect.height) - MENU_EDGE_MARGIN_PX),
     }
     setPos((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [x, y])
+  }, [x, y, sheet])
 
   // Which options row's custom-color panel is expanded (by row label).
   const [openCustomColor, setOpenCustomColor] = useState<string | null>(null)
@@ -198,7 +204,11 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
       role="menu"
       aria-label="Canvas actions"
       tabIndex={-1}
-      className="min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none"
+      className={
+        sheet
+          ? 'rounded-t-xl border-t bg-background py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg focus:outline-none'
+          : 'min-w-36 rounded-md border bg-background py-1 shadow-lg focus:outline-none'
+      }
       // Positioning (incl. stacking) is inline, not utility classes: the
       // edge-clamping above measures the absolutely-positioned box, and it
       // must behave the same where the app stylesheet is absent
@@ -207,7 +217,11 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
       // box otherwise shrinks to fit the space left of the containing-block
       // edge, so a menu opened near the edge would measure (and wrap) narrow
       // and the clamp would compute from the wrong width.
-      style={{ position: 'absolute', zIndex: 20, width: 'max-content', left: pos.x, top: pos.y }}
+      style={
+        sheet
+          ? { position: 'absolute', zIndex: 20, left: 0, right: 0, bottom: 0 }
+          : { position: 'absolute', zIndex: 20, width: 'max-content', left: pos.x, top: pos.y }
+      }
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()
@@ -216,12 +230,16 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
       }}
     >
       {(() => {
-        if (variant === 'grid') {
+        if (variant === 'grid' || variant === 'sheet') {
           return chunkForGrid(items).map((chunk, index) =>
             chunk.kind === 'grid' ? (
               <div
                 key={`grid-${chunk.actions[0]?.label ?? index}`}
-                className="flex max-w-56 flex-wrap gap-0.5 px-1.5 py-1"
+                className={
+                  sheet
+                    ? 'flex flex-wrap gap-1 px-2 py-1'
+                    : 'flex max-w-56 flex-wrap gap-0.5 px-1.5 py-1'
+                }
               >
                 {chunk.actions.map((action) => (
                   <button
@@ -233,7 +251,9 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
                     // the desktop fallback for the icon a reader misreads.
                     title={action.label}
                     className={cn(
-                      'flex size-11 items-center justify-center rounded transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      'flex items-center justify-center rounded transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      // Thumb-zone targets in the sheet, compact in the popover.
+                      sheet ? 'size-12' : 'size-11',
                       action.danger ? 'text-red-600' : 'text-foreground',
                     )}
                     onClick={() => {

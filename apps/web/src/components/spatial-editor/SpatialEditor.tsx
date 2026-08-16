@@ -3408,7 +3408,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   nodeId: selection.id,
                   edgeId: undefined,
                   point: anchor,
-                  variant: 'grid',
+                  // The ⋯ vessel follows the editor's width, decided at open
+                  // time (the menu is transient): below the minimap
+                  // breakpoint the popover becomes a bottom sheet — keyed
+                  // off the CONTAINER for the same reason the minimap is.
+                  variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
                 })
               }}
             />

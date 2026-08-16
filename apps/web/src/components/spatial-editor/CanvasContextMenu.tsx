@@ -67,8 +67,8 @@ export interface ContextMenuTarget {
   readonly nodeId: string | undefined
   readonly edgeId: string | undefined
   readonly point: Point
-  /** The ⋯ control opens the same catalog in the icon-grid vessel. */
-  readonly variant?: 'list' | 'grid'
+  /** The ⋯ control opens the same catalog in the icon-grid or sheet vessel. */
+  readonly variant?: 'list' | 'grid' | 'sheet'
 }
 
 /**
