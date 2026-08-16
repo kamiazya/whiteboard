@@ -7,6 +7,28 @@ import { readDaemonTokenOnce } from './token-store.js'
 // without a separate package export just for pairing/test access.
 export { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
+// Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
+// Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
+// Exported so other cross-boundary contracts (e.g. apps/web's daemon-connection-payload.ts) reuse
+// the same origin-validation rules instead of redefining them.
+export const bareOriginSchema = z
+  .string()
+  .url()
+  .refine(
+    (v) => {
+      try {
+        const url = new URL(v)
+        return url.origin === v && !url.hostname.includes('*')
+      } catch {
+        return false
+      }
+    },
+    {
+      message:
+        'must be a bare origin (scheme + host + optional port, no path, query, hash, credentials, or wildcards)',
+    },
+  )
+
 // The server injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
 // via a same-origin inline <script> (see server/app.ts). It crosses a
 // process boundary (server -> browser), so it is validated on read rather
@@ -21,7 +43,12 @@ export { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 // a token back into this object undetected.
 export const runtimeConfigSchema = z
   .object({
-    daemonBaseUrl: z.string().optional(),
+    // Public origin of this deployed app (e.g., 'https://app.example.com').
+    // Used to construct absolute URLs for same-origin API calls.
+    publicOrigin: bareOriginSchema.optional(),
+    // Base URL of the local whiteboard daemon for daemon-pairing mode.
+    // e.g. 'http://127.0.0.1:3099'
+    daemonBaseUrl: bareOriginSchema.optional(),
   })
   .strict()
 

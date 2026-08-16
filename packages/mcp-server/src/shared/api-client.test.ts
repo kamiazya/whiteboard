@@ -23,6 +23,36 @@ describe('runtimeConfigSchema', () => {
   it('rejects a payload that still carries daemonToken (.strict() rejection, not silent drop)', () => {
     expect(runtimeConfigSchema.safeParse({ daemonToken: 'secret' }).success).toBe(false)
   })
+
+  // Single-owner fold (was apps/web's separate, stricter schema): the wire
+  // contract carries publicOrigin alongside daemonBaseUrl, and both fields
+  // are bare-origin-validated everywhere they are read, not just in apps/web.
+  it('accepts a payload carrying a production publicOrigin', () => {
+    expect(runtimeConfigSchema.safeParse({ publicOrigin: 'https://app.example.com' }).success).toBe(
+      true,
+    )
+  })
+
+  it('accepts publicOrigin and daemonBaseUrl together', () => {
+    expect(
+      runtimeConfigSchema.safeParse({
+        publicOrigin: 'https://app.example.com',
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects a daemonBaseUrl that is not a bare origin (trailing slash)', () => {
+    expect(runtimeConfigSchema.safeParse({ daemonBaseUrl: 'http://127.0.0.1:3099/' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects a daemonBaseUrl carrying a path', () => {
+    expect(
+      runtimeConfigSchema.safeParse({ daemonBaseUrl: 'http://127.0.0.1:3099/pair' }).success,
+    ).toBe(false)
+  })
 })
 
 describe('readRuntimeConfig', () => {
