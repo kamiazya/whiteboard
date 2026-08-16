@@ -1,6 +1,6 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
@@ -282,18 +282,42 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     },
   )
 
+  it('degrades to the facet card when the box fits the card but not the body (pinned counterexample)', () => {
+    // Shrunk from seed=1925800259: at 17x40 the one-line card fits the inner
+    // box but the taller markdown body does not, and composeFileMarkdown's
+    // documented fall-through hands the node to the card. The body outranks
+    // the card only where the body can actually render — the property below
+    // states exactly that, and this example pins the degradation half.
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 17, height: 40, file: 'a.md' }],
+      edges: [],
+    }
+    const text = collectRunText(
+      layoutSpatialCanvas(canvas, {
+        ...withMarkdown,
+        resolveFileFacets: fakeResolveFileFacets,
+      }).nodes,
+    )
+    expect(text).toContain('Card')
+    expect(text).not.toContain('Body')
+  })
+
   fcTest.prop([spatialCanvasArb], withDefaults())(
-    'a resolved markdown body always outranks a resolved facet card',
+    'a resolved markdown body outranks a resolved facet card wherever the body can render',
     (canvas) => {
-      // Stated against what the CARD-only layout actually rendered, not
-      // against the canvas: a node too small for any content degrades both
-      // seams, and asserting unconditionally would make this property pass
-      // vacuously on exactly those canvases (which the generator produces —
-      // it found this on a 0x0 node).
+      // BOTH preconditions stated against what each single-seam layout
+      // actually rendered, not against the canvas: a node too small for a
+      // seam's content degrades that seam (the card on a 0x0 node; the
+      // body on a box that fits the one-line card but not a paragraph —
+      // the pinned 17x40 counterexample above), and asserting past either
+      // guard would restate composeFileMarkdown's documented fall-through
+      // as a failure.
       const cardOnly = collectRunText(
         layoutSpatialCanvas(canvas, { ...bare, resolveFileFacets: fakeResolveFileFacets }).nodes,
       )
       if (!cardOnly.includes('Card')) return
+      const bodyOnly = collectRunText(layoutSpatialCanvas(canvas, withMarkdown).nodes)
+      if (!bodyOnly.includes('Body')) return
 
       const both = collectRunText(
         layoutSpatialCanvas(canvas, {
