@@ -1,7 +1,7 @@
-import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
-import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
+import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
+import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-codec'
+import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -12,14 +12,14 @@ import type { ServerDeps } from '../server-deps.js'
  * targets only the FIRST text node found (or an empty body when none
  * exists) — a real "canvas -> OKF" mapping for a full multi-node spatial
  * canvas is deferred to a future slice once the OKF-vs-spatial duality is
- * resolved in canvas-workspace.
+ * resolved in crdt.
  *
- * `CanvasDocStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
+ * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with the workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */
 export const exportOkfInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
 
@@ -31,7 +31,7 @@ export type ExportOkfOutput = z.infer<typeof exportOkfOutputSchema>
 /**
  * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has
  * no notion of an OKF core-facet `type` of its own — the two formats are
- * deliberately distinct document shapes (package-canvas-codec.md). `canvas`
+ * deliberately distinct document shapes (package-codec.md). `canvas`
  * is the fallback value used ONLY when no core meta was ever persisted for
  * this doc (every canvas created before this bridge existed, or a
  * spatial-only canvas that never went through `wb_document_set`). Once a
@@ -49,23 +49,20 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
  * document, and the `/okf` route reaches it directly for the workspace tree.
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
-  const { doc } = await loadSpatialCanvas(deps, input.canvasId)
-  const coreMeta = readCoreFacets(doc)
+  const { doc } = await loadSpatialCanvas(deps, input.documentId)
+  const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this
   // emits is a projection, and an unnamed document emits none rather than
-  // being handed its slug as a title.
+  // being handed its path as a title.
   const entry = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
-    canvasId: input.canvasId,
+    documentId: input.documentId,
   })
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)
-  const { title: _storedTitle, ...storedMeta } = coreMeta ?? {
-    type: OKF_EXPORT_PLACEHOLDER_TYPE,
-  }
   const frontmatter: OkfMarkdownFrontmatter = {
-    ...storedMeta,
+    ...(coreFacets ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
     ...(entry?.name === undefined ? {} : { title: entry.name }),
     facets,
   }

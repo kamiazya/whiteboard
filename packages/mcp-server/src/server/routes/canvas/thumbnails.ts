@@ -14,9 +14,9 @@ export interface ThumbnailsRouterOptions {
   versionStore: VersionStore
 }
 
-// PUT /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
-// GET /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
-// GET /api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail
+// PUT /api/workspaces/:workspaceId/canvases/:path/versions/:id/thumbnail
+// GET /api/workspaces/:workspaceId/canvases/:path/versions/:id/thumbnail
+// GET /api/workspaces/:workspaceId/canvases/:path/latest-thumbnail
 export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
@@ -26,7 +26,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'put',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, _slug, params) => {
+    async (c, workspaceId, _path, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -66,7 +66,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'get',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, _slug, params) => {
+    async (c, workspaceId, _path, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -93,9 +93,9 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
   // Return the newest version thumbnail for canvas-switcher previews.
   // "Newest" means the first hasThumbnail=true entry in version list order (createdAt desc).
   // Keep max-age short (5 min) so fresh auto-save thumbnails replace cached ones promptly.
-  onCanvasesRoute(app, 'get', ['latest-thumbnail'], async (c, workspaceId, slug) => {
+  onCanvasesRoute(app, 'get', ['latest-thumbnail'], async (c, workspaceId, path) => {
     try {
-      const versions = await versionStore.list(workspaceId, slug)
+      const versions = await versionStore.list(workspaceId, path)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)
       // No thumbnail yet is a normal state (e.g. a brand-new canvas). This
       // endpoint backs CanvasThumb's <img src>, so a 404 would make the browser

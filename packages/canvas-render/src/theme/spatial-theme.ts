@@ -20,7 +20,7 @@
 // background with light node chrome — changing that is a behavior decision
 // (export gaining a dark chrome variant), not a convergence one, and is
 // out of this slice's scope.
-import type { CanvasColor, CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasColor, CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SpatialAppearanceResolver } from '../layout/spatial-appearance.js'
 import type { Appearance } from '../scene-graph.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'

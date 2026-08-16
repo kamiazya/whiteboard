@@ -1,4 +1,4 @@
-import { DocumentPathTakenError } from '@kamiazya/whiteboard-canvas-ports'
+import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { CanvasNotFoundError as SnapshotNotFoundError } from './render/load-spatial-canvas.js'
@@ -20,7 +20,7 @@ import { createDocumentSetTool } from './tools/document-set.js'
 import { createEdgeAddTool } from './tools/edge-add.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
-import { CanvasDocNotFoundError } from './tools/errors.js'
+import { DocumentNotFoundError } from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodeAddTool } from './tools/node-add.js'
@@ -64,10 +64,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/canvases/:documentId', async (c) => {
     const parsed = getCanvasInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
@@ -80,10 +80,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  app.delete('/api/v1/workspaces/:workspaceId/canvases/:canvasId', async (c) => {
+  app.delete('/api/v1/workspaces/:workspaceId/canvases/:documentId', async (c) => {
     const parsed = deleteCanvasInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
@@ -100,10 +100,10 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
-  app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId/okf', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/canvases/:documentId/okf', async (c) => {
     const parsed = exportOkfInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
@@ -116,7 +116,7 @@ export function createServer(deps: ServerDeps) {
       // imported/edited) has no OKF projection — a read miss, not a 500.
       // Note: loadSpatialCanvas throws its own CanvasNotFoundError class,
       // distinct from canvas-crud's; mapCanvasError only knows the latter.
-      if (err instanceof SnapshotNotFoundError || err instanceof CanvasDocNotFoundError) {
+      if (err instanceof SnapshotNotFoundError || err instanceof DocumentNotFoundError) {
         return c.json({ error: err.message }, 404)
       }
       return mapCanvasError(c, err)

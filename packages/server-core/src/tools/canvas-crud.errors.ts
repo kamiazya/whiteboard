@@ -10,9 +10,9 @@
 export class CanvasNotFoundError extends Error {
   constructor(
     readonly workspaceId: string,
-    readonly canvasId: string,
+    readonly documentId: string,
   ) {
-    super(`Canvas not found: ${canvasId} in workspace ${workspaceId}`)
+    super(`Canvas not found: ${documentId} in workspace ${workspaceId}`)
     this.name = 'CanvasNotFoundError'
   }
 }

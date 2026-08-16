@@ -1,13 +1,10 @@
-import { serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
+import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   coreFacetsArbitrary,
   extensionFacetsArbitrary,
-} from '@kamiazya/whiteboard-canvas-model/test-utils'
+} from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
-import {
-  FakeCanvasDocStore,
-  registerCanvasInWorkspace,
-} from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createDocumentSetTool } from './document-set.js'
 import { exportOkf } from './export-okf.js'
@@ -19,9 +16,9 @@ const WORKSPACE_ID = 'ws-1'
  * YAML has no distinct `-0` literal (it round-trips through the parser as
  * `0`) — an inherent encoding ambiguity, not a bug in this tool's core-facet
  * fix. `jsonValue()`-backed `extensionFacetsArbitrary` can generate `-0`
- * inside a facet payload, so it is excluded here the same way canvas-codec's
+ * inside a facet payload, so it is excluded here the same way codec's
  * own round-trip properties exclude constructs with inherent encoding
- * ambiguities (see package-canvas-codec.md).
+ * ambiguities (see package-codec.md).
  */
 function containsNegativeZero(value: unknown): boolean {
   if (typeof value === 'number') return Object.is(value, -0)
@@ -53,7 +50,7 @@ function containsProtoKey(value: unknown): boolean {
   return false
 }
 
-// Extension facet payloads must stay yaml-safe (see canvas-codec's
+// Extension facet payloads must stay yaml-safe (see codec's
 // yaml-safe.ts) — jsonValue() already excludes undefined/NaN/bigint/
 // function/symbol, so extensionFacetsArbitrary is already a yaml-safe
 // generator; no separate "yaml-safe" arbitrary is needed here.
@@ -74,10 +71,10 @@ const okfDocumentArbitrary = fc
   }))
 
 async function setupTools() {
-  const store = new FakeCanvasDocStore()
+  const store = new FakeDocumentStore()
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   const deps = {
-    canvasDocStore: store,
+    documentStore: store,
     blobStore: {} as never,
     documentIndex: store.documentIndex,
   }
@@ -94,8 +91,8 @@ describe('wb_document_set -> the OKF exporter round-trip property', () => {
       const { documentSet, deps } = await setupTools()
       const markdown = serializeOkf(doc)
 
-      await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
-      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+      await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
+      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
       expect(result.frontmatter.type).toBe(doc.frontmatter.type)
       // Not verbatim: the name lives on the workspace now, and a blank name

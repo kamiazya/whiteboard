@@ -50,7 +50,7 @@ import { HeaderBranchChip } from './HeaderBranchChip.js'
 function renderChip() {
   return render(
     <TooltipProvider>
-      <HeaderBranchChip workspaceId="s1" slug="c1" />
+      <HeaderBranchChip workspaceId="s1" path="c1" />
     </TooltipProvider>,
   )
 }
@@ -116,7 +116,7 @@ describe('HeaderBranchChip daemon context wiring', () => {
     render(
       <TooltipProvider>
         <DaemonApiContext.Provider value={daemonFetch}>
-          <HeaderBranchChip workspaceId="s1" slug="c1" />
+          <HeaderBranchChip workspaceId="s1" path="c1" />
         </DaemonApiContext.Provider>
       </TooltipProvider>,
     )
@@ -128,14 +128,14 @@ describe('HeaderBranchChip refreshSignal', () => {
   it('refetches when refreshSignal changes but not on initial mount', () => {
     const { rerender } = render(
       <TooltipProvider>
-        <HeaderBranchChip workspaceId="s1" slug="c1" refreshSignal={0} />
+        <HeaderBranchChip workspaceId="s1" path="c1" refreshSignal={0} />
       </TooltipProvider>,
     )
     expect(state.current.refetch).not.toHaveBeenCalled()
 
     rerender(
       <TooltipProvider>
-        <HeaderBranchChip workspaceId="s1" slug="c1" refreshSignal={1} />
+        <HeaderBranchChip workspaceId="s1" path="c1" refreshSignal={1} />
       </TooltipProvider>,
     )
     expect(state.current.refetch).toHaveBeenCalledTimes(1)

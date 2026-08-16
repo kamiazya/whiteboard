@@ -17,12 +17,12 @@ import { cn } from '@/lib/utils'
 
 interface CanvasThumbProps {
   workspaceId: string
-  slug: string
+  path: string
   size?: 'dropdown' | 'card'
   className?: string
 }
 
-export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }: CanvasThumbProps) {
+export function CanvasThumb({ workspaceId, path, size = 'dropdown', className }: CanvasThumbProps) {
   // A plain <img src> cannot carry the daemon's own origin or Authorization
   // bearer header, so a cross-origin daemon (a DaemonApiContext provider
   // mounted) fetches the image bytes through that authorized fetch and
@@ -32,8 +32,8 @@ export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }:
   const daemonFetch = useDaemonApi()
   const [failed, setFailed] = useState(false)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const src = canvasesApiUrl(workspaceId, slug, 'latest-thumbnail')
-  // Instances are reused across re-renders with a new slug/workspaceId (e.g.
+  const src = canvasesApiUrl(workspaceId, path, 'latest-thumbnail')
+  // Instances are reused across re-renders with a new path/workspaceId (e.g.
   // the canvas switcher dropdown), so a stale `failed` flag from a previous
   // src must not leak into the next canvas's thumbnail. Reset during render
   // (not in an effect) so the fallback icon never flashes for one frame.

@@ -7,8 +7,8 @@ import {
 } from './canvas-list'
 import type { CanvasInfo } from './types'
 
-const canvas = (slug: string, updatedAt: string, name?: string): CanvasInfo => ({
-  slug,
+const canvas = (path: string, updatedAt: string, name?: string): CanvasInfo => ({
+  path,
   updatedAt,
   name,
 })
@@ -17,8 +17,8 @@ describe('sortCanvasesByRecency', () => {
   it('sorts most recently updated first without mutating the input', () => {
     const input = [canvas('a', '2024-01-01'), canvas('b', '2024-02-01'), canvas('c', '2024-01-15')]
     const sorted = sortCanvasesByRecency(input)
-    expect(sorted.map((c) => c.slug)).toEqual(['b', 'c', 'a'])
-    expect(input.map((c) => c.slug)).toEqual(['a', 'b', 'c'])
+    expect(sorted.map((c) => c.path)).toEqual(['b', 'c', 'a'])
+    expect(input.map((c) => c.path)).toEqual(['a', 'b', 'c'])
   })
 })
 
@@ -30,14 +30,14 @@ describe('filterCanvasesBySearch', () => {
     expect(filterCanvasesBySearch(canvases, '', names)).toEqual(canvases)
   })
 
-  it('matches by slug case-insensitively', () => {
-    expect(filterCanvasesBySearch(canvases, 'ROADMAP', names).map((c) => c.slug)).toEqual([
+  it('matches by path case-insensitively', () => {
+    expect(filterCanvasesBySearch(canvases, 'ROADMAP', names).map((c) => c.path)).toEqual([
       'team/roadmap',
     ])
   })
 
-  it('matches by custom display name when the slug does not match', () => {
-    expect(filterCanvasesBySearch(canvases, 'notes', names).map((c) => c.slug)).toEqual([
+  it('matches by custom display name when the path does not match', () => {
+    expect(filterCanvasesBySearch(canvases, 'notes', names).map((c) => c.path)).toEqual([
       'personal',
     ])
   })
@@ -51,18 +51,18 @@ describe('derivePinnedCanvases', () => {
       canvas('c', '2024-01-03'),
     ]
     const result = derivePinnedCanvases(canvases, ['c', 'a'])
-    expect(result.map((c) => c.slug)).toEqual(['c', 'a'])
+    expect(result.map((c) => c.path)).toEqual(['c', 'a'])
   })
 
-  it('skips pinned slugs that no longer exist in the canvas list', () => {
+  it('skips pinned paths that no longer exist in the canvas list', () => {
     const canvases = [canvas('a', '2024-01-01')]
     const result = derivePinnedCanvases(canvases, ['missing', 'a'])
-    expect(result.map((c) => c.slug)).toEqual(['a'])
+    expect(result.map((c) => c.path)).toEqual(['a'])
   })
 })
 
 describe('groupCanvases', () => {
-  it('groups by slug prefix, sorts headers alphabetically, and keeps ungrouped last', () => {
+  it('groups by path prefix, sorts headers alphabetically, and keeps ungrouped last', () => {
     const canvases = [
       canvas('zeta/one', '2024-01-01'),
       canvas('alpha/one', '2024-01-02'),

@@ -1,4 +1,4 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
 

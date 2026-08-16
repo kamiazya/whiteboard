@@ -8,10 +8,10 @@ import {
 
 export interface UseDaemonCanvasControllerOptions {
   daemonBaseUrl: string
-  // Absent workspaceId/slug is resolved to a default (first workspace / first
+  // Absent workspaceId/path is resolved to a default (first workspace / first
   // canvas) on mount — see the resolve effect below.
   workspaceId?: string
-  slug?: string
+  path?: string
   daemonFetch: typeof fetch
 }
 
@@ -22,12 +22,12 @@ export interface DaemonCanvasController {
   // renders this as a full-page error state.
   loadError: string | null
   workspaceId: string | null
-  slug: string | null
+  path: string | null
   workspaces: WorkspaceSummary[]
   canvases: CanvasSummary[]
-  switchCanvas: (slug: string) => void
+  switchCanvas: (path: string) => void
   switchWorkspace: (workspaceId: string) => Promise<void>
-  createCanvas: (slug: string) => Promise<void>
+  createCanvas: (path: string) => Promise<void>
   createError: string | null
   // Non-fatal: switchWorkspace only commits the new workspaceId/canvases
   // after listCanvases succeeds, so a failure here leaves the previous
@@ -45,7 +45,7 @@ function errorMessage(err: unknown): string {
  * Resolves workspace/canvas defaults and owns the canvas-switcher list state
  * for DaemonCanvasPage. Deliberately does NOT create or own the
  * CanvasBackend/useCanvasSync connection — that stays in the page component,
- * mirroring BrowserLocalCanvasPage's own useMemo(backend, [canvasId]) plus
+ * mirroring BrowserLocalCanvasPage's own useMemo(backend, [documentId]) plus
  * useCanvasSync ownership split.
  */
 export function useDaemonCanvasController(
@@ -53,7 +53,7 @@ export function useDaemonCanvasController(
 ): DaemonCanvasController {
   const { daemonBaseUrl, daemonFetch } = options
   const [workspaceId, setWorkspaceId] = useState<string | null>(options.workspaceId ?? null)
-  const [slug, setSlug] = useState<string | null>(options.slug ?? null)
+  const [path, setPath] = useState<string | null>(options.path ?? null)
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [canvases, setCanvases] = useState<CanvasSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,7 +66,7 @@ export function useDaemonCanvasController(
   // never clobber a later, already-committed selection.
   const switchSeqRef = useRef(0)
 
-  // Resolution runs once per mount (daemonBaseUrl/workspaceId/slug come from
+  // Resolution runs once per mount (daemonBaseUrl/workspaceId/path come from
   // a stable pairing payload for the lifetime of this page). listWorkspaces
   // always runs, even when workspaceId is supplied, so the switcher has a
   // list to show — the real pairing-payload caller always passes a non-null
@@ -91,7 +91,7 @@ export function useDaemonCanvasController(
         const { canvases: canvasList } = await listCanvasesApi(daemonFetch, daemonBaseUrl, wid)
         if (cancelled || seq !== switchSeqRef.current) return
         setCanvases(canvasList)
-        setSlug(options.slug ?? canvasList[0]?.slug ?? null)
+        setPath(options.path ?? canvasList[0]?.path ?? null)
       } catch (err) {
         if (!cancelled && seq === switchSeqRef.current) setLoadError(errorMessage(err))
       } finally {
@@ -109,8 +109,8 @@ export function useDaemonCanvasController(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const switchCanvas = useCallback((nextSlug: string) => {
-    setSlug(nextSlug)
+  const switchCanvas = useCallback((nextPath: string) => {
+    setPath(nextPath)
   }, [])
 
   const switchWorkspace = useCallback(
@@ -128,7 +128,7 @@ export function useDaemonCanvasController(
         if (seq !== switchSeqRef.current) return
         setWorkspaceId(nextWorkspaceId)
         setCanvases(list)
-        setSlug(list[0]?.slug ?? null)
+        setPath(list[0]?.path ?? null)
       } catch (err) {
         // Deliberately setSwitchError, not setLoadError: the previous
         // workspace/canvas selection (and its live editor connection) is
@@ -140,23 +140,23 @@ export function useDaemonCanvasController(
   )
 
   const createCanvas = useCallback(
-    async (newSlug: string): Promise<void> => {
+    async (newPath: string): Promise<void> => {
       if (workspaceId === null) return
       setCreateError(null)
       try {
-        const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newSlug)
+        const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newPath)
         const { canvases: refreshed } = await listCanvasesApi(
           daemonFetch,
           daemonBaseUrl,
           workspaceId,
         )
         setCanvases(refreshed)
-        setSlug(created.slug)
+        setPath(created.path)
       } catch (err) {
         setCreateError(errorMessage(err))
-        // The caller derives its next slug from `canvases`. A failure often means that list is
-        // already stale (another client took the slug) — without a refresh, a retry re-derives
-        // the SAME losing slug from the same stale list and collides forever. Best-effort:
+        // The caller derives its next path from `canvases`. A failure often means that list is
+        // already stale (another client took the path) — without a refresh, a retry re-derives
+        // the SAME losing path from the same stale list and collides forever. Best-effort:
         // leaving the previous (possibly stale) list is no worse than not trying.
         await listCanvasesApi(daemonFetch, daemonBaseUrl, workspaceId)
           .then(({ canvases: refreshed }) => setCanvases(refreshed))
@@ -170,7 +170,7 @@ export function useDaemonCanvasController(
     loading,
     loadError,
     workspaceId,
-    slug,
+    path,
     workspaces,
     canvases,
     switchCanvas,

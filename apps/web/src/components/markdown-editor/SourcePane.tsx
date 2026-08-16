@@ -149,16 +149,16 @@ export function SourcePane({
     const state = EditorState.create({
       doc: value,
       extensions: [
-        // GFM, because the preview pane parses through canvas-codec's
+        // GFM, because the preview pane parses through codec's
         // pipeline (`remark-parse` + `remark-gfm` + `remark-math`) and
         // `markdown()`'s default base is plain CommonMark. Left unmatched,
         // the two panes disagree about what the document even IS: a
         // `~~strikethrough~~` or a table renders in the preview while
         // staying unrecognized, and therefore unstyled, in the source.
         // `markdownLanguage` would also cover GFM but throws in
-        // Subscript/Superscript/Emoji, which canvas-codec does NOT parse —
+        // Subscript/Superscript/Emoji, which codec does NOT parse —
         // that trades this mismatch for its mirror image. Math is still
-        // unmatched: canvas-codec parses it, but the preview degrades it to
+        // unmatched: codec parses it, but the preview degrades it to
         // an escaped-source placeholder anyway (see render-preview.ts), so
         // there is nothing yet for a source-side math grammar to agree with.
         markdown({ extensions: [GFM] }),

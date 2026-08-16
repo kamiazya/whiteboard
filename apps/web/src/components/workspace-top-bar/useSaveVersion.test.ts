@@ -9,7 +9,7 @@ function jsonResponse(body: unknown, ok = true): Response {
 const VALID_VERSION = {
   version: {
     id: 'v1',
-    slug: 'foo',
+    path: 'foo',
     createdAt: '2026-01-01T00:00:00Z',
     elementCount: 3,
     auto: false,
@@ -22,7 +22,7 @@ describe('useSaveVersion', () => {
   it('POSTs /versions and returns true on a schema-valid response', async () => {
     const daemonFetch = vi.fn().mockResolvedValue(jsonResponse(VALID_VERSION))
     const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', slug: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
     )
     let ok = false
     await act(async () => {
@@ -38,7 +38,7 @@ describe('useSaveVersion', () => {
   it('returns false without throwing when the response fails schema validation', async () => {
     const daemonFetch = vi.fn().mockResolvedValue(jsonResponse({ nope: true }))
     const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', slug: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
     )
     let ok = true
     await act(async () => {
@@ -55,7 +55,7 @@ describe('useSaveVersion', () => {
       }),
     )
     const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', slug: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
     )
     let firstResult: boolean | undefined
     let secondResult: boolean | undefined

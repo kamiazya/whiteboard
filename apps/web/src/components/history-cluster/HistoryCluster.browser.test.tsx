@@ -15,7 +15,7 @@ type FetchArgs = [RequestInfo | URL, RequestInit?]
 function mkVersionsResponse(count = 24): Response {
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
-    slug: 'design/login-flow',
+    path: 'design/login-flow',
     createdAt: new Date(Date.now() - index * 60_000).toISOString(),
     elementCount: 58 + index,
     label: `Version ${index + 1}`,
@@ -67,7 +67,7 @@ function renderCluster() {
           onRedo={vi.fn()}
           canUndo
           canRedo
-          versions={{ workspaceId: 'sess_1', slug: 'design/login-flow' }}
+          versions={{ workspaceId: 'sess_1', path: 'design/login-flow' }}
         />
       </div>
     </div>,

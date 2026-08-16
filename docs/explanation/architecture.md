@@ -49,7 +49,7 @@ This project is split into three main runtime layers:
 
 ### Browser collaboration path
 
-1. A browser opens `/w/{workspaceId}/canvas/{slug}`.
+1. A browser opens `/w/{workspaceId}/canvas/{path}`.
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
 4. WebSocket events broadcast document changes, version events, and branch head changes.
@@ -69,7 +69,7 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `wb_scene_render` | Render the current canvas to an SVG string from its persisted document — no browser connection required. The reported `width`/`height` cover everything drawn, edges included, not just the nodes' own boxes. |
 | `wb_scene_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. Entries are named by the canvas's own node ids, so anything the digest reports can be acted on directly with `wb_node_patch`; content laid out inside a node is not reported as a node of its own. |
 | `wb_document_get` / `wb_document_set` | Read and replace a document's content. `wb_document_get` answers in the document's own format — OKF Markdown for a markdown document, JSON Canvas 1.0 (with the `x-whiteboard` extension) for a spatial one — and the format is not a parameter. `wb_document_set` writes OKF Markdown. |
-| `wb_version_save` / `wb_version_restore` / `wb_version_list` | Save and restore labeled canvas versions. `wb_version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
+| `wb_version_save` / `wb_version_restore` / `wb_version_list` | Save and restore labeled canvas versions. `wb_version_restore` accepts an optional `targetPath` to fork the past state into a new canvas instead of reconciling in place. |
 
 **A content write has to match the document's format.** The two formats share
 one stored structure — a markdown document keeps its OKF body in a spatial

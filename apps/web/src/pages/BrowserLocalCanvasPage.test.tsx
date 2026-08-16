@@ -586,7 +586,7 @@ describe('BrowserLocalCanvasPage', () => {
     // This only proves the page itself respects initialCanvasId — it does NOT
     // cover the URL->initialCanvasId wiring (App.tsx's parseBrowserLocalRoute),
     // since the pathname and the prop are set independently here. See
-    // App.test.tsx's "derives initialCanvasId from the /local/:canvasId URL"
+    // App.test.tsx's "derives initialCanvasId from the /local/:documentId URL"
     // test for that boundary.
     vi.useRealTimers()
     const store = new MemoryStore()
@@ -609,7 +609,7 @@ describe('BrowserLocalCanvasPage', () => {
     expect(heading.textContent).toBe('Other canvas')
   })
 
-  it('updates the URL to /local/:canvasId when the switcher opens a different canvas', async () => {
+  it('updates the URL to /local/:documentId when the switcher opens a different canvas', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')

@@ -18,7 +18,7 @@ const importBaseDir = mkdtempSync(join(tmpdir(), 'whiteboard-seam-base-'))
 process.env.WHITEBOARD_DATA_DIR = importBaseDir
 
 const { overrideDataDir, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
-const { saveCanvas } = await import('./canvas-store.js')
+const { saveDocument } = await import('./document-store.js')
 const { closeDb } = await import('./db/index.js')
 
 describe('storage layer follows the effective data dir seam', () => {
@@ -41,7 +41,7 @@ describe('storage layer follows the effective data dir seam', () => {
     const doc = new LoroDoc()
     doc.getMap('root').set('k', 'v')
     doc.commit()
-    await saveCanvas('ws-seam-test', 'seam-canvas', doc)
+    await saveDocument('ws-seam-test', 'seam-canvas', doc)
 
     const overrideEntries = await readdir(overrideDir)
     expect(overrideEntries).toContain('whiteboard.db')

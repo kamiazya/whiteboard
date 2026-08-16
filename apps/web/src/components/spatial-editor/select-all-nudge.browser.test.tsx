@@ -2,7 +2,7 @@
 // completeness slice 6). The nudge fix closes a latent bug select-all
 // makes immediately visible: arrow keys moved only the PRIMARY node,
 // tearing a multi-selection apart.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

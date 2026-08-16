@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { ResolvedDoc, ResolvedDocBundle } from './embed-recursion.js'
 import { resolveEmbeds } from './embed-recursion.js'
 
-function doc(canvasId: string, title: string, embeds: readonly string[]): ResolvedDoc {
-  return { canvasId, title, embeds }
+function doc(documentId: string, title: string, embeds: readonly string[]): ResolvedDoc {
+  return { documentId, title, embeds }
 }
 
 describe('resolveEmbeds', () => {
   it('renders a leaf doc with no embeds normally', () => {
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'Doc A', []) },
     }
     const result = resolveEmbeds(bundle)
@@ -19,7 +19,7 @@ describe('resolveEmbeds', () => {
   it('renders a placeholder at the depth cap (4th nesting level, root=0)', () => {
     // A -> B -> C -> D -> E: E is depth 4, the cap hit.
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: {
         A: doc('A', 'A', ['B']),
         B: doc('B', 'B', ['C']),
@@ -37,13 +37,13 @@ describe('resolveEmbeds', () => {
     expect(placeholder?.kind).toBe('embedPlaceholder')
     if (placeholder?.kind === 'embedPlaceholder') {
       expect(placeholder.reason).toBe('depthCap')
-      expect(placeholder.canvasId).toBe('E')
+      expect(placeholder.documentId).toBe('E')
     }
   })
 
   it('renders a placeholder for a path-local cycle re-visit (self-embed)', () => {
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'A', ['A']) },
     }
     const result = resolveEmbeds(bundle)
@@ -55,7 +55,7 @@ describe('resolveEmbeds', () => {
 
   it('renders a placeholder for a mutual A<->B cycle', () => {
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'A', ['B']), B: doc('B', 'B', ['A']) },
     }
     const result = resolveEmbeds(bundle)
@@ -70,7 +70,7 @@ describe('resolveEmbeds', () => {
     // A embeds B twice (via C and via D), B has no further embeds: each B is
     // reached on a disjoint path (A->C->B and A->D->B), so neither is a cycle.
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: {
         A: doc('A', 'A', ['C', 'D']),
         C: doc('C', 'C', ['B']),
@@ -90,7 +90,7 @@ describe('resolveEmbeds', () => {
 
   it('renders a placeholder for a missing bundle key', () => {
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'A', ['missing']) },
     }
     const result = resolveEmbeds(bundle)
@@ -98,13 +98,13 @@ describe('resolveEmbeds', () => {
     expect(child?.kind).toBe('embedPlaceholder')
     if (child?.kind === 'embedPlaceholder') {
       expect(child.reason).toBe('unresolvable')
-      expect(child.title).toBe('missing') // falls back to canvasId
+      expect(child.title).toBe('missing') // falls back to documentId
     }
   })
 
   it('renders a placeholder for an explicitly unresolved bundle entry', () => {
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'A', ['B']), B: { unresolved: true } },
     }
     const result = resolveEmbeds(bundle)
@@ -114,10 +114,10 @@ describe('resolveEmbeds', () => {
   })
 
   it('renders a placeholder rather than resolving an inherited prototype key', () => {
-    // `docs` is looked up with `docs[canvasId]`; canvasId '__proto__' or
+    // `docs` is looked up with `docs[documentId]`; documentId '__proto__' or
     // 'toString' must not resolve to an inherited Object.prototype value.
     const bundle: ResolvedDocBundle = {
-      root: { canvasId: 'A' },
+      root: { documentId: 'A' },
       docs: { A: doc('A', 'A', ['__proto__', 'toString']) },
     }
     const result = resolveEmbeds(bundle)
@@ -140,18 +140,18 @@ describe('resolveEmbeds', () => {
         ids.filter((other) => other !== id),
       )
     }
-    expect(() => resolveEmbeds({ root: { canvasId: 'A' }, docs })).not.toThrow()
+    expect(() => resolveEmbeds({ root: { documentId: 'A' }, docs })).not.toThrow()
   })
 })
 
 function findByCanvasId(
   node: ReturnType<typeof resolveEmbeds>,
-  canvasId: string,
+  documentId: string,
 ): ReturnType<typeof resolveEmbeds> | undefined {
-  if (node.kind === 'embedResolved' && node.canvasId === canvasId) return node
+  if (node.kind === 'embedResolved' && node.documentId === documentId) return node
   if (node.kind === 'embedResolved') {
     for (const child of node.children) {
-      const found = findByCanvasId(child as ReturnType<typeof resolveEmbeds>, canvasId)
+      const found = findByCanvasId(child as ReturnType<typeof resolveEmbeds>, documentId)
       if (found) return found
     }
   }

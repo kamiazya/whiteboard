@@ -50,11 +50,11 @@ export default defineConfig({
   // Keep it external and list it in dependencies so npx finds it at runtime.
   external: ['yaml'],
   noExternal: [
-    '@kamiazya/whiteboard-canvas-model',
-    '@kamiazya/whiteboard-canvas-codec',
+    '@kamiazya/whiteboard-model',
+    '@kamiazya/whiteboard-codec',
     '@kamiazya/whiteboard-canvas-render',
-    '@kamiazya/whiteboard-canvas-ports',
-    '@kamiazya/whiteboard-canvas-workspace',
+    '@kamiazya/whiteboard-ports',
+    '@kamiazya/whiteboard-loro-adapter',
     '@kamiazya/whiteboard-server-core',
   ],
 })

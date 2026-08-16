@@ -1,4 +1,4 @@
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
 import { storeMemoryModule } from './store-memory.module.js'
@@ -17,7 +17,7 @@ export function createContainer(storeModule: ContainerModule = storeMemoryModule
  */
 export function resolveServerDeps(container: Container): ServerDeps {
   return {
-    canvasDocStore: container.get(TOKENS.CanvasDocStore),
+    documentStore: container.get(TOKENS.DocumentStore),
     blobStore: container.get(TOKENS.BlobStore),
     documentIndex: container.get(TOKENS.DocumentIndex),
   }

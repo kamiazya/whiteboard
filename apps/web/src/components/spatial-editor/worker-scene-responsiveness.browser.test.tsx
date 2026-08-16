@@ -15,7 +15,7 @@
  * frames across the update is the direct observation of it; the mutation check
  * for this test is to disable offloading, which starves the counter.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

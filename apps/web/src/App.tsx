@@ -80,8 +80,8 @@ const DaemonIndexPage = lazy(() =>
 )
 
 // Which daemon-mode view is showing: the canvas gallery, or a specific open
-// canvas. A #wb= fragment with a slug skips straight to 'canvas'; local-daemon
-// and slug-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
+// canvas. A #wb= fragment with a path skips straight to 'canvas'; local-daemon
+// and path-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
 // forces a clean remount (fresh controller/backend) on every index -> canvas
 // transition instead of reusing a previous canvas's identity. Reuses
 // DaemonRoute's shape (rather than a parallel type) since this state IS the
@@ -204,32 +204,32 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A #wb= fragment carrying both workspaceId+slug skips straight to the
+  // A #wb= fragment carrying both workspaceId+path skips straight to the
   // canvas (the existing deep-link contract); a workspace-only fragment is
   // still a valid target (see daemon-connection-payload.ts's refine) and
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
   // (local-daemon's runtime-config path, or a same-origin cold load of a
-  // `/w/:workspaceId/canvas/:slug` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // `/w/:workspaceId/canvas/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
   // mount time are fixed for the life of the mount.
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
     if (daemonConnection.status === 'paired') {
-      const { workspaceId, slug } = daemonConnection.payload
-      if (workspaceId && slug) return { kind: 'canvas', workspaceId, slug }
+      const { workspaceId, path } = daemonConnection.payload
+      if (workspaceId && path) return { kind: 'canvas', workspaceId, path }
       return { kind: 'index', workspaceId }
     }
     return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
   })
 
   // Derived per render, not read once at mount: '/' (no id) renders the
-  // canvas list, /local/:canvasId mounts the editor. Once mounted, the
+  // canvas list, /local/:documentId mounts the editor. Once mounted, the
   // editor owns URL<->canvas-id sync for in-editor switching (it reads
   // initialCanvasId a single time), so App re-routes only when the URL
   // crosses the list/editor boundary — including browser Back from the
   // editor to the list.
-  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.canvasId
+  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.documentId
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -243,7 +243,7 @@ export function App({ providerState }: AppProps) {
   const isFirstUrlSyncRef = useRef(true)
   useEffect(() => {
     if (isPairRoute) return
-    // /local/:canvasId belongs to the browser-local world, not daemonView —
+    // /local/:documentId belongs to the browser-local world, not daemonView —
     // rewriting it to the daemon path would yank an open browser-local
     // editor back to the list.
     if (parseBrowserLocalRoute(location.pathname) !== null) return
@@ -292,21 +292,21 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, isPairRoute])
 
-  // Persists ONLY the reconnect target (baseUrl/workspaceId/slug), never the
+  // Persists ONLY the reconnect target (baseUrl/workspaceId/path), never the
   // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
   // existing semantics. This lets a later hosted-app load (a fresh tab with
   // no #wb= fragment) offer a one-click reconnect via DaemonDetectedBanner
   // instead of silently landing on browser-local with no path back.
   useEffect(() => {
     if (daemonConnection.status !== 'paired') return
-    const { baseUrl, workspaceId, slug } = daemonConnection.payload
+    const { baseUrl, workspaceId, path } = daemonConnection.payload
     // update() serializes and writes to localStorage synchronously; skip it
     // when the stored target already matches what we would write.
     const stored = userSettingsStore.load().storage
     if (
       stored.localDaemonBaseUrl === baseUrl &&
       stored.lastConnectedWorkspaceId === workspaceId &&
-      stored.lastConnectedSlug === slug
+      stored.lastConnectedPath === path
     ) {
       return
     }
@@ -316,7 +316,7 @@ export function App({ providerState }: AppProps) {
         ...current.storage,
         localDaemonBaseUrl: baseUrl,
         lastConnectedWorkspaceId: workspaceId,
-        lastConnectedSlug: slug,
+        lastConnectedPath: path,
       },
     }))
     // daemonConnection is a stable module-scope singleton for the life of the
@@ -412,7 +412,7 @@ export function App({ providerState }: AppProps) {
           : {
               baseUrl: (grantPaired as { daemonBaseUrl: string }).daemonBaseUrl,
               workspaceId: undefined,
-              slug: undefined,
+              path: undefined,
             }
       const pairedToken =
         daemonConnection.status === 'paired'
@@ -436,16 +436,16 @@ export function App({ providerState }: AppProps) {
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
                     initialWorkspaceId={daemonView.workspaceId}
-                    onOpenCanvas={(workspaceId, slug) =>
-                      setDaemonView({ kind: 'canvas', workspaceId, slug })
+                    onOpenCanvas={(workspaceId, path) =>
+                      setDaemonView({ kind: 'canvas', workspaceId, path })
                     }
                   />
                 ) : (
                   <DaemonCanvasPage
-                    key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                    key={`${daemonView.workspaceId}:${daemonView.path}`}
                     daemonBaseUrl={payload.baseUrl}
                     workspaceId={daemonView.workspaceId}
-                    slug={daemonView.slug}
+                    path={daemonView.path}
                     token={pairedToken}
                     onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                     browserLocalStore={browserLocalStore}
@@ -523,16 +523,16 @@ export function App({ providerState }: AppProps) {
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
                   initialWorkspaceId={daemonView.workspaceId}
-                  onOpenCanvas={(workspaceId, slug) =>
-                    setDaemonView({ kind: 'canvas', workspaceId, slug })
+                  onOpenCanvas={(workspaceId, path) =>
+                    setDaemonView({ kind: 'canvas', workspaceId, path })
                   }
                 />
               ) : (
                 <DaemonCanvasPage
-                  key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                  key={`${daemonView.workspaceId}:${daemonView.path}`}
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   workspaceId={daemonView.workspaceId}
-                  slug={daemonView.slug}
+                  path={daemonView.path}
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   browserLocalStore={browserLocalStore}
@@ -610,7 +610,7 @@ export function App({ providerState }: AppProps) {
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
             {browserLocalCanvasId === undefined ? (
               // '/' (and any non-/local path) lands on the canvas list. The
-              // editor mounts only for /local/:canvasId, whose in-editor
+              // editor mounts only for /local/:documentId, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
               <BrowserLocalIndexPage

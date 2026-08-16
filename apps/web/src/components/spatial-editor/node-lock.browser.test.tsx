@@ -3,7 +3,7 @@
 // (it lives in the Loro doc's sidecar map), so the editor takes it as a
 // prop and reports toggles through a callback — the same seam shape as
 // the file/image resolvers.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

@@ -31,10 +31,10 @@ export type BranchesState = CanvasBranchesState
 export type MergeResult = MergeResponse
 
 // ── URL builder ──
-// Slugs can contain "/", so always encode them.
+// Paths can contain "/", so always encode them.
 export function buildBranchUrls(
   workspaceId: string,
-  slug: string,
+  path: string,
 ): {
   list: string
   head: string
@@ -42,8 +42,8 @@ export function buildBranchUrls(
   stats: (name: string) => string
   merge: (source: string) => string
 } {
-  const safeSlug = encodeURIComponent(slug)
-  const base = `/api/workspaces/${workspaceId}/canvases/${safeSlug}`
+  const safePath = encodeURIComponent(path)
+  const base = `/api/workspaces/${workspaceId}/canvases/${safePath}`
   return {
     list: `${base}/branches`,
     head: `${base}/head`,
@@ -124,8 +124,8 @@ function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
 // daemon-origin-aware fetch obtained from useDaemonApi() instead. Kept a
 // plain function (not a hook) because it is also constructed outside React
 // (branchesApi.test.ts) and inside a ref (see useBranches below).
-export function branchesApi(workspaceId: string, slug: string, fetchFn: typeof fetch = apiFetch) {
-  const urls = buildBranchUrls(workspaceId, slug)
+export function branchesApi(workspaceId: string, path: string, fetchFn: typeof fetch = apiFetch) {
+  const urls = buildBranchUrls(workspaceId, path)
   return {
     async list(): Promise<BranchesState> {
       const res = await requireOk(await fetchFn(urls.list))
@@ -203,7 +203,7 @@ export interface UseBranchesResult {
 
 export function useBranches(
   workspaceId: string,
-  slug: string,
+  path: string,
   fetchFn: typeof fetch = apiFetch,
 ): UseBranchesResult {
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
@@ -214,15 +214,15 @@ export function useBranches(
   // rebuild would depend on effect declaration order to run before the
   // initial-fetch effect — correct today but fragile under reordering. The
   // factory is a stateless wrapper, so rebuilding during render is safe.
-  const apiRef = useRef(branchesApi(workspaceId, slug, fetchFn))
-  const apiDepsRef = useRef({ workspaceId, slug, fetchFn })
+  const apiRef = useRef(branchesApi(workspaceId, path, fetchFn))
+  const apiDepsRef = useRef({ workspaceId, path, fetchFn })
   if (
     apiDepsRef.current.workspaceId !== workspaceId ||
-    apiDepsRef.current.slug !== slug ||
+    apiDepsRef.current.path !== path ||
     apiDepsRef.current.fetchFn !== fetchFn
   ) {
-    apiDepsRef.current = { workspaceId, slug, fetchFn }
-    apiRef.current = branchesApi(workspaceId, slug, fetchFn)
+    apiDepsRef.current = { workspaceId, path, fetchFn }
+    apiRef.current = branchesApi(workspaceId, path, fetchFn)
   }
   // Monotonically increasing counter. Each refetch call stamps its result with
   // the counter value at dispatch time; the setter is a no-op when a newer
@@ -233,7 +233,13 @@ export function useBranches(
   // Reset synchronously during render when the canvas changes — an effect
   // would leave one frame where consumers that don't check `loading` see the
   // PREVIOUS canvas's branches/head.
-  const canvasKey = `${workspaceId} ${slug}`
+  // A literal NUL as the separator, written as an escape: neither a workspace
+  // id nor a document path can contain one, so the two halves cannot collide
+  // the way a `/` or `:` separator would. Spelled `\0` because a raw NUL byte
+  // in the source makes every tool treat this file as binary — grep reports
+  // "binary file matches" and prints nothing, which is how a stale name in
+  // here survived a repo-wide sweep.
+  const canvasKey = `${workspaceId}\0${path}`
   const [prevCanvasKey, setPrevCanvasKey] = useState(canvasKey)
   if (prevCanvasKey !== canvasKey) {
     setPrevCanvasKey(canvasKey)
@@ -260,7 +266,7 @@ export function useBranches(
 
   useEffect(() => {
     void refetch()
-  }, [refetch, workspaceId, slug, fetchFn])
+  }, [refetch, workspaceId, path, fetchFn])
 
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after

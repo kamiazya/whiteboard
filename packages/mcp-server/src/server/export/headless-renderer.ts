@@ -4,7 +4,7 @@
 //   1. canvas-render's `layoutSpatialCanvas` turns the persisted canvas
 //      into a canvas-render `Scene`, using the vendored opentype.js
 //      measurer (measure-text.ts) as the injected text-measurement seam,
-//      canvas-codec's `parseMarkdownBody` as the injected body parser, and
+//      codec's `parseMarkdownBody` as the injected body parser, and
 //      canvas-render's shared `createSpatialTheme({ mode: 'light' })` as
 //      the injected appearance resolver — export is deliberately pinned to
 //      light (package-canvas-render.md decision #8) so a user's UI theme
@@ -22,8 +22,6 @@
 // getHeadlessExporter() — warms the font measurer and resvg's module
 // import once per process; every render call after that reuses the result.
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type {
   MeasureText,
   Scene,
@@ -36,6 +34,8 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'

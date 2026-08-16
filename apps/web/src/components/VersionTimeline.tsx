@@ -30,7 +30,7 @@ const log = getAppLogger('VersionTimeline')
 
 interface Props {
   workspaceId: string
-  slug: string
+  path: string
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
   // Bumped by the caller (e.g. after a manual "Save version" action, or a WS
@@ -72,7 +72,7 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
-export default function VersionTimeline({ workspaceId, slug, onRestored, refreshSignal }: Props) {
+export default function VersionTimeline({ workspaceId, path, onRestored, refreshSignal }: Props) {
   const fetchFn = useDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -87,25 +87,25 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
   // Monotonically increasing sequence stamp. Each refresh() call captures the
   // value at dispatch time; a response only commits if no newer refresh has
   // started meanwhile. Without this, a slow /versions response for an older
-  // workspaceId/slug pair could overwrite the list after the canvas changed.
+  // workspaceId/path pair could overwrite the list after the canvas changed.
   const fetchSeqRef = useRef(0)
 
   const refresh = useCallback(async () => {
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
-      const res = await fetchFn(canvasesApiUrl(workspaceId, slug, 'versions'))
+      const res = await fetchFn(canvasesApiUrl(workspaceId, path, 'versions'))
       if (seq !== fetchSeqRef.current) return
       if (res.ok) {
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
         if (seq !== fetchSeqRef.current) return
         if (parsed.success) setVersions(parsed.data.versions)
         else {
-          log.error('versions response failed schema validation', { workspaceId, slug })
+          log.error('versions response failed schema validation', { workspaceId, path })
           setVersions([])
         }
       } else {
-        log.error('versions request failed', { status: res.status, workspaceId, slug })
+        log.error('versions request failed', { status: res.status, workspaceId, path })
       }
     } catch (err) {
       if (seq !== fetchSeqRef.current) return
@@ -113,11 +113,11 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [workspaceId, slug, fetchFn])
+  }, [workspaceId, path, fetchFn])
 
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
-  // workspaceId/slug) never renders under the new canvas while the refetch
+  // workspaceId/path) never renders under the new canvas while the refetch
   // is in flight. Also drop any staged restore — confirming a dialog opened
   // on the previous canvas would POST that version id to the NEW canvas's
   // restore endpoint.
@@ -126,7 +126,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     setPendingRestore(null)
     setRestoreError(null)
     setIsRestoring(false)
-  }, [workspaceId, slug])
+  }, [workspaceId, path])
 
   // Reload whenever the canvas changes.
   useEffect(() => {
@@ -139,7 +139,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     state: branchesState,
     loading: branchesLoading,
     refetch: refetchBranches,
-  } = useBranches(workspaceId, slug, fetchFn)
+  } = useBranches(workspaceId, path, fetchFn)
 
   // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
   // same tick. useBranches has no event subscription of its own, so this is
@@ -177,7 +177,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     // actually happened. A failed request keeps the dialog open with an error
     // so the caller never discards undo history for a restore that didn't occur.
     try {
-      const res = await fetchFn(canvasesApiUrl(workspaceId, slug, `versions/${v.id}/restore`), {
+      const res = await fetchFn(canvasesApiUrl(workspaceId, path, `versions/${v.id}/restore`), {
         method: 'POST',
       })
       if (!res.ok) {
@@ -203,7 +203,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, isRestoring, workspaceId, slug, onRestored, refresh, fetchFn])
+  }, [pendingRestore, isRestoring, workspaceId, path, onRestored, refresh, fetchFn])
 
   const head = branchesState.head
 
@@ -296,7 +296,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
                         <VersionThumbnail
                           workspaceId={workspaceId}
-                          slug={slug}
+                          path={path}
                           versionId={v.id}
                           hasThumbnail={v.hasThumbnail}
                         />

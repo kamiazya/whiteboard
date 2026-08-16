@@ -2,8 +2,9 @@
 // canvas looks at the live preview geometry, and which edge sides stay
 // frozen — ONE producer for the editor's static-base/ghost/live-edge
 // layers instead of per-gesture copies drifting apart.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   CARRIED_RESIDE_STEP_PX,

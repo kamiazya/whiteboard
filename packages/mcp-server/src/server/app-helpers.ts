@@ -95,7 +95,7 @@ export function extractInitializeDebugPayload(parsedBody: unknown) {
 
 export function decodeBranchTipOrThrow(
   workspaceId: string,
-  slug: string,
+  path: string,
   branchName: string,
   tipFrontiersBase64: string,
 ) {
@@ -103,7 +103,7 @@ export function decodeBranchTipOrThrow(
     return decodeFrontiers(new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')))
   } catch (error) {
     throw corruptStoredData(
-      `${workspaceId}/branches/${slug}.json#${branchName}.tipFrontiers`,
+      `${workspaceId}/branches/${path}.json#${branchName}.tipFrontiers`,
       `tipFrontiers could not be decoded (${errorMessage(error)})`,
     )
   }

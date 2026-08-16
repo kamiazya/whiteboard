@@ -5,8 +5,9 @@
 // one access path there is for a label. `figure` names the region and keeps
 // its children reachable, which is the honest interim until canvas-render
 // grows the a11y projection its README defers.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'

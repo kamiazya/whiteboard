@@ -41,7 +41,7 @@ describe('docs snapshot — agent drew the architecture diagram', () => {
         testId="canvas-agent-drew-frame"
         width={1100}
         height={640}
-        canvases={[{ slug: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' }]}
+        canvases={[{ path: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' }]}
         scene={ARCHITECTURE_SCENE}
       />,
     )

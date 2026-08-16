@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)', () => {
   it('selecting another branch from the dropdown calls setHead', async () => {
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
@@ -69,7 +69,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('kebab -> rename -> Enter calls renameBranch with the old and new names', async () => {
     // Rename is disabled while head === 'main', so switch HEAD first.
     stateHolder.current.state = { head: 'feature-x', branches }
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -85,7 +85,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
   it('kebab -> delete -> confirm shows the unmerged-commits warning and calls deleteBranch', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -101,7 +101,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   })
 
   it('inline "New variation…" form submits createBranch with the typed name', async () => {
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
@@ -116,7 +116,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
   it('surfaces createBranch rejection as a role=alert with the safe error copy', async () => {
     stateHolder.current.createBranch = vi.fn().mockRejectedValue(new Error('boom'))
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
@@ -143,7 +143,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
       status: 409,
       body: { error: 'branch_conflict', message: 'A variation named "main" already exists' },
     })
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     await userEvent.click(screen.getByTestId('header-branch-chip'))
     await userEvent.click(await screen.findByText(/New variation/))
     const input = await screen.findByPlaceholderText('New variation name')
@@ -156,7 +156,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
   it('surfaces setHead rejection as a role=alert with the safe error copy', async () => {
     stateHolder.current.setHead = vi.fn().mockRejectedValue(new Error('boom'))
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
@@ -170,7 +170,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('surfaces renameBranch rejection as a role=alert with the safe error copy', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
     stateHolder.current.renameBranch = vi.fn().mockRejectedValue(new Error('boom'))
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -190,7 +190,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('surfaces deleteBranch rejection as a role=alert with the safe error copy', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
     stateHolder.current.deleteBranch = vi.fn().mockRejectedValue(new Error('boom'))
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -207,7 +207,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('kebab -> merge opens MergeDialog with the chosen source and current HEAD as target', async () => {
     stateHolder.current.state = { head: 'main', branches }
     stateHolder.current.merge = vi.fn().mockResolvedValue({})
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -226,7 +226,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('disables the merge entry point when mergeEnabled is false', async () => {
     stateHolder.current.state = { head: 'main', branches }
     stateHolder.current.merge = vi.fn().mockResolvedValue({})
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" mergeEnabled={false} />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" mergeEnabled={false} />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -244,7 +244,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
   it('keeps the rename target stable when HEAD changes while the rename dialog is open', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
-    const { rerender } = render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const { rerender } = render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -253,7 +253,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
     // Simulate an external onHeadChanged update landing while the dialog is open.
     stateHolder.current.state = { head: 'main', branches }
-    rerender(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    rerender(<HeaderBranchChip workspaceId="s1" path="c1" />)
 
     const input = await screen.findByPlaceholderText('feature-x')
     await userEvent.clear(input)
@@ -267,7 +267,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     // include it: `state.branches.find(b => b.name === head)` is undefined,
     // so a merge pick must not open MergeDialog with a null target.
     stateHolder.current.state = { head: 'ghost-branch', branches }
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -281,7 +281,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('omits the unmerged-commits count when getBranchStats rejects during delete confirmation', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
     stateHolder.current.getBranchStats = vi.fn().mockRejectedValue(new Error('network error'))
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -300,7 +300,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   it('keeps the merge target stable when HEAD changes while the merge dialog is open', async () => {
     stateHolder.current.state = { head: 'main', branches }
     stateHolder.current.merge = vi.fn().mockResolvedValue({})
-    const { rerender } = render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const { rerender } = render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -310,7 +310,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
 
     // Simulate an external onHeadChanged update landing while the dialog is open.
     stateHolder.current.state = { head: 'feature-x', branches: [branches[1], branches[0]] }
-    rerender(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    rerender(<HeaderBranchChip workspaceId="s1" path="c1" />)
 
     // Assert on the *last* call: a stale-target regression would fire a second
     // preview request for `into: 'feature-x'` once the dialog re-derives its
@@ -329,7 +329,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
       { name: longName, tipFrontiers: '', color: '#f97316', createdAt: '2026-04-23T01:00:00Z' },
     ]
     stateHolder.current.state = { head: longName, branches: longBranches }
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
@@ -345,7 +345,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   })
 
   it('dismisses the "Variation" hover tooltip the moment the switch-variation dropdown opens', async () => {
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
 
     // Hover first so the tooltip actually opens (delayDuration is 0). Radix
@@ -364,7 +364,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   })
 
   it('does not reopen the tooltip when the dropdown returns focus to the chip on close', async () => {
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
 
     await userEvent.hover(chip)
@@ -381,7 +381,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
   })
 
   it('does not poison the next genuine hover when the dropdown closes without returning focus to the chip', async () => {
-    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     const kebab = screen.getByTestId('header-branch-kebab')
 

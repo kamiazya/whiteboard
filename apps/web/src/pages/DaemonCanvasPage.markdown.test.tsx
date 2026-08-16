@@ -8,8 +8,8 @@
 import {
   writeCoreFacets,
   writeDocumentKind,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-canvas-workspace'
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
@@ -49,36 +49,16 @@ const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
 
 /**
  * A daemon-held markdown document in the shape `wb_document_set` actually
- * writes: the body as the single `okf-body` text node of the spatial
- * canvas (NOT the browser-local `body` text container), plus core facets
- * and the stored kind.
+ * writes: the body in the `body` text container, and NOT as a text node of
+ * the spatial canvas. The distinction is the whole point of this fixture —
+ * an agent-authored document that opened empty here is exactly the interop
+ * defect the one-writer rule exists to prevent.
  */
 function markdownSnapshot(): Uint8Array {
   const doc = new LoroDoc()
-  writeSpatialCanvas(doc, {
-    nodes: [
-      {
-        id: 'okf-body',
-        type: 'text',
-        x: 0,
-        y: 0,
-        width: 600,
-        height: 400,
-        text: '# Hello from an agent',
-      },
-    ],
-    edges: [],
-  })
-  writeCoreFacets(doc, { type: 'markdown', title: 'Agent verification note' })
+  writeMarkdownBody(doc, '# Hello from an agent')
+  writeCoreFacets(doc, { type: 'markdown' })
   writeDocumentKind(doc, 'markdown')
-  return doc.export({ mode: 'snapshot' })
-}
-
-/** A daemon-held spatial document: empty canvas, stored kind. */
-function spatialSnapshot(): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, { nodes: [], edges: [] })
-  writeDocumentKind(doc, 'spatial')
   return doc.export({ mode: 'snapshot' })
 }
 
@@ -109,7 +89,7 @@ describe('DaemonCanvasPage markdown documents', () => {
     window.localStorage.clear()
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      canvases: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
     })
   })
   afterEach(() => {
@@ -124,7 +104,7 @@ describe('DaemonCanvasPage markdown documents', () => {
         <DaemonCanvasPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
-          slug="agent-note"
+          path="agent-note"
           createBackend={() => new FakeBackend()}
         />,
         { container: document.body },
@@ -143,7 +123,7 @@ describe('DaemonCanvasPage markdown documents', () => {
         <DaemonCanvasPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
-          slug="agent-note"
+          path="agent-note"
           createBackend={() => new FakeBackend()}
         />,
         { container: document.body },
@@ -152,44 +132,8 @@ describe('DaemonCanvasPage markdown documents', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Hello from an agent'))
   })
 
-  // The top-bar title slot: canvas identity lives in the merged header row,
-  // backed by the sync session's core facets (mirrors the browser-local page).
-  it('shows the document title from core facets and the facets disclosure for markdown', async () => {
-    await act(async () => {
-      render(
-        <DaemonCanvasPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          workspaceId="w1"
-          slug="agent-note"
-          createBackend={() => new FakeBackend()}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => {
-      const title = screen.getByPlaceholderText('Untitled') as HTMLInputElement
-      expect(title.value).toBe('Agent verification note')
-    })
-    // Facets are OKF frontmatter, so a markdown document gets the disclosure.
-    expect(screen.getByLabelText('Properties')).toBeTruthy()
-  })
-
-  it('hides the facets disclosure for a spatial document (no OKF frontmatter to hold)', async () => {
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
-    })
-    await act(async () => {
-      render(
-        <DaemonCanvasPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          workspaceId="w1"
-          slug="board"
-          createBackend={() => new FakeBackend(spatialSnapshot)}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByPlaceholderText('Untitled')).toBeTruthy())
-    expect(screen.queryByLabelText('Properties')).toBeNull()
-  })
+  // No title-slot coverage here, deliberately. This page mounts no identity
+  // slot: a document's NAME is the workspace's (ADR-0009 decision 2) and the
+  // daemon's canvas summary carries no display name to render. The tests for
+  // the title box live with the browser-local page, which has one.
 })

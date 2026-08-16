@@ -3,7 +3,7 @@
 // sandboxed iframe (no allow-same-origin, no referrer); at most three live
 // at once (LRU); collapse returns to the facade. Exports are untouched —
 // this layer is editor-only HTML.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

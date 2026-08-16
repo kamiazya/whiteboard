@@ -1,4 +1,4 @@
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 

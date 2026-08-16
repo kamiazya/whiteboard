@@ -1,4 +1,4 @@
-import type { SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   createEditorAppearance,

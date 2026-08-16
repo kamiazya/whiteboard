@@ -4,7 +4,7 @@ import VersionTimeline from '@/components/VersionTimeline'
 interface VersionPanelProps {
   panelRef: Ref<HTMLDivElement>
   workspaceId: string
-  slug: string
+  path: string
   onRestored?: () => void
   refreshSignal?: number
   versionPanelExtra?: ReactNode
@@ -15,7 +15,7 @@ interface VersionPanelProps {
 export function VersionPanel({
   panelRef,
   workspaceId,
-  slug,
+  path,
   onRestored,
   refreshSignal,
   versionPanelExtra,
@@ -28,7 +28,7 @@ export function VersionPanel({
       <div className="flex h-[480px] min-h-0 flex-col">
         <VersionTimeline
           workspaceId={workspaceId}
-          slug={slug}
+          path={path}
           onRestored={onRestored}
           refreshSignal={refreshSignal}
         />

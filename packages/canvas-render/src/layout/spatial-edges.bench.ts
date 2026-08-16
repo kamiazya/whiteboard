@@ -9,7 +9,7 @@
 //
 // Numbers are machine-specific — compare a before/after on the SAME machine
 // in one sitting, never a committed figure against a fresh run.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bench, describe } from 'vitest'
 import { clusteredLayout } from '../test-utils/routing-corpus.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'

@@ -1,9 +1,9 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-model'
+import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import { resolveFileReferences } from '../render/resolve-file-references.js'
@@ -28,7 +28,7 @@ export const canvasViewReferenceSchema = z
   .strict()
 
 export const canvasViewInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type CanvasViewInput = z.infer<typeof canvasViewInputSchema>
 
@@ -38,7 +38,7 @@ export const canvasViewOutputSchema = z
      * Echoed so the widget's Refresh control can re-invoke this tool for the
      * same canvas without the host having to remember what it asked for.
      */
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     /** The document itself: the widget lays it out, it is not pre-rendered. */
     scene: spatialCanvasSchema,
     /**
@@ -72,12 +72,25 @@ export function createCanvasViewTool(deps: ServerDeps) {
     inputSchema: canvasViewInputSchema,
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
-      const { canvas } = await loadSpatialCanvas(deps, input.canvasId)
+      const { canvas } = await loadSpatialCanvas(deps, input.documentId)
       const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
       return {
-        canvasId: input.canvasId,
+        documentId: input.documentId,
         scene: canvas,
-        references: Object.fromEntries(resolved),
+        // `markdown` -> `body` is the one place the internal record and the
+        // wire disagree. The record is canvas-render's `ResolvedReference`,
+        // which names every content kind it can carry; this schema names
+        // only the two a widget receives, and renaming a published tool's
+        // field is its own increment (vocabulary.md).
+        references: Object.fromEntries(
+          [...resolved].map(([ref, { label, markdown }]) => [
+            ref,
+            {
+              ...(label !== undefined ? { label } : {}),
+              ...(markdown !== undefined ? { body: markdown } : {}),
+            },
+          ]),
+        ),
       }
     },
   }

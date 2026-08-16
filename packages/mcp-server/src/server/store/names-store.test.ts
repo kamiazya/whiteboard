@@ -44,7 +44,7 @@ describe('names-store', () => {
     expect(names.canvases).toEqual({})
   })
 
-  it('setCanvasName stores names per slug', async () => {
+  it('setCanvasName stores names per path', async () => {
     await setCanvasName('sess-1', 'arch/overview', 'Architecture Overview')
     await setCanvasName('sess-1', 'notes/meeting', 'Team meeting notes')
     const names = await loadWorkspaceNames('sess-1')
@@ -59,7 +59,7 @@ describe('names-store', () => {
     expect(names.workspace).toBeUndefined()
   })
 
-  it('setCanvasName deletes the slug entry on empty string input', async () => {
+  it('setCanvasName deletes the path entry on empty string input', async () => {
     await setCanvasName('sess-1', 'a', 'Alpha')
     await setCanvasName('sess-1', 'b', 'Beta')
     await setCanvasName('sess-1', 'a', '')
@@ -68,16 +68,16 @@ describe('names-store', () => {
   })
 
   it('trims leading and trailing whitespace', async () => {
-    await setCanvasName('sess-1', 'slug', '   spaced   ')
+    await setCanvasName('sess-1', 'path', '   spaced   ')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases.slug).toBe('spaced')
+    expect(names.canvases.path).toBe('spaced')
   })
 
   it('treats all-whitespace values as empty and deletes them', async () => {
-    await setCanvasName('sess-1', 'slug', 'Initial')
-    await setCanvasName('sess-1', 'slug', '   \t  \n ')
+    await setCanvasName('sess-1', 'path', 'Initial')
+    await setCanvasName('sess-1', 'path', '   \t  \n ')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases.slug).toBeUndefined()
+    expect(names.canvases.path).toBeUndefined()
   })
 
   it('updates workspace and canvases independently without overwriting each other', async () => {
@@ -100,12 +100,12 @@ describe('names-store', () => {
     expect(names.pinned).toEqual(['c1', 'c2'])
   })
 
-  it('setCanvasPinned(false) removes from the array and is a no-op for missing slugs', async () => {
+  it('setCanvasPinned(false) removes from the array and is a no-op for missing paths', async () => {
     await setCanvasPinned('sess-1', 'c1', true)
     await setCanvasPinned('sess-1', 'c2', true)
     let names = await setCanvasPinned('sess-1', 'c1', false)
     expect(names.pinned).toEqual(['c2'])
-    // Unpinning a missing slug is a no-op.
+    // Unpinning a missing path is a no-op.
     names = await setCanvasPinned('sess-1', 'nope', false)
     expect(names.pinned).toEqual(['c2'])
   })

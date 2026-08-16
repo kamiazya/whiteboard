@@ -9,7 +9,7 @@
 // `data-editor-overlay` so the editor root can skip hit-testing it, and that
 // marker is what this test collects. A future overlay joins the matrix by
 // existing — nobody has to remember to add it here.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'

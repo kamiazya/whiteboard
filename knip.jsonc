@@ -48,10 +48,10 @@
         "src/server/security/auth-strategy.ts": ["duplicates"]
       }
     },
-    "packages/canvas-model": {
+    "packages/model": {
       "project": ["src/**/*.ts"]
     },
-    "packages/canvas-codec": {
+    "packages/codec": {
       "project": ["src/**/*.ts"]
     },
     "tools/arch-lint": {
@@ -60,10 +60,10 @@
       "entry": ["src/scanner.ts", "src/direction-check.ts", "src/architecture-map.ts"],
       "project": ["src/**/*.ts"]
     },
-    "packages/canvas-ports": {
+    "packages/ports": {
       "project": ["src/**/*.ts"]
     },
-    "packages/canvas-workspace": {
+    "packages/loro-adapter": {
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {

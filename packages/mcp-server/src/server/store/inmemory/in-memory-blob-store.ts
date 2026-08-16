@@ -9,7 +9,7 @@ import type {
   BlobPutResult,
   BlobRef,
   BlobStore,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import { cloneBytes } from './clone-bytes.js'
 
 interface BlobRecord {

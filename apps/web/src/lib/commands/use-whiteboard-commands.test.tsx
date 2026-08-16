@@ -7,7 +7,7 @@ import { useWhiteboardCommands } from './use-whiteboard-commands.js'
 function deps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
     provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
-    canvas: { canvasId: 'c1', name: 'Canvas 1' },
+    canvas: { documentId: 'c1', name: 'Canvas 1' },
     ...overrides,
   }
 }
@@ -22,7 +22,7 @@ describe('useWhiteboardCommands', () => {
     )
     const first = result.current
 
-    rerender(deps({ canvas: { canvasId: 'c2', name: 'Canvas 2' } }))
+    rerender(deps({ canvas: { documentId: 'c2', name: 'Canvas 2' } }))
     rerender(
       deps({
         provider: {

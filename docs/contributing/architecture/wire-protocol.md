@@ -33,7 +33,7 @@ Common client-to-server traffic includes:
 
 - JSON is used for control messages.
 - Binary document payloads are used where Loro update transport is more efficient.
-- Message handling is canvas-scoped by workspace and slug.
+- Message handling is canvas-scoped by workspace and path.
 
 ## Why this matters
 

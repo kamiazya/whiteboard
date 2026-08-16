@@ -7,39 +7,39 @@ import {
   type DeleteCanvasResponse,
   type ListCanvasesResponse,
   type ListWorkspacesResponse,
-  type RenameCanvasSlugResponse,
-  renameCanvasSlugRequestSchema,
+  type RenameDocumentPathResponse,
+  renameDocumentPathRequestSchema,
 } from '../../../shared/api-contracts/canvas.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import {
   ConflictError,
-  deleteCanvas,
-  listCanvases,
+  deleteDocument,
+  listDocuments,
   listWorkspaces,
-  renameCanvasSlug,
-  saveCanvas,
+  renameDocumentPath,
+  saveDocument,
   workspaceExists,
-} from '../../store/canvas-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+} from '../../store/document-store.js'
+import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 
 // Names the specific field createCanvasRequestSchema rejected, instead of a
-// single message covering the whole request — a valid slug with an invalid
-// kind must not be told "slug is required", which names the wrong field and
+// single message covering the whole request — a valid path with an invalid
+// kind must not be told "path is required", which names the wrong field and
 // gives the caller no path to recovery.
 function createCanvasRequestErrorTitle(error: z.ZodError): string {
   const issue = error.issues[0]
   const field = issue?.path[0]
   if (field === 'kind') return 'kind must be "spatial" or "markdown"'
-  if (field === 'slug') return 'slug is required'
+  if (field === 'path') return 'path is required'
   return issue?.message ?? 'invalid request body'
 }
 
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/canvases
-// POST /api/workspaces/:workspaceId/canvases  body: { slug: string }
+// POST /api/workspaces/:workspaceId/canvases  body: { path: string }
 export function createWorkspacesRouter() {
   const app = new Hono()
 
@@ -73,7 +73,7 @@ export function createWorkspacesRouter() {
       if (!(await workspaceExists(workspaceId))) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }
-      const canvases = await listCanvases(workspaceId)
+      const canvases = await listDocuments(workspaceId)
       const response: ListCanvasesResponse = { canvases }
       return c.json(response)
     } catch (err) {
@@ -83,8 +83,8 @@ export function createWorkspacesRouter() {
     }
   })
 
-  // Save a new empty LoroDoc under slug. Return 409 for conflicts and 400 for invalid slugs.
-  // On success, return { slug } for client-side navigation.
+  // Save a new empty LoroDoc under path. Return 409 for conflicts and 400 for invalid paths.
+  // On success, return { path } for client-side navigation.
   app.post('/api/workspaces/:workspaceId/canvases', async (c) => {
     const { workspaceId } = c.req.param()
     try {
@@ -105,9 +105,9 @@ export function createWorkspacesRouter() {
         400,
       )
     }
-    const slug = parsed.data.slug
+    const path = parsed.data.path
     try {
-      validateSlug(slug)
+      validateDocumentPath(path)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
@@ -115,14 +115,14 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(workspaceId, slug, doc, { overwrite: false, kind: parsed.data.kind })
-      const response: CreateCanvasResponse = { slug }
+      await saveDocument(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
+      const response: CreateCanvasResponse = { path }
       return c.json(response)
     } catch (err) {
       if (err instanceof ConflictError) {
-        return c.json({ title: `Canvas "${slug}" already exists` }, 409)
+        return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
-      getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
+      getLogger('canvas').error({ err: err as Error }, 'saveDocument failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
   })
@@ -134,66 +134,66 @@ export function createWorkspacesRouter() {
     app,
     'delete',
     [],
-    async (c, workspaceId, slug) => {
+    async (c, workspaceId, path) => {
       try {
-        const deleted = await deleteCanvas(workspaceId, slug)
+        const deleted = await deleteDocument(workspaceId, path)
         if (!deleted) {
-          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
         const response: DeleteCanvasResponse = { ok: true }
         return c.json(response)
       } catch (err) {
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('canvas').error({ err: err as Error }, 'deleteCanvas failed unexpectedly')
+        getLogger('canvas').error({ err: err as Error }, 'deleteDocument failed unexpectedly')
         return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
       }
     },
     { badRequest: 'problem-details' },
   )
 
-  // Rename a canvas's slug in place: same canvasId, same branches/versions/blob,
-  // just a new slug column. Old URLs carrying the old slug 404 by design — no
+  // Rename a canvas's path in place: same documentId, same branches/versions/blob,
+  // just a new path column. Old URLs carrying the old path 404 by design — no
   // redirect, no alias history (0.0.x).
   //
   // Server-side foundation only: no MCP tool, CLI command, or apps/web
-  // affordance calls this route yet. The apps/web slug-edit UI is a planned
+  // affordance calls this route yet. The apps/web path-edit UI is a planned
   // follow-up, not dead code.
   onCanvasesRoute(
     app,
     'put',
-    ['slug'],
-    async (c, workspaceId, slug) => {
+    ['path'],
+    async (c, workspaceId, path) => {
       const raw = await c.req.json().catch(() => null)
       if (raw === null) {
         return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)
       }
-      const parsed = renameCanvasSlugRequestSchema.safeParse(raw)
+      const parsed = renameDocumentPathRequestSchema.safeParse(raw)
       if (!parsed.success) {
-        return c.json({ title: 'slug is required' } satisfies ApiErrorBody, 400)
+        return c.json({ title: 'path is required' } satisfies ApiErrorBody, 400)
       }
-      const newSlug = parsed.data.slug
+      const newPath = parsed.data.path
       try {
-        validateSlug(newSlug)
+        validateDocumentPath(newPath)
       } catch (err) {
         const body = validationErrorBody(err)
         if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
         throw err
       }
       try {
-        const result = await renameCanvasSlug(workspaceId, slug, newSlug)
+        const result = await renameDocumentPath(workspaceId, path, newPath)
         if (!result) {
-          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
-        const response: RenameCanvasSlugResponse = { slug: newSlug }
+        const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {
         if (err instanceof ConflictError) {
-          return c.json({ title: `Canvas "${newSlug}" already exists` }, 409)
+          return c.json({ title: `Canvas "${newPath}" already exists` }, 409)
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('canvas').error({ err: err as Error }, 'renameCanvasSlug failed unexpectedly')
+        getLogger('canvas').error({ err: err as Error }, 'renameDocumentPath failed unexpectedly')
         return c.json({ title: 'Failed to rename canvas.' } satisfies ApiErrorBody, 500)
       }
     },

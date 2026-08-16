@@ -5,8 +5,8 @@
 // zod-schema-discipline no Zod schema is warranted.
 //
 // A markdown parser is an injected dependency, the same seam class as
-// `measure`/`renderMath`: this package never imports canvas-codec, so
-// `parseBody` is supplied by the caller (canvas-codec's
+// `measure`/`renderMath`: this package never imports codec, so
+// `parseBody` is supplied by the caller (codec's
 // `parseMarkdownBody` in both current consumers). Likewise `appearance` is
 // an injected `SpatialAppearanceResolver` (spatial-appearance.ts) — layout
 // never chooses a color.
@@ -24,8 +24,8 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
@@ -60,7 +60,7 @@ export type SpatialLayoutDegradation =
   | { readonly kind: 'body-parse-failed'; readonly nodeId: string; readonly err: unknown }
   | { readonly kind: 'unknown-node-kind'; readonly nodeId: string; readonly type: string }
   // 'repeat' tiling needs the image's intrinsic size, which this pure layer
-  // never has (no image decoding behind the resolveFileImage seam) — it
+  // never has (no image decoding behind the resolved `image`) — it
   // renders as 'cover' and the caller is told.
   | {
       readonly kind: 'unsupported-background-style'
@@ -70,7 +70,7 @@ export type SpatialLayoutDegradation =
 
 /**
  * Presentation-shaped card content for a file node, mapped by the caller
- * from its own facet data (canvas-model's `coreFacetsSchema` and friends).
+ * from its own facet data (model's `coreFacetsSchema` and friends).
  * Deliberately NOT domain-shaped: this package renders "one bare heading
  * line, then labelled rows" and learns nothing about what a facet MEANS —
  * the semantic mapping (`title = facets.title ?? facets.type`, one row per
@@ -126,73 +126,79 @@ export interface SpatialLayoutOptions {
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
-   * Human-readable label for a file node's reference. A composition root
-   * whose file references are opaque ids (the browser-local store) resolves
-   * them to titles here; `undefined` (or a throw — total-layout rule) falls
-   * back to the raw reference string. Absent in exports that have no
-   * resolver, so exported labels stay a pure function of the canvas.
+   * Resolves one reference — a file node's `file`, or a group's
+   * `background` — to everything the caller knows about it. Absent, or
+   * `undefined` for a reference, keeps the plain chrome+label rendering;
+   * a throw is caught (total-layout rule) and read as `undefined`.
+   *
+   * ONE seam rather than one per content kind, because a caller has ONE
+   * document per reference: the six callbacks this replaced were six
+   * closures over the same lookup, called four times per node for the same
+   * key, and every consumer that wired any of them wired most. Collapsing
+   * them also makes a resolution plain DATA, which a function seam could
+   * never be — the layout worker refuses any canvas whose file seams are
+   * wired precisely because a function cannot cross `postMessage`.
+   *
+   * `expandFileNode` stays separate: it is the caller's POLICY over a node
+   * (the editor decides by on-screen size, export by intrinsic size), not
+   * something known about the reference. `MdastLayoutOptions.resolveEmbed`
+   * likewise stays its own seam — it is keyed by a documentId appearing in
+   * prose, not by a spatial node's reference.
    */
-  readonly resolveFileLabel?: (file: string) => string | undefined
-  /**
-   * Marks a file node's reference as pointing at a target that no longer
-   * exists (deleted canvas, imported ref into a store that never had it).
-   * `true` renders a quiet "Missing reference" label instead of the raw
-   * reference — an opaque id tells a reader nothing — while `false`,
-   * absence, or a throw (total-layout rule) keeps the ordinary label
-   * path. This package only paints the state; deciding it (a lookup
-   * against the live document list) is the caller's job, same as every
-   * other injected resolver here.
-   */
-  readonly resolveFileMissing?: (file: string) => boolean
-  /**
-   * Resolves a file node's reference to the referenced spatial canvas for
-   * INLINE embedding. Absent, or `undefined` for a reference, keeps the
-   * card-only rendering. Recursion is depth-capped (3) with path-local
-   * cycle detection — a re-visit on the current path degrades to the card.
-   */
-  readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /**
    * The caller's expansion policy (the LOD gate): called per file node
-   * when `resolveFileCanvas` is present; `false` (or an absent callback)
+   * when a resolution carries a `canvas`; `false` (or an absent callback)
    * keeps the card. canvas-render itself has no expansion policy — the
    * editor decides by on-screen size, export by intrinsic size.
    */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+}
+
+/**
+ * What a caller knows about one reference. Every field is optional and
+ * independent — a caller supplies what it has, and the ranking below
+ * decides what gets painted.
+ *
+ * The content fields are ranked, highest first: `image` (a scaled-down
+ * picture is still a meaningful thumbnail, so it is not LOD-gated),
+ * `canvas` (inline-embedded, depth-capped at 3 with path-local cycle
+ * detection, and gated by `expandFileNode`), `markdown` (the document's own
+ * prose, which says more about it than the facets describing it), then
+ * `facets`. Anything that produces no usable content — an empty body, a
+ * card with no title or rows, a box too small for one block — falls through
+ * to the next rank and finally to the plain chrome+label rendering.
+ */
+export interface ResolvedReference {
   /**
-   * Resolves a file node's reference to a renderable IMAGE (href emitted
-   * verbatim into the SVG — a data: URI in exports, a blob:/app URL in the
-   * editor). Checked BEFORE the canvas-embed seam and not LOD-gated: a
-   * scaled-down image is still a meaningful thumbnail, unlike crushed
-   * canvas content. `undefined` (or a throw) keeps the card.
-   */
-  readonly resolveFileImage?: (
-    file: string,
-  ) => { readonly href: string; readonly alt?: string } | undefined
-  /**
-   * Resolves a file node's reference to the already-parsed body of a
-   * referenced MARKDOWN document, laid out inline in the node's content
-   * area. Checked after the image and canvas-embed seams and BEFORE the
-   * facet card: a document's own prose says more about it than the facets
-   * describing it, and less than a spatial canvas or an image the caller
-   * already resolved. `undefined` or a throw keeps the lower-ranked
-   * rendering.
+   * Human-readable name, for a caller whose references are opaque ids (the
+   * browser-local store). Absent falls back to the raw reference string,
+   * which is why an export that resolves nothing keeps labels a pure
+   * function of the canvas.
    *
-   * Deliberately carries no title, unlike `MdastLayoutOptions.resolveEmbed`.
    * A document's name lives in the workspace, not in its content
-   * (vocabulary.md), and `resolveFileLabel` is already the seam that
-   * resolves it; `resolveEmbed` carries one only because an embed mixed
+   * (vocabulary.md) — which is why the markdown body below carries no title
+   * of its own, unlike `MdastLayoutOptions.resolveEmbed`, whose embed mixed
    * into prose has no other name source.
    */
-  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
+  readonly label?: string
   /**
-   * Resolves a file node's reference to card content built from its facet
-   * data. Checked LAST among the file-node content resolvers — after the
-   * image, canvas-embed and markdown seams — so it never outranks any of
-   * them; `undefined`, a throw, or card data with no usable title/rows (the
-   * common case for a document that carries no facets this caller maps) all
-   * keep the plain chrome+label rendering.
+   * The reference points at a target that no longer exists (deleted
+   * document, an imported ref into a store that never had it). Renders a
+   * quiet "Missing reference" label instead of the raw reference, which for
+   * an opaque id tells a reader nothing. This package only paints the
+   * state; deciding it is a lookup against the live document list, and so
+   * the caller's.
    */
-  readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
+  readonly missing?: boolean
+  /** A renderable image: `href` is emitted verbatim into the SVG — a data: URI in exports, a blob:/app URL in the editor. */
+  readonly image?: { readonly href: string; readonly alt?: string }
+  /** The referenced spatial canvas, for inline embedding. */
+  readonly canvas?: SpatialCanvas
+  /** A referenced markdown document's already-parsed body. */
+  readonly markdown?: MdastRoot
+  /** Card content built from the referenced document's facet data. */
+  readonly facets?: FacetCardData
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
@@ -349,29 +355,31 @@ function composeTextNode(
   return [chromeShape(node, options), ...placeInNode(node, body, options)]
 }
 
+/**
+ * The caller's resolution for one reference, guarded to the never-throw
+ * rule. The single place `resolveReference` is called, so every caller
+ * below gets the same total behaviour without repeating a try/catch.
+ */
+function referenceFor(ref: string, options: ResolvedLayoutOptions): ResolvedReference | undefined {
+  if (options.resolveReference === undefined) return undefined
+  try {
+    return options.resolveReference(ref)
+  } catch {
+    return undefined
+  }
+}
+
 /** The readable label of a non-text node, or `undefined` when it has none. */
 function labelOf(
   node: Extract<SpatialNode, { type: 'file' | 'link' | 'group' }>,
-  options: ResolvedLayoutOptions,
+  resolved: ResolvedReference | undefined,
 ): string | undefined {
   switch (node.type) {
     case 'file': {
-      let missing = false
-      try {
-        missing = options.resolveFileMissing?.(node.file) === true
-      } catch {
-        missing = false
-      }
       // The raw reference is an opaque id — useless to a reader — and the
       // subpath is moot without a target, so neither appears.
-      if (missing) return 'Missing reference'
-      let resolved: string | undefined
-      try {
-        resolved = options.resolveFileLabel?.(node.file)
-      } catch {
-        resolved = undefined
-      }
-      const base = resolved ?? node.file
+      if (resolved?.missing === true) return 'Missing reference'
+      const base = resolved?.label ?? node.file
       return node.subpath ? `${base}${node.subpath}` : base
     }
     case 'link':
@@ -394,21 +402,15 @@ const FILE_EMBED_DEPTH_CAP = 3
  */
 function composeFileEmbed(
   node: Extract<SpatialNode, { type: 'file' }>,
+  resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
-  const resolveFileCanvas = options.resolveFileCanvas
-  if (resolveFileCanvas === undefined) return undefined
+  const child = resolved?.canvas
+  if (child === undefined) return undefined
   if (options.expandFileNode?.(node) !== true) return undefined
   if (options.embedDepth >= FILE_EMBED_DEPTH_CAP || options.embedPath.has(node.file)) {
     return undefined
   }
-  let child: SpatialCanvas | undefined
-  try {
-    child = resolveFileCanvas(node.file)
-  } catch {
-    child = undefined
-  }
-  if (child === undefined) return undefined
 
   const childScene = layoutSpatialCanvasInternalScene(child, {
     ...options,
@@ -430,7 +432,7 @@ function composeFileEmbed(
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-    canvasId: node.file,
+    documentId: node.file,
     children: placed.nodes,
   }
 }
@@ -438,16 +440,11 @@ function composeFileEmbed(
 /** The image rendering of a file node: fills the padded box, aspect kept. */
 function composeFileImage(
   node: Extract<SpatialNode, { type: 'file' }>,
+  resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
-  if (options.resolveFileImage === undefined) return undefined
-  let resolved: { readonly href: string; readonly alt?: string } | undefined
-  try {
-    resolved = options.resolveFileImage(node.file)
-  } catch {
-    resolved = undefined
-  }
-  if (resolved === undefined) return undefined
+  const image = resolved?.image
+  if (image === undefined) return undefined
   const padding = options.geometry.paddingPx
   const w = node.width - 2 * padding
   const h = node.height - 2 * padding
@@ -455,8 +452,8 @@ function composeFileImage(
   return {
     kind: 'image',
     bbox: { x: node.x + padding, y: node.y + padding, w, h },
-    href: resolved.href,
-    ...(resolved.alt !== undefined ? { alt: resolved.alt } : {}),
+    href: image.href,
+    ...(image.alt !== undefined ? { alt: image.alt } : {}),
   }
 }
 
@@ -515,15 +512,10 @@ function fitBodyInNode(
  */
 function composeFileMarkdown(
   node: Extract<SpatialNode, { type: 'file' }>,
+  resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] | undefined {
-  if (options.resolveFileMarkdown === undefined) return undefined
-  let root: MdastRoot | undefined
-  try {
-    root = options.resolveFileMarkdown(node.file)
-  } catch {
-    root = undefined
-  }
+  const root = resolved?.markdown
   if (root === undefined) return undefined
 
   // The LAYOUT is guarded too, not just the resolver call. This seam is the
@@ -546,7 +538,7 @@ function composeFileMarkdown(
   if (body === undefined) return undefined
 
   const chrome = chromeShape(node, options)
-  const label = labelOf(node, options)
+  const label = labelOf(node, resolved)
   const placed = placeInNode(node, body, options)
   return label === undefined
     ? [chrome, ...placed]
@@ -572,15 +564,10 @@ function composeFileMarkdown(
  */
 function composeFileFacets(
   node: Extract<SpatialNode, { type: 'file' }>,
+  resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] | undefined {
-  if (options.resolveFileFacets === undefined) return undefined
-  let card: FacetCardData | undefined
-  try {
-    card = options.resolveFileFacets(node.file)
-  } catch {
-    card = undefined
-  }
+  const card = resolved?.facets
   if (card === undefined) return undefined
 
   const title = card.title?.trim() ? card.title : undefined
@@ -618,14 +605,9 @@ function composeGroupBackground(
   node: Extract<SpatialNode, { type: 'group' }>,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
-  if (node.background === undefined || options.resolveFileImage === undefined) return undefined
-  let resolved: { readonly href: string; readonly alt?: string } | undefined
-  try {
-    resolved = options.resolveFileImage(node.background)
-  } catch {
-    resolved = undefined
-  }
-  if (resolved === undefined) return undefined
+  if (node.background === undefined) return undefined
+  const image = referenceFor(node.background, options)?.image
+  if (image === undefined) return undefined
   if (!(node.width > 0) || !(node.height > 0)) return undefined
   if (node.backgroundStyle === 'repeat') {
     options.onDegrade?.({ kind: 'unsupported-background-style', nodeId: node.id, style: 'repeat' })
@@ -633,8 +615,8 @@ function composeGroupBackground(
   return {
     kind: 'image',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-    href: resolved.href,
-    ...(resolved.alt !== undefined ? { alt: resolved.alt } : {}),
+    href: image.href,
+    ...(image.alt !== undefined ? { alt: image.alt } : {}),
     fit: node.backgroundStyle === 'ratio' ? 'contain' : 'cover',
   }
 }
@@ -642,25 +624,33 @@ function composeGroupBackground(
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   switch (node.type) {
     case 'file': {
-      const image = composeFileImage(node, options)
+      // Resolved ONCE per node and threaded through every rank below. The
+      // seams this replaced re-asked for the same key at each rank, which
+      // meant a caller's lookup ran four times per file node.
+      const resolved = referenceFor(node.file, options)
+      const image = composeFileImage(node, resolved, options)
       if (image !== undefined) {
         // Full-bleed image, no label run — the filename would overlap the
         // picture; the accessible name travels on the image node itself.
         return [chromeShape(node, options), image]
       }
-      const embed = composeFileEmbed(node, options)
+      const embed = composeFileEmbed(node, resolved, options)
       if (embed !== undefined) {
         const chrome = chromeShape(node, options)
-        const label = labelOf(node, options)
+        const label = labelOf(node, resolved)
         return label === undefined
           ? [chrome, embed]
           : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
       }
-      const markdown = composeFileMarkdown(node, options)
+      const markdown = composeFileMarkdown(node, resolved, options)
       if (markdown !== undefined) return markdown
-      const facets = composeFileFacets(node, options)
+      const facets = composeFileFacets(node, resolved, options)
       if (facets !== undefined) return facets
-      break
+      const chrome = chromeShape(node, options)
+      const label = labelOf(node, resolved)
+      return label === undefined
+        ? [chrome]
+        : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options)]
     }
     default:
       break
@@ -672,15 +662,14 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
       const chrome = chromeShape(node, options)
       const background = composeGroupBackground(node, options)
       const base = background === undefined ? [chrome] : [chrome, background]
-      const label = labelOf(node, options)
+      const label = labelOf(node, undefined)
       return label === undefined
         ? base
         : [...base, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
     }
-    case 'file':
     case 'link': {
       const chrome = chromeShape(node, options)
-      const label = labelOf(node, options)
+      const label = labelOf(node, undefined)
       return label === undefined
         ? [chrome]
         : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options)]

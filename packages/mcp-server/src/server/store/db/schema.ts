@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
@@ -13,12 +13,12 @@ interface WorkspacesTable {
   updatedAt: Timestamp
 }
 
-interface CanvasesTable {
-  // Stable nanoid that survives slug renames. PK so child tables can FK on it.
+interface DocumentsTable {
+  // Stable nanoid that survives path renames. PK so child tables can FK on it.
   id: string
   workspaceId: string
-  // Mutable display path; UNIQUE within (workspaceId, slug).
-  slug: string
+  // Mutable display path; UNIQUE within (workspaceId, path).
+  path: string
   displayName: string | null
   isPinned: Bool
   pinOrder: number | null
@@ -31,11 +31,11 @@ interface CanvasesTable {
   lastCompactedAt: Timestamp | null
   // Which editor opens this canvas. Null for rows created before this column
   // existed; the application layer maps null to 'spatial'.
-  kind: CanvasKind | null
+  kind: DocumentKind | null
 }
 
 interface BranchesTable {
-  canvasId: string
+  documentId: string
   name: string
   tipFrontiers: string
   color: string | null
@@ -46,7 +46,7 @@ interface BranchesTable {
 
 interface VersionsTable {
   id: string
-  canvasId: string
+  documentId: string
   branchName: string
   auto: Bool
   label: string | null
@@ -69,11 +69,11 @@ interface RuntimeTable {
   updatedAt: Timestamp
 }
 
-// Header row for a chunked CanvasDocStore snapshot. `docKey` is the
+// Header row for a chunked DocumentStore snapshot. `docKey` is the
 // DocRef-derived string from ../doc-ref-key.ts. Chunk bytes themselves live
-// in CanvasDocSnapshotChunksTable; this row carries only the manifest
+// in DocumentSnapshotChunksTable; this row carries only the manifest
 // scalars plus the frontier the snapshot was taken at.
-interface CanvasDocSnapshotsTable {
+interface DocumentSnapshotsTable {
   docKey: string
   chunkCount: number
   totalBytes: number
@@ -81,16 +81,16 @@ interface CanvasDocSnapshotsTable {
   frontier: Uint8Array
 }
 
-interface CanvasDocSnapshotChunksTable {
+interface DocumentSnapshotChunksTable {
   docKey: string
   chunkIndex: number
   bytes: Uint8Array
 }
 
 // Append-only delta log. `frontier` is the batch's resulting frontier,
-// duplicated onto every update row of that batch since canvas-ports'
+// duplicated onto every update row of that batch since ports'
 // DeltaBatch carries one frontier per batch, not per update.
-interface CanvasDocDeltasTable {
+interface DocumentDeltasTable {
   docKey: string
   seq: number
   bytes: Uint8Array
@@ -100,19 +100,19 @@ interface CanvasDocDeltasTable {
 // "Latest write wins" frontier per docKey, updated by both saveSnapshot and
 // appendDeltas so readFrontier does not need to compare rows across the two
 // differently-shaped logs above.
-interface CanvasDocFrontiersTable {
+interface DocumentFrontiersTable {
   docKey: string
   frontier: Uint8Array
 }
 
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
-  canvases: CanvasesTable
+  documents: DocumentsTable
   branches: BranchesTable
   versions: VersionsTable
   runtime: RuntimeTable
-  canvasDocSnapshots: CanvasDocSnapshotsTable
-  canvasDocSnapshotChunks: CanvasDocSnapshotChunksTable
-  canvasDocDeltas: CanvasDocDeltasTable
-  canvasDocFrontiers: CanvasDocFrontiersTable
+  documentSnapshots: DocumentSnapshotsTable
+  documentSnapshotChunks: DocumentSnapshotChunksTable
+  documentDeltas: DocumentDeltasTable
+  documentFrontiers: DocumentFrontiersTable
 }

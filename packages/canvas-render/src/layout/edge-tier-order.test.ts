@@ -4,7 +4,7 @@
 // reason, and their order relative to each other was never argued — with
 // border-tracing above, the lexicographic compare bought 0px of border
 // tracing with 170px of tunnelling straight through the target.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { PENALTY_RULES } from './edge-rules.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'

@@ -3,7 +3,7 @@
 // among equal-length clear candidates, the one with fewer bends wins — in
 // particular, an elbow collinear with BOTH stubs draws one corner, never a
 // three-bend staircase.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

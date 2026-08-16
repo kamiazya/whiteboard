@@ -115,11 +115,11 @@ describe('runMigrations', () => {
       .values({ id: 'ws1', displayName: null, createdAt: 1, updatedAt: 1 })
       .execute()
     await db
-      .insertInto('canvases')
+      .insertInto('documents')
       .values({
         id: 'cv1',
         workspaceId: 'ws1',
-        slug: 'main',
+        path: 'main',
         displayName: null,
         isPinned: 0,
         pinOrder: null,
@@ -129,14 +129,14 @@ describe('runMigrations', () => {
       })
       .execute()
     const row = await db
-      .selectFrom('canvases')
-      .select(['id', 'workspaceId', 'slug', 'currentBranch'])
+      .selectFrom('documents')
+      .select(['id', 'workspaceId', 'path', 'currentBranch'])
       .where('id', '=', 'cv1')
       .executeTakeFirst()
     expect(row).toEqual({
       id: 'cv1',
       workspaceId: 'ws1',
-      slug: 'main',
+      path: 'main',
       currentBranch: 'main',
     })
   })

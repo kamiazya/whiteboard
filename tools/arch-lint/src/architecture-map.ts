@@ -25,12 +25,12 @@ export interface PackageArchEntry {
 }
 
 export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
-  '@kamiazya/whiteboard-canvas-model': {
+  '@kamiazya/whiteboard-model': {
     allowedInternalDeps: [],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-codec': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+  '@kamiazya/whiteboard-codec': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [
       'zod',
       'unified',
@@ -42,37 +42,40 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     ],
   },
   '@kamiazya/whiteboard-canvas-render': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-ports': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model'],
+  '@kamiazya/whiteboard-ports': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-canvas-workspace': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-canvas-model', '@kamiazya/whiteboard-canvas-ports'],
+  '@kamiazya/whiteboard-loro-adapter': {
+    // Deliberately NOT ports: this package adapts loro-crdt to the model and
+    // knows nothing about where a document sits, so it implements no port.
+    // The port implementations live in the composition roots.
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     // loro-crdt: this package owns the LoroDoc<->model bridge (see
-    // .claude/rules/package-canvas-workspace.md), so it's the one shared-
+    // .claude/rules/package-loro-adapter.md), so it's the one shared-
     // layer package (besides server-core, which re-exposes the bridge via
     // its Loro-backed store ports) allowed to import it directly.
     // zod: the bridge validates the persisted `core` LoroMap entries against
-    // canvas-model's canvasCoreMetaSchema field-by-field on read.
+    // model's storedCoreFacetsSchema field-by-field on read.
     allowedThirdParty: ['loro-crdt', 'zod'],
   },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-canvas-ports',
-      '@kamiazya/whiteboard-canvas-workspace',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-loro-adapter',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
     ],
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
@@ -103,10 +106,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // Node entrypoints are not reachable from here.
   '@kamiazya/whiteboard-web': {
     allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-model',
-      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-canvas-workspace',
+      '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
     ],
@@ -132,8 +135,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
  * either is its own lane, not this one's.
  */
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
-  // doc-cache.ts imports canvas-store.ts statically; canvas-store.ts closes the
-  // loop with `await import('./doc-cache.js')` at three eviction call sites.
+  // doc-cache.ts imports document-store.ts statically; document-store.ts
+  // closes the loop with `await import('./doc-cache.js')` at three eviction
+  // call sites.
   //
   // This list used to say a call-time dynamic import carries "no module-eval
   // TDZ risk". It does not follow, and the sibling entry that said it was
@@ -145,8 +149,8 @@ export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
   // is mid-evaluation somewhere up the stack. Treat an entry here as debt with
   // a known failure mode, not as a cycle that has been reasoned safe.
   [
-    'packages/mcp-server/src/server/store/canvas-store.ts',
     'packages/mcp-server/src/server/store/doc-cache.ts',
+    'packages/mcp-server/src/server/store/document-store.ts',
   ],
 ]
 

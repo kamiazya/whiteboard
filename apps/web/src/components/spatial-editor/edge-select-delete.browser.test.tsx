@@ -1,7 +1,7 @@
 // Create/delete symmetry for edges: the Connect tool makes edge creation a
 // two-click flow, so a misclicked connection must be just as removable —
 // click the edge line to select it, press Delete to remove it.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

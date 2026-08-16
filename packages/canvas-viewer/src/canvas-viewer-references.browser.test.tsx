@@ -8,8 +8,8 @@
  * that map because a function cannot cross the host boundary the widget
  * sits behind.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -38,7 +38,7 @@ describe('CanvasViewer file-reference seams', () => {
     const { container } = render(
       <CanvasViewer
         canvas={canvas}
-        resolveFileMarkdown={(file) => (file === 'notes' ? BODY : undefined)}
+        resolveReference={(ref) => (ref === 'notes' ? { markdown: BODY } : undefined)}
       />,
     )
     expect(svgText(container)).toContain('Weekly notes')
@@ -52,7 +52,9 @@ describe('CanvasViewer file-reference seams', () => {
   })
 
   it('uses the resolved label instead of the raw reference', () => {
-    const { container } = render(<CanvasViewer canvas={canvas} resolveFileLabel={() => 'Weekly'} />)
+    const { container } = render(
+      <CanvasViewer canvas={canvas} resolveReference={() => ({ label: 'Weekly' })} />,
+    )
     expect(svgText(container)).toContain('Weekly')
   })
 })

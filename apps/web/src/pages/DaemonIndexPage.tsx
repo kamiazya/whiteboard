@@ -1,5 +1,5 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
@@ -19,8 +19,8 @@ import {
   updateCanvas,
 } from '../lib/daemon-api-client.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
-import { deriveCopySlug } from '../lib/derive-copy-slug.js'
-import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { deriveCopyPath } from '../lib/derive-copy-path.js'
+import { deriveNewCanvasPath } from '../lib/derive-new-canvas-path.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
@@ -33,18 +33,18 @@ export interface DaemonIndexPageProps {
   daemonBaseUrl: string
   token?: string
   capabilities?: WhiteboardCapabilities
-  // A workspace-level pairing link (#wb= with workspaceId but no slug) names
+  // A workspace-level pairing link (#wb= with workspaceId but no path) names
   // a specific workspace to land on; falls back to the daemon's first-listed
   // workspace when absent, or when the named workspace isn't in the list.
   initialWorkspaceId?: string
-  onOpenCanvas: (workspaceId: string, slug: string) => void
+  onOpenCanvas: (workspaceId: string, path: string) => void
 }
 
 interface CanvasRow {
-  slug: string
+  path: string
   displayName: string
   updatedAt: string
-  kind: CanvasKind
+  kind: DocumentKind
   pinned: boolean
   pinOrder: number
 }
@@ -106,9 +106,9 @@ export function DaemonIndexPage({
   // Which card's Duplicate action is currently in flight — disables just that
   // card's button (a second click during the async read-then-write must not
   // start a second copy) rather than a page-wide boolean.
-  const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null)
+  const [duplicatingPath, setDuplicatingPath] = useState<string | null>(null)
   // Disables both create controls while one is in flight, so a second press cannot send another
-  // POST deriving the identical slug from the same rows. The `disabled` attribute is the whole
+  // POST deriving the identical path from the same rows. The `disabled` attribute is the whole
   // mechanism — an early `if (creating) return` inside the handler was also tried and removed: it
   // reads `creating` from the render closure, so it is stale in exactly the same-tick case it
   // would have to catch, and no test could distinguish its presence from its absence.
@@ -154,12 +154,12 @@ export function DaemonIndexPage({
           fetchWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId),
         ])
         if (isStale()) return
-        const pinIndex = new Map((names?.pinned ?? []).map((slug, i) => [slug, i]))
+        const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         const nextRows: CanvasRow[] = canvasesRes.canvases.map((c) => {
-          const pinOrder = pinIndex.get(c.slug)
+          const pinOrder = pinIndex.get(c.path)
           return {
-            slug: c.slug,
-            displayName: names?.canvases?.[c.slug] ?? c.slug,
+            path: c.path,
+            displayName: names?.canvases?.[c.path] ?? c.path,
             updatedAt: c.updatedAt,
             kind: c.kind,
             pinned: pinOrder !== undefined,
@@ -183,7 +183,7 @@ export function DaemonIndexPage({
     let cancelled = false
     // Clear synchronously BEFORE the async load: leaving the previous
     // workspace's rows visible during the switch lets a click pair the new
-    // workspace id with an old workspace's slug — a mismatched identity.
+    // workspace id with an old workspace's path — a mismatched identity.
     setRows([])
     setLoaded(false)
     setLoadError(null)
@@ -194,25 +194,25 @@ export function DaemonIndexPage({
   }, [selectedWorkspace, loadWorkspace])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point
-  // 3). A slug is derived from the loaded rows so it never collides with a
+  // 3). A path is derived from the loaded rows so it never collides with a
   // canvas already in the list; naming happens afterwards, in the opened
   // canvas's own top bar.
   const handleCreate = useCallback(
-    async (kind: CanvasKind) => {
+    async (kind: DocumentKind) => {
       if (!selectedWorkspace) return
       const workspaceAtStart = selectedWorkspace
       setCreating(true)
       setCreateError(null)
       try {
-        const slug = deriveNewCanvasSlug(rows.map((r) => r.slug))
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, slug, kind)
-        onOpenCanvas(workspaceAtStart, created.slug)
+        const path = deriveNewCanvasPath(rows.map((r) => r.path))
+        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, path, kind)
+        onOpenCanvas(workspaceAtStart, created.path)
       } catch (err) {
         // daemon-api-client errors are already sanitized (Problem Details
         // title or a generic status message) — safe to surface directly.
         setCreateError(err instanceof Error ? err.message : 'Failed to create canvas.')
-        // The slug is derived from `rows`, so a failure caused by a name this list has not seen
-        // (another tab, a lost race) would otherwise re-derive the SAME slug on every retry and
+        // The path is derived from `rows`, so a failure caused by a name this list has not seen
+        // (another tab, a lost race) would otherwise re-derive the SAME path on every retry and
         // collide forever. Re-read the list so the next derive skips what is actually taken.
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (!isStale()) await loadWorkspace(workspaceAtStart, isStale)
@@ -228,13 +228,13 @@ export function DaemonIndexPage({
   // browser-local controller's read-then-write duplicate flow rather than
   // requiring a dedicated server-side "duplicate" endpoint.
   const handleDuplicate = useCallback(
-    async (sourceSlug: string) => {
-      if (duplicatingSlug !== null) return
+    async (sourcePath: string) => {
+      if (duplicatingPath !== null) return
       const workspaceAtStart = selectedWorkspace
       if (!workspaceAtStart) return
-      setDuplicatingSlug(sourceSlug)
+      setDuplicatingPath(sourcePath)
       setDuplicateError(null)
-      const sourceRow = rows.find((r) => r.slug === sourceSlug)
+      const sourceRow = rows.find((r) => r.path === sourcePath)
       // The whole operation targets workspaceAtStart, not whatever the user
       // has switched the selector to by the time each await resolves — a
       // duplicate started in one workspace must finish in that SAME
@@ -246,15 +246,15 @@ export function DaemonIndexPage({
           daemonFetch,
           daemonBaseUrl,
           workspaceAtStart,
-          sourceSlug,
+          sourcePath,
         )
-        const existingSlugs = new Set(rows.map((r) => r.slug))
-        const newSlug = deriveCopySlug(sourceSlug, existingSlugs)
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newSlug)
-        await updateCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, created.slug, snapshot)
+        const existingPaths = new Set(rows.map((r) => r.path))
+        const newPath = deriveCopyPath(sourcePath, existingPaths)
+        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newPath)
+        await updateCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
-        const newName = deriveCopyName(sourceRow?.displayName ?? sourceSlug, existingNames)
-        await setCanvasName(daemonFetch, daemonBaseUrl, workspaceAtStart, created.slug, newName)
+        const newName = deriveCopyName(sourceRow?.displayName ?? sourcePath, existingNames)
+        await setCanvasName(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, newName)
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)
@@ -262,14 +262,14 @@ export function DaemonIndexPage({
         if (selectedWorkspaceRef.current !== workspaceAtStart) return
         setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
       } finally {
-        setDuplicatingSlug((current) => (current === sourceSlug ? null : current))
+        setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingSlug],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingPath],
   )
 
   const [pendingDelete, setPendingDelete] = useState<{
-    slug: string
+    path: string
     displayName: string
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -295,7 +295,7 @@ export function DaemonIndexPage({
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deleteCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.slug)
+      await deleteCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.path)
       closeDeleteDialog()
     } catch (err) {
       // daemon-api-client errors are already sanitized (problem-details
@@ -382,7 +382,7 @@ export function DaemonIndexPage({
           // A failed list load must not dead-end the page: the POST needs no
           // rows and success navigates away, so creating remains a recovery
           // path around the broken list. The transient loading state below
-          // deliberately has no create control — deriving a slug from rows
+          // deliberately has no create control — deriving a path from rows
           // that are still in flight invites a collision the loaded states
           // cannot produce.
           <div className="flex flex-col items-start gap-3">
@@ -417,30 +417,30 @@ export function DaemonIndexPage({
           <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             <CanvasListView
               rows={rows.map((row) => ({
-                slug: row.slug,
+                path: row.path,
                 displayName: row.displayName,
-                // The slug is worth a second line only when a display name
+                // The path is worth a second line only when a display name
                 // covers the first; unnamed canvases already show it once.
-                secondary: row.displayName !== row.slug ? row.slug : undefined,
+                secondary: row.displayName !== row.path ? row.path : undefined,
                 updatedAt: row.updatedAt,
                 kind: row.kind,
               }))}
-              onOpen={(slug) => selectedWorkspace && onOpenCanvas(selectedWorkspace, slug)}
+              onOpen={(path) => selectedWorkspace && onOpenCanvas(selectedWorkspace, path)}
               onCreate={(kind) => void handleCreate(kind)}
               createDisabled={creating}
               renderThumb={(row) => (
-                <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
+                <CanvasThumb workspaceId={selectedWorkspace ?? ''} path={row.path} size="card" />
               )}
               renderActions={(row) => (
                 <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                   <button
                     type="button"
                     aria-label={`Duplicate ${row.displayName}`}
-                    disabled={duplicatingSlug === row.slug}
+                    disabled={duplicatingPath === row.path}
                     onClick={(event) => {
                       // Prevents the click from bubbling to the wrapping open-button.
                       event.stopPropagation()
-                      void handleDuplicate(row.slug)
+                      void handleDuplicate(row.path)
                     }}
                     className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-100"
                   >
@@ -451,7 +451,7 @@ export function DaemonIndexPage({
                     aria-label={`Delete ${row.displayName}`}
                     onClick={(event) => {
                       event.stopPropagation()
-                      setPendingDelete({ slug: row.slug, displayName: row.displayName })
+                      setPendingDelete({ path: row.path, displayName: row.displayName })
                     }}
                     className="rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium hover:bg-accent"
                   >

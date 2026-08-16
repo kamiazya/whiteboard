@@ -33,7 +33,7 @@ describe('buildWhiteboardWsProtocolsWithTicket', () => {
 })
 
 describe('buildWhiteboardWsUrl', () => {
-  it('rewrites http(s) to ws(s) and points the path at the workspace/slug WS route', () => {
+  it('rewrites http(s) to ws(s) and points the path at the workspace/path WS route', () => {
     expect(buildWhiteboardWsUrl('https://example.com/app', 'ws1', 'main')).toBe(
       'wss://example.com/ws/ws1/main',
     )
@@ -42,9 +42,9 @@ describe('buildWhiteboardWsUrl', () => {
     )
   })
 
-  it('encodes the slug and strips any existing search/hash', () => {
-    expect(buildWhiteboardWsUrl('https://example.com/app?x=1#frag', 'ws1', 'my slug')).toBe(
-      'wss://example.com/ws/ws1/my%20slug',
+  it('encodes the path and strips any existing search/hash', () => {
+    expect(buildWhiteboardWsUrl('https://example.com/app?x=1#frag', 'ws1', 'my path')).toBe(
+      'wss://example.com/ws/ws1/my%20path',
     )
   })
 })

@@ -1,5 +1,5 @@
-import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-canvas-ports'
-import { writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -14,7 +14,7 @@ import type {
   listCanvasesInputSchema,
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
-import { saveDocSnapshot } from './canvas-doc-io.js'
+import { saveDocumentSnapshot } from './document-io.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -63,9 +63,9 @@ export async function wbCanvasCreate(
   // document yet to ask. The kind is written once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
-  await saveDocSnapshot(deps, entry.canvasId, doc)
+  await saveDocumentSnapshot(deps, entry.documentId, doc)
 
-  return { canvasId: entry.canvasId, path: entry.path }
+  return { documentId: entry.documentId, path: entry.path }
 }
 
 export async function wbCanvasGet(
@@ -74,13 +74,13 @@ export async function wbCanvasGet(
 ): Promise<z.infer<typeof getCanvasOutputSchema>> {
   const entry = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
-    canvasId: input.canvasId,
+    documentId: input.documentId,
   })
   if (entry === null) {
-    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
+    throw new CanvasNotFoundError(input.workspaceId, input.documentId)
   }
   return {
-    canvasId: entry.canvasId,
+    documentId: entry.documentId,
     path: entry.path,
     ...(entry.name === undefined ? {} : { name: entry.name }),
   }
@@ -98,7 +98,7 @@ export async function wbCanvasList(
   )
   return {
     canvases: entries.map((entry) => ({
-      canvasId: entry.canvasId,
+      documentId: entry.documentId,
       path: entry.path,
       ...(entry.name === undefined ? {} : { name: entry.name }),
     })),
@@ -111,10 +111,10 @@ export async function wbCanvasDelete(
 ): Promise<z.infer<typeof deleteCanvasOutputSchema>> {
   const entry = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
-    canvasId: input.canvasId,
+    documentId: input.documentId,
   })
   if (entry === null) {
-    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
+    throw new CanvasNotFoundError(input.workspaceId, input.documentId)
   }
   // Placement first: the index refuses while documents sit below this one, so
   // the bytes are only discarded once nothing can still be orphaned by it.
@@ -122,6 +122,6 @@ export async function wbCanvasDelete(
     workspaceId: input.workspaceId,
     path: entry.path,
   })
-  await deps.canvasDocStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: entry.canvasId } })
+  await deps.documentStore.deleteDoc({ docRef: { kind: 'canvas', documentId: entry.documentId } })
   return { deleted: true }
 }

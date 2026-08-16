@@ -1,9 +1,9 @@
-import type { BlobStore, CanvasDocStore } from '@kamiazya/whiteboard-canvas-ports'
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import type { BlobStore, DocumentStore } from '@kamiazya/whiteboard-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
-import { LibsqlCanvasDocStore } from '../server/store/libsql/libsql-canvas-doc-store.js'
+import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
 import { createStoreLocalModule } from './store-local.module.js'
 
 describe('createStoreLocalModule', () => {
@@ -14,10 +14,10 @@ describe('createStoreLocalModule', () => {
     const container = new Container()
     container.load(mod)
 
-    const docStore = container.get<CanvasDocStore>(TOKENS.CanvasDocStore)
+    const docStore = container.get<DocumentStore>(TOKENS.DocumentStore)
     const blobStore = container.get<BlobStore>(TOKENS.BlobStore)
 
-    expect(docStore).toBeInstanceOf(LibsqlCanvasDocStore)
+    expect(docStore).toBeInstanceOf(LibsqlDocumentStore)
     expect(blobStore).toBeInstanceOf(FsBlobStore)
   })
 
@@ -28,8 +28,8 @@ describe('createStoreLocalModule', () => {
     const container = new Container()
     container.load(mod)
 
-    const a = container.get<CanvasDocStore>(TOKENS.CanvasDocStore)
-    const b = container.get<CanvasDocStore>(TOKENS.CanvasDocStore)
+    const a = container.get<DocumentStore>(TOKENS.DocumentStore)
+    const b = container.get<DocumentStore>(TOKENS.DocumentStore)
     expect(a).toBe(b)
   })
 })

@@ -1,4 +1,4 @@
-// High-level headless export: take a canvas {workspaceId, slug} and produce
+// High-level headless export: take a canvas {workspaceId, path} and produce
 // a PNG/SVG buffer using the browser-less renderer.
 //
 // Reads the data root from the daemon's configured data dir rather than
@@ -7,8 +7,8 @@
 // separate file loader took an explicit dataDir; tying both ends to the
 // same canonical path closes that mismatch.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
@@ -51,7 +51,7 @@ function hasLegacyElements(doc: LoroDoc): boolean {
 }
 
 // Test-only: exercises the non-mutating probe directly against a bare
-// LoroDoc, isolated from canvas-store's own (separate, pre-existing)
+// LoroDoc, isolated from document-store's own (separate, pre-existing)
 // legacy-list-migration probe on the load path.
 export const _hasLegacyElementsForTests = hasLegacyElements
 
@@ -60,12 +60,12 @@ export const _hasLegacyElementsForTests = hasLegacyElements
 // still carries a legacy Excalidraw `elements` list is not an error — it is
 // pre-migration data — so it degrades to a valid empty export with a
 // named warning rather than rendering nothing with no explanation.
-async function readCanvas(workspaceId: string, slug: string): Promise<SpatialCanvas> {
-  const doc = await getDoc(workspaceId, slug)
+async function readCanvas(workspaceId: string, path: string): Promise<SpatialCanvas> {
+  const doc = await getDoc(workspaceId, path)
   const canvas = readSpatialCanvas(doc)
   if (canvas.nodes.length === 0 && hasLegacyElements(doc)) {
     log.warning(
-      { workspaceId, slug },
+      { workspaceId, path },
       'canvas has no spatial nodes but carries legacy Excalidraw elements; exporting an empty canvas',
     )
   }
@@ -74,14 +74,14 @@ async function readCanvas(workspaceId: string, slug: string): Promise<SpatialCan
 
 interface HeadlessCanvasExportArgs {
   workspaceId: string
-  slug: string
+  path: string
   options?: HeadlessCanvasExportOptions
 }
 
 export async function exportCanvasHeadless(
   args: HeadlessCanvasExportArgs,
 ): Promise<HeadlessExportResult> {
-  const canvas = await readCanvas(args.workspaceId, args.slug)
+  const canvas = await readCanvas(args.workspaceId, args.path)
   return renderSpatialCanvasToPng(canvas, {
     padding: args.options?.padding,
     scale: args.options?.scale,
@@ -92,7 +92,7 @@ export async function exportCanvasHeadless(
 export async function exportCanvasHeadlessSvg(
   args: HeadlessCanvasExportArgs,
 ): Promise<HeadlessSvgExportResult> {
-  const canvas = await readCanvas(args.workspaceId, args.slug)
+  const canvas = await readCanvas(args.workspaceId, args.path)
   return renderSpatialCanvasToSvg(canvas, {
     padding: args.options?.padding,
     theme: args.options?.theme,

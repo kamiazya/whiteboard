@@ -6,30 +6,30 @@
 // no store of its own — it receives a snapshot and lays it out itself, so a
 // file node's referenced markdown can only reach it if the server puts it in
 // the payload.
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function seedWorkspace(store: FakeCanvasDocStore) {
+async function seedWorkspace(store: FakeDocumentStore) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
-    canvasId: CANVAS_ID,
+    documentId: CANVAS_ID,
     kind: 'spatial',
   })
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'notes',
-    canvasId: NOTE_ID,
+    documentId: NOTE_ID,
     kind: 'markdown',
     name: 'Weekly',
   })
@@ -64,13 +64,13 @@ async function seedWorkspace(store: FakeCanvasDocStore) {
 
 describe('canvas_view tool', () => {
   test('returns the scene the widget lays out, plus the id it refreshes with', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
-    expect(result.canvasId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(CANVAS_ID)
     // Sorted: node order is whatever `readSpatialCanvas` gives back, not the
     // order they were written in. What this pins is that the whole document
     // reaches the widget, not a projection of it.
@@ -78,11 +78,11 @@ describe('canvas_view tool', () => {
   })
 
   test('carries the referenced markdown document body, parsed', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     const reference = result.references[NOTE_ID]
     expect(reference?.label).toBe('Weekly')
@@ -94,7 +94,7 @@ describe('canvas_view tool', () => {
     // so `references` is schematized rather than passed as unknown — a
     // hand-written type on the widget side is the drift this prevents.
     const parsed = canvasViewOutputSchema.safeParse({
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       scene: { nodes: [], edges: [] },
       references: { [NOTE_ID]: { label: 'Weekly', body: { type: 'root', children: [] } } },
     })
@@ -103,7 +103,7 @@ describe('canvas_view tool', () => {
 
   test('rejects a reference body that is not a real mdast root', () => {
     const parsed = canvasViewOutputSchema.safeParse({
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       scene: { nodes: [], edges: [] },
       references: { x: { body: { type: 'nonsense' } } },
     })
@@ -111,11 +111,11 @@ describe('canvas_view tool', () => {
   })
 
   test('returns an empty reference map for a canvas with no file nodes', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
       path: 'board',
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       kind: 'spatial',
     })
     await seedDoc(store, CANVAS_ID, (doc) => {
@@ -127,7 +127,7 @@ describe('canvas_view tool', () => {
     })
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.references).toEqual({})
   })

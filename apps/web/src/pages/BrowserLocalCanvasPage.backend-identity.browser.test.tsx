@@ -25,9 +25,9 @@ vi.mock('../lib/browser-local-backend.js', async () => {
     '../lib/browser-local-backend.js',
   )
   class RecordingBackend extends actual.BrowserLocalBackend {
-    constructor(canvasId: string) {
-      super(canvasId)
-      constructedFor.push(canvasId)
+    constructor(documentId: string) {
+      super(documentId)
+      constructedFor.push(documentId)
     }
     connect(handlers: CanvasBackendHandlers) {
       connectedFor.push('connect')

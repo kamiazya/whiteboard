@@ -35,12 +35,12 @@ describe('wireMcpLogging', () => {
       .mockResolvedValue({} as Awaited<ReturnType<typeof server.sendLoggingMessage>>)
     wireMcpLogging(server)
 
-    getLogger('canvas-store').warning({ workspaceId: 'ws_1' }, 'skipped corrupt row')
+    getLogger('document-store').warning({ workspaceId: 'ws_1' }, 'skipped corrupt row')
 
     expect(sendSpy).toHaveBeenCalledTimes(1)
     expect(sendSpy).toHaveBeenCalledWith({
       level: 'warning',
-      logger: 'canvas-store',
+      logger: 'document-store',
       data: { msg: 'skipped corrupt row', workspaceId: 'ws_1' },
     })
   })

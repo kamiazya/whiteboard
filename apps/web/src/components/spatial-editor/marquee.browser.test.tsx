@@ -2,7 +2,7 @@
 // space marquee-selects intersecting nodes; panning moves to Space+drag or
 // middle-button drag (wheel pan unchanged). The stationary empty double
 // press still creates a node, resolved at the release.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

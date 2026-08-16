@@ -1,7 +1,7 @@
 // The minimap in the editor. Fitting geometry is unit-tested in
 // minimap.test.ts; this pins the wiring: when it appears, that pressing it
 // centres the canvas, and that it gets out of the way of a gesture.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

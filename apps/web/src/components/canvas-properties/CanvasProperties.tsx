@@ -1,4 +1,4 @@
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
@@ -12,20 +12,24 @@ export interface CanvasPropertiesProps {
    * push the canvas down mid-edit).
    */
   inline?: boolean
-  readonly meta: CanvasCoreMeta
   /**
-   * Whether this document can hold facets at all. A facet is OKF frontmatter
-   * (ADR-0009 decision 3) and a JSON Canvas document has none, so a spatial
-   * canvas passes `false` and gets no disclosure — the server refuses to
-   * write facets there, and offering the editor would make the same claim
-   * in the UI that the server just stopped honouring.
-   *
-   * The title is unaffected: it is the document's NAME, a workspace concern
-   * (decision 2), which this editor still keeps in core meta for
-   * browser-local canvases.
+   * The document's NAME, which is a workspace concern rather than stored
+   * content (ADR-0009 decision 2) — so it arrives as its own prop and leaves
+   * through `onTitleChange`, not as a facet. The empty string is an unnamed
+   * document; the box shows its placeholder.
    */
-  readonly showFacets?: boolean
-  readonly onChange: (next: CanvasCoreMeta) => void
+  readonly title: string
+  readonly onTitleChange: (next: string) => void
+  /**
+   * The document's OKF frontmatter, or absent when the document has none to
+   * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
+   * put one (ADR-0009 decision 3), so a spatial canvas omits both this and
+   * `onFacetsChange` and gets no disclosure. Absent rather than a
+   * `showFacets={false}` flag beside a value, because the flag hid the
+   * disclosure while the document went on storing what it would have shown.
+   */
+  readonly facets?: StoredCoreFacets
+  readonly onFacetsChange?: (next: StoredCoreFacets) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
   /**
@@ -56,63 +60,29 @@ export interface CanvasPropertiesProps {
 const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as const
 
 /**
- * Editor for the OKF CORE facets (`type` / `title` / `tags`).
- *
- * Every handler emits a WHOLE `CanvasCoreMeta`, never a patch, because
- * `writeCoreFacets` replaces the stored bucket outright and deletes any
- * field the caller omitted. `facetsRaw` — root-level frontmatter keys this
- * app does not model — therefore has to survive every edit here untouched,
- * or a title change silently drops data the document arrived with.
- *
- * `view` is deliberately absent: its documented job is picking between
- * Views when several EXTENSION facets apply to one canvas, and extension
- * facets are not editable here yet, so the control would have nothing to
- * choose between.
+ * The canvas row: the document's name, plus — for a document that HAS OKF
+ * frontmatter — an editor for its core facets behind a disclosure.
  */
 export function CanvasProperties({
   inline = false,
-  showFacets = true,
-  meta,
-  onChange,
+  title,
+  onTitleChange,
+  facets,
+  onFacetsChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
   status,
   settings,
   actions,
 }: CanvasPropertiesProps) {
   const [open, setOpen] = useState(false)
-  const [draftTag, setDraftTag] = useState('')
+  // Null means "not being edited" — the box then shows the canonical name.
+  // While it is a string the box shows that instead, because the name comes
+  // back NORMALISED (trimmed, and blank replaced by the unnamed sentinel) and
+  // rendering the normalised form on the keystroke that typed a space erases
+  // it: the next character lands flush against the previous word, and
+  // "Release plan" typed one key at a time arrives as "Releaseplan".
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
   const suggestionsId = useId()
-  const tags = meta.tags ?? []
-
-  // An absent optional field and an empty one are different documents in
-  // OKF: `title: ''` round-trips as an empty frontmatter value, while a
-  // dropped key is simply untitled. Blank input means the latter.
-  //
-  // Only PRESENCE is decided by the trimmed form — the stored value stays
-  // raw. The box is controlled from `meta.title`, so trimming here is not a
-  // tidy-up, it is destructive: a trailing space is erased on the very
-  // keystroke that types it, the input re-renders without it, and the next
-  // character lands flush against the previous word ("Release plan" typed
-  // one key at a time arrives as "Releaseplan"). `onBlur` does the tidying
-  // instead, once the edit is finished.
-  const withTitle = (raw: string): CanvasCoreMeta => {
-    const { title: _dropped, ...rest } = meta
-    return raw.trim() === '' ? rest : { ...rest, title: raw }
-  }
-
-  const withTags = (next: readonly string[]): CanvasCoreMeta => {
-    const { tags: _dropped, ...rest } = meta
-    return next.length === 0 ? rest : { ...rest, tags: [...next] }
-  }
-
-  const commitDraftTag = () => {
-    const tag = draftTag.trim()
-    // Blank and duplicate both mean "nothing to add" — emitting anyway would
-    // write an identical document and, for a duplicate, a misleading one.
-    if (tag === '' || tags.includes(tag)) return
-    onChange(withTags([...tags, tag]))
-    setDraftTag('')
-  }
 
   return (
     <div
@@ -129,18 +99,20 @@ export function CanvasProperties({
         </label>
         <input
           id={`${suggestionsId}-title`}
-          value={meta.title ?? ''}
-          onChange={(event) => onChange(withTitle(event.target.value))}
-          onBlur={() => {
-            const tidied = withTitle((meta.title ?? '').trim())
-            if (tidied.title !== meta.title) onChange(tidied)
+          value={draftTitle ?? title}
+          onChange={(event) => {
+            setDraftTitle(event.target.value)
+            onTitleChange(event.target.value)
           }}
+          // Dropping the draft is the whole tidy-up: the box falls back to the
+          // canonical name, which is already trimmed.
+          onBlur={() => setDraftTitle(null)}
           placeholder="Untitled"
           className={`text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent font-medium outline-none ${
             inline ? 'text-sm' : 'text-base'
           }`}
         />
-        {showFacets && (
+        {facets !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -163,86 +135,145 @@ export function CanvasProperties({
         )}
       </div>
 
-      {showFacets && open && (
-        <div
+      {facets !== undefined && open && (
+        <FacetDisclosure
           id={`${suggestionsId}-disclosure`}
-          className={
-            inline
-              ? 'border-border bg-background absolute left-0 right-0 top-full z-20 flex flex-col gap-2 border-b px-3 py-2 shadow-md'
-              : 'flex flex-col gap-2 pb-1'
-          }
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <label
-              className="text-muted-foreground w-12 shrink-0 text-xs"
-              htmlFor={`${suggestionsId}-type`}
-            >
-              Type
-            </label>
-            <input
-              id={`${suggestionsId}-type`}
-              list={suggestionsId}
-              value={meta.type}
-              // `type` is the one required field in `coreFacetsSchema`, so an
-              // emptied box is not a value to store — it is a half-finished
-              // edit. Held locally rather than propagated.
-              onChange={(event) => {
-                const type = event.target.value
-                if (type.trim() !== '') onChange({ ...meta, type })
-              }}
-              className="text-foreground border-border min-w-0 flex-1 rounded border bg-transparent px-2 py-1 text-sm outline-none"
-            />
-            <datalist id={suggestionsId}>
-              {typeSuggestions.map((suggestion) => (
-                <option key={suggestion} value={suggestion} />
-              ))}
-            </datalist>
-          </div>
-
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <label
-              className="text-muted-foreground w-12 shrink-0 text-xs"
-              htmlFor={`${suggestionsId}-tag`}
-            >
-              Tags
-            </label>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    aria-label={`Remove tag ${tag}`}
-                    onClick={() => onChange(withTags(tags.filter((entry) => entry !== tag)))}
-                    className="hover:text-foreground"
-                  >
-                    <X aria-hidden className="size-3" />
-                  </button>
-                </span>
-              ))}
-              <input
-                id={`${suggestionsId}-tag`}
-                value={draftTag}
-                onChange={(event) => setDraftTag(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ',') return
-                  // Enter would submit an enclosing form and `,` would land in
-                  // the box; both mean "finish this tag" here.
-                  event.preventDefault()
-                  commitDraftTag()
-                }}
-                onBlur={commitDraftTag}
-                placeholder="Add tag"
-                aria-label="Add tag"
-                className="text-foreground placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-xs outline-none"
-              />
-            </div>
-          </div>
-        </div>
+          suggestionsId={suggestionsId}
+          inline={inline}
+          facets={facets}
+          onChange={onFacetsChange}
+          typeSuggestions={typeSuggestions}
+        />
       )}
+    </div>
+  )
+}
+
+/**
+ * The Type/Tags editor. Its own component so the handlers below close over a
+ * `facets` that is present by construction rather than re-proving it.
+ *
+ * Every handler emits a WHOLE `StoredCoreFacets`, never a patch, because
+ * `writeCoreFacets` replaces the stored bucket outright and deletes any field
+ * the caller omitted. `facetsRaw` — root-level frontmatter keys this app does
+ * not model — therefore has to survive every edit untouched, or one tag edit
+ * silently drops data the document arrived with.
+ *
+ * `view` is deliberately absent: its documented job is picking between Views
+ * when several EXTENSION facets apply to one document, and extension facets
+ * are not editable here yet, so the control would have nothing to choose
+ * between.
+ */
+function FacetDisclosure({
+  id,
+  suggestionsId,
+  inline,
+  facets,
+  onChange,
+  typeSuggestions,
+}: {
+  readonly id: string
+  readonly suggestionsId: string
+  readonly inline: boolean
+  readonly facets: StoredCoreFacets
+  readonly onChange?: (next: StoredCoreFacets) => void
+  readonly typeSuggestions: readonly string[]
+}) {
+  const [draftTag, setDraftTag] = useState('')
+  const tags = facets.tags ?? []
+
+  const withTags = (next: readonly string[]): StoredCoreFacets => {
+    const { tags: _dropped, ...rest } = facets
+    return next.length === 0 ? rest : { ...rest, tags: [...next] }
+  }
+
+  const commitDraftTag = () => {
+    const tag = draftTag.trim()
+    // Blank and duplicate both mean "nothing to add" — emitting anyway would
+    // write an identical document and, for a duplicate, a misleading one.
+    if (tag === '' || tags.includes(tag)) return
+    onChange?.(withTags([...tags, tag]))
+    setDraftTag('')
+  }
+
+  return (
+    <div
+      id={id}
+      className={
+        inline
+          ? 'border-border bg-background absolute left-0 right-0 top-full z-20 flex flex-col gap-2 border-b px-3 py-2 shadow-md'
+          : 'flex flex-col gap-2 pb-1'
+      }
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <label
+          className="text-muted-foreground w-12 shrink-0 text-xs"
+          htmlFor={`${suggestionsId}-type`}
+        >
+          Type
+        </label>
+        <input
+          id={`${suggestionsId}-type`}
+          list={suggestionsId}
+          value={facets.type}
+          // `type` is the one required field in `coreFacetsSchema`, so an
+          // emptied box is not a value to store — it is a half-finished
+          // edit. Held locally rather than propagated.
+          onChange={(event) => {
+            const type = event.target.value
+            if (type.trim() !== '') onChange?.({ ...facets, type })
+          }}
+          className="text-foreground border-border min-w-0 flex-1 rounded border bg-transparent px-2 py-1 text-sm outline-none"
+        />
+        <datalist id={suggestionsId}>
+          {typeSuggestions.map((suggestion) => (
+            <option key={suggestion} value={suggestion} />
+          ))}
+        </datalist>
+      </div>
+
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <label
+          className="text-muted-foreground w-12 shrink-0 text-xs"
+          htmlFor={`${suggestionsId}-tag`}
+        >
+          Tags
+        </label>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
+            >
+              {tag}
+              <button
+                type="button"
+                aria-label={`Remove tag ${tag}`}
+                onClick={() => onChange?.(withTags(tags.filter((entry) => entry !== tag)))}
+                className="hover:text-foreground"
+              >
+                <X aria-hidden className="size-3" />
+              </button>
+            </span>
+          ))}
+          <input
+            id={`${suggestionsId}-tag`}
+            value={draftTag}
+            onChange={(event) => setDraftTag(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ',') return
+              // Enter would submit an enclosing form and `,` would land in
+              // the box; both mean "finish this tag" here.
+              event.preventDefault()
+              commitDraftTag()
+            }}
+            onBlur={commitDraftTag}
+            placeholder="Add tag"
+            aria-label="Add tag"
+            className="text-foreground placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-xs outline-none"
+          />
+        </div>
+      </div>
     </div>
   )
 }

@@ -5,7 +5,7 @@
  * select/move/marquee semantics). Real PointerEvents with
  * pointerType='touch' exercise the actual root handlers.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

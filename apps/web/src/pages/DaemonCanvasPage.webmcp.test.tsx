@@ -42,7 +42,7 @@ class FakeBackend implements CanvasBackend {
   handlers: CanvasBackendHandlers | null = null
   constructor(
     public workspaceId: string,
-    public slug: string,
+    public path: string,
   ) {}
   connect(handlers: CanvasBackendHandlers): void {
     this.handlers = handlers
@@ -63,7 +63,7 @@ class FakeBackend implements CanvasBackend {
 }
 
 function makeCreateBackend() {
-  return (workspaceId: string, slug: string) => new FakeBackend(workspaceId, slug)
+  return (workspaceId: string, path: string) => new FakeBackend(workspaceId, path)
 }
 
 function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
@@ -85,7 +85,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
   beforeEach(() => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 
@@ -96,7 +96,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
     delete (document as { modelContext?: unknown }).modelContext
   })
 
-  it('registers every read-only tool, keyed on workspaceId/slug, once a daemon canvas loads', async () => {
+  it('registers every read-only tool, keyed on workspaceId/path, once a daemon canvas loads', async () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 

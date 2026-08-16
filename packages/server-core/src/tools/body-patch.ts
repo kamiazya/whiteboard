@@ -1,14 +1,14 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
 
 export const bodyPatchRangeSchema = z
@@ -34,7 +34,7 @@ export const bodyPatchInputSchema = z.discriminatedUnion('mode', [
     .object({
       mode: z.literal('full'),
       workspaceId: workspaceIdSchema,
-      canvasId: canvasIdSchema,
+      documentId: documentIdSchema,
       nodeId: nodeIdSchema,
       body: z.string(),
     })
@@ -43,7 +43,7 @@ export const bodyPatchInputSchema = z.discriminatedUnion('mode', [
     .object({
       mode: z.literal('range'),
       workspaceId: workspaceIdSchema,
-      canvasId: canvasIdSchema,
+      documentId: documentIdSchema,
       nodeId: nodeIdSchema,
       range: bodyPatchRangeSchema,
     })
@@ -53,7 +53,7 @@ export type BodyPatchInput = z.infer<typeof bodyPatchInputSchema>
 
 export const bodyPatchOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     node: spatialNodeSchema,
   })
   .strict()
@@ -64,7 +64,7 @@ export type BodyPatchOutput = z.infer<typeof bodyPatchOutputSchema>
  * `text` and inserts `replacement`'s lines in their place. Out-of-range
  * indices are rejected by the caller before this runs — silently
  * clamping would partial-apply the patch without telling the caller,
- * which is the failure mode canvas-codec's own parsers reject rather
+ * which is the failure mode codec's own parsers reject rather
  * than degrade.
  */
 function spliceLines(text: string, range: BodyPatchRange): string {
@@ -83,13 +83,13 @@ export function createBodyPatchTool(deps: ServerDeps) {
     inputSchema: bodyPatchInputSchema,
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
-      if (node === undefined) throw new NodeNotFoundError(input.canvasId, input.nodeId)
+      if (node === undefined) throw new NodeNotFoundError(input.documentId, input.nodeId)
       if (node.type !== 'text') {
-        throw new NotATextNodeError(input.canvasId, input.nodeId, node.type)
+        throw new NotATextNodeError(input.documentId, input.nodeId, node.type)
       }
 
       let newText: string
@@ -123,12 +123,12 @@ export function createBodyPatchTool(deps: ServerDeps) {
 
       const updatedNode = parsed.data.nodes.find((existing) => existing.id === input.nodeId)
       if (updatedNode === undefined) {
-        throw new NodeNotFoundError(input.canvasId, input.nodeId)
+        throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, node: updatedNode }
+      return { documentId: input.documentId, node: updatedNode }
     },
   }
 }

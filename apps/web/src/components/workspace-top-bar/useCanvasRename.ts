@@ -2,11 +2,11 @@ import type { MutableRefObject } from 'react'
 import { useState } from 'react'
 
 interface UseCanvasRenameOptions {
-  slug: string
+  path: string
   isLocalMode: boolean
   currentName: string | undefined
   onRenameCanvas: ((name: string) => void | Promise<void>) | undefined
-  renameCanvas: (slug: string, name: string) => Promise<boolean>
+  renameCanvas: (path: string, name: string) => Promise<boolean>
   // Shared with copy/create — see useCreateCanvas's mountedRef doc.
   mountedRef: MutableRefObject<boolean>
 }
@@ -18,7 +18,7 @@ interface UseCanvasRenameOptions {
 // which has no daemon-mode equivalent (a failed PUT there just leaves the
 // previous name in place with no separate error channel).
 export function useCanvasRename({
-  slug,
+  path,
   isLocalMode,
   currentName,
   onRenameCanvas,
@@ -51,7 +51,7 @@ export function useCanvasRename({
       }
       return
     }
-    await renameCanvas(slug, name)
+    await renameCanvas(path, name)
     if (mountedRef.current) {
       setRenamingCanvas(false)
       setDraft('')

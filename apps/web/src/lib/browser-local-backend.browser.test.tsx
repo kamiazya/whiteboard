@@ -206,7 +206,7 @@ describe('BrowserLocalBackend', () => {
     expect(onFileSuccess).toHaveBeenCalledWith('file-1')
     expect(onFileSuccess).toHaveBeenCalledWith('file-2')
 
-    // Simulated reload: fresh instance, same canvasId.
+    // Simulated reload: fresh instance, same documentId.
     const reloaded = new BrowserLocalBackend('canvas-1')
     const blob1 = await reloaded.getFile('file-1')
     const blob2 = await reloaded.getFile('file-2')
@@ -458,7 +458,7 @@ describe('BrowserLocalBackend', () => {
   })
 })
 
-async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
+async function forceInvalidLoroRecord(documentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
@@ -477,7 +477,7 @@ async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
           snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
           updatedAt: new Date().toISOString(),
         },
-        canvasId,
+        documentId,
       )
       tx.oncomplete = () => {
         db.close()
@@ -492,7 +492,7 @@ async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
   })
 }
 
-async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): Promise<void> {
+async function forceRecordWithBadDelta(documentId: string, snapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
@@ -512,7 +512,7 @@ async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): 
           deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
           updatedAt: new Date().toISOString(),
         },
-        canvasId,
+        documentId,
       )
       tx.oncomplete = () => {
         db.close()
@@ -555,7 +555,7 @@ async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promis
   })
 }
 
-async function forceCorruptRecord(canvasId: string): Promise<void> {
+async function forceCorruptRecord(documentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
@@ -567,7 +567,7 @@ async function forceCorruptRecord(canvasId: string): Promise<void> {
     req.onsuccess = () => {
       const db = req.result
       const tx = db.transaction('loroCanvases', 'readwrite')
-      tx.objectStore('loroCanvases').put({ v: 99, garbage: true }, canvasId)
+      tx.objectStore('loroCanvases').put({ v: 99, garbage: true }, documentId)
       tx.oncomplete = () => {
         db.close()
         resolve()

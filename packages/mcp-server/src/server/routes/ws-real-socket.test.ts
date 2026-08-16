@@ -1,7 +1,7 @@
 // Regression test for tmp/issues/ws-real-socket-e2e-needs-injectable-data-dir.md:
 // exercises a REAL WebSocketServer + real `ws` client (not the FakeWebSocket
 // used elsewhere in ws.test.ts) so a Loro binary update travels over an
-// actual loopback TCP socket into saveCanvas's real filesystem write path.
+// actual loopback TCP socket into saveDocument's real filesystem write path.
 // DATA_DIR is redirected via the getDataDir() test-injection seam
 // (setDataDirForTests) instead of a hand-rolled per-file mock, proving the
 // seam is sufficient to keep a real-socket persistence test off the
@@ -76,7 +76,7 @@ vi.mock('../config.js', async () => {
 
 const { setDataDirForTests, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
 const { clearCache } = await import('../store/doc-cache.js')
-const { loadCanvas, saveCanvas } = await import('../store/canvas-store.js')
+const { loadDocument, saveDocument } = await import('../store/document-store.js')
 const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
 
 // Snapshot of initialFakeHomeDir's contents immediately after the
@@ -138,30 +138,30 @@ function connectAndCaptureSnapshot(
 
 // How long to wait for the WS persistence path to signal completion before
 // failing with a clear diagnostic instead of hanging until Vitest's global
-// test timeout (which reports no information about which (workspaceId, slug)
+// test timeout (which reports no information about which (workspaceId, path)
 // never arrived).
 const PERSISTED_SIGNAL_TIMEOUT_MS = 5_000
 
 // Resolves once the WS persistence path signals it has finished saving for
-// this exact (workspaceId, slug) — a deterministic completion event instead
-// of polling loadCanvas() until an expectation happens to pass. Rejects if
+// this exact (workspaceId, path) — a deterministic completion event instead
+// of polling loadDocument() until an expectation happens to pass. Rejects if
 // that signal never arrives within PERSISTED_SIGNAL_TIMEOUT_MS (e.g.
-// saveCanvas throws, or a regression changes/drops the callback args), so a
+// saveDocument throws, or a regression changes/drops the callback args), so a
 // broken persistence path fails fast with a clear message instead of hanging.
-function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
+function waitForPersisted(workspaceId: string, path: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       setOnPersistedForTests(undefined)
       reject(
         new Error(
           `waitForPersisted timed out after ${PERSISTED_SIGNAL_TIMEOUT_MS}ms waiting for ` +
-            `(workspaceId=${workspaceId}, slug=${slug}) to persist`,
+            `(workspaceId=${workspaceId}, path=${path}) to persist`,
         ),
       )
     }, PERSISTED_SIGNAL_TIMEOUT_MS)
 
-    setOnPersistedForTests((persistedWorkspaceId, persistedSlug) => {
-      if (persistedWorkspaceId === workspaceId && persistedSlug === slug) {
+    setOnPersistedForTests((persistedWorkspaceId, persistedPath) => {
+      if (persistedWorkspaceId === workspaceId && persistedPath === path) {
         clearTimeout(timer)
         setOnPersistedForTests(undefined)
         resolve()
@@ -192,7 +192,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -232,7 +232,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       client.send(update)
       await persisted
 
-      const saved = await loadCanvas('session1', 'canvas-a')
+      const saved = await loadDocument('session1', 'canvas-a')
       const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
       expect(elements.map((entry) => entry.id)).toContain('real-socket-elem')
     } finally {
@@ -296,7 +296,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
 
       // Only B's element made it to disk; A's malformed bytes never
       // decoded into anything that could be persisted.
-      const saved = await loadCanvas('session1', 'canvas-a')
+      const saved = await loadDocument('session1', 'canvas-a')
       const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
       expect(elements.map((entry) => entry.id)).toEqual(['survivor-elem'])
     } finally {

@@ -9,7 +9,7 @@
 // are also verified.
 //
 // Expected behavior:
-// 1. codex returns a JSON object { slug, canvasId, versionId }
+// 1. codex returns a JSON object { path, documentId, versionId }
 // 2. tmp data dir contains a blob for the canvas (under blobs/{ws}/canvas/)
 //
 // Notes:
@@ -51,10 +51,10 @@ const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
   additionalProperties: false,
-  required: ['slug', 'canvasId', 'versionId'],
+  required: ['path', 'documentId', 'versionId'],
   properties: {
-    slug: { type: 'string', const: 'codex-strict-smoke' },
-    canvasId: {
+    path: { type: 'string', const: 'codex-strict-smoke' },
+    documentId: {
       type: 'string',
       pattern: '^[A-Za-z0-9_-]+/codex-strict-smoke$',
     },
@@ -68,8 +68,8 @@ writeFileSync(schemaPath, JSON.stringify(schema))
 
 const prompt = [
   'Use the whiteboard MCP server.',
-  'Create a canvas with slug "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call wb_version_save with label "codex-strict-smoke" for that canvas.',
-  'Return a JSON object with slug, canvasId, and versionId only.',
+  'Create a canvas with path "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call wb_version_save with label "codex-strict-smoke" for that canvas.',
+  'Return a JSON object with path, documentId, and versionId only.',
 ].join(' ')
 
 const configOverride = [
@@ -154,9 +154,9 @@ child.on('exit', (code) => {
     fail(`invalid JSON output (${error instanceof Error ? error.message : 'unknown error'})`)
   }
 
-  const [sessionId] = String(output.canvasId).split('/')
+  const [sessionId] = String(output.documentId).split('/')
   // Canvas blobs land under blobs/{workspaceId}/canvas/{nanoid}.loro now that
-  // the metadata store owns the slug → canvasId mapping. We only verify that
+  // the metadata store owns the path → documentId mapping. We only verify that
   // *some* canvas blob exists for the workspace; the exact filename is
   // generated nanoid.
   const blobsDir = join(tmpDataDir, 'blobs', sessionId, 'canvas')

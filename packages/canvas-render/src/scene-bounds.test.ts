@@ -155,7 +155,7 @@ describe('sceneBounds', () => {
         {
           kind: 'embedResolved',
           bbox: { x: 0, y: 0, w: 10, h: 10 },
-          canvasId: 'other-canvas',
+          documentId: 'other-canvas',
           children: [{ kind: 'thematicBreak', bbox: { x: 500, y: 500, w: 10, h: 10 } }],
         },
       ],

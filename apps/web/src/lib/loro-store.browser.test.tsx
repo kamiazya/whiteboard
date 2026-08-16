@@ -64,7 +64,7 @@ describe('LoroStore (real IndexedDB)', () => {
     await clearDb()
   })
 
-  it('load returns not-found for unknown canvasId', async () => {
+  it('load returns not-found for unknown documentId', async () => {
     const store = new LoroStore()
     const result = await store.load('unknown-id')
     expect(result).toEqual({ kind: 'not-found' })

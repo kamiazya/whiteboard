@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 

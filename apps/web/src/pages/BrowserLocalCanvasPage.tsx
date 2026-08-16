@@ -1,6 +1,6 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
+import { isImageRef } from '@kamiazya/whiteboard-model'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -99,7 +99,7 @@ interface BrowserLocalCanvasPageProps {
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
   // A canvas id requested by the URL at mount (e.g. a bookmarked
-  // /local/:canvasId deep link), read once — see
+  // /local/:documentId deep link), read once — see
   // useBrowserLocalCanvasController's own contract for the same parameter.
   initialCanvasId?: string
 }
@@ -108,18 +108,13 @@ interface BrowserLocalCanvasPageProps {
 // own message; the other states are not shown as raw enum tokens.
 
 /**
- * The core meta to show when a canvas has none stored yet — every canvas
- * that predates the facet bar, which is all of them.
- *
- * `title` is seeded from the canvas NAME rather than left blank: the two are
- * one concept, so a canvas already called "Diagram A" must show that as its
- * title, not an empty box the user has to retype. `untitled` is the list's
- * placeholder for an unnamed canvas, so it stays a placeholder here instead
- * of becoming a real stored title on the first unrelated edit.
+ * The canvas name as a TITLE. `untitled` is the store's sentinel for an
+ * unnamed canvas (`renameCanvas` normalises a cleared name to it), so it
+ * becomes the empty string here and the title box falls back to its
+ * placeholder rather than showing the sentinel as a real name.
  */
-function fallbackCoreMeta(kind: CanvasSnapshot['kind'], name: string | null): CanvasCoreMeta {
-  const title = name && name !== 'untitled' ? name : undefined
-  return { type: kind, ...(title ? { title } : {}) }
+function titleOf(name: string | null): string {
+  return name === null || name === 'untitled' ? '' : name
 }
 
 export function BrowserLocalCanvasPage({
@@ -238,10 +233,10 @@ export function BrowserLocalCanvasPage({
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
-  const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  const documentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
-  const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
-  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
+  const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
+  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, documentId, documentKind === 'markdown')
   // Binds CodeMirror straight to the document's 'body' text container:
   // edits land in the CRDT with real deltas (not the wholesale replace
   // setBody does), and an external change moves the local caret exactly.
@@ -251,7 +246,7 @@ export function BrowserLocalCanvasPage({
     () =>
       markdownDoc.doc === null
         ? undefined
-        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText('body'))],
+        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText(MARKDOWN_BODY_KEY))],
     [markdownDoc.doc],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
@@ -262,14 +257,14 @@ export function BrowserLocalCanvasPage({
   const resolveAlias = useMemo(() => createSnapshotAliasResolver(canvases), [canvases])
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
-    body: canvasKind === 'markdown' ? (markdownDoc.body ?? '') : '',
+    body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
     resolveAlias,
   })
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
-  // /canvas/:workspaceId/:slug contract). This page only mounts on
-  // /local/:canvasId (App routes '/' to the list), so on a normal open the
+  // /canvas/:workspaceId/:path contract). This page only mounts on
+  // /local/:documentId (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
   // exists for the stale-deep-link case: a bookmarked id that no longer
   // exists falls back to the default canvas, and repairing the URL with a
@@ -277,19 +272,19 @@ export function BrowserLocalCanvasPage({
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
   // This never fights the URL->canvas effect below: that effect only calls
-  // switchCanvas when the URL disagrees with the already-loaded canvasId, and
+  // switchCanvas when the URL disagrees with the already-loaded documentId, and
   // by the time navigate() below lands, location.pathname already equals
   // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
-    if (canvasId === null) return
-    const path = browserLocalCanvasPath(canvasId)
+    if (documentId === null) return
+    const path = browserLocalCanvasPath(documentId)
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
     navigate(path, { replace: isFirstSync })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId, navigate])
+  }, [documentId, navigate])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -300,7 +295,7 @@ export function BrowserLocalCanvasPage({
   // stale canvas.
   //
   // lastKnownCanvasIdRef distinguishes the two ways this effect's own
-  // dependencies can change: a switcher-driven switchCanvas() updates canvasId
+  // dependencies can change: a switcher-driven switchCanvas() updates documentId
   // before the sibling canvas-id -> URL effect's navigate() call has actually
   // updated `location`, so this effect would otherwise see a stale pathname
   // that still names the PREVIOUS canvas and switch straight back to it. When
@@ -309,23 +304,23 @@ export function BrowserLocalCanvasPage({
   // skip it and let the other effect finish the sync.
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (canvasId === null) return
-    const requestedId = parseBrowserLocalRoute(location.pathname)?.canvasId
+    if (documentId === null) return
+    const requestedId = parseBrowserLocalRoute(location.pathname)?.documentId
     const lastKnownCanvasId = lastKnownCanvasIdRef.current
-    lastKnownCanvasIdRef.current = canvasId
-    if (requestedId === undefined || requestedId === canvasId) return
+    lastKnownCanvasIdRef.current = documentId
+    if (requestedId === undefined || requestedId === documentId) return
     if (requestedId === lastKnownCanvasId) return
     void switchCanvas(requestedId).then((switched) => {
       // A stale deep link (deleted/unknown canvas) is a recoverable miss:
       // keep the loaded canvas and repair the address bar instead of
       // leaving a URL that names nothing.
-      if (!switched) navigate(browserLocalCanvasPath(canvasId), { replace: true })
+      if (!switched) navigate(browserLocalCanvasPath(documentId), { replace: true })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, canvasId, switchCanvas])
+  }, [location.pathname, documentId, switchCanvas])
 
   useEffect(() => {
-    if (canvasId === null) return
+    if (documentId === null) return
     const generation = ++listGenerationRef.current
     listCanvases()
       .then((list) => {
@@ -337,7 +332,7 @@ export function BrowserLocalCanvasPage({
         // rejection; the switcher just keeps showing its last-known list.
         log.error('listCanvases failed', err)
       })
-  }, [canvasId, currentUpdatedAt, listCanvases])
+  }, [documentId, currentUpdatedAt, listCanvases])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged. A markdown canvas
@@ -347,10 +342,12 @@ export function BrowserLocalCanvasPage({
   // written by use-markdown-body.
   const backend = useMemo(
     () =>
-      canvasId != null && canvasKind !== 'markdown' ? new BrowserLocalBackend(canvasId) : null,
-    // Re-create backend only when canvasId/kind changes; a null id means not-yet-loaded.
+      documentId != null && documentKind !== 'markdown'
+        ? new BrowserLocalBackend(documentId)
+        : null,
+    // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId, canvasKind],
+    [documentId, documentKind],
   )
 
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
@@ -370,8 +367,6 @@ export function BrowserLocalCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
-    coreFacets,
-    setCoreFacets,
   } = useCanvasSync(backend)
 
   // Export rides the canvas row's operations kebab on this page (the top
@@ -397,14 +392,14 @@ export function BrowserLocalCanvasPage({
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
-    canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
+    canvas: documentId !== null ? { documentId, name: canvasName ?? '' } : null,
   })
 
   // Read once at mount: the routed /settings page is the only place this
   // toggles, and navigating there and back remounts this page (a route
   // change), which re-reads the store fresh — no in-mount reactivity needed.
   const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
-  useBrowserToolRegistry(commands, canvasId, webMcpEnabled)
+  useBrowserToolRegistry(commands, documentId, webMcpEnabled)
 
   // Canvas data lives in IndexedDB; without an explicit persistence grant
   // the browser may evict it under storage pressure. Fire-and-forget — the
@@ -618,55 +613,49 @@ export function BrowserLocalCanvasPage({
     </>
   )
 
+  // The name goes to the workspace and NOWHERE else: it is a property of the
+  // document's place, not of its content (ADR-0009 decision 2), so the
+  // snapshot row is the one copy and the OKF `title` is projected from it on
+  // export. Both kinds share this — the same callback for both mount sites
+  // below is the point, not a coincidence.
+  const onTitleChange = (next: string) => {
+    void renameCanvas(next).catch(() => {
+      // Surfaced through persistence state, which the save chip beside this
+      // box already renders.
+    })
+  }
+
   // The merged header row's flexible middle: canvas identity (title, core
   // facets, display settings) lives in the SAME row as workspace context —
   // the second chrome strip is gone. Kind decides the exact segment.
   const canvasTitleSlot =
-    canvasKind === 'markdown' ? (
-      markdownDoc.body !== null && markdownDoc.coreMeta !== null ? (
+    documentKind === 'markdown' ? (
+      markdownDoc.body !== null && markdownDoc.coreFacets !== null ? (
         <CanvasProperties
           inline
-          key={canvasId ?? 'no-canvas'}
+          key={documentId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
-          meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
-          onChange={(next) => {
-            markdownDoc.setCoreMeta(next)
-            // title and the canvas name are ONE concept: the facet is the
-            // document's own truth, the snapshot row is the copy the canvas
-            // list reads without loading every document. `renameCanvas`
-            // normalises a cleared title to 'untitled', which is exactly
-            // what an absent facet should list as.
-            if (next.title !== markdownDoc.coreMeta?.title) {
-              void renameCanvas(next.title ?? '').catch(() => {
-                // Surfaced through persistence state; the facet write is
-                // independent and has already landed in the document.
-              })
-            }
-          }}
+          title={titleOf(canvasName)}
+          onTitleChange={onTitleChange}
+          facets={markdownDoc.coreFacets}
+          onFacetsChange={markdownDoc.setCoreFacets}
         />
       ) : null
     ) : (
+      // No facets at all: this branch is the SPATIAL canvas, and a facet is
+      // OKF frontmatter that JSON Canvas has nowhere to put (ADR-0009
+      // decision 3). It used to pass `showFacets={false}` and keep WRITING
+      // them, which is the shape the ADR calls out — the editor hid what the
+      // document went on storing.
       <CanvasProperties
         inline
-        // A facet is OKF frontmatter and this branch is the SPATIAL canvas,
-        // which has none to hold one (ADR-0009 decision 3) — wb_facet_set
-        // refuses to write them here, so the editor does not offer them.
-        showFacets={false}
-        key={canvasId ?? 'no-canvas'}
+        key={documentId ?? 'no-canvas'}
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
-        meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}
-        onChange={(next) => {
-          setCoreFacets(next)
-          if (next.title !== coreFacets?.title) {
-            void renameCanvas(next.title ?? '').catch(() => {
-              // Surfaced through persistence state; the facet write is
-              // independent and has already landed in the document.
-            })
-          }
-        }}
+        title={titleOf(canvasName)}
+        onTitleChange={onTitleChange}
       />
     )
 
@@ -717,9 +706,9 @@ export function BrowserLocalCanvasPage({
               }
               dataMode="local"
               workspaceId="local"
-              slug={pageState.snapshot.id}
+              path={pageState.snapshot.id}
               canvases={switcherOptions.map((c) => ({
-                slug: c.id,
+                path: c.id,
                 name: c.name,
                 updatedAt: c.updatedAt,
               }))}
@@ -776,10 +765,10 @@ export function BrowserLocalCanvasPage({
       )}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
         <DocumentEditorSurface
-          kind={canvasKind}
-          documentKey={canvasId ?? 'no-canvas'}
+          kind={documentKind}
+          documentKey={documentId ?? 'no-canvas'}
           markdown={
-            markdownDoc.coreMeta === null
+            markdownDoc.coreFacets === null
               ? { body: null, setBody: markdownDoc.setBody }
               : {
                   body: markdownDoc.body,
@@ -787,7 +776,8 @@ export function BrowserLocalCanvasPage({
                   sourceExtensions: markdownBinding,
                   autoFocus: true,
                   theme: resolvedTheme,
-                  meta: markdownDoc.coreMeta,
+                  meta: markdownDoc.coreFacets,
+                  title: titleOf(canvasName),
                   resolveAlias,
                   onOpenCanvas: (id) => navigate(browserLocalCanvasPath(id)),
                   resolveEmbed,
@@ -803,7 +793,7 @@ export function BrowserLocalCanvasPage({
                   inherits the previous canvas's viewport. (The markdown
                   branch keys for the same reason.) */}
                 <SpatialEditor
-                  key={canvasId ?? 'no-canvas'}
+                  key={documentId ?? 'no-canvas'}
                   // Decided from the canvas's own shape, but only once its
                   // document has loaded — at mount every canvas still looks
                   // empty.
@@ -822,7 +812,7 @@ export function BrowserLocalCanvasPage({
                   // File-node reference = browser-local canvas id; the current
                   // canvas is excluded (a self-reference card is pure noise).
                   fileRefOptions={canvases
-                    .filter((entry) => entry.id !== canvasId)
+                    .filter((entry) => entry.id !== documentId)
                     .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
                   onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
                   missingFileRef={missingFileRef}

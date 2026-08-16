@@ -78,9 +78,7 @@ export function createCanvasSvgExportRouter() {
       try {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
-          // The store layer still speaks `slug`; renaming it through
-          // headless-export and canvas-store is its own sweep.
-          slug: path,
+          path,
           options: { padding: body.padding, frameId: body.frameId, theme: body.theme },
         })
         svg = result.svg

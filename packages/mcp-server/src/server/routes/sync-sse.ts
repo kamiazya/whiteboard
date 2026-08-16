@@ -27,7 +27,7 @@ const log = getLogger('sync-sse')
 export const syncSubscribeRequestSchema = z
   .object({
     streamId: z.string().min(1),
-    // Doc keys are `${workspaceId}/${slug}`, matching the WS connection registry.
+    // Doc keys are `${workspaceId}/${path}`, matching the WS connection registry.
     subscribe: z.array(z.string().min(1)).optional(),
     unsubscribe: z.array(z.string().min(1)).optional(),
   })
@@ -83,8 +83,8 @@ interface SyncStream {
 
 const streams = new Map<string, SyncStream>()
 
-export function docKey(workspaceId: string, slug: string): string {
-  return `${workspaceId}/${slug}`
+export function docKey(workspaceId: string, path: string): string {
+  return `${workspaceId}/${path}`
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -99,8 +99,8 @@ function toBase64(bytes: Uint8Array): string {
  * regardless of which one produced it — an MCP tool edit and a WS peer edit
  * are indistinguishable to a subscriber.
  */
-export function sseBroadcastUpdate(workspaceId: string, slug: string, update: Uint8Array): void {
-  const key = docKey(workspaceId, slug)
+export function sseBroadcastUpdate(workspaceId: string, path: string, update: Uint8Array): void {
+  const key = docKey(workspaceId, path)
   const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {
@@ -118,8 +118,8 @@ export function sseBroadcastUpdate(workspaceId: string, slug: string, update: Ui
  * whichever canvas happened to be listening — a head_changed for one canvas
  * landing on another.
  */
-export function sseBroadcastText(workspaceId: string, slug: string, raw: string): void {
-  const key = docKey(workspaceId, slug)
+export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
+  const key = docKey(workspaceId, path)
   const payload: SyncMessageEvent = { doc: key, raw }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {
@@ -129,8 +129,8 @@ export function sseBroadcastText(workspaceId: string, slug: string, raw: string)
 }
 
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
-export function sseBroadcastTextToReady(workspaceId: string, slug: string, raw: string): void {
-  const key = docKey(workspaceId, slug)
+export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: string): void {
+  const key = docKey(workspaceId, path)
   const payload: SyncMessageEvent = { doc: key, raw }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {

@@ -1,16 +1,16 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { parseVersionRecord } from './version-record.js'
 
 export const versionRestoreInputSchema = z
   .object({
     workspaceId: workspaceIdSchema.describe('Workspace ID the target canvas belongs to.'),
-    canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
+    documentId: documentIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
     versionId: z
       .string()
       .min(1)
@@ -21,7 +21,7 @@ export type VersionRestoreInput = z.infer<typeof versionRestoreInputSchema>
 
 export const versionRestoreOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     restoredVersionId: z.string(),
     label: z.string(),
     frontier: z.string(),
@@ -31,10 +31,10 @@ export type VersionRestoreOutput = z.infer<typeof versionRestoreOutputSchema>
 
 export class VersionNotFoundError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly versionId: string,
   ) {
-    super(`version not found: ${versionId} in canvas ${canvasId}`)
+    super(`version not found: ${versionId} in canvas ${documentId}`)
     this.name = 'VersionNotFoundError'
   }
 }
@@ -46,18 +46,18 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.documentId)
 
       const versions = doc.getMap('versions')
       const raw = versions.get(input.versionId)
       if (typeof raw !== 'string') {
-        throw new VersionNotFoundError(input.canvasId, input.versionId)
+        throw new VersionNotFoundError(input.documentId, input.versionId)
       }
 
       const record = parseVersionRecord(raw)
       if (record === null) {
-        throw new VersionNotFoundError(input.canvasId, input.versionId)
+        throw new VersionNotFoundError(input.documentId, input.versionId)
       }
       const { label, frontier } = record
 
@@ -73,10 +73,10 @@ export function createVersionRestoreTool(deps: ServerDeps) {
       writeSpatialCanvas(doc, oldCanvas)
       doc.commit()
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
       return {
-        canvasId: input.canvasId,
+        documentId: input.documentId,
         restoredVersionId: input.versionId,
         label,
         frontier,

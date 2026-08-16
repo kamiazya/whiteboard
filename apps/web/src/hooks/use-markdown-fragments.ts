@@ -8,10 +8,12 @@
  * layout keeps its documented fallback) and is never re-attempted in a
  * retry storm.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
+
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { useCallback } from 'react'
 import { renderDiagramFragment, renderMathFragment } from '../lib/markdown-fragment-renderers.js'
+import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 export interface FragmentRenderers {
   readonly renderMath: (value: string, displayMode: boolean) => RenderedSvgFragment | undefined
@@ -28,33 +30,31 @@ const DEFAULT_LOADERS: FragmentLoaders = {
   diagram: renderDiagramFragment,
 }
 
-type Wanted = {
-  readonly key: string
-  readonly render: () => Promise<RenderedSvgFragment | undefined>
-}
-
 /**
  * Every renderable fragment source in one parsed document. Keys carry a
  * kind namespace and the fence language, so a $$ math block and a
  * ```math fence with identical source never share a cache row. Total:
  * a mid-edit body the schema rejects has no fragments to offer.
  */
-function collectFragmentSources(body: string, loaders: FragmentLoaders): readonly Wanted[] {
+function collectFragmentSources(
+  body: string,
+  loaders: FragmentLoaders,
+): readonly PrefetchRequest<RenderedSvgFragment>[] {
   try {
     const root = parseMarkdownBody(body)
-    const wanted: Wanted[] = []
+    const wanted: PrefetchRequest<RenderedSvgFragment>[] = []
     for (const node of root.children) {
       if (node.type === 'math') {
         wanted.push({
           key: `math:${node.value}`,
-          render: () => loaders.math(node.value, true),
+          load: () => loaders.math(node.value, true),
         })
       }
       if (node.type === 'code' && node.lang) {
         const { lang, value } = node
         wanted.push({
           key: `fence:${lang}:${value}`,
-          render: () => loaders.diagram(lang, value),
+          load: () => loaders.diagram(lang, value),
         })
       }
     }
@@ -72,47 +72,19 @@ export function useMarkdownFragments({
   /** Injection seam for tests; defaults to the real MathJax/mermaid loaders. */
   loaders?: FragmentLoaders
 }): FragmentRenderers {
-  // `null` = render failed: a terminal answer that keeps the layout on its
-  // fallback without re-rendering the same source forever.
-  const [cache, setCache] = useState<ReadonlyMap<string, RenderedSvgFragment | null>>(new Map())
-  const inflight = useRef<Set<string>>(new Set())
-  // Unmount-scoped, NOT effect-scoped: a keystroke re-runs the effect while
-  // a render is in flight and skips it as inflight — cancelling the old
-  // completion per-effect would drop the result with nothing left to
-  // re-fire it (the stuck-placeholder bug class).
-  const unmounted = useRef(false)
-  useEffect(() => {
-    // Reset on the effect BODY, not just initialization: StrictMode's dev
-    // double-mount runs this cleanup once before the real session, and a
-    // flag that only ever goes true would silently drop every completion
-    // for the component's whole life (dev-only, invisible in prod builds).
-    unmounted.current = false
-    return () => {
-      unmounted.current = true
-    }
-  }, [])
-
-  useEffect(() => {
-    for (const { key, render } of collectFragmentSources(body, loaders)) {
-      if (cache.has(key) || inflight.current.has(key)) continue
-      inflight.current.add(key)
-      void render()
-        .catch(() => undefined)
-        .then((fragment) => {
-          inflight.current.delete(key)
-          if (unmounted.current) return
-          setCache((prev) => new Map(prev).set(key, fragment ?? null))
-        })
-    }
-  }, [body, cache, loaders])
+  // No transitive closure here, unlike the embed sibling: a rendered
+  // fragment is an SVG string and cannot reference further sources.
+  const lookup = usePrefetchedCache<RenderedSvgFragment>(
+    useCallback(() => collectFragmentSources(body, loaders), [body, loaders]),
+  )
 
   const renderMath = useCallback(
-    (value: string, _displayMode: boolean) => cache.get(`math:${value}`) ?? undefined,
-    [cache],
+    (value: string, _displayMode: boolean) => lookup(`math:${value}`),
+    [lookup],
   )
   const renderDiagram = useCallback(
-    (lang: string, value: string) => cache.get(`fence:${lang}:${value}`) ?? undefined,
-    [cache],
+    (lang: string, value: string) => lookup(`fence:${lang}:${value}`),
+    [lookup],
   )
   return { renderMath, renderDiagram }
 }

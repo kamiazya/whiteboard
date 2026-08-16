@@ -59,14 +59,14 @@ const storageSettingsSchema = z
         }
       }, 'must be an http(s) URL')
       .optional(),
-    // The (workspaceId, slug) last reached via a #wb= pairing, alongside
+    // The (workspaceId, path) last reached via a #wb= pairing, alongside
     // localDaemonBaseUrl above — together they let a later hosted-app load
     // offer a one-click reconnect to the same daemon and canvas instead of
-    // just the daemon's root. slug is meaningless without workspaceId, but
+    // just the daemon's root. path is meaningless without workspaceId, but
     // this is UI-hint state (not an access boundary), so it is not enforced
     // by a cross-field refine the way daemonConnectionPayloadSchema does.
     lastConnectedWorkspaceId: z.string().optional(),
-    lastConnectedSlug: z.string().optional(),
+    lastConnectedPath: z.string().optional(),
     // Every daemon baseUrl a probe has actually confirmed, most recent
     // first (see daemon-discovery.ts's MRU helper). Same http(s)-only
     // constraint as localDaemonBaseUrl above and for the same reason:

@@ -2,7 +2,7 @@
 // outline reads as though the edge merges into the box. Overlapping nodes
 // are the arrangement that provokes it, because a side's anchor can sit
 // inside the other node and the route has to come back around.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

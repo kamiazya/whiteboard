@@ -2,7 +2,7 @@
 // pins the wiring: that a dragged node actually lands on the snapped
 // position, that the guide is drawn, that Cmd/Ctrl suspends it, and that a
 // node never snaps to something travelling with it.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

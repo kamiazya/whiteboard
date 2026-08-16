@@ -15,7 +15,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
+const { saveDocument, loadDocument } = await import('./document-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
@@ -88,10 +88,10 @@ describe('purgeDanglingFiles', () => {
   it('keeps a file referenced by a CURRENT nodes-model file node (production doc shape)', async () => {
     // Production docs write spatial content into the nodes/edges model, not
     // the retired 'elements' movable list — this is the shape every daemon
-    // actually persists through saveCanvas. Before the fix this must be RED:
+    // actually persists through saveDocument. Before the fix this must be RED:
     // the collector only walks 'elements' and returns an empty set, so the
     // aged file below is (wrongly) classified as dangling and unlinked.
-    await saveCanvas('ws_nodes', 'page', makeSpatialDocWithImage('asset-x'))
+    await saveDocument('ws_nodes', 'page', makeSpatialDocWithImage('asset-x'))
     await seedFile('ws_nodes', 'asset-x', '.png', 500)
 
     const result = await purgeDanglingFiles('ws_nodes')
@@ -104,8 +104,8 @@ describe('purgeDanglingFiles', () => {
   it('keeps files referenced by nodes-model file nodes and deletes the rest', async () => {
     // Two canvases reference distinct fileIds; an additional dangling file
     // qualifies for deletion.
-    await saveCanvas('ws_a', 'used-a', makeSpatialDocWithImage('used-a'))
-    await saveCanvas('ws_a', 'used-b', makeSpatialDocWithImage('used-b'))
+    await saveDocument('ws_a', 'used-a', makeSpatialDocWithImage('used-a'))
+    await saveDocument('ws_a', 'used-b', makeSpatialDocWithImage('used-b'))
 
     await seedFile('ws_a', 'used-a', '.png', 100)
     await seedFile('ws_a', 'used-b', '.png', 200)
@@ -126,7 +126,7 @@ describe('purgeDanglingFiles', () => {
     // nodes/edges model still store their images in the retired 'elements'
     // movable list — collectFromDoc's second pass must keep protecting
     // them even though every current doc uses the nodes-model pass above.
-    await saveCanvas('ws_legacy', 'page', makeDocWithImage('legacy-image'))
+    await saveDocument('ws_legacy', 'page', makeDocWithImage('legacy-image'))
     await seedFile('ws_legacy', 'legacy-image', '.png', 321)
 
     const result = await purgeDanglingFiles('ws_legacy')
@@ -148,7 +148,7 @@ describe('purgeDanglingFiles', () => {
     map.set('fileId', 'soft-deleted')
     map.set('isDeleted', true)
     doc.commit()
-    await saveCanvas('ws_b', 'tombstoned', doc)
+    await saveDocument('ws_b', 'tombstoned', doc)
 
     await seedFile('ws_b', 'soft-deleted', '.png', 800)
 
@@ -166,8 +166,8 @@ describe('purgeDanglingFiles', () => {
     // Pins the two-pass walker running in ONE scan: a workspace mid-
     // migration has some canvases still in the legacy shape and some
     // already resaved through the current model.
-    await saveCanvas('ws_mixed', 'legacy-page', makeDocWithImage('legacy-ref'))
-    await saveCanvas('ws_mixed', 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
+    await saveDocument('ws_mixed', 'legacy-page', makeDocWithImage('legacy-ref'))
+    await saveDocument('ws_mixed', 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
 
     await seedFile('ws_mixed', 'legacy-ref', '.png', 10)
     await seedFile('ws_mixed', 'nodes-ref', '.png', 20)
@@ -185,8 +185,8 @@ describe('purgeDanglingFiles', () => {
     // Precision: a 'file' node's `file` value can also be a canvas
     // reference (wikilink-style embed) rather than an upload — only the
     // 'asset:' prefix means "this points at an uploaded blob". A same-named
-    // orphan upload must not be spared by a canvas-slug collision.
-    await saveCanvas(
+    // orphan upload must not be spared by a canvas-path collision.
+    await saveDocument(
       'ws_precision',
       'page',
       makeSpatialDoc({
@@ -214,16 +214,16 @@ describe('purgeDanglingFiles', () => {
 
   it('keeps files referenced by a saved version when versionStore is supplied', async () => {
     // Step 1: live state references "version-only" via a file node.
-    await saveCanvas('ws_v', 'evolving', makeSpatialDocWithImage('version-only'))
+    await saveDocument('ws_v', 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
-    await store.save('ws_v', 'evolving', await loadCanvas('ws_v', 'evolving'), { auto: false })
+    await store.save('ws_v', 'evolving', await loadDocument('ws_v', 'evolving'), { auto: false })
 
     // Step 2: live state changes — the original node is replaced by a
     // brand-new one. After this the live doc references only "live-now",
     // while the saved version still points at "version-only".
-    const live = await loadCanvas('ws_v', 'evolving')
+    const live = await loadDocument('ws_v', 'evolving')
     setSpatialDocImage(live, 'live-now')
-    await saveCanvas('ws_v', 'evolving', live, { overwrite: true })
+    await saveDocument('ws_v', 'evolving', live, { overwrite: true })
 
     await seedFile('ws_v', 'version-only', '.png', 700)
     await seedFile('ws_v', 'live-now', '.png', 300)
@@ -250,7 +250,7 @@ describe('purgeDanglingFiles', () => {
     // the very behaviour this test exists to prevent.
     const cap = captureLogsForTests('debug')
 
-    await saveCanvas('ws_brk', 'broken', makeSpatialDocWithImage('only-by-broken-version'))
+    await saveDocument('ws_brk', 'broken', makeSpatialDocWithImage('only-by-broken-version'))
     await seedFile('ws_brk', 'only-by-broken-version', '.png', 222)
     await seedFile('ws_brk', 'really-dangling', '.png', 33)
 
@@ -258,7 +258,7 @@ describe('purgeDanglingFiles', () => {
       list: async () => [
         {
           id: 'v-broken',
-          slug: 'broken',
+          path: 'broken',
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
@@ -297,7 +297,7 @@ describe('purgeDanglingFiles', () => {
       expect(fileGcWarnings).toHaveLength(1)
       expect(fileGcWarnings[0].data).toMatchObject({
         workspaceId: 'ws_brk',
-        slug: 'broken',
+        path: 'broken',
         versionId: 'v-broken',
       })
     } finally {
@@ -306,9 +306,9 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('skips files whose mtime is within the configured grace window (Race C)', async () => {
-    // The upload-but-not-yet-saveCanvas race: routes/files.ts has just
+    // The upload-but-not-yet-saveDocument race: routes/files.ts has just
     // written `pending.png` to disk, but the user has not yet called
-    // saveCanvas with the matching image element. Without a grace
+    // saveDocument with the matching image element. Without a grace
     // window GC fires here and permanently deletes a file that was
     // about to be referenced. With the default 1-hour grace, freshly-
     // touched files are spared.
@@ -348,10 +348,10 @@ describe('purgeDanglingFiles', () => {
     }
   })
 
-  it('serialises against a concurrent saveCanvas that adds a new file reference', async () => {
+  it('serialises against a concurrent saveDocument that adds a new file reference', async () => {
     // Race scenario: user has foo.png on disk left over from an earlier
     // session, but no canvas references it yet. They open a canvas and
-    // add a file node pointing at foo. Just as that saveCanvas is
+    // add a file node pointing at foo. Just as that saveDocument is
     // committing, a background purgeDanglingFiles fires.
     //
     // Without a workspace write barrier, GC's collectReferencedFileIds
@@ -361,14 +361,14 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_race', 'about-to-reference', '.png', 200)
 
     const empty = new LoroDoc()
-    await saveCanvas('ws_race', 'page', empty)
+    await saveDocument('ws_race', 'page', empty)
 
     // Build the post-save doc by extending the empty doc.
-    const next = await loadCanvas('ws_race', 'page')
+    const next = await loadDocument('ws_race', 'page')
     setSpatialDocImage(next, 'about-to-reference')
 
     // Kick the save first so it acquires the lock; then kick the purge.
-    const savePromise = saveCanvas('ws_race', 'page', next, { overwrite: true })
+    const savePromise = saveDocument('ws_race', 'page', next, { overwrite: true })
     const purgePromise = purgeDanglingFiles('ws_race')
     const [, purgeResult] = await Promise.all([savePromise, purgePromise])
 
@@ -380,15 +380,15 @@ describe('purgeDanglingFiles', () => {
   it('keeps a file referenced only by a non-head branch tip', async () => {
     // File node lives at the point where "feature" branches off.
     const doc = makeSpatialDocWithImage('branch-only-image')
-    await saveCanvas('ws_branch', 'page', doc)
+    await saveDocument('ws_branch', 'page', doc)
     const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
     await createBranch('ws_branch', 'page', { name: 'feature', initialTipFrontiers: branchTip })
 
     // At head (main), the file node is removed — main's live state no
     // longer references it, but "feature"'s tip still does.
-    const live = await loadCanvas('ws_branch', 'page')
+    const live = await loadDocument('ws_branch', 'page')
     clearSpatialDocNodes(live)
-    await saveCanvas('ws_branch', 'page', live, { overwrite: true })
+    await saveDocument('ws_branch', 'page', live, { overwrite: true })
 
     await seedFile('ws_branch', 'branch-only-image', '.png', 42)
 
@@ -404,7 +404,7 @@ describe('purgeDanglingFiles', () => {
     // themselves are corrupt — no retry fixes that, so this must surface
     // as CorruptStoredDataError (mapped to 500 corrupt_stored_data by the
     // route), not the retryable IncompleteFileGcScanError (503).
-    await saveCanvas('ws_brk2', 'broken-branch', makeSpatialDocWithImage('only-by-broken-branch'))
+    await saveDocument('ws_brk2', 'broken-branch', makeSpatialDocWithImage('only-by-broken-branch'))
     await createBranch('ws_brk2', 'broken-branch', {
       name: 'feature',
       initialTipFrontiers: 'not-valid-base64-frontiers!!',
@@ -426,7 +426,7 @@ describe('purgeDanglingFiles', () => {
     // throw on the corrupt tip). This is what keeps the periodic sweeper
     // cheap on the common no-uploads workspace; reordering the scan back
     // in front of the readdir turns this test red.
-    await saveCanvas('ws_noscan', 'broken-branch', makeSpatialDocWithImage('never-uploaded'))
+    await saveDocument('ws_noscan', 'broken-branch', makeSpatialDocWithImage('never-uploaded'))
     await createBranch('ws_noscan', 'broken-branch', {
       name: 'feature',
       initialTipFrontiers: 'not-valid-base64-frontiers!!',
@@ -442,7 +442,7 @@ describe('purgeDanglingFiles', () => {
     // A silent `if (past) collectFromDoc(...)` skip is equivalent to
     // treating a version we could not load as "referencing nothing" —
     // the same permanent-data-loss hazard as a thrown load() error.
-    await saveCanvas('ws_nullver', 'page', makeSpatialDocWithImage('only-by-null-version'))
+    await saveDocument('ws_nullver', 'page', makeSpatialDocWithImage('only-by-null-version'))
     await seedFile('ws_nullver', 'only-by-null-version', '.png', 55)
     await seedFile('ws_nullver', 'really-dangling-3', '.png', 11)
 
@@ -450,7 +450,7 @@ describe('purgeDanglingFiles', () => {
       list: async () => [
         {
           id: 'v-missing',
-          slug: 'page',
+          path: 'page',
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
@@ -479,21 +479,21 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('serialises purge against a concurrent updateBranchTip (GC-vs-branch-write race)', async () => {
-    // The mirror image of the saveCanvas race above: a branch tip is
+    // The mirror image of the saveDocument race above: a branch tip is
     // updated (e.g. after a commit on that branch) concurrently with a
     // purge pass. Without branches-store also taking the workspace write
     // lock, the purge could snapshot branch state before the tip update
     // lands and unlink a file the new tip references.
     const doc = makeSpatialDocWithImage('about-to-be-tip-referenced')
-    await saveCanvas('ws_branch_race', 'page', doc)
+    await saveDocument('ws_branch_race', 'page', doc)
     await createBranch('ws_branch_race', 'page', { name: 'feature' })
     const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
 
     // Head (main) no longer references the image — only the about-to-land
     // "feature" tip update will.
-    const live = await loadCanvas('ws_branch_race', 'page')
+    const live = await loadDocument('ws_branch_race', 'page')
     clearSpatialDocNodes(live)
-    await saveCanvas('ws_branch_race', 'page', live, { overwrite: true })
+    await saveDocument('ws_branch_race', 'page', live, { overwrite: true })
 
     await seedFile('ws_branch_race', 'about-to-be-tip-referenced', '.png', 77)
 
@@ -533,15 +533,15 @@ describe('purgeDanglingFiles', () => {
     // before the tip lands, and permanently delete the file the new
     // tip is about to reference.
     const doc = makeSpatialDocWithImage('about-to-be-tip-referenced-live')
-    await saveCanvas('ws_branch_race_live', 'page', doc)
+    await saveDocument('ws_branch_race_live', 'page', doc)
     await createBranch('ws_branch_race_live', 'page', { name: 'feature' })
     const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
 
     // Head (main) no longer references the image — only the about-to-land
     // "feature" tip update will.
-    const live = await loadCanvas('ws_branch_race_live', 'page')
+    const live = await loadDocument('ws_branch_race_live', 'page')
     clearSpatialDocNodes(live)
-    await saveCanvas('ws_branch_race_live', 'page', live, { overwrite: true })
+    await saveDocument('ws_branch_race_live', 'page', live, { overwrite: true })
 
     await seedFile('ws_branch_race_live', 'about-to-be-tip-referenced-live', '.png', 77)
 
@@ -575,7 +575,7 @@ describe('purgeDanglingFiles', () => {
 
     setSpatialDocImage(doc, 'about-to-be-captured-on-head-switch')
 
-    await saveCanvas('ws_head_race', 'page', doc)
+    await saveDocument('ws_head_race', 'page', doc)
     await createBranch('ws_head_race', 'page', {
       name: 'feature',
       initialTipFrontiers: featureTip,
@@ -583,18 +583,18 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_head_race', 'about-to-be-captured-on-head-switch', '.png', 90)
 
     const app = createBranchesRouter({
-      getCurrentFrontiers: async (sid, slug) => {
-        const live = await loadCanvas(sid, slug)
+      getCurrentFrontiers: async (sid, path) => {
+        const live = await loadDocument(sid, path)
         return Buffer.from(encodeFrontiers(live.frontiers())).toString('base64')
       },
-      checkoutTo: async (sid, slug, tipFrontiersBase64) => {
-        const live = await loadCanvas(sid, slug)
+      checkoutTo: async (sid, path, tipFrontiersBase64) => {
+        const live = await loadDocument(sid, path)
         const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
         const targetFrontiers = decodeFrontiers(
           new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')),
         )
         clone.checkout(targetFrontiers)
-        await saveCanvas(sid, slug, clone, { overwrite: true })
+        await saveDocument(sid, path, clone, { overwrite: true })
       },
     })
 

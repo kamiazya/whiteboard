@@ -9,7 +9,7 @@ git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
 pnpm install
 pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
-pnpm test         # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-model, canvas-ports, canvas-codec, canvas-workspace, server-core, arch-lint, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test         # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model, ports, codec, workspace, server-core, arch-lint, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```

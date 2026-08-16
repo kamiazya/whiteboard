@@ -3,7 +3,7 @@
 // routed around one, which the router now does deliberately — fell outside
 // the reported size, and a consumer sizing a viewport by it clipped the
 // drawing.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { composeCanvasScene, computeSceneDimensions } from './compose-canvas-scene.js'
 import { fallbackMeasureText } from './fallback-measure.js'

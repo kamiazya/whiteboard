@@ -102,8 +102,8 @@ export interface ShapeSceneNode {
 /** Semantic provenance for an inline link-like run. Never flattened away. */
 export type LinkProvenance =
   | { readonly kind: 'link'; readonly href: string; readonly title?: string }
-  | { readonly kind: 'wikiLink'; readonly canvasId: string; readonly alias?: string }
-  | { readonly kind: 'embed'; readonly canvasId: string }
+  | { readonly kind: 'wikiLink'; readonly documentId: string; readonly alias?: string }
+  | { readonly kind: 'embed'; readonly documentId: string }
 
 /** A block-level heading. `level` is the semantic heading depth (1-6). */
 export interface HeadingBlockNode {
@@ -205,7 +205,7 @@ export interface SvgFragmentNode {
 export interface EmbedPlaceholderNode {
   readonly kind: 'embedPlaceholder'
   readonly bbox: BoundingBox
-  readonly canvasId: string
+  readonly documentId: string
   readonly title: string
   readonly reason: 'cycle' | 'depthCap' | 'unresolvable'
 }
@@ -213,7 +213,7 @@ export interface EmbedPlaceholderNode {
 export interface EmbedResolvedNode {
   readonly kind: 'embedResolved'
   readonly bbox: BoundingBox
-  readonly canvasId: string
+  readonly documentId: string
   readonly children: readonly SceneNode[]
 }
 

@@ -4,7 +4,7 @@
 // parallel overlap. Each group member now gets a strictly deeper one-sided
 // stub (base + i * step, in the group's existing sort order), so shared
 // sides produce parallel DISTINCT corridors.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

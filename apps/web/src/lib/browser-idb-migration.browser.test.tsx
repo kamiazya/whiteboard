@@ -20,7 +20,7 @@ async function clearDb(): Promise<void> {
 }
 
 /** Seed a pre-v3 ("v2 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
-async function seedV2Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', 2)
     req.onupgradeneeded = (event) => {
@@ -32,15 +32,15 @@ async function seedV2Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
     req.onsuccess = () => {
       const db = req.result
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
-      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
         {
-          id: canvasId,
+          id: documentId,
           name: 'Pre-migration canvas',
           scene: { elements: [{ id: 'legacy-el', type: 'rectangle' }] },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
-        canvasId,
+        documentId,
       )
       tx.objectStore('loroCanvases').put(
         {
@@ -48,7 +48,7 @@ async function seedV2Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
           snapshot: loroSnapshot,
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
-        canvasId,
+        documentId,
       )
       tx.oncomplete = () => {
         db.close()
@@ -64,13 +64,13 @@ async function seedV2Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
 }
 
 /** Reads a 'canvases' row directly via raw IDB, bypassing canvasSnapshotSchema. */
-async function readRawCanvasesRow(canvasId: string): Promise<unknown> {
+async function readRawCanvasesRow(documentId: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard')
     req.onsuccess = () => {
       const db = req.result
       const tx = db.transaction('canvases', 'readonly')
-      const getReq = tx.objectStore('canvases').get(canvasId)
+      const getReq = tx.objectStore('canvases').get(documentId)
       getReq.onsuccess = () => resolve(getReq.result)
       getReq.onerror = () => reject(getReq.error)
       tx.oncomplete = () => db.close()
@@ -80,7 +80,7 @@ async function readRawCanvasesRow(canvasId: string): Promise<unknown> {
 }
 
 /** Seed a pre-v4 ("v3 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
-async function seedV3Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+async function seedV3Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', 3)
     req.onupgradeneeded = (event) => {
@@ -92,14 +92,14 @@ async function seedV3Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
     req.onsuccess = () => {
       const db = req.result
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
-      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
-        { id: canvasId, name: 'Pre-v4 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        { id: documentId, name: 'Pre-v4 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
+        documentId,
       )
       tx.objectStore('loroCanvases').put(
         { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        documentId,
       )
       tx.oncomplete = () => {
         db.close()
@@ -115,7 +115,7 @@ async function seedV3Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
 }
 
 /** Seed a pre-v5 ("v4 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
-async function seedV4Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+async function seedV4Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', 4)
     req.onupgradeneeded = (event) => {
@@ -128,14 +128,14 @@ async function seedV4Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
     req.onsuccess = () => {
       const db = req.result
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
-      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
-        { id: canvasId, name: 'Pre-v5 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        { id: documentId, name: 'Pre-v5 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
+        documentId,
       )
       tx.objectStore('loroCanvases').put(
         { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        documentId,
       )
       tx.objectStore('canvasFiles').put(new Blob(['file-bytes']), 'file-1')
       tx.oncomplete = () => {
@@ -152,7 +152,7 @@ async function seedV4Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
 }
 
 /** Seed a pre-v6 ("v5 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
-async function seedV5Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard', 5)
     req.onupgradeneeded = (event) => {
@@ -171,14 +171,14 @@ async function seedV5Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
         ['meta', 'canvases', 'loroCanvases', 'canvasFiles', 'reconnectKeypairs'],
         'readwrite',
       )
-      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
-        { id: canvasId, name: 'Pre-v6 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        { id: documentId, name: 'Pre-v6 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
+        documentId,
       )
       tx.objectStore('loroCanvases').put(
         { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
-        canvasId,
+        documentId,
       )
       tx.objectStore('canvasFiles').put(new Blob(['file-bytes']), 'file-1')
       // A real (non-extractable) CryptoKey cannot be structured-cloned into a
@@ -213,11 +213,11 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
   })
 
   it('removes the reconnectKeypairs store and the legacy localStorage secret while preserving canvases/loroCanvases/canvasFiles/meta', async () => {
-    const canvasId = 'canvas-migrate-v6'
+    const documentId = 'canvas-migrate-v6'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
     const loroSnapshot = doc.export({ mode: 'snapshot' })
-    await seedV5Fixture(canvasId, loroSnapshot)
+    await seedV5Fixture(documentId, loroSnapshot)
     localStorage.setItem(
       LEGACY_RECONNECT_SECRET_KEY,
       JSON.stringify({ origin: 'http://localhost:3099', secret: 'stale-secret' }),
@@ -239,12 +239,12 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
     expect(fileCount).toBe(1)
 
     const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(canvasId)
+    const loroResult = await loroStore.load(documentId)
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
-    const loadResult = await metaStore.load(canvasId)
+    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe('Pre-v6 canvas')
@@ -284,11 +284,11 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
   })
 
   it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/canvases/meta contents', async () => {
-    const canvasId = 'canvas-migrate-v5'
+    const documentId = 'canvas-migrate-v5'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
     const loroSnapshot = doc.export({ mode: 'snapshot' })
-    await seedV4Fixture(canvasId, loroSnapshot)
+    await seedV4Fixture(documentId, loroSnapshot)
 
     const db = await openWhiteboardDb()
     // v4 -> current spans the v4->v5 store creation AND the v5->v6 removal
@@ -307,12 +307,12 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(fileCount).toBe(1)
 
     const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(canvasId)
+    const loroResult = await loroStore.load(documentId)
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
-    const loadResult = await metaStore.load(canvasId)
+    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe('Pre-v5 canvas')
@@ -329,23 +329,23 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
   })
 
   it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/canvases/meta contents', async () => {
-    const canvasId = 'canvas-migrate-v4'
+    const documentId = 'canvas-migrate-v4'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
     const loroSnapshot = doc.export({ mode: 'snapshot' })
-    await seedV3Fixture(canvasId, loroSnapshot)
+    await seedV3Fixture(documentId, loroSnapshot)
 
     const db = await openWhiteboardDb()
     expect(db.objectStoreNames.contains('canvasFiles')).toBe(true)
     db.close()
 
     const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(canvasId)
+    const loroResult = await loroStore.load(documentId)
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
-    const loadResult = await metaStore.load(canvasId)
+    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe('Pre-v4 canvas')
@@ -362,11 +362,11 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
   })
 
   it('opens a seeded v2 fixture at the current version without VersionError, strips scene, and keeps loroCanvases canonical', async () => {
-    const canvasId = 'canvas-migrate-1'
+    const documentId = 'canvas-migrate-1'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
     const loroSnapshot = doc.export({ mode: 'snapshot' })
-    await seedV2Fixture(canvasId, loroSnapshot)
+    await seedV2Fixture(documentId, loroSnapshot)
 
     // (a) Open through the shared opener at the current DB_VERSION — must not VersionError.
     const db = await openWhiteboardDb()
@@ -374,7 +374,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
 
     // (b) The loroCanvases record survives and its elements are canonical after load.
     const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(canvasId)
+    const loroResult = await loroStore.load(documentId)
     expect(loroResult.kind).toBe('ok')
     if (loroResult.kind === 'ok') {
       const restored = new Loro()
@@ -387,20 +387,20 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // z.object() silently strips unrecognized keys from its parsed OUTPUT even
     // when the underlying row still carries them, so asserting only against
     // loadResult.snapshot would pass even if the upgrade never ran.
-    const rawRow = await readRawCanvasesRow(canvasId)
+    const rawRow = await readRawCanvasesRow(documentId)
     expect(rawRow).not.toHaveProperty('scene')
     expect(rawRow).toEqual({
-      id: canvasId,
+      id: documentId,
       name: 'Pre-migration canvas',
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
 
     const metaStore = new IndexedDBStore()
-    const loadResult = await metaStore.load(canvasId)
+    const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot).toEqual({
-        id: canvasId,
+        id: documentId,
         name: 'Pre-migration canvas',
         updatedAt: '2026-01-01T00:00:00.000Z',
         // Not stored in the v2 fixture: the schema's own default — a
@@ -410,7 +410,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     }
 
     // (d) The default pointer/id is intact.
-    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
+    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
   })
 
   it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {
@@ -451,10 +451,10 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // code (that is done manually per the zod-schema-discipline mutation-check
     // step). It re-asserts the invariant the real mutation-check depends on:
     // opening at version 2 must NOT run the v2->v3 upgrade at all.
-    const canvasId = 'canvas-migrate-2'
+    const documentId = 'canvas-migrate-2'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'el' })
-    await seedV2Fixture(canvasId, doc.export({ mode: 'snapshot' }))
+    await seedV2Fixture(documentId, doc.export({ mode: 'snapshot' }))
 
     // Opening at the (hypothetically reverted) old version 2 does not run
     // onupgradeneeded at all, so the legacy 'scene' field is still present.
@@ -465,7 +465,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     })
     const raw = await new Promise<unknown>((resolve, reject) => {
       const tx = rawDb.transaction('canvases', 'readonly')
-      const getReq = tx.objectStore('canvases').get(canvasId)
+      const getReq = tx.objectStore('canvases').get(documentId)
       getReq.onsuccess = () => resolve(getReq.result)
       getReq.onerror = () => reject(getReq.error)
       tx.oncomplete = () => rawDb.close()

@@ -1,5 +1,5 @@
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it, vi } from 'vitest'
 import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
@@ -40,7 +40,7 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
 
 // A tiny fake mdast parser: '#'-prefixed text becomes a heading, everything
 // else becomes a single paragraph — enough to exercise layoutMdastBlocks
-// without depending on canvas-codec (a cross-package dependency this
+// without depending on codec (a cross-package dependency this
 // package must not take). `__THROW__` simulates a construct outside the
 // caller's accepted subset.
 function fakeParseBody(text: string): MdastRoot {
@@ -314,7 +314,7 @@ describe('layoutSpatialCanvas', () => {
     expect(label?.bbox.x).toBe(node.x + NODE_PADDING_PX)
   })
 
-  it('resolveFileLabel replaces a file node label; failures fall back to the raw reference', () => {
+  it('a resolved label replaces a file node label; failures fall back to the raw reference', () => {
     const node: Extract<SpatialNode, { type: 'file' }> = {
       id: 'f1',
       type: 'file',
@@ -326,7 +326,7 @@ describe('layoutSpatialCanvas', () => {
     }
     const resolved = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileLabel: (file) => (file === 'opaque-id-123' ? 'Release plan' : undefined),
+      resolveReference: (ref) => (ref === 'opaque-id-123' ? { label: 'Release plan' } : undefined),
     })
     const label = resolved.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('Release plan')
@@ -335,14 +335,14 @@ describe('layoutSpatialCanvas', () => {
     // throwing resolver degrades the same way instead of aborting layout.
     const unknown = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileLabel: () => undefined,
+      resolveReference: () => undefined,
     })
     expect(unknown.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
       'opaque-id-123',
     )
     const throwing = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileLabel: () => {
+      resolveReference: () => {
         throw new Error('boom')
       },
     })
@@ -351,7 +351,7 @@ describe('layoutSpatialCanvas', () => {
     )
   })
 
-  it('resolveFileMissing renders a quiet missing label instead of the raw reference', () => {
+  it('a reference resolved as missing renders a quiet label instead of the raw reference', () => {
     const node: Extract<SpatialNode, { type: 'file' }> = {
       id: 'f1',
       type: 'file',
@@ -364,7 +364,7 @@ describe('layoutSpatialCanvas', () => {
     }
     const missing = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileMissing: (file) => file === 'dangling-id-123',
+      resolveReference: (ref) => ({ missing: ref === 'dangling-id-123' }),
     })
     // The raw reference is an opaque id — useless to a reader — and the
     // subpath is moot without a target, so neither appears.
@@ -375,7 +375,7 @@ describe('layoutSpatialCanvas', () => {
     // Not missing -> the ordinary label path (raw ref + subpath) is untouched.
     const present = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileMissing: () => false,
+      resolveReference: () => ({ missing: false }),
     })
     expect(present.nodes.find((n): n is TextRunNode => n.kind === 'textRun')?.text).toBe(
       'dangling-id-123#heading',
@@ -384,7 +384,7 @@ describe('layoutSpatialCanvas', () => {
     // A throwing callback degrades to not-missing (total-layout rule).
     const throwing = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
-      resolveFileMissing: () => {
+      resolveReference: () => {
         throw new Error('boom')
       },
     })
@@ -574,7 +574,7 @@ describe('group background images (JSON Canvas group.background/backgroundStyle)
     edges: [],
   })
   const withImage = (overrides: Partial<SpatialLayoutOptions> = {}) =>
-    baseOptions({ resolveFileImage: (file) => ({ href: `app://${file}` }), ...overrides })
+    baseOptions({ resolveReference: (ref) => ({ image: { href: `app://${ref}` } }), ...overrides })
 
   it('renders the background as a full-frame image between chrome and label', () => {
     const scene = layoutSpatialCanvas(groupWithBackground(), withImage())
@@ -616,7 +616,7 @@ describe('group background images (JSON Canvas group.background/backgroundStyle)
       ),
     ).toBe(false)
     const throwing = baseOptions({
-      resolveFileImage: () => {
+      resolveReference: () => {
         throw new Error('no store')
       },
     })

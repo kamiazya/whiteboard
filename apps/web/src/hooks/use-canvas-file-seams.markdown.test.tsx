@@ -7,7 +7,7 @@
  * because canvas-render calls the seam during layout — on every re-layout,
  * for every file node.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { type CanvasFileAdapter, useCanvasFileSeams } from './use-canvas-file-seams.js'
@@ -41,7 +41,7 @@ function mount(canvas: SpatialCanvas, adapter: CanvasFileAdapter) {
   return renderHook(() => useCanvasFileSeams({ canvas, adapter, stampOf: new Map() }))
 }
 
-describe('resolveFileMarkdown', () => {
+describe("a resolved reference's markdown body", () => {
   it('resolves a markdown document to its parsed body', async () => {
     const canvas = canvasWith('notes')
     const { result } = mount(
@@ -49,8 +49,8 @@ describe('resolveFileMarkdown', () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: BODY })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileMarkdown('notes')).toBeDefined())
-    const root = result.current.resolveFileMarkdown('notes')
+    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
+    const root = result.current.resolveReference('notes')?.markdown
     expect(root?.type).toBe('root')
     expect(root?.children[0]).toMatchObject({ type: 'heading', depth: 1 })
   })
@@ -66,8 +66,8 @@ describe('resolveFileMarkdown', () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileCanvas('diagram')).toBeUndefined())
-    expect(result.current.resolveFileMarkdown('diagram')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('diagram')?.canvas).toBeUndefined())
+    expect(result.current.resolveReference('diagram')?.markdown).toBeUndefined()
   })
 
   it('returns undefined for a whitespace-only body, keeping the lower-ranked card', async () => {
@@ -77,8 +77,8 @@ describe('resolveFileMarkdown', () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: '   \n\n  ' })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileFacets('empty')).toBeUndefined())
-    expect(result.current.resolveFileMarkdown('empty')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('empty')?.facets).toBeUndefined())
+    expect(result.current.resolveReference('empty')?.markdown).toBeUndefined()
   })
 
   it('keeps the canvas seam quiet for a daemon-shaped markdown document', async () => {
@@ -110,13 +110,13 @@ describe('resolveFileMarkdown', () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileMarkdown('notes')).toBeDefined())
-    expect(result.current.resolveFileCanvas('notes')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
+    expect(result.current.resolveReference('notes')?.canvas).toBeUndefined()
   })
 
   it('returns undefined for a reference that never loaded', () => {
     const { result } = mount(canvasWith('gone'), makeAdapter())
-    expect(result.current.resolveFileMarkdown('gone')).toBeUndefined()
+    expect(result.current.resolveReference('gone')?.markdown).toBeUndefined()
   })
 
   it('parses each body once, not once per resolver call', async () => {
@@ -126,12 +126,12 @@ describe('resolveFileMarkdown', () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: BODY })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileMarkdown('notes')).toBeDefined())
+    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
     // Referential equality is the observable form of "parsed once": a
     // resolver that parsed per call would hand back a fresh tree each time,
     // and canvas-render calls this for every file node on every re-layout.
-    expect(result.current.resolveFileMarkdown('notes')).toBe(
-      result.current.resolveFileMarkdown('notes'),
+    expect(result.current.resolveReference('notes')?.markdown).toBe(
+      result.current.resolveReference('notes')?.markdown,
     )
   })
 
@@ -144,7 +144,7 @@ describe('resolveFileMarkdown', () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: '\uD800' })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileCanvas('bad')).toBeUndefined())
-    expect(() => result.current.resolveFileMarkdown('bad')).not.toThrow()
+    await waitFor(() => expect(result.current.resolveReference('bad')?.canvas).toBeUndefined())
+    expect(() => result.current.resolveReference('bad')?.markdown).not.toThrow()
   })
 })

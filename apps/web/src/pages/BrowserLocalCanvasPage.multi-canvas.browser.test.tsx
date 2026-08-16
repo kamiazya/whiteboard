@@ -10,7 +10,7 @@
  * this suite's subject is the backend/IndexedDB sync layer, not gesture input.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
   cleanup,
@@ -133,10 +133,22 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // No stray placeholder row from the backend re-key.
     expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
 
+    // The switcher's menu is still dismissing from the "New canvas" click
+    // above, and it is non-modal — so re-opening the trigger while it is
+    // mounted has the click CONSUMED and the menu stays shut. Measured at one
+    // such CI failure: no [role=menu] anywhere and every aria-expanded=false,
+    // which makes the failure read as "the list does not contain this canvas"
+    // when no list was ever opened. Raising the query timeout only buys a
+    // slower identical failure. Same shape, and same wait, as the markdown
+    // suite's canvas-switch test.
+    await waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull(), {
+      timeout: 10_000,
+    })
+
     // Switch back to A via the switcher control. Both A and B default to the
     // "untitled" display name, so disambiguate by the raw id shown in each
     // menu item's subtitle line (only rendered when the name differs from
-    // the slug/id, which it always does for a browser-local canvas).
+    // the path/id, which it always does for a browser-local canvas).
     const switcherB = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
     const idALabel = await screen.findByText(idA)

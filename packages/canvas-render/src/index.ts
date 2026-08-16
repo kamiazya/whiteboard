@@ -13,6 +13,7 @@ export type {
 } from './layout/spatial-appearance.js'
 export type {
   FacetCardData,
+  ResolvedReference,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
 } from './layout/spatial-canvas.js'

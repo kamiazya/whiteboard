@@ -22,7 +22,7 @@ export const daemonConnectionPayloadSchema = z
   .object({
     baseUrl: daemonBaseUrlSchema,
     workspaceId: z.string().min(1).optional(),
-    slug: z.string().min(1).optional(),
+    path: z.string().min(1).optional(),
     bootstrapToken: z.string().min(MIN_BOOTSTRAP_TOKEN_LENGTH).optional(),
     authMode: z.enum(['bootstrap', 'none']),
     fullscreen: z.boolean().optional(),
@@ -34,11 +34,11 @@ export const daemonConnectionPayloadSchema = z
     message: 'bootstrapToken is required when authMode is "bootstrap"',
     path: ['bootstrapToken'],
   })
-  // A canvas is addressed by the (workspaceId, slug) pair, so a slug is
+  // A canvas is addressed by the (workspaceId, path) pair, so a path is
   // meaningless without a workspaceId. workspaceId alone is a valid
   // workspace-level target, so the constraint is one-directional.
-  .refine((payload) => payload.slug === undefined || payload.workspaceId !== undefined, {
-    message: 'workspaceId is required when slug is set',
+  .refine((payload) => payload.path === undefined || payload.workspaceId !== undefined, {
+    message: 'workspaceId is required when path is set',
     path: ['workspaceId'],
   })
 

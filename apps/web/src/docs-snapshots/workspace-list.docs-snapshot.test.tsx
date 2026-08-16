@@ -44,15 +44,15 @@ beforeEach(() => {
           canvases: [
             // 1d, 2d, 5d ago relative to NOW (2026-05-02T12:00Z) so the
             // rendered labels stay stable across regenerations.
-            { slug: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
-            { slug: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
-            { slug: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
+            { path: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
+            { path: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
+            { path: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
           ],
         })
       }
       if (url.endsWith('/api/workspaces/ws_sketches/canvases')) {
         return jsonResponse({
-          canvases: [{ slug: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
+          canvases: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
       // Pre-rename state: no display names set yet, no canvas pinned. The

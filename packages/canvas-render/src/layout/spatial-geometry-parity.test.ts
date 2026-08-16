@@ -5,8 +5,8 @@
 // they may legitimately disagree on color/stroke/fontFamily. This is the
 // property the pre-theme three-resolver split violated via
 // `minContentWidthPx`/`labelFontSizePx`.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
 import type { Scene, SceneNode } from '../scene-graph.js'

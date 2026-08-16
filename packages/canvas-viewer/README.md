@@ -21,7 +21,7 @@ widget, HTML export). Private workspace package — never published to npm.
   (`<script data-whiteboard-scene>` or `window.__WHITEBOARD_VIEWER_SCENE__`).
   Throws a `ViewerSceneError` if the scene payload fails schema validation.
 - `parseViewerScene` / `serializeViewerScene` (from `./scene`) — a total
-  parser/serializer pair delegating to canvas-codec's
+  parser/serializer pair delegating to codec's
   `parseSpatial`/`serializeSpatial`; `parseViewerScene` never throws, it
   returns a discriminated `{ ok, value | error }` result.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser

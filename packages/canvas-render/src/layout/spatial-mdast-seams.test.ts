@@ -6,8 +6,8 @@
 // mermaid fences in the markdown editor and rendered them as placeholders
 // the moment it was laid out inside a canvas node — one engine, two
 // answers, depending on which surface called it.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode, SvgFragmentNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -24,7 +24,7 @@ const BODY: MdastRoot = {
   children: [
     { type: 'math', value: 'E = mc^2' },
     { type: 'code', lang: 'mermaid', value: 'graph TD; a-->b;' },
-    { type: 'paragraph', children: [{ type: 'embed', canvasId: 'other' }] },
+    { type: 'paragraph', children: [{ type: 'embed', documentId: 'other' }] },
   ],
 }
 
@@ -75,8 +75,8 @@ const svgOf = (nodes: readonly SceneNode[]) => fragmentsOf(nodes).map((node) => 
 const SEAMS = {
   renderMath: (value: string) => `<g data-math="${value}"/>`,
   renderDiagram: (lang: string, value: string) => `<g data-${lang}="${value.length}"/>`,
-  resolveEmbed: (canvasId: string) =>
-    canvasId === 'other'
+  resolveEmbed: (documentId: string) =>
+    documentId === 'other'
       ? {
           title: 'Other',
           root: {
@@ -112,7 +112,7 @@ function textOf(nodes: readonly SceneNode[]): string[] {
 
 describe.each([
   ['a text node body', textCanvas, {} as Partial<SpatialLayoutOptions>],
-  ['a markdown file node body', fileCanvas, { resolveFileMarkdown: () => BODY }],
+  ['a markdown file node body', fileCanvas, { resolveReference: () => ({ markdown: BODY }) }],
 ])('mdast content seams reach %s', (_name, canvas, extra) => {
   it('renders math through the injected renderer', () => {
     const scene = layoutSpatialCanvas(canvas, baseOptions({ ...extra, ...SEAMS }))

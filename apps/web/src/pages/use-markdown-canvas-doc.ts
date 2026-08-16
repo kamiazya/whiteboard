@@ -14,8 +14,15 @@
  * the store cannot decode should degrade to "empty, editable, next save
  * overwrites" rather than a dead page.
  */
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { readCoreFacets, writeCoreFacets } from '@kamiazya/whiteboard-canvas-workspace'
+
+import {
+  MARKDOWN_BODY_KEY,
+  readCoreFacets,
+  readMarkdownBody,
+  writeCoreFacets,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
@@ -39,15 +46,15 @@ const SAVE_DEBOUNCE_MS = 500
  * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
  * one was, so it cannot leave the queue permanently poisoned.
  */
-function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array): Promise<void> {
-  const previous = pendingFlushes.get(canvasId)
+function queueSave(store: LoroStoreLike, documentId: string, snapshot: Uint8Array): Promise<void> {
+  const previous = pendingFlushes.get(documentId)
   const next = Promise.resolve(previous)
-    .then(() => store.save(canvasId, snapshot))
+    .then(() => store.save(documentId, snapshot))
     .catch(() => {})
     .finally(() => {
-      if (pendingFlushes.get(canvasId) === next) pendingFlushes.delete(canvasId)
+      if (pendingFlushes.get(documentId) === next) pendingFlushes.delete(documentId)
     })
-  pendingFlushes.set(canvasId, next)
+  pendingFlushes.set(documentId, next)
   return next
 }
 
@@ -58,15 +65,15 @@ function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array)
  * as `markdown` is both true and the least surprising default, and the
  * field is free text the moment the user disagrees.
  */
-export const DEFAULT_MARKDOWN_CORE_META: CanvasCoreMeta = { type: 'markdown' }
+export const DEFAULT_MARKDOWN_CORE_FACETS: StoredCoreFacets = { type: 'markdown' }
 
 export interface MarkdownCanvasDocState {
   /** Null until the initial load resolves — render nothing editable before. */
   readonly body: string | null
   readonly setBody: (next: string) => void
   /** Null until the initial load resolves, mirroring `body`. */
-  readonly coreMeta: CanvasCoreMeta | null
-  readonly setCoreMeta: (next: CanvasCoreMeta) => void
+  readonly coreFacets: StoredCoreFacets | null
+  readonly setCoreFacets: (next: StoredCoreFacets) => void
   /**
    * The loaded Loro instance, for composition-root CRDT bindings
    * (loro-codemirror). Null until the initial load resolves. A binding
@@ -79,11 +86,11 @@ export interface MarkdownCanvasDocState {
 
 export function useMarkdownCanvasDoc(
   loro: LoroStoreLike,
-  canvasId: string | null,
+  documentId: string | null,
   enabled: boolean,
 ): MarkdownCanvasDocState {
   const [body, setBodyState] = useState<string | null>(null)
-  const [coreMeta, setCoreMetaState] = useState<CanvasCoreMeta | null>(null)
+  const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const docRef = useRef<Loro | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -95,7 +102,7 @@ export function useMarkdownCanvasDoc(
   const pending = pendingFlushes
 
   useEffect(() => {
-    if (!enabled || canvasId === null) {
+    if (!enabled || documentId === null) {
       docRef.current = null
       setDoc(null)
       setBodyState(null)
@@ -104,9 +111,9 @@ export function useMarkdownCanvasDoc(
     }
     let cancelled = false
     let unsubscribe: (() => void) | undefined
-    void Promise.resolve(pending.get(canvasId))
+    void Promise.resolve(pending.get(documentId))
       .catch(() => {})
-      .then(() => loroRef.current.load(canvasId))
+      .then(() => loroRef.current.load(documentId))
       .then((result) => {
         if (cancelled) return
         const doc = new Loro()
@@ -125,13 +132,28 @@ export function useMarkdownCanvasDoc(
         // still reach the body state (and the preview) and get persisted.
         unsubscribe = doc.subscribe((event) => {
           if (cancelled) return
-          setBodyState(doc.getText('body').toString())
-          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+          setBodyState(readMarkdownBody(doc))
+          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_FACETS)
           if (event.by === 'local') scheduleSaveRef.current?.()
         })
         setDoc(doc)
-        setBodyState(doc.getText('body').toString())
-        setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+        // A document written before the writers were unified stores its body
+        // as a text NODE, and reading it is not enough: `LoroSyncPlugin`
+        // syncs the text CONTAINER into CodeMirror on mount and overwrites
+        // whatever `value` put there, so such a document settles on an empty
+        // editor beside a preview showing its prose — and the next keystroke
+        // saves over the original. Converting on load is what ends that.
+        //
+        // Here rather than in a migration pass because this is the moment the
+        // document is in memory anyway, and it is a no-op for every document
+        // already in the current shape. The write commits locally, so the
+        // subscription above both refreshes the state and persists it.
+        const stored = readMarkdownBody(doc)
+        if (stored.length > 0 && doc.getText(MARKDOWN_BODY_KEY).length === 0) {
+          writeMarkdownBody(doc, stored)
+        }
+        setBodyState(readMarkdownBody(doc))
+        setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_FACETS)
       })
     return () => {
       cancelled = true
@@ -146,12 +168,12 @@ export function useMarkdownCanvasDoc(
         clearTimeout(timerRef.current)
         timerRef.current = null
         const doc = docRef.current
-        if (doc !== null && canvasId !== null) {
-          void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
+        if (doc !== null && documentId !== null) {
+          void queueSave(loroRef.current, documentId, doc.export({ mode: 'snapshot' }))
         }
       }
     }
-  }, [canvasId, enabled])
+  }, [documentId, enabled])
 
   // One timer for both writers: they export the same document, so a second
   // independent debounce would only duplicate the save. Reached through a
@@ -159,7 +181,7 @@ export function useMarkdownCanvasDoc(
   // before this binding initializes on the first render.
   const scheduleSaveRef = useRef<(() => void) | null>(null)
   const scheduleSave = useCallback(() => {
-    if (canvasId === null) return
+    if (documentId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       // Clearing the ref first means a cleanup arriving after this point
@@ -168,9 +190,9 @@ export function useMarkdownCanvasDoc(
       timerRef.current = null
       const doc = docRef.current
       if (doc === null) return
-      void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
+      void queueSave(loroRef.current, documentId, doc.export({ mode: 'snapshot' }))
     }, SAVE_DEBOUNCE_MS)
-  }, [canvasId])
+  }, [documentId])
   scheduleSaveRef.current = scheduleSave
 
   const setBody = useCallback(
@@ -181,17 +203,14 @@ export function useMarkdownCanvasDoc(
       // Replace-wholesale is deliberate for slice 1: the editor is a plain
       // textarea, so we do not have edit deltas to splice. CRDT-granular
       // updates arrive with the collaborative-editor slice.
-      const text = doc.getText('body')
-      text.delete(0, text.length)
-      text.insert(0, next)
-      doc.commit()
+      writeMarkdownBody(doc, next)
       scheduleSave()
     },
     [scheduleSave],
   )
 
-  const setCoreMeta = useCallback(
-    (next: CanvasCoreMeta) => {
+  const setCoreFacets = useCallback(
+    (next: StoredCoreFacets) => {
       const doc = docRef.current
       if (doc === null) return
       setCoreMetaState(next)
@@ -204,5 +223,5 @@ export function useMarkdownCanvasDoc(
     [scheduleSave],
   )
 
-  return { body, setBody, coreMeta, setCoreMeta, doc }
+  return { body, setBody, coreFacets, setCoreFacets, doc }
 }

@@ -109,7 +109,7 @@ function renderTextRun(run: TextRunNode): string {
       : ''
   const text = `${underlay}<text ${position}${appearance}>${body}</text>`
   if (!run.link) return text
-  const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
+  const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.documentId
   return `<a href="${escapeXmlAttr(href)}">${text}</a>`
 }
 
@@ -275,7 +275,7 @@ function renderNode(node: SceneNode): string {
       // preceding block. The node carries no measured ascent (it is not a
       // text run), so the baseline is derived from the box: 0.8 matches the
       // ascent ratio the measurer contract documents for body text.
-      return `<a href="#${escapeXmlAttr(node.canvasId)}"><text x="${formatCoord(node.bbox.x)}" y="${formatCoord(node.bbox.y + node.bbox.h * 0.8)}">${escapeXmlText(node.title)}</text></a>`
+      return `<a href="#${escapeXmlAttr(node.documentId)}"><text x="${formatCoord(node.bbox.x)}" y="${formatCoord(node.bbox.y + node.bbox.h * 0.8)}">${escapeXmlText(node.title)}</text></a>`
     case 'embedResolved':
       return `<g>${node.children.map(renderNode).join('')}</g>`
     case 'edge': {

@@ -12,11 +12,11 @@
  * canvas-viewer's font.ts already documents having shipped once.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   createBrowserMeasureText,
   ensureViewerFontLoaded,
 } from '@kamiazya/whiteboard-canvas-viewer'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
@@ -114,7 +114,10 @@ it('carries the file-label seam across the wire', async () => {
   const onMain = renderCanvasToSvg(withFile, {
     measure: createBrowserMeasureText(),
     theme: 'light',
-    resolveFileLabel: (file) => labels.find((l) => l.file === file)?.label,
+    resolveReference: (ref) => {
+      const label = labels.find((l) => l.file === ref)?.label
+      return label === undefined ? undefined : { label }
+    },
   })
   const fromWorker = await layoutInWorker({
     type: 'layout',

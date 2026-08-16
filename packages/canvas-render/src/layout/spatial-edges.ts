@@ -1,4 +1,4 @@
-import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
@@ -1660,7 +1660,7 @@ function routeOrthogonal(
 }
 
 /**
- * Resolves one canvas-model edge into a scene-graph edge with a concrete
+ * Resolves one model edge into a scene-graph edge with a concrete
  * point path. Pure function of (nodes, edge): never throws — a missing
  * endpoint id degenerates to a zero-length path at the origin rather than
  * raising, so a single bad reference never aborts layout for the rest of

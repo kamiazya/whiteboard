@@ -3,7 +3,7 @@
 // Edit URL. Real pointer input where the double-press pairing matters —
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

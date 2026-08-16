@@ -8,7 +8,7 @@ afterEach(() => cleanup())
 
 describe('CanvasThumb', () => {
   it('renders an img pointed at the latest-thumbnail route, encoding each path segment', () => {
-    const { container } = render(<CanvasThumb workspaceId="ws-1" slug="my canvas/x" />)
+    const { container } = render(<CanvasThumb workspaceId="ws-1" path="my canvas/x" />)
     const img = container.querySelector('img') as HTMLImageElement
     expect(img).not.toBeNull()
     expect(img.getAttribute('src')).toBe(
@@ -19,19 +19,19 @@ describe('CanvasThumb', () => {
   })
 
   it('swaps to the fallback icon and removes the img once loading fails', () => {
-    const { container } = render(<CanvasThumb workspaceId="ws-1" slug="a" />)
+    const { container } = render(<CanvasThumb workspaceId="ws-1" path="a" />)
     const img = container.querySelector('img') as HTMLImageElement
     fireEvent.error(img)
     expect(container.querySelector('img')).toBeNull()
   })
 
-  it('resets the failed state and re-renders the img when slug changes on a reused instance', () => {
-    const { container, rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
+  it('resets the failed state and re-renders the img when path changes on a reused instance', () => {
+    const { container, rerender } = render(<CanvasThumb workspaceId="ws-1" path="canvas-a" />)
     const imgA = container.querySelector('img') as HTMLImageElement
     fireEvent.error(imgA)
     expect(container.querySelector('img')).toBeNull()
 
-    rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+    rerender(<CanvasThumb workspaceId="ws-1" path="canvas-b" />)
     const imgB = container.querySelector('img') as HTMLImageElement
     expect(imgB).not.toBeNull()
     expect(imgB.getAttribute('src')).toBe('/api/workspaces/ws-1/canvases/canvas-b/latest-thumbnail')
@@ -39,7 +39,7 @@ describe('CanvasThumb', () => {
 
   it('applies the card wrapper classes and merges className for size="card"', () => {
     const { container } = render(
-      <CanvasThumb workspaceId="ws-1" slug="a" size="card" className="extra-class" />,
+      <CanvasThumb workspaceId="ws-1" path="a" size="card" className="extra-class" />,
     )
     const wrapper = container.firstElementChild as HTMLElement
     expect(wrapper.className).toContain('aspect-[16/9]')
@@ -47,7 +47,7 @@ describe('CanvasThumb', () => {
   })
 
   it('applies the dropdown wrapper classes by default', () => {
-    const { container } = render(<CanvasThumb workspaceId="ws-1" slug="a" />)
+    const { container } = render(<CanvasThumb workspaceId="ws-1" path="a" />)
     const wrapper = container.firstElementChild as HTMLElement
     expect(wrapper.className).toContain('h-9')
     expect(wrapper.className).toContain('w-14')
@@ -56,11 +56,11 @@ describe('CanvasThumb', () => {
   it('does not trigger a React setState-in-render warning when the guarded prevSrc reset runs on a src change', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      const { rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
-      // Changing slug changes `src`, which drives the guarded prevSrc reset
+      const { rerender } = render(<CanvasThumb workspaceId="ws-1" path="canvas-a" />)
+      // Changing path changes `src`, which drives the guarded prevSrc reset
       // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
       // "adjust state during render" form, not the cross-component violation.
-      rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+      rerender(<CanvasThumb workspaceId="ws-1" path="canvas-b" />)
       assertNoSetStateInRenderWarning(errorSpy)
     } finally {
       errorSpy.mockRestore()
@@ -76,7 +76,7 @@ describe('CanvasThumb', () => {
     try {
       const { container, findByRole } = render(
         <DaemonApiContext.Provider value={daemonFetch}>
-          <CanvasThumb workspaceId="ws-1" slug="a" />
+          <CanvasThumb workspaceId="ws-1" path="a" />
         </DaemonApiContext.Provider>,
       )
       const img = (await findByRole('presentation')) as HTMLImageElement
@@ -92,7 +92,7 @@ describe('CanvasThumb', () => {
     const daemonFetch = vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
     const { container } = render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <CanvasThumb workspaceId="ws-1" slug="a" />
+        <CanvasThumb workspaceId="ws-1" path="a" />
       </DaemonApiContext.Provider>,
     )
     await vi.waitFor(() => expect(container.querySelector('svg')).not.toBeNull())
@@ -113,7 +113,7 @@ describe('CanvasThumb', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL: vi.fn() })
     const { container } = render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <CanvasThumb workspaceId="ws-1" slug="a" />
+        <CanvasThumb workspaceId="ws-1" path="a" />
       </DaemonApiContext.Provider>,
     )
     await vi.waitFor(() => expect(daemonFetch).toHaveBeenCalled())
@@ -138,7 +138,7 @@ describe('CanvasThumb', () => {
     }
   })
 
-  it('revokes the previous object URL when the slug identity changes', async () => {
+  it('revokes the previous object URL when the path identity changes', async () => {
     const blob = new Blob(['fake-png'], { type: 'image/png' })
     const daemonFetch = vi.fn().mockResolvedValue(new Response(blob, { status: 200 }))
     const revokeObjectURL = vi.fn()
@@ -146,13 +146,13 @@ describe('CanvasThumb', () => {
     try {
       const { rerender, findByRole } = render(
         <DaemonApiContext.Provider value={daemonFetch}>
-          <CanvasThumb workspaceId="ws-1" slug="canvas-a" />
+          <CanvasThumb workspaceId="ws-1" path="canvas-a" />
         </DaemonApiContext.Provider>,
       )
       await findByRole('presentation')
       rerender(
         <DaemonApiContext.Provider value={daemonFetch}>
-          <CanvasThumb workspaceId="ws-1" slug="canvas-b" />
+          <CanvasThumb workspaceId="ws-1" path="canvas-b" />
         </DaemonApiContext.Provider>,
       )
       await vi.waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'))

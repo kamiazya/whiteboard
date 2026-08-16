@@ -3,7 +3,7 @@
 // comparisons are integer-exact, so a single missed candidate pair changes
 // side-choice equilibria. The full double loop over the shared narrow
 // phase stays here as the oracle.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'

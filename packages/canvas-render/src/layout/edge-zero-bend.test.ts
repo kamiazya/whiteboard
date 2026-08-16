@@ -3,7 +3,7 @@
 // other's coordinate and the route is a single straight segment — anchors
 // are renderer-chosen defaults, so trading their position for a bend-free
 // line is the better-looking edge. Blocked lanes fall back to the elbows.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 

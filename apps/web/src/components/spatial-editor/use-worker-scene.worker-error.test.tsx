@@ -11,7 +11,7 @@
  * decode-named-character-reference alias) is covered by the parity browser
  * test; this covers what the EDITOR does if that class of failure ever ships.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useWorkerScene } from './use-worker-scene.js'

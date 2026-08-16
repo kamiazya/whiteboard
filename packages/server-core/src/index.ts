@@ -66,7 +66,7 @@ export {
   edgePatchOutputSchema,
 } from './tools/edge-patch.js'
 export {
-  CanvasDocNotFoundError,
+  DocumentNotFoundError,
   EdgeLockedError,
   EdgeNotFoundError,
   NodeLockedError,

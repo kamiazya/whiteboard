@@ -34,7 +34,7 @@ const tierOf = (name: string): number => {
 const rectArb: fc.Arbitrary<Rect> = fc.record({
   x: fc.integer({ min: -100, max: 100 }),
   y: fc.integer({ min: -100, max: 100 }),
-  // Zero stays a legal JSON Canvas size (canvas-model pins it): the
+  // Zero stays a legal JSON Canvas size (model pins it): the
   // framework invariants must hold for collapsed boxes too.
   w: fc.integer({ min: 0, max: 120 }),
   h: fc.integer({ min: 0, max: 120 }),
@@ -121,7 +121,7 @@ describe('composeSidePairs: preference-rule removal', () => {
 // PENALTY-rule framework invariants (edge-rules.ts's PENALTY_RULES): the
 // slot a rule writes into is derived from its declared `tier`, never a
 // hardcoded array position, so the domain below leans on zero-size rects
-// and degenerate paths per the canvas-model contract (zero is a legal
+// and degenerate paths per the model contract (zero is a legal
 // JSON Canvas node size) rather than well-formed routed geometry.
 const pointArb: fc.Arbitrary<Point> = fc.record({
   x: fc.integer({ min: -200, max: 200 }),
@@ -133,7 +133,7 @@ const pathArb: fc.Arbitrary<readonly Point[]> = fc.array(pointArb, { minLength: 
 const foreignRectArb: fc.Arbitrary<Rect> = fc.record({
   x: fc.integer({ min: -200, max: 200 }),
   y: fc.integer({ min: -200, max: 200 }),
-  // Zero-size rects are legal (canvas-model): a degenerate foreign body
+  // Zero-size rects are legal (model): a degenerate foreign body
   // must never make a scorer throw or return a non-finite total.
   w: fc.integer({ min: 0, max: 200 }),
   h: fc.integer({ min: 0, max: 200 }),

@@ -20,43 +20,43 @@ export async function upsertWorkspaceRow(db: Database, workspaceId: string): Pro
     .execute()
 }
 
-// Look up the stable canvas id for (workspaceId, slug). Returns null when
+// Look up the stable canvas id for (workspaceId, path). Returns null when
 // the canvas does not exist; callers that want to create it should use
 // upsertCanvasRow.
-export async function getCanvasIdBySlug(
+export async function getDocumentIdByPath(
   db: Database,
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<string | null> {
   const row = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['id'])
     .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('path', '=', path)
     .executeTakeFirst()
   return row?.id ?? null
 }
 
-// Look up or create the canvases row for (workspaceId, slug). Returns the
+// Look up or create the canvases row for (workspaceId, path). Returns the
 // stable canvas id child tables FK on. The displayName / pin fields are left
 // at their existing values when the row already exists, matching the previous
 // "upsert without overwriting names" semantics.
 export async function upsertCanvasRow(
   db: Database,
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<string> {
   await upsertWorkspaceRow(db, workspaceId)
-  const existing = await getCanvasIdBySlug(db, workspaceId, slug)
+  const existing = await getDocumentIdByPath(db, workspaceId, path)
   if (existing) return existing
   const id = nanoid(12)
   const now = Date.now()
   await db
-    .insertInto('canvases')
+    .insertInto('documents')
     .values({
       id,
       workspaceId,
-      slug,
+      path,
       displayName: null,
       isPinned: 0,
       pinOrder: null,
@@ -64,10 +64,10 @@ export async function upsertCanvasRow(
       createdAt: now,
       updatedAt: now,
     })
-    .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
+    .onConflict((oc) => oc.columns(['workspaceId', 'path']).doNothing())
     .execute()
   // Re-read in case a concurrent insert won the race; otherwise our generated
   // id is the canonical one.
-  const resolved = await getCanvasIdBySlug(db, workspaceId, slug)
+  const resolved = await getDocumentIdByPath(db, workspaceId, path)
   return resolved ?? id
 }

@@ -4,10 +4,11 @@
 // exported seam in headless-renderer.ts) with an injected fake measurer, so
 // this stays a fast unit test with no real opentype.js font load — the
 // mutation-check target for this slice.
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { buildSpatialScene } from './headless-renderer.js'
 

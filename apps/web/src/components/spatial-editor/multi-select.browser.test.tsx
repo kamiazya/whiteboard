@@ -1,7 +1,7 @@
 // Multi-select slice (a): shift-click membership, group move, batch delete.
 // Marquee selection is deliberately deferred — it needs the pan-gesture
 // decision recorded on the task. Real pointer input throughout.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

@@ -12,7 +12,7 @@ const log = getAppLogger('import-browser-local-panel')
 // Minimal surface this panel needs from LoroStore — narrower than the full
 // class so tests can inject a plain object instead of touching IndexedDB.
 interface ImportLoroStoreLike {
-  load(canvasId: string): Promise<LoroLoadResult>
+  load(documentId: string): Promise<LoroLoadResult>
 }
 
 interface ImportBrowserLocalPanelProps {
@@ -26,7 +26,7 @@ interface ImportBrowserLocalPanelProps {
 
 type RowResult =
   | { status: 'pending' }
-  | { status: 'success'; slug: string }
+  | { status: 'success'; path: string }
   | { status: 'error'; reason: string }
 
 /**
@@ -83,7 +83,7 @@ export function ImportBrowserLocalPanel({
             daemonBaseUrl,
             workspaceId,
             canvasName: canvas.name,
-            canvasKind: canvas.kind,
+            documentKind: canvas.kind,
             loroLoad,
           })
           if (result.kind === 'ok') {
@@ -91,7 +91,7 @@ export function ImportBrowserLocalPanel({
             lastSuccessCanvasId = canvas.id
             setResults((prev) => ({
               ...prev,
-              [canvas.id]: { status: 'success', slug: result.slug },
+              [canvas.id]: { status: 'success', path: result.path },
             }))
           } else {
             setResults((prev) => ({
@@ -153,7 +153,7 @@ export function ImportBrowserLocalPanel({
             <li key={canvas.id} className="flex items-center justify-between gap-2 text-sm">
               <span>{canvas.name}</span>
               {result?.status === 'success' && (
-                <span className="text-xs text-muted-foreground">{`Imported as ${result.slug}`}</span>
+                <span className="text-xs text-muted-foreground">{`Imported as ${result.path}`}</span>
               )}
               {result?.status === 'error' && (
                 <span className="text-xs text-destructive">{result.reason}</span>

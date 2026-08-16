@@ -23,26 +23,26 @@ describe('parseWsTargetFromRequestUrl', () => {
   it('takes a nested document path as plain slash segments', () => {
     expect(parseWsTargetFromRequestUrl('/ws/ws-1/notes/2026/plan', '127.0.0.1:3099')).toEqual({
       workspaceId: 'ws-1',
-      slug: 'notes/2026/plan',
+      path: 'notes/2026/plan',
     })
   })
 
-  it('accepts validated workspaceId and encoded slug', () => {
-    expect(parseWsTargetFromRequestUrl('/ws/sess-1/nested%2Fslug', '127.0.0.1:3099')).toEqual({
+  it('accepts validated workspaceId and encoded path', () => {
+    expect(parseWsTargetFromRequestUrl('/ws/sess-1/nested%2Fpath', '127.0.0.1:3099')).toEqual({
       workspaceId: 'sess-1',
-      slug: 'nested/slug',
+      path: 'nested/path',
     })
   })
 
   it('rejects invalid session ids before websocket upgrade', () => {
-    expect(() => parseWsTargetFromRequestUrl('/ws/bad.sid/slug', '127.0.0.1:3099')).toThrow(
+    expect(() => parseWsTargetFromRequestUrl('/ws/bad.sid/path', '127.0.0.1:3099')).toThrow(
       /Invalid workspaceId/,
     )
   })
 
-  it('rejects invalid slugs before websocket upgrade', () => {
-    expect(() => parseWsTargetFromRequestUrl('/ws/sess-1/bad.slug', '127.0.0.1:3099')).toThrow(
-      /Invalid slug/,
+  it('rejects invalid paths before websocket upgrade', () => {
+    expect(() => parseWsTargetFromRequestUrl('/ws/sess-1/bad.path', '127.0.0.1:3099')).toThrow(
+      /Invalid path/,
     )
   })
 

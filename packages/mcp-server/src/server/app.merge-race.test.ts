@@ -40,7 +40,7 @@ const { createApp } = await import('./app.js')
 const { clearCache, getDoc } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
-const { saveCanvas } = await import('./store/canvas-store.js')
+const { saveDocument } = await import('./store/document-store.js')
 const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
 
 function createRuntimeOptions() {
@@ -86,7 +86,7 @@ describe('performMerge vs rename race', () => {
     clearCache()
   })
 
-  it('does not fork a phantom duplicate canvas when a slug rename races an in-flight merge that already resolved the live doc through the old slug', async () => {
+  it('does not fork a phantom duplicate canvas when a path rename races an in-flight merge that already resolved the live doc through the old path', async () => {
     const app = createApp(createRuntimeOptions())
 
     // Base canvas: rect-1 only.
@@ -95,7 +95,7 @@ describe('performMerge vs rename race', () => {
     const el1 = list.insertContainer(0, new LoroMap())
     el1.set('id', 'rect-1')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     // feature's tip freezes the rect-1-only state.
     const featureTipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
@@ -113,13 +113,13 @@ describe('performMerge vs rename race', () => {
     // Add rect-2 directly on top so main's empty tip (== "current live doc")
     // diverges from feature's frozen rect-1-only tip. Merging feature into
     // main (source wins) will reconcile the live doc back down to rect-1
-    // and persist it, exercising performMerge's getDoc -> saveCanvas span.
+    // and persist it, exercising performMerge's getDoc -> saveDocument span.
     const el2 = list.insertContainer(1, new LoroMap())
     el2.set('id', 'rect-2')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    // Stall performMerge's getDoc() call so a slug rename can be fired
+    // Stall performMerge's getDoc() call so a path rename can be fired
     // while the merge request is paused mid-flight, matching the real
     // race: the read resolves before the rename runs, the write happens
     // after.
@@ -127,10 +127,10 @@ describe('performMerge vs rename race', () => {
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
     const actual =
       await vi.importActual<typeof import('./store/doc-cache.js')>('./store/doc-cache.js')
-    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, slug) => {
+    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
       signalGetDocCalled()
       await getDocGate
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const mergePromise = app.request(
@@ -145,10 +145,10 @@ describe('performMerge vs rename race', () => {
     await getDocCalled
 
     // Fire the rename while the merge is stalled mid-flight.
-    const renamePromise = app.request('/api/workspaces/session1/canvases/canvas-a/slug', {
+    const renamePromise = app.request('/api/workspaces/session1/canvases/canvas-a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: 'canvas-b' }),
+      body: JSON.stringify({ path: 'canvas-b' }),
     })
     // Give the rename a chance to run before letting the stalled read continue.
     await new Promise((r) => setTimeout(r, 20))
@@ -158,11 +158,11 @@ describe('performMerge vs rename race', () => {
     expect(renameRes.status).toBe(200)
     expect(mergeRes.status).toBe(200)
 
-    // Exactly one canvas must survive -- at the post-rename slug. The merge
+    // Exactly one canvas must survive -- at the post-rename path. The merge
     // must not have silently inserted a phantom duplicate back at the old
-    // slug.
+    // path.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual(['canvas-b'])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual(['canvas-b'])
   })
 })

@@ -1,7 +1,6 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type {
   MeasureText,
+  ResolvedReference,
   Scene,
   SpatialLayoutDegradation,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -10,8 +9,9 @@ import {
   layoutSpatialCanvas,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
-import type { ResolvedFileReference } from './resolve-file-references.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
 // decision #8): a user's ambient UI theme must never change what wb_scene_render
@@ -40,7 +40,7 @@ function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
  * snapshot.
  */
 export interface ComposeCanvasSceneOptions {
-  readonly references?: ReadonlyMap<string, ResolvedFileReference>
+  readonly references?: ReadonlyMap<string, ResolvedReference>
 }
 
 /**
@@ -70,12 +70,7 @@ export function composeCanvasScene(
     parseBody: parseMarkdownBody,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
-    ...(references === undefined
-      ? {}
-      : {
-          resolveFileLabel: (file: string) => references.get(file)?.label,
-          resolveFileMarkdown: (file: string) => references.get(file)?.body,
-        }),
+    ...(references === undefined ? {} : { resolveReference: (ref: string) => references.get(ref) }),
   })
 }
 

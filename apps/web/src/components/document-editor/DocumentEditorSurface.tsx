@@ -11,12 +11,12 @@
  * - `markdown` is a REQUIRED prop. A page cannot mount the surface without
  *   deciding what a markdown document looks like on its backend, so "this
  *   page only does spatial" stops being expressible by omission.
- * - The switch below is exhaustive over `CanvasKind` with a `never` default,
- *   so adding a third kind to `canvasKindSchema` fails compilation HERE, in
+ * - The switch below is exhaustive over `DocumentKind` with a `never` default,
+ *   so adding a third kind to `documentKindSchema` fails compilation HERE, in
  *   the one place every page shares, rather than silently falling through
  *   to whichever editor a page happened to hardcode.
  */
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ReactNode } from 'react'
 import { MarkdownEditor, type MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
 
@@ -37,6 +37,7 @@ export interface MarkdownDocumentSession
     | 'onOpenCanvas'
     | 'resolveEmbed'
     | 'autoFocus'
+    | 'title'
   > {
   /** Null until the document has hydrated — nothing editable renders before. */
   readonly body: string | null
@@ -44,7 +45,7 @@ export interface MarkdownDocumentSession
 }
 
 export interface DocumentEditorSurfaceProps {
-  kind: CanvasKind
+  kind: DocumentKind
   /** Keys the editor to the document identity so a switch resets its state. */
   documentKey: string
   /** The spatial editor, fully wired by the page (its prop surface is page-specific). */

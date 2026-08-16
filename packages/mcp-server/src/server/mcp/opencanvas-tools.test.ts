@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
-import { InMemoryCanvasDocStore } from '../store/inmemory/in-memory-canvas-doc-store.js'
+import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 // Side-effect import: registering these tools also installs the server-core
 // log-sink wiring at module scope (see opencanvas-tools.ts).
 import { CANVAS_VIEW_RESOURCE_URI, RESOURCE_URI_META_KEY } from './mcp-apps.js'
@@ -17,7 +17,7 @@ function fakeServer() {
 
 function fakeDeps() {
   return {
-    canvasDocStore: new InMemoryCanvasDocStore(),
+    documentStore: new InMemoryDocumentStore(),
     blobStore: new InMemoryBlobStore(),
   }
 }

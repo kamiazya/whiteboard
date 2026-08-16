@@ -3,14 +3,18 @@
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
  * (J5b) silently did nothing there while working in browser-local mode.
  */
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  writeCoreFacets,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDaemonFileAdapter } from './daemon-file-adapter.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const WS = 'ws-1'
-const SLUG = 'my-canvas'
+const path = 'my-canvas'
 
 function snapshotOf(text: string): Uint8Array {
   const doc = new Loro()
@@ -46,16 +50,16 @@ afterEach(() => {
 })
 
 describe('createDaemonFileAdapter', () => {
-  it('treats an asset: reference as an image and anything else as a canvas slug', () => {
+  it('treats an asset: reference as an image and anything else as a canvas path', () => {
     const adapter = createDaemonFileAdapter({
       daemonFetch: vi.fn(),
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     // The SAME convention browser-local uses, so a canvas keeps meaning the
-    // same thing in both modes. A daemon slug can never collide: slugs match
+    // same thing in both modes. A daemon path can never collide: paths match
     // /^[a-zA-Z0-9_-]+$/ and so cannot contain a colon.
     expect(adapter.isImageRef('asset:abc')).toBe(true)
     expect(adapter.isImageRef('sibling-canvas')).toBe(false)
@@ -69,12 +73,12 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     const url = await adapter.loadImageUrl('asset:file-abc')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/${SLUG}/file/file-abc`)
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/${path}/file/file-abc`)
     expect(url).toBe(FAKE_OBJECT_URL)
   })
 
@@ -84,7 +88,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     // Totality: a broken reference keeps the card, it never takes the page down.
@@ -97,7 +101,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     const file = new File(['xy'], 'x.png', { type: 'image/png' })
@@ -105,7 +109,7 @@ describe('createDaemonFileAdapter', () => {
 
     expect(ref).toBe(`asset:${FAKE_UUID}`)
     const [url, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`${BASE}/api/w/${WS}/canvas/${SLUG}/file/${FAKE_UUID}`)
+    expect(url).toBe(`${BASE}/api/w/${WS}/canvas/${path}/file/${FAKE_UUID}`)
     expect(init.method).toBe('PUT')
     // The route rejects an unrecognised Content-Type with 415, so the
     // picked file's own type has to travel.
@@ -118,7 +122,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     // Returning the ref anyway would put a node on the canvas pointing at
@@ -134,7 +138,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     const loaded = await adapter.loadDocument('sibling')
@@ -152,7 +156,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     const loaded = await adapter.loadDocument('notes')
@@ -166,10 +170,51 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
+  })
+
+  it('reports no facets for a spatial document, whatever its content still holds', async () => {
+    // A facet is OKF frontmatter and a JSON Canvas document has none
+    // (ADR-0009 decision 3). A document written before that stopped being
+    // true still carries a `core` map; surfacing it puts a facet card on a
+    // diagram the server would refuse to write one to.
+    const doc = new Loro()
+    writeDocumentKind(doc, 'spatial')
+    writeCoreFacets(doc, { type: 'diagram', tags: ['stale'] })
+    const daemonFetch = vi.fn(
+      async () => new Response(doc.export({ mode: 'snapshot' }) as BodyInit),
+    )
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    expect((await adapter.loadDocument('diagram'))?.facets).toBeUndefined()
+  })
+
+  it('still reports facets for a markdown document, which is what OKF frontmatter is', async () => {
+    const doc = new Loro()
+    writeDocumentKind(doc, 'markdown')
+    writeCoreFacets(doc, { type: 'note', tags: ['ops'] })
+    const daemonFetch = vi.fn(
+      async () => new Response(doc.export({ mode: 'snapshot' }) as BodyInit),
+    )
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    expect((await adapter.loadDocument('notes'))?.facets).toEqual({
+      type: 'note',
+      tags: ['ops'],
+    })
   })
 
   it('resolves an unreachable referenced canvas to undefined', async () => {
@@ -180,19 +225,19 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
   })
 
-  it('percent-encodes a slug on its way into the path', async () => {
+  it('percent-encodes a path on its way into the path', async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: path,
     })
 
     await adapter.loadDocument('a b')
@@ -202,14 +247,14 @@ describe('createDaemonFileAdapter', () => {
 })
 
 describe('createDaemonFileAdapter — id references', () => {
-  it('resolves an id reference to its CURRENT slug through the injected lookup', async () => {
+  it('resolves an id reference to its CURRENT path through the injected lookup', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('hello') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
-      resolveRefSlug: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
+      path: path,
+      resolveRefPath: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
     })
     const loaded = await adapter.loadDocument('nanoid-123')
     expect(loaded).toBeDefined()
@@ -218,19 +263,19 @@ describe('createDaemonFileAdapter — id references', () => {
     )
   })
 
-  it('falls back to treating an unknown reference as a legacy slug', async () => {
+  it('falls back to treating an unknown reference as a legacy path', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('legacy') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
-      resolveRefSlug: () => undefined,
+      path: path,
+      resolveRefPath: () => undefined,
     })
-    const loaded = await adapter.loadDocument('old-slug-ref')
+    const loaded = await adapter.loadDocument('old-path-ref')
     expect(loaded).toBeDefined()
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/canvas/old-slug-ref/snapshot',
+      '/api/w/ws-1/canvas/old-path-ref/snapshot',
     )
   })
 })

@@ -25,7 +25,7 @@ import {
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   validateBranchName,
-  validateSlug,
+  validateDocumentPath,
   validateVersionId,
   validateWorkspaceId,
   validationErrorBody,
@@ -42,20 +42,20 @@ export interface CreateBranchesRouterOptions {
   resolveFromVersionFrontiers?: (workspaceId: string, versionId: string) => Promise<string | null>
   // Hook for PUT /head to persist the current frontiers onto the previous branch before switching.
   // Skip the update if omitted or if it returns null, for example when the doc is not cached.
-  getCurrentFrontiers?: (workspaceId: string, slug: string) => Promise<string | null>
+  getCurrentFrontiers?: (workspaceId: string, path: string) => Promise<string | null>
   // Hook for PUT /head to reconcile and broadcast the doc to the new branch tipFrontiers.
   // Not called when tipFrontiersBase64 === "" because that branch is still uninitialized.
-  checkoutTo?: (workspaceId: string, slug: string, tipFrontiersBase64: string) => Promise<void>
+  checkoutTo?: (workspaceId: string, path: string, tipFrontiersBase64: string) => Promise<void>
   // Notify all peers on the same key when a HEAD switch completes.
   // This is only a UI signal because checkoutTo already broadcasts the Loro update.
-  notifyHeadChanged?: (workspaceId: string, slug: string, head: string) => void
+  notifyHeadChanged?: (workspaceId: string, path: string, head: string) => void
   // Merge source into target.
   // dryRun=true returns preview + badges without persisting changes.
   // dryRun=false updates target tipFrontiers and, if target is HEAD, reconciles and broadcasts the live doc.
   // Deployments without this hook return 501 unsupported_merge.
   performMerge?: (
     workspaceId: string,
-    slug: string,
+    path: string,
     args: { source: string; into: string; dryRun: boolean },
   ) => Promise<{
     previewElementCount: number
@@ -80,13 +80,13 @@ export interface CreateBranchesRouterOptions {
   // If omitted, only branch metadata is renamed.
   renameInVersions?: (
     workspaceId: string,
-    slug: string,
+    path: string,
     oldName: string,
     newName: string,
   ) => Promise<number>
   // Count function used by DELETE /branches/:name to return actual unmergedCommits.
   // If omitted, the route falls back to 0.
-  countVersionsOnBranch?: (workspaceId: string, slug: string, branchName: string) => Promise<number>
+  countVersionsOnBranch?: (workspaceId: string, path: string, branchName: string) => Promise<number>
 }
 
 // Helper that turns ValidationError into a structured 400 response.
@@ -127,10 +127,10 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   const branchConflict = (message: string) => ({ error: 'branch_conflict', message })
   const branchNotFound = (message: string) => ({ error: 'branch_not_found', message })
 
-  // ── GET /api/workspaces/:sid/canvases/:slug/branches ──
-  onCanvasesRoute(app, 'get', ['branches'], async (c, sid, slug) => {
+  // ── GET /api/workspaces/:sid/canvases/:path/branches ──
+  onCanvasesRoute(app, 'get', ['branches'], async (c, sid, path) => {
     try {
-      const state: CanvasBranchesState = await loadCanvasBranches(sid, slug)
+      const state: CanvasBranchesState = await loadCanvasBranches(sid, path)
       return c.json(state)
     } catch (err) {
       const corruption = handleCorruption(err)
@@ -139,8 +139,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── POST /api/workspaces/:sid/canvases/:slug/branches ──
-  onCanvasesRoute(app, 'post', ['branches'], async (c, sid, slug) => {
+  // ── POST /api/workspaces/:sid/canvases/:path/branches ──
+  onCanvasesRoute(app, 'post', ['branches'], async (c, sid, path) => {
     let rawBody: unknown
     try {
       rawBody = await c.req.json()
@@ -183,7 +183,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
 
     try {
-      const branch = await createBranch(sid, slug, {
+      const branch = await createBranch(sid, path, {
         name: reqBody.name,
         ...(initialTipFrontiers !== undefined ? { initialTipFrontiers } : {}),
         ...(baseVersionId !== undefined ? { baseVersionId } : {}),
@@ -203,17 +203,17 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── DELETE /api/workspaces/:sid/canvases/:slug/branches/:name ──
-  onCanvasesRoute(app, 'delete', ['branches', ':name'], async (c, sid, slug, params) => {
+  // ── DELETE /api/workspaces/:sid/canvases/:path/branches/:name ──
+  onCanvasesRoute(app, 'delete', ['branches', ':name'], async (c, sid, path, params) => {
     const name = params.name as string
     const bn = validateBranchNameOrRespond(name)
     if (bn) return c.json(bn.body, bn.status)
     try {
       let unmerged = 0
       if (countVersionsOnBranch) {
-        unmerged = await countVersionsOnBranch(sid, slug, name)
+        unmerged = await countVersionsOnBranch(sid, path, name)
       }
-      const result = await deleteBranch(sid, slug, name)
+      const result = await deleteBranch(sid, path, name)
       const response: DeleteBranchResponse = { ...result, unmergedCommits: unmerged }
       return c.json(response)
     } catch (err) {
@@ -231,12 +231,12 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── PUT /api/workspaces/:sid/canvases/:slug/head ──
+  // ── PUT /api/workspaces/:sid/canvases/:path/head ──
   // Update branches.json on HEAD switch.
   // When getCurrentFrontiers / checkoutTo are provided, also:
   //   1) save the current doc.frontiers() onto the previous HEAD
   //   2) reconcile + broadcast when the new HEAD tipFrontiers is non-empty
-  onCanvasesRoute(app, 'put', ['head'], async (c, sid, slug) => {
+  onCanvasesRoute(app, 'put', ['head'], async (c, sid, path) => {
     const parsed = setHeadRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'branch is required' }, 400)
@@ -252,9 +252,9 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       // interleave right after checkoutTo moves the live doc onto the new
       // HEAD but before the outgoing HEAD's captured frontiers land in
       // branches.json, and would see a file as unreferenced by either.
-      const response = await withCanvasBranchesLock(sid, slug, async (before, save) => {
+      const response = await withCanvasBranchesLock(sid, path, async (before, save) => {
         if (!before.branches.some((b) => b.name === targetBranch)) {
-          throw new BranchNotFoundError(`Branch "${targetBranch}" not found on ${sid}/${slug}`)
+          throw new BranchNotFoundError(`Branch "${targetBranch}" not found on ${sid}/${path}`)
         }
         if (before.head === targetBranch) {
           const same: SetHeadResponse = { head: targetBranch, previousHead: before.head }
@@ -265,7 +265,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
         // Only then write branches.json once, avoiding partial writes on corruption.
         let currentFrontiers: string | null = null
         if (getCurrentFrontiers) {
-          currentFrontiers = await getCurrentFrontiers(sid, slug)
+          currentFrontiers = await getCurrentFrontiers(sid, path)
         }
 
         // Reconcile to the new HEAD tipFrontiers only when non-empty.
@@ -273,7 +273,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
         const newTip = before.branches.find((b) => b.name === targetBranch)?.tipFrontiers ?? ''
         if (checkoutTo) {
           if (newTip.length > 0) {
-            await checkoutTo(sid, slug, newTip)
+            await checkoutTo(sid, path, newTip)
           }
         }
 
@@ -293,7 +293,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       // no-op case (switching to the branch that is already HEAD) so
       // idempotent re-switches don't fire a spurious signal.
       if (notifyHeadChanged && response.previousHead !== targetBranch) {
-        notifyHeadChanged(sid, slug, targetBranch)
+        notifyHeadChanged(sid, path, targetBranch)
       }
 
       return c.json(response)
@@ -309,7 +309,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge ──
+  // ── POST /api/workspaces/:sid/canvases/:path/branches/:source/merge ──
   // Spec §7. Merge source (URL param) into target (body). dryRun can return a preview without committing.
   // LWW edge-case detection lives in merge-engine.detectMergeBadges; document operations are delegated to performMerge.
   // Unlike PUT /head above, this route itself holds no lock: performMerge
@@ -318,11 +318,11 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // withWorkspaceWriteLock, the same way PUT /head's own handler owns its
   // branches.json read+save. Locking here too would be redundant, not
   // protective.
-  onCanvasesRoute(app, 'post', ['branches', ':source', 'merge'], async (c, sid, slug, params) => {
+  onCanvasesRoute(app, 'post', ['branches', ':source', 'merge'], async (c, sid, path, params) => {
     const source = params.source as string
     try {
       validateWorkspaceId(sid)
-      validateSlug(slug)
+      validateDocumentPath(path)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
@@ -352,7 +352,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
 
     const dryRun = reqBody.dryRun === true
     try {
-      const result = await performMerge(sid, slug, { source, into: reqBody.into, dryRun })
+      const result = await performMerge(sid, path, { source, into: reqBody.into, dryRun })
       const response: MergeResponse = { badges: result.badges }
       if (result.committed) {
         response.committed = { elementCount: result.previewElementCount }
@@ -399,21 +399,21 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats ──
+  // ── GET /api/workspaces/:sid/canvases/:path/branches/:name/stats ──
   // Pre-check endpoint for the delete confirmation dialog.
   // Returns actual unmergedCommits plus isHead.
-  onCanvasesRoute(app, 'get', ['branches', ':name', 'stats'], async (c, sid, slug, params) => {
+  onCanvasesRoute(app, 'get', ['branches', ':name', 'stats'], async (c, sid, path, params) => {
     const name = params.name as string
     const bn = validateBranchNameOrRespond(name)
     if (bn) return c.json(bn.body, bn.status)
     try {
-      const state = await loadCanvasBranches(sid, slug)
+      const state = await loadCanvasBranches(sid, path)
       if (!state.branches.some((b) => b.name === name)) {
-        return c.json(branchNotFound(`Branch "${name}" not found on ${sid}/${slug}`), 404)
+        return c.json(branchNotFound(`Branch "${name}" not found on ${sid}/${path}`), 404)
       }
       const isHead = state.head === name
       const unmergedCommits = countVersionsOnBranch
-        ? await countVersionsOnBranch(sid, slug, name)
+        ? await countVersionsOnBranch(sid, path, name)
         : 0
       const response: BranchStatsResponse = { unmergedCommits, isHead }
       return c.json(response)
@@ -424,10 +424,10 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── PATCH /api/workspaces/:sid/canvases/:slug/branches/:name ──
+  // ── PATCH /api/workspaces/:sid/canvases/:path/branches/:name ──
   // Rename with body { name: newName }. main returns 409, conflicts return 409, missing returns 404.
   // version-store branchName updates are delegated to renameInVersions and default to 0 when omitted.
-  onCanvasesRoute(app, 'patch', ['branches', ':name'], async (c, sid, slug, params) => {
+  onCanvasesRoute(app, 'patch', ['branches', ':name'], async (c, sid, path, params) => {
     const name = params.name as string
     const oldValidation = validateBranchNameOrRespond(name)
     if (oldValidation) return c.json(oldValidation.body, oldValidation.status)
@@ -447,14 +447,14 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     if (newValidation) return c.json(newValidation.body, newValidation.status)
 
     try {
-      const branch = await renameBranch(sid, slug, name, newName)
+      const branch = await renameBranch(sid, path, name, newName)
       let renamedVersionCount = 0
       if (renameInVersions) {
         try {
-          renamedVersionCount = await renameInVersions(sid, slug, name, newName)
+          renamedVersionCount = await renameInVersions(sid, path, name, newName)
         } catch (err) {
           try {
-            await renameBranch(sid, slug, newName, name)
+            await renameBranch(sid, path, newName, name)
           } catch {
             /* rollback best-effort; original error is returned */
           }

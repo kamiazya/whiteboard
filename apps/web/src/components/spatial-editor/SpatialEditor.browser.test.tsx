@@ -2,7 +2,7 @@
  * Real-browser interaction coverage — pointer capture, drag-to-move, and
  * unmount-mid-gesture are exactly what jsdom cannot exercise faithfully.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

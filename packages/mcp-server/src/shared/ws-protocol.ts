@@ -22,11 +22,11 @@ export function buildWhiteboardWsProtocolsWithTicket(ticket: string): string[] {
 export function buildWhiteboardWsUrl(
   locationHref: string,
   workspaceId: string,
-  slug: string,
+  path: string,
 ): string {
   const url = new URL(locationHref)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.pathname = `/ws/${workspaceId}/${slug.split('/').map(encodeURIComponent).join('/')}`
+  url.pathname = `/ws/${workspaceId}/${path.split('/').map(encodeURIComponent).join('/')}`
   url.search = ''
   url.hash = ''
   return url.toString()

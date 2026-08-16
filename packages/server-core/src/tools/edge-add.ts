@@ -1,20 +1,20 @@
+import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import {
   canvasEdgeSchema,
-  canvasIdSchema,
+  documentIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const edgeAddInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     edge: canvasEdgeSchema.describe(
       'The whole edge, including the id you want it to have. Both endpoints must already be on the canvas.',
     ),
@@ -24,7 +24,7 @@ export type EdgeAddInput = z.infer<typeof edgeAddInputSchema>
 
 export const edgeAddOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     edge: canvasEdgeSchema,
   })
   .strict()
@@ -32,11 +32,11 @@ export type EdgeAddOutput = z.infer<typeof edgeAddOutputSchema>
 
 export class EdgeAlreadyExistsError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly edgeId: string,
   ) {
     super(
-      `Edge ${edgeId} already exists on canvas ${canvasId}. ` +
+      `Edge ${edgeId} already exists on canvas ${documentId}. ` +
         'Use wb_edge_patch to change it, or add it under a different id.',
     )
     this.name = 'EdgeAlreadyExistsError'
@@ -56,22 +56,22 @@ export function createEdgeAddTool(deps: ServerDeps) {
     inputSchema: edgeAddInputSchema,
     outputSchema: edgeAddOutputSchema,
     execute: async (input: EdgeAddInput): Promise<EdgeAddOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
         writeDocumentKind(doc, 'spatial')
       } else if (kind !== 'spatial') {
         throw new DocumentKindMismatchError(
-          input.canvasId,
+          input.documentId,
           kind,
           'This adds a JSON Canvas edge, and its only node holds its OKF body. Write its content through wb_document_set, or its body through wb_body_patch.',
         )
       }
 
       if (canvas.edges.some((existing) => existing.id === input.edge.id)) {
-        throw new EdgeAlreadyExistsError(input.canvasId, input.edge.id)
+        throw new EdgeAlreadyExistsError(input.documentId, input.edge.id)
       }
 
       // `spatialCanvasSchema` (not `canvasEdgeSchema`) is the validation gate:
@@ -84,9 +84,9 @@ export function createEdgeAddTool(deps: ServerDeps) {
       })
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, edge: input.edge }
+      return { documentId: input.documentId, edge: input.edge }
     },
   }
 }

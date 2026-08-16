@@ -1,4 +1,3 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   apiErrorReason,
   type CanvasOkfV1Response,
@@ -20,6 +19,7 @@ import {
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 // Re-exported so existing callers keep one import site; the implementation
 // lives in its own module so a SharedWorker can use it without this file's
@@ -91,8 +91,8 @@ export function createCanvas(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  slug: string,
-  kind?: CanvasKind,
+  path: string,
+  kind?: DocumentKind,
 ): Promise<CreateCanvasResponse> {
   return fetchAndParse(
     fetchFn,
@@ -103,7 +103,7 @@ export function createCanvas(
       headers: { 'Content-Type': 'application/json' },
       // Omitted kind stays omitted (not null) so an older daemon that
       // rejects unknown fields never sees one it can't parse.
-      body: JSON.stringify(kind === undefined ? { slug } : { slug, kind }),
+      body: JSON.stringify(kind === undefined ? { path } : { path, kind }),
     },
   )
 }
@@ -112,26 +112,26 @@ export function deleteCanvas(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<DeleteCanvasResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug)}`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, path)}`,
     deleteCanvasResponseSchema,
     { method: 'DELETE' },
   )
 }
 
-// GET /api/w/:workspaceId/canvas/:slug/snapshot returns raw Loro bytes
+// GET /api/w/:workspaceId/canvas/:path/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
 // which always calls res.json().
 export async function getCanvasSnapshot(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<Uint8Array> {
-  const url = `${daemonBaseUrl}${canvasApiUrl(workspaceId, slug, 'snapshot')}`
+  const url = `${daemonBaseUrl}${canvasApiUrl(workspaceId, path, 'snapshot')}`
   const res = await fetchFn(url)
   if (!res.ok) {
     throw new Error(await parseProblemDetails(res))
@@ -143,12 +143,12 @@ export function updateCanvas(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  slug: string,
+  path: string,
   snapshot: Uint8Array,
 ): Promise<UpdateCanvasResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasApiUrl(workspaceId, slug, 'update')}`,
+    `${daemonBaseUrl}${canvasApiUrl(workspaceId, path, 'update')}`,
     updateCanvasResponseSchema,
     { method: 'POST', body: snapshot as BodyInit },
   )
@@ -158,12 +158,12 @@ export function setCanvasName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, slug, 'name')}`,
+    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, path, 'name')}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
@@ -173,7 +173,7 @@ export function setCanvasName(
   )
 }
 
-// ---- OpenCanvas /api/v1 surface (canvasId + derived alias world) ----
+// ---- OpenCanvas /api/v1 surface (documentId + derived alias world) ----
 
 export function listCanvasesV1(
   fetchFn: typeof globalThis.fetch,
@@ -191,11 +191,11 @@ export function getCanvasOkfV1(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  canvasId: string,
+  documentId: string,
 ): Promise<CanvasOkfV1Response> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(canvasId)}/okf`,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(documentId)}/okf`,
     canvasOkfV1ResponseSchema,
   )
 }

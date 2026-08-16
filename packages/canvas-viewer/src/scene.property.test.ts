@@ -1,13 +1,13 @@
 /**
  * Property-based coverage for the scene parse/serialize boundary. Built from
- * canvas-model's own shared node/edge arbitraries (not duplicated here) —
- * see canvas-model/src/test-utils/arbitraries.ts. There is no published
+ * model's own shared node/edge arbitraries (not duplicated here) —
+ * see model/src/test-utils/arbitraries.ts. There is no published
  * "whole SpatialCanvas" arbitrary yet upstream, so this file composes one
  * locally (unique node ids, edges referencing only generated node ids).
  */
 
-import { strictDegrade } from '@kamiazya/whiteboard-canvas-codec'
-import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
+import { strictDegrade } from '@kamiazya/whiteboard-codec'
+import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseViewerScene, serializeViewerScene } from './scene.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'

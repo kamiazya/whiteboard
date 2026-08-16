@@ -1,21 +1,21 @@
-import type { CanvasCoreMeta, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
-  readCoreFacets,
   readEdgeLocks,
+  readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
   type SpatialBatchWriter,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
-  writeCoreFacets,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
-} from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
@@ -62,6 +62,11 @@ function commandTargetKey(command: EditorCommand): string {
       return `edge:${command.edgeId}`
     case 'create-node':
       return `node:${command.node.id}`
+    case 'set-body':
+      // One key for the whole body: `text` is always the complete document,
+      // so a burst of keystrokes inside one debounce window collapses to the
+      // last one — which is the entire point of deduping here.
+      return 'body'
     case 'batch':
       // Mapped in writeCommandTarget (unlike the default arm), but each
       // batch is one distinct user action — never deduped against another.
@@ -141,7 +146,7 @@ export interface CanvasSyncSession {
   // since pushes happen on COMMIT, after the canvas publish that triggered
   // the consumer's last render.
   subscribeHistory(listener: () => void): () => void
-  // Node lock lives in the doc's sidecar map (canvas-workspace's
+  // Node lock lives in the doc's sidecar map (crdt's
   // readNodeLocks/setNodeLock): durable and peer-synced, yet never part of
   // the canvas value, so it never reaches an export.
   getNodeLocks(): ReadonlySet<string>
@@ -151,14 +156,11 @@ export interface CanvasSyncSession {
   getEdgeLocks(): ReadonlySet<string>
   setEdgeLock(edgeId: string, locked: boolean): void
   subscribeLocks(listener: () => void): () => void
-  // OKF core facets (type/title/tags/facetsRaw) live in the doc's own
-  // sidecar map, exactly like a lock: durable and peer-synced, yet never
-  // part of the canvas value, so a title edit neither reaches an export as
-  // a node nor makes the editor re-render its scene. `undefined` means the
-  // document has never had core meta written.
-  getCoreFacets(): CanvasCoreMeta | undefined
-  setCoreFacets(meta: CanvasCoreMeta): void
-  subscribeCoreFacets(listener: () => void): () => void
+  // A markdown document's body lives in the doc's `body` text container, not
+  // in the canvas value, so — exactly like locks — it needs its own read and
+  // its own notification. Empty string before the first snapshot.
+  getMarkdownBody(): string
+  subscribeMarkdownBody(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -171,7 +173,7 @@ export interface CanvasSyncSession {
 
 /**
  * Writes exactly the node/edge the command targets into its own LoroMap
- * entry (via canvas-workspace's `writeSpatialNode`/`writeSpatialEdge`, the
+ * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
  * same field-projection `writeSpatialCanvas` uses), and returns whether it
  * could — false when the command's target id is missing from `next` (see
  * commitToDoc's fallback rule). This is what preserves the node-level CRDT
@@ -200,6 +202,12 @@ function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCo
       writeSpatialNode(doc, node)
       return true
     }
+    case 'set-body':
+      // Always "handled", and it MUST be: the fallback below writes the
+      // whole SpatialCanvas, which would leave the body container untouched
+      // and silently drop the edit.
+      writeMarkdownBody(doc, command.text)
+      return true
     case 'delete-node':
       // Always "handled": deleteSpatialNode is a documented no-op for an
       // already-absent id, so there is no missing-target case to fall back
@@ -331,7 +339,7 @@ export function createCanvasSyncSession(
   let undoManager: UndoManager | null = null
   const historyListeners = new Set<() => void>()
   const lockListeners = new Set<() => void>()
-  const coreFacetListeners = new Set<() => void>()
+  const bodyListeners = new Set<() => void>()
   // Microtask defer: onPush fires inside Loro's commit, and a listener that
   // synchronously setStates mid-commit would re-enter React from a doc
   // mutation path.
@@ -578,12 +586,16 @@ export function createCanvasSyncSession(
           // snapshot import above, since that happens before this listener
           // is registered.
           deps.dispatchIdentityEvent(CANVAS_SYNC_DOC_CHANGED_EVENT, deps.getOptions().identity)
+          // Every change, not just an import: a local UNDO rewrites the body
+          // container without one, and the editor holding stale text is the
+          // whole failure this notification exists to prevent. Re-notifying
+          // the editor that authored the keystroke is harmless — it already
+          // holds that value.
+          notifyBodyChanged()
           if (e.by === 'import') {
             publishCanvasFromDoc(newDoc)
             // A remote peer may have locked or unlocked something.
             notifyLocksChanged()
-            // ...or retitled the document.
-            notifyCoreFacetsChanged()
           }
         })
 
@@ -591,8 +603,9 @@ export function createCanvasSyncSession(
         // Hydration decides the lock set for this session — without this,
         // a persisted lock reads as absent until the next toggle.
         notifyLocksChanged()
-        // Same for the stored title: absent until the next edit otherwise.
-        notifyCoreFacetsChanged()
+        // Same for the stored body: this is the read that makes an
+        // agent-authored document open with its prose already in the editor.
+        notifyBodyChanged()
       },
 
       onRemoteUpdate(bytes) {
@@ -812,35 +825,25 @@ export function createCanvasSyncSession(
     notifyLocksChanged()
   }
 
+  function getMarkdownBody(): string {
+    return doc === null ? '' : readMarkdownBody(doc)
+  }
+
+  function notifyBodyChanged(): void {
+    for (const listener of bodyListeners) listener()
+  }
+
+  function subscribeMarkdownBody(listener: () => void): () => void {
+    bodyListeners.add(listener)
+    return () => {
+      bodyListeners.delete(listener)
+    }
+  }
+
   function subscribeLocks(listener: () => void): () => void {
     lockListeners.add(listener)
     return () => {
       lockListeners.delete(listener)
-    }
-  }
-
-  function getCoreFacets(): CanvasCoreMeta | undefined {
-    return doc === null ? undefined : readCoreFacets(doc)
-  }
-
-  function notifyCoreFacetsChanged(): void {
-    for (const listener of coreFacetListeners) listener()
-  }
-
-  function setCoreFacets(meta: CanvasCoreMeta): void {
-    if (doc === null) return
-    // `writeCoreFacets` REPLACES the stored bucket, so `meta` must already be
-    // complete — including `facetsRaw`. Reaches peers through the doc's own
-    // subscribeLocalUpdates push, like a lock; the canvas VALUE is unchanged,
-    // so subscribers get a facet notification rather than a canvas publish.
-    writeCoreFacets(doc, meta)
-    notifyCoreFacetsChanged()
-  }
-
-  function subscribeCoreFacets(listener: () => void): () => void {
-    coreFacetListeners.add(listener)
-    return () => {
-      coreFacetListeners.delete(listener)
     }
   }
 
@@ -862,8 +865,7 @@ export function createCanvasSyncSession(
     getEdgeLocks,
     setEdgeLock,
     subscribeLocks,
-    getCoreFacets,
-    setCoreFacets,
-    subscribeCoreFacets,
+    getMarkdownBody,
+    subscribeMarkdownBody,
   }
 }

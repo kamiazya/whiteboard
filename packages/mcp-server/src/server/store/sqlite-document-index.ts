@@ -1,4 +1,4 @@
-import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -10,7 +10,7 @@ import type {
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import {
   compareDocumentPaths,
   DocumentHasDescendantsError,
@@ -18,7 +18,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-canvas-ports'
+} from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -31,13 +31,13 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  */
 function toEntry(row: {
   id: string
-  slug: string
+  path: string
   kind: string | null
   displayName: string | null
 }): DocumentEntry {
   return {
-    canvasId: row.id,
-    path: row.slug,
+    documentId: row.id,
+    path: row.path,
     ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
   }
@@ -58,9 +58,9 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
  * canvas list, versions, branches and file GC already hang off, which is what
  * makes an agent-created document one a user can see.
  *
- * New rows are assigned a ULID, not the nanoid `saveCanvas` mints for its own
- * rows: ADR-0007 point 5 fixed the ULID as the `canvasId` and the nanoid as a
- * storage detail, and `canvasIdSchema` in the port's `DocumentEntry` accepts
+ * New rows are assigned a ULID, not the nanoid `saveDocument` mints for its own
+ * rows: ADR-0007 point 5 fixed the ULID as the `documentId` and the nanoid as a
+ * storage detail, and `documentIdSchema` in the port's `DocumentEntry` accepts
  * only the former. A row predating this cannot round-trip through the port —
  * a deliberate consequence of converging the two id spaces — so `listDocuments`
  * skips such rows (see its comment) rather than letting one of them fail
@@ -92,16 +92,16 @@ export class SqliteDocumentIndex implements DocumentIndex {
       if (!workspace) {
         throw new WorkspaceNotFoundError(workspaceId)
       }
-      const canvasId = generateCanvasId()
+      const documentId = generateDocumentId()
       const now = Date.now()
       // One statement, so the check and the claim cannot be separated: the
-      // unique (workspaceId, slug) index decides, and a loser inserts nothing.
+      // unique (workspaceId, path) index decides, and a loser inserts nothing.
       const inserted = await this.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
-          id: canvasId,
+          id: documentId,
           workspaceId,
-          slug: path,
+          path: path,
           displayName: name ?? null,
           isPinned: 0,
           pinOrder: null,
@@ -110,13 +110,13 @@ export class SqliteDocumentIndex implements DocumentIndex {
           updatedAt: now,
           kind,
         })
-        .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
+        .onConflict((oc) => oc.columns(['workspaceId', 'path']).doNothing())
         .executeTakeFirst()
 
       if ((inserted.numInsertedOrUpdatedRows ?? 0n) === 0n) {
         throw new DocumentPathTakenError(workspaceId, path)
       }
-      return { canvasId, path, kind, ...(name === undefined ? {} : { name }) }
+      return { documentId, path, kind, ...(name === undefined ? {} : { name }) }
     })
   }
 
@@ -125,10 +125,10 @@ export class SqliteDocumentIndex implements DocumentIndex {
     path,
   }: ResolveDocumentInput): Promise<DocumentEntry | null> {
     const row = await this.db
-      .selectFrom('canvases')
-      .select(['id', 'slug', 'kind', 'displayName'])
+      .selectFrom('documents')
+      .select(['id', 'path', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
-      .where('slug', '=', path)
+      .where('path', '=', path)
       .executeTakeFirst()
     if (!row) return null
     return toEntry(row)
@@ -136,27 +136,27 @@ export class SqliteDocumentIndex implements DocumentIndex {
 
   async resolveDocumentById({
     workspaceId,
-    canvasId,
+    documentId,
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     const row = await this.db
-      .selectFrom('canvases')
-      .select(['id', 'slug', 'kind', 'displayName'])
+      .selectFrom('documents')
+      .select(['id', 'path', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .executeTakeFirst()
     if (!row) return null
     return toEntry(row)
   }
 
-  async setDocumentName({ workspaceId, canvasId, name }: SetDocumentNameInput): Promise<void> {
+  async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
     const result = await this.db
-      .updateTable('canvases')
+      .updateTable('documents')
       .set({ displayName: name ?? null })
       .where('workspaceId', '=', workspaceId)
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .executeTakeFirst()
     if (result.numUpdatedRows === 0n) {
-      throw new DocumentNotFoundError(workspaceId, canvasId)
+      throw new DocumentNotFoundError(workspaceId, documentId)
     }
   }
 
@@ -170,15 +170,15 @@ export class SqliteDocumentIndex implements DocumentIndex {
       throw new WorkspaceNotFoundError(workspaceId)
     }
     const rows = await this.db
-      .selectFrom('canvases')
-      .select(['id', 'slug', 'kind', 'displayName'])
+      .selectFrom('documents')
+      .select(['id', 'path', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .execute()
     // Sorted here rather than in SQL: segment-wise order is not what any
     // collation gives, and the row count per workspace is a list a human reads.
     //
     // Rows whose id is not a canonical ULID are SKIPPED, not surfaced:
-    // `saveCanvas` minted nanoid row ids before the id spaces converged, and
+    // `saveDocument` minted nanoid row ids before the id spaces converged, and
     // rows outlive minting policy. The port's DocumentEntry accepts only a
     // ULID, so mapping such a row does not degrade to one bad entry — it
     // fails output validation for the ENTIRE listing, and one legacy row per
@@ -187,9 +187,9 @@ export class SqliteDocumentIndex implements DocumentIndex {
     // user's gallery), and the log is where the absence is said.
     const entries: DocumentEntry[] = []
     for (const row of rows) {
-      if (!canvasIdSchema.safeParse(row.id).success) {
+      if (!documentIdSchema.safeParse(row.id).success) {
         log.warning(
-          { workspaceId, slug: row.slug },
+          { workspaceId, path: row.path },
           'skipping a pre-convergence row the port cannot carry',
         )
         continue
@@ -206,29 +206,29 @@ export class SqliteDocumentIndex implements DocumentIndex {
     await withWorkspaceWriteLock(workspaceId, async () => {
       await this.db.transaction().execute(async (trx) => {
         const rows = await trx
-          .selectFrom('canvases')
-          .select(['id', 'slug'])
+          .selectFrom('documents')
+          .select(['id', 'path'])
           .where('workspaceId', '=', workspaceId)
           .execute()
 
-        const moving = rows.filter((row) => isSelfOrDescendant(row.slug, from))
+        const moving = rows.filter((row) => isSelfOrDescendant(row.path, from))
         if (moving.length === 0) {
           throw new DocumentNotFoundError(workspaceId, from)
         }
-        const occupied = new Set(rows.map((row) => row.slug))
+        const occupied = new Set(rows.map((row) => row.path))
         const rewritten = moving.map((row) => ({
           id: row.id,
-          from: row.slug,
-          slug: `${to}${row.slug.slice(from.length)}`,
+          from: row.path,
+          path: `${to}${row.path.slice(from.length)}`,
         }))
         // Every produced path, not just `to`: moving `a` onto a free `c`
         // still collides when `a/d` and `c/d` both exist. Paths the move is
         // vacating do not count as occupied, or relocating a subtree would
         // always collide with itself.
-        const vacating = new Set(moving.map((row) => row.slug))
+        const vacating = new Set(moving.map((row) => row.path))
         for (const row of rewritten) {
-          if (occupied.has(row.slug) && !vacating.has(row.slug)) {
-            throw new DocumentPathTakenError(workspaceId, row.slug)
+          if (occupied.has(row.path) && !vacating.has(row.path)) {
+            throw new DocumentPathTakenError(workspaceId, row.path)
           }
         }
 
@@ -248,8 +248,8 @@ export class SqliteDocumentIndex implements DocumentIndex {
         const now = Date.now()
         for (const row of rewritten) {
           await trx
-            .updateTable('canvases')
-            .set({ slug: row.slug, updatedAt: now })
+            .updateTable('documents')
+            .set({ path: row.path, updatedAt: now })
             .where('id', '=', row.id)
             .execute()
         }
@@ -260,21 +260,21 @@ export class SqliteDocumentIndex implements DocumentIndex {
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
     await withWorkspaceWriteLock(workspaceId, async () => {
       const descendant = await this.db
-        .selectFrom('canvases')
-        .select('slug')
+        .selectFrom('documents')
+        .select('path')
         .where('workspaceId', '=', workspaceId)
-        .where('slug', 'like', `${path}/%`)
+        .where('path', 'like', `${path}/%`)
         .executeTakeFirst()
       if (descendant) {
         throw new DocumentHasDescendantsError(
           path,
-          `Delete "${descendant.slug}" and any others below it first.`,
+          `Delete "${descendant.path}" and any others below it first.`,
         )
       }
       await this.db
-        .deleteFrom('canvases')
+        .deleteFrom('documents')
         .where('workspaceId', '=', workspaceId)
-        .where('slug', '=', path)
+        .where('path', '=', path)
         .execute()
     })
   }

@@ -10,7 +10,7 @@
  * `onToggleNodeLock` without synthesising pointer input.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'

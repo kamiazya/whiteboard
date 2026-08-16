@@ -10,8 +10,8 @@
  * every unit test passed while it was broken.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DOCUMENT_NODE_HEIGHT, DOCUMENT_NODE_WIDTH } from './node-factories.js'
@@ -52,7 +52,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={(file) => (file === 'notes' ? BODY : undefined)}
+        resolveReference={(ref) => (ref === 'notes' ? { markdown: BODY } : undefined)}
       />,
     )
 
@@ -66,8 +66,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => BODY}
-        resolveFileFacets={() => CARD}
+        resolveReference={() => ({ markdown: BODY, facets: CARD })}
       />,
     )
 
@@ -80,8 +79,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => undefined}
-        resolveFileFacets={() => CARD}
+        resolveReference={() => ({ facets: CARD })}
       />,
     )
 
@@ -96,7 +94,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveFileMarkdown={() => long}
+        resolveReference={() => ({ markdown: long })}
       />,
     )
 

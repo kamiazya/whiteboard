@@ -3,7 +3,7 @@
 // detour can ever clear a rect that contains the edge's endpoints, the router
 // fell back to the shortest detour AROUND the whole frame — a hairpin dipping
 // below the group.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'

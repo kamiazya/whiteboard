@@ -71,7 +71,7 @@ const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
 
 export class DaemonBackend implements CanvasBackend {
   private readonly workspaceId: string
-  private readonly slug: string
+  private readonly path: string
   private readonly locationHref: string
   private readonly apiTransport: DaemonApiTransport | undefined
 
@@ -85,18 +85,18 @@ export class DaemonBackend implements CanvasBackend {
   // rejections does.
   private consecutiveImmediateFailures = 0
   // Hoisted to instance scope so reconnects do not reset it. Only reset by
-  // disconnect() or when the canvas (workspaceId/slug) changes via a new
+  // disconnect() or when the canvas (workspaceId/path) changes via a new
   // connect() call after the hook tears down the previous backend.
   private snapshotReceived = false
 
   constructor(
     workspaceId: string,
-    slug: string,
+    path: string,
     locationHref: string,
     apiTransport?: DaemonApiTransport,
   ) {
     this.workspaceId = workspaceId
-    this.slug = slug
+    this.path = path
     this.locationHref = locationHref
     this.apiTransport = apiTransport
   }
@@ -130,7 +130,7 @@ export class DaemonBackend implements CanvasBackend {
 
   async getFile(fileId: string): Promise<Blob | null> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
-    const res = await fetchFn(canvasFileApiUrl(this.workspaceId, this.slug, fileId))
+    const res = await fetchFn(canvasFileApiUrl(this.workspaceId, this.path, fileId))
     if (!res.ok) return null
     return res.blob()
   }
@@ -142,7 +142,7 @@ export class DaemonBackend implements CanvasBackend {
     await uploadFiles(
       newEntries,
       this.workspaceId,
-      this.slug,
+      this.path,
       onFileSuccess,
       this.apiTransport?.fetch,
     )
@@ -171,7 +171,7 @@ export class DaemonBackend implements CanvasBackend {
     const daemonToken = readDaemonTokenOnce() ?? this.apiTransport?.wsToken?.() ?? null
 
     const ws = new WebSocket(
-      buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.slug),
+      buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.path),
       buildWhiteboardWsProtocols(daemonToken),
     )
     // Required: without this, binary frames arrive as Blob and the ArrayBuffer

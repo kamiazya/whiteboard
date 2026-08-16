@@ -1,7 +1,7 @@
 // Hand tool: a dock mode where a single pointer drag pans the viewport
 // instead of selecting or moving nodes — the one-handed mobile
 // navigation path (two-finger pan stays available in every mode).
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

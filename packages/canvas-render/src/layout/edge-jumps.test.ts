@@ -2,8 +2,8 @@
 // another, the LATER edge (document order — the one painted on top) hops
 // over the earlier one with a small arc, so crossing lines stay readable.
 // Canvas-wide today; the per-edge override slot reuses the same resolution.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'

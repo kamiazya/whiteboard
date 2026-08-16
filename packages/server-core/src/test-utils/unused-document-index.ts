@@ -1,4 +1,4 @@
-import type { DocumentIndex } from '@kamiazya/whiteboard-canvas-ports'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 
 /**
  * A `DocumentIndex` for tests whose subject is elsewhere. Every method

@@ -6,8 +6,8 @@
 
 import architectureRaw from '@docs-assets/architecture.canvas?raw'
 import authFlowRaw from '@docs-assets/canvas-auth-flow.canvas?raw'
-import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { parseSpatial } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 function parseCanvasSource(raw: string, fileName: string): SpatialCanvas {
   const parsed = parseSpatial(raw)
