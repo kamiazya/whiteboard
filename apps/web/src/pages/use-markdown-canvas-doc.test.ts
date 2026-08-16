@@ -6,8 +6,15 @@
  * save. Without that, a binding-driven edit would be on screen and in the
  * CRDT but never persisted and never reflected in the preview.
  */
+import {
+  MARKDOWN_BODY_KEY,
+  MARKDOWN_BODY_NODE_ID,
+  readMarkdownBody,
+  readSpatialCanvas,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import type { Loro } from 'loro-crdt'
+import { type Loro, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 import { useMarkdownCanvasDoc } from './use-markdown-canvas-doc.js'
@@ -196,5 +203,96 @@ describe('flush/load ordering across an effect cycle', () => {
     await waitFor(() => expect(result.current.body).toBe('typed before the switch'), {
       timeout: 3000,
     })
+  })
+})
+
+describe('a document written by the daemon-side writer', () => {
+  // `wb_document_set` used to store a body as an `okf-body` TEXT NODE rather
+  // than the `body` text container this editor binds to. Documents written
+  // that way are still in stores, so both sides read through
+  // `readMarkdownBody`; this editor reading the raw container instead showed
+  // such a document as empty and then quietly overwrote it.
+  function storeHolding(build: (doc: Loro) => void): LoroStoreLike & { saves: Uint8Array[] } {
+    const doc = new LoroDoc()
+    build(doc)
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const saves: Uint8Array[] = []
+    return {
+      saves,
+      async save(_canvasId, next) {
+        saves.push(next)
+      },
+      createEmptySnapshot() {
+        return new Uint8Array()
+      },
+      async load() {
+        return { kind: 'ok', snapshot, deltas: [] } as never
+      },
+    }
+  }
+
+  const legacy = (doc: Loro) => {
+    writeSpatialCanvas(doc, {
+      nodes: [
+        {
+          id: MARKDOWN_BODY_NODE_ID,
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 600,
+          height: 400,
+          text: 'written by wb_document_set',
+        },
+      ],
+      edges: [],
+    })
+    doc.commit()
+  }
+
+  it('opens with its body visible instead of empty', async () => {
+    const store = storeHolding(legacy)
+    const { result } = renderHook(() => useMarkdownCanvasDoc(store, 'c1', true))
+
+    await waitFor(() => expect(result.current.body).toBe('written by wb_document_set'))
+  })
+
+  it('converges it onto the text container, which is all the CRDT binding can bind to', async () => {
+    // Reading the node is not enough. `LoroSyncPlugin` binds CodeMirror to
+    // the `body` CONTAINER, so a document that leaves its prose in a node
+    // opens with text in the preview and an empty editor.
+    const store = storeHolding(legacy)
+    const { result } = renderHook(() => useMarkdownCanvasDoc(store, 'c1', true))
+    await waitFor(() => expect(result.current.doc).not.toBeNull())
+
+    const doc = result.current.doc as Loro
+    await waitFor(() =>
+      expect(doc.getText(MARKDOWN_BODY_KEY).toString()).toBe('written by wb_document_set'),
+    )
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
+    // And persisted, so the conversion survives the next load rather than
+    // being redone from the node every time.
+    await waitFor(() => expect(store.saves.length).toBeGreaterThan(0), { timeout: 3000 })
+  })
+
+  it('does not resurrect the old body when the document is emptied', async () => {
+    // The failure this pins is specific to keeping both representations
+    // alive at once: an edit writes the container, the container wins on
+    // read, and then clearing it falls back to the node nobody removed — so
+    // deleted text reappears. Stated as the outcome rather than as one
+    // mechanism, because either superseding the node on load or on write is
+    // enough; what must not happen is neither.
+    const store = storeHolding(legacy)
+    const { result } = renderHook(() => useMarkdownCanvasDoc(store, 'c1', true))
+    await waitFor(() => expect(result.current.body).toBe('written by wb_document_set'))
+
+    act(() => {
+      result.current.setBody('replaced')
+    })
+    act(() => {
+      result.current.setBody('')
+    })
+
+    expect(result.current.body).toBe('')
+    expect(readMarkdownBody(result.current.doc as Loro)).toBe('')
   })
 })

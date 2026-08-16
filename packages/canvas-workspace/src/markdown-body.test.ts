@@ -11,7 +11,12 @@
 // not have to know which side wrote it.
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { readMarkdownBody, writeSpatialCanvas } from './loro-bridge.js'
+import {
+  readMarkdownBody,
+  readSpatialCanvas,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from './loro-bridge.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 
@@ -69,5 +74,47 @@ describe('readMarkdownBody', () => {
       edges: [],
     })
     expect(readMarkdownBody(doc)).toBe('')
+  })
+})
+
+describe('writeMarkdownBody', () => {
+  it('round-trips through the reader', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, BODY)
+    expect(readMarkdownBody(doc)).toBe(BODY)
+  })
+
+  it('replaces the previous body rather than appending to it', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, 'first')
+    writeMarkdownBody(doc, 'second')
+    expect(readMarkdownBody(doc)).toBe('second')
+  })
+
+  it('clears the body when written empty', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, BODY)
+    writeMarkdownBody(doc, '')
+    expect(readMarkdownBody(doc)).toBe('')
+  })
+
+  it('writes the CONTAINER, so a markdown document is not also a spatial canvas', () => {
+    // The point of the whole change. Storing a body as a text node made a
+    // markdown document parse as a perfectly valid canvas holding one node,
+    // which is why every reader of a reference has to ask the document its
+    // kind before it can tell prose from a diagram.
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, BODY)
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
+  })
+
+  it('supersedes a legacy okf-body node left by an older writer', () => {
+    // Stored documents keep their text node until something rewrites them.
+    // A rewrite must not leave the old node behind to be read back later —
+    // that is exactly the stale-read the two representations enabled.
+    const doc = withBodyNode(new LoroDoc(), 'stale from the node')
+    writeMarkdownBody(doc, 'fresh')
+    expect(readMarkdownBody(doc)).toBe('fresh')
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
   })
 })

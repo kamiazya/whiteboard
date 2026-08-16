@@ -471,32 +471,39 @@ export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
 }
 
 /**
- * The Loro text container apps/web's browser-local markdown editor binds
- * its CRDT editing session to.
+ * The Loro text container a markdown document's body lives in, and the one
+ * apps/web's browser-local editor binds its CRDT editing session to.
+ *
+ * Exported because that binding needs the container HANDLE, not its text —
+ * `readMarkdownBody` cannot serve it, and a second `'body'` literal on the
+ * apps/web side would be a contract duplicated across a package boundary.
  */
-const MARKDOWN_BODY_KEY = 'body'
+export const MARKDOWN_BODY_KEY = 'body'
 
 /**
- * The stored id of the single text node a markdown document's body lives in
- * on the mcp-server/daemon side. `wb_document_set` writes it, and it is how
- * that tool recognises a document it could itself have written.
+ * The stored id of the single text node a markdown document's body USED to
+ * live in on the daemon side. Nothing writes it any more — `wb_document_set`
+ * writes the text container — but stored documents still hold one, so it is
+ * how a reader finds such a body and how that tool recognises a document it
+ * could itself have written.
  */
 export const MARKDOWN_BODY_NODE_ID = 'okf-body'
 
 /**
  * A markdown document's body, whichever way this codebase stored it.
  *
- * There are two representations, and they grew independently:
- * `wb_document_set` writes the body as a single `okf-body` TEXT NODE inside
- * the spatial canvas (which is why a markdown document also parses as a
- * perfectly valid, if odd, canvas), while apps/web's browser-local markdown
- * editor writes a Loro TEXT CONTAINER named `body` so a CRDT editing
- * session has something to bind to. Until this function existed neither
- * side could read the other's documents.
+ * Every writer now writes the Loro TEXT CONTAINER named `body`
+ * (`writeMarkdownBody`). It did not start that way: `wb_document_set` used
+ * to store the body as a single `okf-body` TEXT NODE inside the spatial
+ * canvas — which is why a markdown document also parsed as a perfectly
+ * valid, if odd, canvas — while apps/web's editor wrote the container so a
+ * CRDT editing session had something to bind to. Neither side could read
+ * the other's documents until this function existed, and stored documents
+ * still hold the old shape, so it keeps reading both.
  *
- * The container wins when both are present. Nothing writes both today, but
- * "whichever the reader checked first" is not an answer, and where both
- * exist the container is the one being live-edited.
+ * The container wins when both are present: writers supersede the node
+ * rather than removing it in a migration, so where both exist the container
+ * is the newer one.
  *
  * Falls back to the FIRST text node rather than requiring the id, because
  * documents written before the id was stable still have to be readable. An
@@ -511,6 +518,41 @@ export function readMarkdownBody(doc: LoroDoc): string {
   const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
   if (byId?.type === 'text') return byId.text
   return nodes.find((node) => node.type === 'text')?.text ?? ''
+}
+
+/**
+ * Replaces a markdown document's body, and makes the document stop being a
+ * spatial canvas at the same time.
+ *
+ * The CONTAINER is the representation, not a text node inside the spatial
+ * canvas. Two reasons, and the second is the one that keeps biting:
+ *
+ * - It is the CRDT-native form. apps/web binds a collaborative editing
+ *   session straight to it (`LoroSyncPlugin`), which a plain string field
+ *   on a node cannot support — character-level merge is the whole point.
+ * - Storing a body as a text NODE made a markdown document parse as a
+ *   perfectly valid spatial canvas holding one node. That is why anything
+ *   resolving a reference has to ask the document its kind before it can
+ *   tell prose from a diagram: "does it parse as a canvas" answers yes for
+ *   both. Writing the container and emptying the canvas removes the
+ *   ambiguity at the source rather than guarding against it downstream.
+ *
+ * Clearing the canvas also supersedes a legacy `okf-body` node left by the
+ * older writer, so a rewritten document cannot keep a stale second body for
+ * a later reader to find.
+ */
+export function writeMarkdownBody(doc: LoroDoc, body: string): void {
+  const text = doc.getText(MARKDOWN_BODY_KEY)
+  text.delete(0, text.length)
+  if (body.length > 0) text.insert(0, body)
+  // Only when there is something to clear. This runs on every keystroke in
+  // the browser editor, where the canvas is already empty and an
+  // unconditional rewrite would add CRDT operations — and a save — for a
+  // change nobody made.
+  if (doc.getMap(NODES_KEY).size > 0 || doc.getMap(EDGES_KEY).size > 0) {
+    writeSpatialCanvas(doc, { nodes: [], edges: [] })
+  }
+  doc.commit()
 }
 
 /**

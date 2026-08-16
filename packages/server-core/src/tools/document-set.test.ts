@@ -3,6 +3,7 @@ import {
   readCoreFacets,
   readDocumentKind,
   readFacets,
+  readMarkdownBody,
   readSpatialCanvas,
   writeDocumentKind,
   writeSpatialCanvas,
@@ -61,12 +62,11 @@ describe('wb_document_set tool', () => {
     const facets = readFacets(doc)
     expect(facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
 
-    const canvas = readSpatialCanvas(doc)
-    expect(canvas.nodes).toHaveLength(1)
-    expect(canvas.nodes[0].type).toBe('text')
-    if (canvas.nodes[0].type === 'text') {
-      expect(canvas.nodes[0].text).toBe('# Bug report\n\nSomething is broken.')
-    }
+    expect(readMarkdownBody(doc)).toBe('# Bug report\n\nSomething is broken.')
+    // And the document is NOT also a spatial canvas. The body used to be
+    // stored as a text node, which is what made every markdown document
+    // parse as a valid one-node canvas.
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
   })
 
   test('imports markdown with empty body (facets only)', async () => {
@@ -100,11 +100,10 @@ describe('wb_document_set tool', () => {
     const facets = readFacets(doc)
     expect(facets['example/1']).toEqual({ status: 'closed' })
 
-    const canvas = readSpatialCanvas(doc)
-    expect(canvas.nodes).toHaveLength(1)
-    if (canvas.nodes[0].type === 'text') {
-      expect(canvas.nodes[0].text).toBe('Updated body.')
-    }
+    // Overwritten, not appended: the second import replaces the body rather
+    // than leaving the first one alongside it.
+    expect(readMarkdownBody(doc)).toBe('Updated body.')
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
   })
 
   test('rejects invalid OKF markdown', async () => {
@@ -214,8 +213,10 @@ describe('wb_document_set tool', () => {
 
     const doc = await loadDoc(store, CANVAS_ID)
     expect(readDocumentKind(doc)).toBe('markdown')
-    const node = readSpatialCanvas(doc).nodes[0]
-    expect(node?.type === 'text' ? node.text : undefined).toBe('New body.')
+    expect(readMarkdownBody(doc)).toBe('New body.')
+    // The legacy okf-body node it was healed FROM is gone, so a later read
+    // cannot find a stale second body behind the fresh one.
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
   })
 
   test('a document predating kinds that holds nodes is refused, not flattened', async () => {

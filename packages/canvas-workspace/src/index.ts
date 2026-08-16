@@ -1,6 +1,7 @@
 export {
   deleteSpatialEdge,
   deleteSpatialNode,
+  MARKDOWN_BODY_KEY,
   MARKDOWN_BODY_NODE_ID,
   readCoreFacets,
   readDocumentKind,
@@ -16,6 +17,7 @@ export {
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,

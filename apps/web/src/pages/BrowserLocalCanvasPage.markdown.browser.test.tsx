@@ -10,6 +10,7 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -542,5 +543,119 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       },
       { timeout: 10_000 },
     )
+  })
+
+  describe('a document written by the daemon before the body writers were unified', () => {
+    // `wb_document_set` used to store a body as an `okf-body` TEXT NODE
+    // rather than the `body` text container CodeMirror binds to. Both sides
+    // now write the container, but documents in the old shape are already in
+    // stores — and only a real browser can show what CodeMirror actually
+    // displays for one, which is the half a hook test cannot reach.
+    const LEGACY_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const LEGACY_BODY = 'body stored as an okf-body node'
+
+    async function seedLegacyNote(store: IndexedDBStore, name: string): Promise<void> {
+      await store.save({
+        id: LEGACY_ID,
+        name,
+        updatedAt: '2026-05-24T00:00:00.000Z',
+        kind: 'markdown' as const,
+      })
+      const doc = new Loro()
+      writeSpatialCanvas(doc, {
+        nodes: [
+          {
+            id: MARKDOWN_BODY_NODE_ID,
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 400,
+            text: LEGACY_BODY,
+          },
+        ],
+        edges: [],
+      })
+      doc.commit()
+      await new LoroStore().save(LEGACY_ID, doc.export({ mode: 'snapshot' }))
+    }
+
+    it('is editable in the real editor without losing the body it was opened with', async () => {
+      // This needs a real browser for the CRDT binding. `LoroSyncPlugin`
+      // syncs the `body` CONTAINER into CodeMirror on mount, overwriting the
+      // `value` prop — so for a document whose prose is still in a node, the
+      // editor settles on the placeholder while the preview shows the text,
+      // and the next edit saves over the original.
+      //
+      // Asserted AFTER a full edit/save/remount cycle rather than on first
+      // paint: the value prop is briefly visible before the binding takes
+      // over, so an assertion at mount can pass on a frame that is about to
+      // be replaced. By the reopen there is no path that puts the old body
+      // on screen unless it really was converted and persisted.
+      const store = new IndexedDBStore()
+      await seedLegacyNote(store, 'Legacy note')
+      await store.setDefaultCanvasId(LEGACY_ID)
+      const first = render(<BrowserLocalCanvasPage store={store} />)
+
+      const editable = await waitFor(
+        () => {
+          const el = document.querySelector('.cm-content')
+          expect(el).not.toBeNull()
+          return el as HTMLElement
+        },
+        { timeout: 10_000 },
+      )
+      editable.focus()
+      await userEvent.keyboard('{Control>}{End}{/Control}{Enter}and an appended line')
+      await waitFor(() => {
+        expect(document.querySelector('.cm-content')?.textContent).toContain('and an appended line')
+      })
+
+      await waitForSaved()
+      first.unmount()
+
+      render(<BrowserLocalCanvasPage store={store} />)
+      await waitFor(
+        () => {
+          const text = document.querySelector('.cm-content')?.textContent
+          expect(text).toContain(LEGACY_BODY)
+          expect(text).toContain('and an appended line')
+        },
+        { timeout: 10_000 },
+      )
+    })
+
+    it('renders as an ![[embed]] target', async () => {
+      const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+      const store = new IndexedDBStore()
+      await seedLegacyNote(store, 'Legacy embed target')
+      await store.save({
+        id: SOURCE_ID,
+        name: 'Embed source',
+        updatedAt: '2026-05-24T00:00:01.000Z',
+        kind: 'markdown' as const,
+      })
+      await store.setDefaultCanvasId(SOURCE_ID)
+      render(<BrowserLocalCanvasPage store={store} />)
+
+      const editable = await waitFor(
+        () => {
+          const el = document.querySelector('[contenteditable="true"]')
+          expect(el).not.toBeNull()
+          return el as HTMLElement
+        },
+        { timeout: 10_000 },
+      )
+      editable.focus()
+      await userEvent.keyboard(`![[[[canvas:${LEGACY_ID}]]{Enter}{Enter}trailing`)
+
+      await waitFor(
+        () => {
+          const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+          expect(preview?.textContent).toContain(LEGACY_BODY)
+        },
+        { timeout: 10_000 },
+      )
+    })
   })
 })

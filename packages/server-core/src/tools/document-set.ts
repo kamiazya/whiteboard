@@ -7,7 +7,7 @@ import {
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
-  writeSpatialCanvas,
+  writeMarkdownBody,
 } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -17,11 +17,14 @@ import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js
 
 /**
  * Whether a canvas is one this tool could itself have written, and so holds
- * nothing a markdown write would destroy. A markdown document's stored
- * content IS a valid spatial canvas — the body lives in one text node — so
- * "has any node" cannot tell the two apart, and the documents that predate
- * kinds include both shapes. Matching the exact shape written below keeps
- * the pre-kind markdown ones editable without letting a diagram through.
+ * nothing a markdown write would destroy.
+ *
+ * A markdown document written today has an empty canvas — the body is a
+ * CRDT text container. One written by the older writer stored the body as a
+ * single `okf-body` text node, which made it ALSO a valid one-node spatial
+ * canvas, so "has any node" cannot tell such a document from a diagram.
+ * Accepting that legacy shape as well keeps documents that predate both the
+ * container and kinds editable, without letting a real diagram through.
  */
 function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: readonly unknown[] }) {
   if (canvas.edges.length > 0) return false
@@ -127,21 +130,15 @@ export function createDocumentSetTool(deps: ServerDeps) {
         writeFacets(doc, facets)
       }
 
-      const nodes =
-        body.length > 0
-          ? [
-              {
-                id: TEXT_NODE_ID,
-                type: 'text' as const,
-                x: 0,
-                y: 0,
-                width: 600,
-                height: 400,
-                text: body,
-              },
-            ]
-          : []
-      writeSpatialCanvas(doc, { nodes, edges: [] })
+      // The body goes in the CRDT text container, and this clears the
+      // spatial canvas with it (see writeMarkdownBody). Older documents
+      // stored it as an `okf-body` TEXT NODE, which made every markdown
+      // document also parse as a valid one-node canvas — the ambiguity that
+      // forces every reference resolver to ask the document its kind before
+      // it can tell prose from a diagram. Reads handle both shapes, so
+      // stored documents need no migration; they converge as they are
+      // rewritten.
+      writeMarkdownBody(doc, body)
 
       await saveDocSnapshot(deps, input.canvasId, doc)
 

@@ -1,6 +1,7 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -251,7 +252,7 @@ export function BrowserLocalCanvasPage({
     () =>
       markdownDoc.doc === null
         ? undefined
-        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText('body'))],
+        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText(MARKDOWN_BODY_KEY))],
     [markdownDoc.doc],
   )
   const noopChange = useCallback(() => {}, [])

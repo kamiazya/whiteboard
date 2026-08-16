@@ -1,12 +1,17 @@
 import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  readFacets,
+  readMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import {
   FakeCanvasDocStore,
   registerCanvasInWorkspace,
+  seedDoc,
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
@@ -129,16 +134,22 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     const doc = await loadDoc(store, CANVAS_ID)
 
     expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
-    const canvas = readSpatialCanvas(doc)
-    expect(canvas.nodes).toHaveLength(1)
-    if (canvas.nodes[0].type === 'text') {
-      expect(canvas.nodes[0].text).toBe('Original body.')
-    }
+    expect(readMarkdownBody(doc)).toBe('Original body.')
   })
 })
 
 describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () => {
-  test('the imported body appears as a text node in the exported (extended) JSON Canvas', async () => {
+  test('a markdown document has no canvas to export as JSON Canvas', async () => {
+    // It used to have exactly one node, because the body was STORED as a
+    // text node. That is what made a markdown document also parse as a
+    // valid canvas, and why anything resolving a reference had to ask the
+    // document its kind before it could tell prose from a diagram. The body
+    // now lives in its own container, so the canvas is genuinely empty.
+    //
+    // Unreachable in production either way: `wb_document_get` routes by
+    // kind, so a markdown document is exported as OKF and only a spatial
+    // one ever reaches this exporter. Asserted here because the old
+    // assertion encoded the ambiguity, not because the path is used.
     const { documentSet, deps } = await setupTools()
 
     await documentSet.execute({
@@ -148,19 +159,37 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
     })
 
     const result = await exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
-    const parsed = JSON.parse(result.json)
+    expect(JSON.parse(result.json).nodes).toEqual([])
 
-    expect(parsed.nodes).toHaveLength(1)
-    expect(parsed.nodes[0].text).toBe('Hello from OKF.')
+    // The body is not lost — it is read through its own accessor, which is
+    // what the OKF export uses.
+    const okf = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    expect(okf.markdown).toContain('Hello from OKF.')
   })
 
   test('the exported (strict) JSON Canvas has no x-whiteboard extensions', async () => {
-    const { documentSet, deps } = await setupTools()
-
-    await documentSet.execute({
-      workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
-      markdown: '---\ntype: note\n---\nHello.',
+    // Seeded as a SPATIAL document carrying the extension, which is both
+    // what this exporter is actually for and the only way this assertion
+    // can fail. It used to seed markdown and index `nodes[0]`, which worked
+    // only because a markdown body was stored as a node; over an empty
+    // node list the same loop would pass while checking nothing.
+    const { store, deps } = await setupTools()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          {
+            id: 'n1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            text: 'hi',
+            'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+          },
+        ],
+        edges: [],
+      })
     })
 
     const result = await exportJsonCanvas(deps, {
@@ -170,6 +199,7 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
     })
     const parsed = JSON.parse(result.json)
 
+    expect(parsed.nodes).toHaveLength(1)
     expect(parsed.nodes[0]['x-whiteboard']).toBeUndefined()
   })
 })

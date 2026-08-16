@@ -61,7 +61,7 @@ export async function loadMarkdownEmbedSource(
     doc.import(result.snapshot)
     for (const delta of result.deltas ?? []) doc.import(delta)
     const title = readCoreFacets(doc)?.title
-    return { body: doc.getText('body').toString(), ...(title !== undefined ? { title } : {}) }
+    return { body: readMarkdownBody(doc), ...(title !== undefined ? { title } : {}) }
   } catch (err) {
     log.warn('embedded markdown load failed', { canvasId, err })
     return undefined

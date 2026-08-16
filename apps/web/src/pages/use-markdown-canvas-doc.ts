@@ -15,7 +15,13 @@
  * overwrites" rather than a dead page.
  */
 import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
-import { readCoreFacets, writeCoreFacets } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  MARKDOWN_BODY_KEY,
+  readCoreFacets,
+  readMarkdownBody,
+  writeCoreFacets,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
@@ -125,12 +131,27 @@ export function useMarkdownCanvasDoc(
         // still reach the body state (and the preview) and get persisted.
         unsubscribe = doc.subscribe((event) => {
           if (cancelled) return
-          setBodyState(doc.getText('body').toString())
+          setBodyState(readMarkdownBody(doc))
           setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
           if (event.by === 'local') scheduleSaveRef.current?.()
         })
         setDoc(doc)
-        setBodyState(doc.getText('body').toString())
+        // A document written before the writers were unified stores its body
+        // as a text NODE, and reading it is not enough: `LoroSyncPlugin`
+        // syncs the text CONTAINER into CodeMirror on mount and overwrites
+        // whatever `value` put there, so such a document settles on an empty
+        // editor beside a preview showing its prose — and the next keystroke
+        // saves over the original. Converting on load is what ends that.
+        //
+        // Here rather than in a migration pass because this is the moment the
+        // document is in memory anyway, and it is a no-op for every document
+        // already in the current shape. The write commits locally, so the
+        // subscription above both refreshes the state and persists it.
+        const stored = readMarkdownBody(doc)
+        if (stored.length > 0 && doc.getText(MARKDOWN_BODY_KEY).length === 0) {
+          writeMarkdownBody(doc, stored)
+        }
+        setBodyState(readMarkdownBody(doc))
         setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
       })
     return () => {
@@ -181,10 +202,7 @@ export function useMarkdownCanvasDoc(
       // Replace-wholesale is deliberate for slice 1: the editor is a plain
       // textarea, so we do not have edit deltas to splice. CRDT-granular
       // updates arrive with the collaborative-editor slice.
-      const text = doc.getText('body')
-      text.delete(0, text.length)
-      text.insert(0, next)
-      doc.commit()
+      writeMarkdownBody(doc, next)
       scheduleSave()
     },
     [scheduleSave],
