@@ -35,25 +35,34 @@ function rootOf(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
-it('selecting a text node shows an Edit control; clicking it opens the editor', async () => {
+it('selecting a node shows one More-actions control; it opens the object menu HERE', async () => {
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
 
-  const editHandle = page.getByTestId('edit-handle')
-  await expect.element(editHandle).toBeInTheDocument()
+  // C from the discoverability analysis: the pencil promoted ONE verb and
+  // left ten invisible. The ⋯ is the visible doorway to all of them.
+  const more = page.getByTestId('more-actions-handle')
+  await expect.element(more).toBeInTheDocument()
+  expect(container.querySelector('[data-testid="edit-handle"]')).toBeNull()
 
-  await userEvent.click(editHandle)
+  await userEvent.click(more)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  // The SAME catalog the right-click shows — no second menu to learn.
+  await expect.element(page.getByRole('menuitem', { name: 'Edit text' })).toBeInTheDocument()
+
+  await userEvent.click(page.getByRole('menuitem', { name: 'Edit text' }))
   await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
   expect(container.querySelector('textarea')?.value).toBe('hello world')
 })
 
-it('the Edit control is keyboard-operable (Enter opens the editor)', async () => {
+it('the More-actions control is keyboard-operable (Enter opens the menu)', async () => {
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
-  ;(page.getByTestId('edit-handle').element() as SVGElement & { focus(): void }).focus()
-  await userEvent.keyboard('{Enter}')
 
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  const more = container.querySelector('[data-testid="more-actions-handle"]') as SVGGElement
+  more.focus()
+  await userEvent.keyboard('{Enter}')
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 })
 
 it('arrow keys nudge the selected node; Shift enlarges the step', async () => {

@@ -182,6 +182,7 @@ import {
   type Point,
   panBy,
   panToShowTarget,
+  canvasToScreen,
   screenToCanvas,
   contentBounds as unionContentBounds,
   type Viewport,
@@ -3390,19 +3391,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
-              onEditRequest={
-                !isMultiSelection && selectedNode?.type === 'text'
-                  ? () => {
-                      applyResult(
-                        reduceGesture(gestureState, canvas, {
-                          type: 'start-text-edit',
-                          nodeId: selectedNode.id,
-                          text: selectedNode.text,
-                        }),
-                      )
-                    }
-                  : undefined
-              }
+              // The ⋯ opens the SAME menu right-click does, for the same
+              // target — one catalog, now with a visible doorway. Offered
+              // for every selection (multi included: align/distribute were
+              // the least discoverable actions of all).
+              onMoreActions={(anchor) => {
+                const screen = canvasToScreen(anchor, viewport)
+                setContextMenu({
+                  x: screen.x,
+                  y: screen.y,
+                  nodeId: isMultiSelection ? selection.id : (selectedNode?.id ?? selection.id),
+                  edgeId: undefined,
+                  point: anchor,
+                })
+              }}
             />
           )}
           {/* In-flight gesture preview. Drawn from component-local pointer

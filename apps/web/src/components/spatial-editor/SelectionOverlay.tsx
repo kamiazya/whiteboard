@@ -1,5 +1,6 @@
 /** Selection outline + resize handles + in-flight connect line, drawn in canvas space. */
 import type { Box, ResizeHandleKind } from './geometry.js'
+import type { Point } from './viewport.js'
 import { cornerHitBoxes, edgeBandBoxes, resizeHandleBoxes } from './geometry.js'
 
 export interface SelectionOverlayProps {
@@ -21,7 +22,8 @@ export interface SelectionOverlayProps {
   /** Enter/Space on the focused connect handle — the keyboard equivalent of a pointer connect-drag. */
   readonly onConnectKeyDown?: (e: React.KeyboardEvent) => void
   /**
-   * Opens the selected node's text editor. Rendered only when provided
+   * Opens the object's action menu, anchored at the control. Rendered only
+   * when provided
    * (non-text nodes have no text to edit). Fired on CLICK, not pointerdown:
    * the editor mount (autofocus included) flushes synchronously inside a
    * discrete event, and mousedown's default focus action would then blur
@@ -29,7 +31,7 @@ export interface SelectionOverlayProps {
    * double-press path suppresses with preventDefault. Click fires after
    * those defaults, so it needs no suppression at all.
    */
-  readonly onEditRequest?: () => void
+  readonly onMoreActions?: (anchor: Point) => void
 }
 
 const SELECTION_STROKE = 'var(--manipulation)'
@@ -71,7 +73,7 @@ export function SelectionOverlay({
   onConnectPointerDown,
   onHandleKeyDown,
   onConnectKeyDown,
-  onEditRequest,
+  onMoreActions,
 }: SelectionOverlayProps) {
   const handles = resizeHandleBoxes(box, zoom)
   // Hitting and drawing are separate questions: the markers stay 8px so
@@ -233,44 +235,47 @@ export function SelectionOverlay({
             />
           </g>
         ))}
-      {onEditRequest !== undefined && (
+      {onMoreActions !== undefined && (
         // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
         <g
-          data-testid="edit-handle"
+          data-testid="more-actions-handle"
           role="button"
           tabIndex={0}
-          aria-label="Edit text"
+          aria-label="More actions"
+          aria-haspopup="menu"
           style={{ pointerEvents: 'auto', cursor: 'pointer' }}
           onPointerDown={(e) => {
             // Keep the press away from the root's node/empty hit-test; the
-            // action itself fires on click (see onEditRequest's doc).
+            // action itself fires on click.
             e.stopPropagation()
           }}
-          onClick={() => onEditRequest()}
+          onClick={() => onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' && e.key !== ' ') return
             e.preventDefault()
-            onEditRequest()
+            onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })
           }}
         >
           <rect
-            x={box.x + box.width - 22 / zoom}
-            y={box.y - 26 / zoom}
-            width={22 / zoom}
-            height={20 / zoom}
-            rx={4 / zoom}
+            x={box.x + box.width - 24 / zoom}
+            y={box.y - 30 / zoom}
+            width={24 / zoom}
+            height={24 / zoom}
+            rx={6 / zoom}
             fill={SELECTION_STROKE}
           />
-          <text
-            x={box.x + box.width - 11 / zoom}
-            y={box.y - 12 / zoom}
-            textAnchor="middle"
-            fontSize={12 / zoom}
-            fill="var(--background)"
-            style={{ userSelect: 'none' }}
-          >
-            ✎
-          </text>
+          {/* Three dots as real circles, not a "⋯" glyph — a text character
+              rides the platform font and renders as emoji or tofu on some
+              systems, which is no way to draw a control. */}
+          {[-5, 0, 5].map((dx) => (
+            <circle
+              key={dx}
+              cx={box.x + box.width - 12 / zoom + dx / zoom}
+              cy={box.y - 18 / zoom}
+              r={1.6 / zoom}
+              fill="var(--background)"
+            />
+          ))}
         </g>
       )}
     </svg>
