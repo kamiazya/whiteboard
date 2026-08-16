@@ -471,6 +471,49 @@ export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
 }
 
 /**
+ * The Loro text container apps/web's browser-local markdown editor binds
+ * its CRDT editing session to.
+ */
+const MARKDOWN_BODY_KEY = 'body'
+
+/**
+ * The stored id of the single text node a markdown document's body lives in
+ * on the mcp-server/daemon side. `wb_document_set` writes it, and it is how
+ * that tool recognises a document it could itself have written.
+ */
+export const MARKDOWN_BODY_NODE_ID = 'okf-body'
+
+/**
+ * A markdown document's body, whichever way this codebase stored it.
+ *
+ * There are two representations, and they grew independently:
+ * `wb_document_set` writes the body as a single `okf-body` TEXT NODE inside
+ * the spatial canvas (which is why a markdown document also parses as a
+ * perfectly valid, if odd, canvas), while apps/web's browser-local markdown
+ * editor writes a Loro TEXT CONTAINER named `body` so a CRDT editing
+ * session has something to bind to. Until this function existed neither
+ * side could read the other's documents.
+ *
+ * The container wins when both are present. Nothing writes both today, but
+ * "whichever the reader checked first" is not an answer, and where both
+ * exist the container is the one being live-edited.
+ *
+ * Falls back to the FIRST text node rather than requiring the id, because
+ * documents written before the id was stable still have to be readable. An
+ * empty string for a document with no body at all is the honest answer: it
+ * has no body, which is a valid state, not a failure.
+ */
+export function readMarkdownBody(doc: LoroDoc): string {
+  const container = doc.getText(MARKDOWN_BODY_KEY).toString()
+  if (container.length > 0) return container
+
+  const { nodes } = readSpatialCanvas(doc)
+  const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
+  if (byId?.type === 'text') return byId.text
+  return nodes.find((node) => node.type === 'text')?.text ?? ''
+}
+
+/**
  * The kind a document was created as. `wb_document_get` serialises through
  * it — a spatial document as JSON Canvas, a markdown one as OKF — so this
  * is what makes a format follow from the document rather than from a

@@ -47,4 +47,8 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
   wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
   wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },
+  // The MCP Apps UI tool. ADR-0009 point 7 keeps it outside the `wb_` data
+  // plane on purpose: it is a UI contract with the host, not a tool a model
+  // reads data through.
+  canvas_view: { profile: READ_ONLY, title: 'Show a canvas inline in the chat' },
 }

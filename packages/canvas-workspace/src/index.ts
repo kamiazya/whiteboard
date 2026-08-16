@@ -1,10 +1,12 @@
 export {
   deleteSpatialEdge,
   deleteSpatialNode,
+  MARKDOWN_BODY_NODE_ID,
   readCoreFacets,
   readDocumentKind,
   readEdgeLocks,
   readFacets,
+  readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
   type SpatialBatchWriter,

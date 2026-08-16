@@ -64,6 +64,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   EdgeSides,
   FacetCardData,
@@ -141,6 +142,8 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
+  DOCUMENT_NODE_HEIGHT,
+  DOCUMENT_NODE_WIDTH,
   fileNodeDefaults,
   GROUP_FRAME_HEIGHT,
   GROUP_FRAME_WIDTH,
@@ -334,6 +337,13 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /**
+   * A referenced MARKDOWN document's parsed body, rendered inline in the
+   * node. Same contract as the seams around it: synchronous, host-cached,
+   * undefined falls through to the facet card. Parsed rather than raw so
+   * layout never runs a markdown parse per file node per frame.
+   */
+  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
   readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
   /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
   readonly resolveFileImage?: (
@@ -455,6 +465,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       missingFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileMarkdown,
       resolveFileFacets,
       resolveFileImage,
       onAddImage,
@@ -529,6 +540,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * used to blur the just-mounted textarea when we opened at the press.
      */
     const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
+    /**
+     * Every pointer currently down on the root, by id. Read by
+     * `handleLostPointerCapture` to tell a capture handed back with its own
+     * release from one lost out from under a pointer that is still down.
+     * A set, not a single slot: a pinch holds two at once and they end
+     * independently.
+     */
+    const downPointersRef = useRef<Set<number>>(new Set())
     /** In-flight marquee selection rect, in canvas space (Excalidraw
      * semantics: plain drag on empty space selects; pan is Space+drag,
      * middle-button drag, or wheel). */
@@ -708,6 +727,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         resolveFileMissing: missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
@@ -716,6 +736,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
@@ -1332,7 +1353,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const beginOverlayGesture = (e: React.PointerEvent): HTMLDivElement | null => {
       const root = rootRef.current
-      if (root !== null) capturePointer(root, e.pointerId)
+      if (root !== null) {
+        // These presses never reach handlePointerDown, so this is where the
+        // pointer joins the down set. Without it a capture lost mid-resize
+        // would be read as an ordinary handback and never recovered. Their
+        // release does reach handlePointerUp, because capture redirects the
+        // rest of the sequence to the root.
+        downPointersRef.current.add(e.pointerId)
+        capturePointer(root, e.pointerId)
+      }
       return root
     }
 
@@ -1379,6 +1408,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
+      // Before every early return below: what is down has to be recorded even
+      // for presses this handler goes on to ignore, or their handback is read
+      // as a capture loss.
+      downPointersRef.current.add(e.pointerId)
       if (e.pointerType === 'touch') {
         touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
         if (pinchActiveRef.current) return
@@ -1732,6 +1765,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
+      // Ahead of the gather/pinch early returns: this pointer is up whatever
+      // the rest of the handler decides to do about it.
+      downPointersRef.current.delete(e.pointerId)
       const root = rootRef.current
       // Gathering fingers act on the press, so their release carries no
       // meaning — running the click/marquee logic here would re-collapse the
@@ -1899,6 +1935,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
       if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
+      downPointersRef.current.delete(e.pointerId)
       // Pointer ids are reused, so a gathering finger left in these refs by a
       // cancel would silently deaden whichever later touch inherits its id.
       gatherPointersRef.current.delete(e.pointerId)
@@ -1910,6 +1947,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       isPanningRef.current = false
       activePointerIdRef.current = null
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+    }
+
+    /**
+     * `lostpointercapture` is NOT a synonym for "the gesture broke". It also
+     * fires on the ordinary release of a captured pointer — and the browser
+     * captures touch pointers IMPLICITLY, so on a touch device it arrives
+     * after every single tap. Cancelling there deleted the node the
+     * empty-canvas double-TAP had just created for editing: it appeared and
+     * vanished. (The same double-CLICK was fine — capture is taken at the
+     * first MOVE, so a stationary mouse press holds none to lose.)
+     *
+     * The question is per-POINTER, not per-editor: is THIS pointer still
+     * down? A pinch captures both fingers, so lifting one leaves the other
+     * held. Deciding from any editor-wide "is something active" flag lets
+     * the lifted finger's ordinary handback answer for the finger still
+     * down — which then leaves the pinch bookkeeping holding a pointer id
+     * nothing will ever release, silently deadening whichever later touch
+     * inherits it.
+     */
+    const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!downPointersRef.current.has(e.pointerId)) return
+      handlePointerCancel(e)
     }
 
     /**
@@ -2602,6 +2661,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** File nodes are reference cards like links — same shorter default box. */
     const createFileRefAtViewportCenter = (file: string, at?: Point) => {
+      // The picked option's kind decides the box: a markdown document
+      // renders its prose inside the node and needs room a one-line
+      // reference card does not have.
+      const kind = fileRefOptions?.find((option) => option.file === file)?.kind
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
@@ -2610,12 +2673,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const point = resolveSpawnPoint(
         at,
         preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        kind === 'markdown'
+          ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
+          : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
         occupied,
         visibleCanvasRect(),
       )
       const id = newId()
-      const node = fileNodeDefaults(id, point, file)
+      const node = fileNodeDefaults(id, point, file, kind)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],
@@ -2873,7 +2938,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onLostPointerCapture={handlePointerCancel}
+        onLostPointerCapture={handleLostPointerCapture}
         onKeyDown={handleKeyDown}
       >
         {/* Screen space, outside the pan/zoom transform — an overview that

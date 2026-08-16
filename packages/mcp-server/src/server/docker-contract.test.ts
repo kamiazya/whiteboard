@@ -41,6 +41,21 @@ const envExample = readText('.env.server.example')
 const docs = readText('docs/how-to/self-host-with-docker.md')
 
 describe('Dockerfile.server contracts', () => {
+  it('gives the fetch stage every file pnpm fetch resolves from', () => {
+    // `pnpm fetch` runs against a hand-picked subset of the repo, so any
+    // file the lockfile RESOLUTION depends on has to be copied before it —
+    // and a missing one fails the image build outright
+    // (ERR_PNPM_PATCH_NOT_FOUND), which is how patches/ was found missing.
+    const workspace = readText('pnpm-workspace.yaml')
+    if (!/^patchedDependencies:/m.test(workspace)) return
+    // Comments stripped first: the Dockerfile explains this requirement in
+    // prose right above the COPY, and matching that mention instead of the
+    // RUN line put the boundary before the very line being checked.
+    const instructions = dockerfile.replace(/^\s*#.*$/gm, '')
+    const beforeFetch = instructions.slice(0, instructions.indexOf('pnpm fetch'))
+    expect(beforeFetch).toMatch(/^COPY\s+patches\b/m)
+  })
+
   it('entrypoint uses whiteboard server run --json (not daemon run)', () => {
     expect(dockerfile).toMatch(/ENTRYPOINT.*server.*run.*--json/)
     // Comments may mention "daemon run" to explain what the image does NOT support.

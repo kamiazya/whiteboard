@@ -112,8 +112,12 @@ describe('DaemonCanvasPage file refs', () => {
   it('offers other canvases as id-valued refs labeled with their slug', async () => {
     await renderPage()
     // The open canvas (main) is excluded; the ref stored into the document
-    // is the id, the label the user sees is the slug.
-    expect(capturedEditorProps?.fileRefOptions).toEqual([{ file: 'id-second', label: 'second' }])
+    // is the id, the label the user sees is the slug. `kind` rides along
+    // because it decides the geometry of the node the picker creates — a
+    // markdown reference renders prose and needs room a card does not.
+    expect(capturedEditorProps?.fileRefOptions).toEqual([
+      { file: 'id-second', label: 'second', kind: 'spatial' },
+    ])
   })
 
   it('opens an id ref on the target canvas current slug', async () => {
@@ -157,6 +161,8 @@ describe('DaemonCanvasPage file refs', () => {
       ],
     })
     await renderPage()
-    expect(capturedEditorProps?.fileRefOptions).toEqual([{ file: 'second', label: 'second' }])
+    expect(capturedEditorProps?.fileRefOptions).toEqual([
+      { file: 'second', label: 'second', kind: 'spatial' },
+    ])
   })
 })

@@ -6,6 +6,7 @@
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { FacetCardData, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
@@ -28,6 +29,8 @@ export interface RenderCanvasOptions {
   readonly resolveFileMissing?: (file: string) => boolean
   /** Passed through to layout: referenced canvas content for inline embeds. */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /** Passed through to layout: a referenced markdown document's parsed body. */
+  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
   /** Passed through to layout: image content for media file nodes. */

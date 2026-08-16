@@ -10,7 +10,11 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { readCoreFacets, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  readCoreFacets,
+  readMarkdownBody,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter, LoadedFileDocument } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
@@ -27,9 +31,15 @@ async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocumen
     const doc = new Loro()
     doc.import(result.snapshot)
     for (const delta of result.deltas ?? []) doc.import(delta)
-    // One load, both reads — the doc used to be discarded after the canvas
-    // read, which is why facets need no second store round-trip.
-    return { canvas: readSpatialCanvas(doc), facets: readCoreFacets(doc) }
+    // One load, every read — the doc used to be discarded after the canvas
+    // read, which is why neither facets nor the body need a second store
+    // round-trip.
+    const body = readMarkdownBody(doc)
+    return {
+      canvas: readSpatialCanvas(doc),
+      facets: readCoreFacets(doc),
+      ...(body.length > 0 ? { body } : {}),
+    }
   } catch (err) {
     log.warn('embedded document load failed', { canvasId, err })
     return undefined

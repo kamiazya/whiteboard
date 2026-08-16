@@ -57,6 +57,40 @@ async function waitForSaved(): Promise<void> {
   })
 }
 
+/**
+ * Resolves the title input AFTER the markdown page that owns it has mounted.
+ *
+ * A spatial canvas carries the same properties bar, so `/title/i` matches on
+ * BOTH pages. The switcher's menu is non-modal and closes without a focus
+ * trap to sit through, which is fast enough that a bare query can resolve
+ * against the OUTGOING page and hand back a node that is detached a moment
+ * later. Typing then lands in the live input while the assertion reads the
+ * dead one — indistinguishable, from the failure message, from "the
+ * keystrokes were lost". Waiting for `.cm-content` pins the query to the
+ * markdown page.
+ */
+async function findMarkdownTitleInput(): Promise<HTMLInputElement> {
+  await waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull(), {
+    timeout: 10_000,
+  })
+  return (await screen.findByRole('textbox', { name: /title/i })) as HTMLInputElement
+}
+
+/**
+ * Asserts on the title input as it is NOW. Never hold a reference across an
+ * action: the input remounts with the page, and a held node keeps reporting
+ * the value it had when it was detached.
+ */
+async function expectTitleValue(expected: string): Promise<void> {
+  await waitFor(
+    () => {
+      const live = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+      expect(live.value).toBe(expected)
+    },
+    { timeout: 10_000 },
+  )
+}
+
 describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -172,15 +206,13 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
-    const title = await screen.findByRole('textbox', { name: /title/i })
+    const title = await findMarkdownTitleInput()
     // The markdown arm of the merged row: the title lives INSIDE the
     // workspace header (one chrome row), not a detached strip below it.
     expect(title.closest('header')).toBeTruthy()
     await userEvent.click(title)
     await userEvent.keyboard('リリース計画')
-    await waitFor(() => {
-      expect((title as HTMLInputElement).value).toBe('リリース計画')
-    })
+    await expectTitleValue('リリース計画')
 
     // title and the canvas name are one concept: the switcher label is the
     // snapshot row, written from the same edit as the OKF core facet.
@@ -271,12 +303,10 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
-    const title = await screen.findByRole('textbox', { name: /title/i })
+    const title = await findMarkdownTitleInput()
     await userEvent.click(title)
     await userEvent.keyboard('Fast switch')
-    await waitFor(() => {
-      expect((title as HTMLInputElement).value).toBe('Fast switch')
-    })
+    await expectTitleValue('Fast switch')
 
     // Unmount INSIDE the save debounce. `renameCanvas` has already written the
     // snapshot name, so a cancelled facet save would leave the list name and
@@ -284,10 +314,19 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
-    await waitFor(() => {
-      const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
-      expect(restored.value).toBe('Fast switch')
-    })
+    // The only assertion in this file gated on a save that had NOT landed
+    // before the unmount — every other reload here calls waitForSaved()
+    // first. That makes this reload wait for the flush to finish rather than
+    // race it, which is the behaviour under test but also strictly slower
+    // than an unordered read, and testing-library's 1s default is not a
+    // budget for a real IndexedDB write plus a read on a loaded CI runner.
+    await waitFor(
+      () => {
+        const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+        expect(restored.value).toBe('Fast switch')
+      },
+      { timeout: 10_000 },
+    )
   })
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
@@ -310,8 +349,13 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // an empty box the user would have to retype.
     expect((title as HTMLInputElement).value).toBe('Diagram A')
 
+    // clear(), not a select-all chord: the browser's select-all is Cmd+A on
+    // macOS and Ctrl+A elsewhere, so `{Control>}a{/Control}` selects nothing
+    // on a Mac and the new title appends to the old one ("Diagram
+    // AArchitecture map"). clear() drives the field's own selection API and
+    // means the same thing on every platform.
     await userEvent.click(title)
-    await userEvent.keyboard('{Control>}a{/Control}')
+    await userEvent.clear(title)
     await userEvent.keyboard('Architecture map')
     await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
     await screen.findByRole('menuitem', { name: /Architecture map/ }, { timeout: 10_000 })
@@ -362,8 +406,19 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       { name: /^Workspace:/i },
       { timeout: 10_000 },
     )
+    // The previous menu must be GONE before its trigger is clicked again.
+    // Clicking it while the non-modal menu is still mounted leaves the menu
+    // CLOSED — measured at the failure: no [role=menu], trigger connected,
+    // aria-expanded=false. The failure then reads as "the list does not
+    // contain this canvas", when no list was ever opened, so raising the
+    // query's timeout only buys a slower identical failure.
+    //
+    // Load-bearing: drop this wait and the test fails every run.
+    await waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull(), {
+      timeout: 10_000,
+    })
     await userEvent.click(switcher2)
-    await userEvent.click(await screen.findByText('Diagram A'))
+    await userEvent.click(await screen.findByText('Diagram A', undefined, { timeout: 10_000 }))
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-spatial-editor')).toBeInTheDocument()

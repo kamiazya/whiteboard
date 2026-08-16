@@ -1,5 +1,6 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
@@ -25,6 +26,18 @@ export interface CanvasViewerProps {
   background?: SvgDocumentOptions['background']
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
+  /**
+   * A file node's reference resolved to a readable name, and to a
+   * referenced MARKDOWN document's already-parsed body.
+   *
+   * Synchronous by canvas-render's contract, which is why this package
+   * takes them as data rather than fetching: it is read-only and has no
+   * store. The host supplies them — the MCP Apps widget from
+   * `canvas_view`'s `references` payload, since the server is the only side
+   * that can read another document. Absent keeps the plain reference card.
+   */
+  resolveFileLabel?: (file: string) => string | undefined
+  resolveFileMarkdown?: (file: string) => MdastRoot | undefined
   testId?: string
   /**
    * Accessible name for the rendered canvas. The viewer cannot derive one:
@@ -45,6 +58,8 @@ export function CanvasViewer({
   padding,
   background,
   measure,
+  resolveFileLabel,
+  resolveFileMarkdown,
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
@@ -67,6 +82,8 @@ export function CanvasViewer({
       measure: resolvedMeasure,
       parseBody: parseMarkdownBody,
       appearance: VIEWER_APPEARANCE,
+      ...(resolveFileLabel === undefined ? {} : { resolveFileLabel }),
+      ...(resolveFileMarkdown === undefined ? {} : { resolveFileMarkdown }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
@@ -74,7 +91,17 @@ export function CanvasViewer({
     return renderSceneToSvg(scene, { width, height, padding, background })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontReady is a
     // pure re-measure trigger, not a value read inside the callback.
-  }, [canvas, resolvedMeasure, width, height, padding, background, fontReady])
+  }, [
+    canvas,
+    resolvedMeasure,
+    width,
+    height,
+    padding,
+    background,
+    resolveFileLabel,
+    resolveFileMarkdown,
+    fontReady,
+  ])
 
   // Injecting canvas-render's SVG string via dangerouslySetInnerHTML is sound
   // BECAUSE canvas-render's serializer (packages/canvas-render/src/svg/format.ts)

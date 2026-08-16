@@ -1,0 +1,23 @@
+diff --git a/lib/index.js b/lib/index.js
+index 80a713c56a91675a3a1fd71b275a65af2ab67d3f..dcac49172c72c14a1b6424f341a81c580776c340 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -47,9 +47,16 @@ export function gfmTaskListItemToMarkdown() {
+  * @type {FromMarkdownHandle}
+  */
+ function exitCheck(token) {
+-  // We’re always in a paragraph, in a list item.
++  // Usually we’re in a paragraph, in a list item — but not always. The
++  // micromark side emits this token for a checkbox on a bullet’s
++  // CONTINUATION line (`*\n[ ] x`), where the paragraph is not in a list
++  // item at all, and the assert below then crashes the whole parse in a
++  // development build. There is no `checked` to set on a non-list-item, so
++  // the only thing to do is leave it alone: bailing keeps the parse total
++  // AND avoids stamping a bogus `checked` field onto a paragraph, which is
++  // what the production build (where the assert is a no-op) does today.
+   const node = this.stack[this.stack.length - 2]
+-  assert(node.type === 'listItem')
++  if (!node || node.type !== 'listItem') return
+   node.checked = token.type === 'taskListCheckValueChecked'
+ }
+ 

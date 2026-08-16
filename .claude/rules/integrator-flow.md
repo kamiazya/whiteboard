@@ -83,3 +83,17 @@ When a preview contradicts a green test, suspect the cache before suspecting the
     breaks it, so a reproduction has to get that order right (the first attempt
     here did not, and its mutation check passed against the unfixed code).
 - **A third shape: `await import()` of a heavy module INSIDE a test body.** It charges the transform-and-load of that whole module graph to the per-test timeout (10s in `mcp-node`), which is ample on an idle machine and the first thing to blow once the full suite runs every project in parallel — aggregate import time there is measured in minutes. It reads as a mysterious load-dependent failure and the message names the test, not the import. Hoist it to a static top-level `import`, where the cost lands in the collection phase that no per-test timeout bounds. A dynamic import is only necessary when the file mocks what it imports (`vi.mock` + top-level `await import` is a different, legitimate shape), so **an in-body `await import()` with no `vi.mock` in the file is the tell**.
+- **A sixth shape: an element reference held across an action that remounts it.** A query
+  resolves, the page swaps, and the assertion reads a node that is no longer in the document —
+  reporting the value it had when it was detached. Measured at one such failure:
+  `held.isConnected=false held.value='' live.value='Fast switch'`. The typing was always fine;
+  only the node being read was dead, and the message (`expected '' to be 'Fast switch'`) is
+  indistinguishable from a genuine loss. Query inside the assertion, and resolve the element
+  from the page that owns it — `/title/i` matched on the outgoing page too, which is how it
+  bound to the wrong one. Made likelier by anything that speeds up a transition; here it
+  surfaced when a dropdown became non-modal and stopped waiting out a focus trap.
+- **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
+  the menu stays shut, so the failure reads as "the list does not contain this item" when no
+  list was ever opened — and raising the query's timeout only buys a slower identical failure.
+  Measured: `menus=0 expanded=false connected=true`. Wait for `[role="menu"]` to be gone before
+  re-opening.

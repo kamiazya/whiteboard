@@ -27,18 +27,28 @@ describe('markdown body parse totality (including lists)', () => {
   )
 })
 
-describe('upstream task-list continuation crash (canary)', () => {
-  // A GFM checkbox stranded on a bullet's continuation line trips a
-  // DEV-ONLY assert inside mdast-util-gfm-task-list-item@2.0.0 (exitCheck,
-  // via devlop — production builds no-op it, so deployed parsing does not
-  // throw; the dev server and this test runner do). The totality
-  // arbitrary excludes the one model shape whose serialization produces
-  // this text (a blank-valued html node emptying a checked item's first
-  // paragraph — unreachable from any real parse). This canary pins the
-  // upstream behavior itself: when a dependency bump makes it stop
-  // throwing, delete this test and the html-value exclusion in
-  // canvas-model's arbitraries together.
-  it('still throws on a checkbox stranded on a continuation line', () => {
-    expect(() => parseMarkdownBody('*\n[ ] x')).toThrow()
+describe('patched upstream: task-list checkbox on a continuation line', () => {
+  // `mdast-util-gfm-task-list-item@2.0.0`'s exitCheck assumed a checkbox is
+  // always inside a paragraph inside a listItem and asserted it. The
+  // micromark side emits the token for a checkbox on a bullet's
+  // CONTINUATION line too, where the paragraph is not in a list item — so
+  // that input crashed the whole parse in any development build (production
+  // no-ops devlop's assert, and instead stamps a bogus `checked` onto the
+  // paragraph). patches/mdast-util-gfm-task-list-item@2.0.0.patch makes the
+  // handler bail when the node is not a listItem, which is both total and
+  // more correct than what production did.
+  //
+  // These pin the patch: they fail if it is ever dropped (the first throws,
+  // the second is what the patch must not have broken to buy it).
+  it('parses instead of crashing', () => {
+    expect(() => parseMarkdownBody('*\n[ ] x')).not.toThrow()
+  })
+
+  it('still reads a real task list item as checked', () => {
+    const root = parseMarkdownBody('- [x] done\n')
+    const list = root.children[0]
+    expect(list?.type).toBe('list')
+    if (list?.type !== 'list') throw new Error('unreachable')
+    expect(list.children[0]?.checked).toBe(true)
   })
 })
