@@ -246,10 +246,18 @@ export function SelectionOverlay({
           style={{ pointerEvents: 'auto', cursor: 'pointer' }}
           onPointerDown={(e) => {
             // Keep the press away from the root's node/empty hit-test; the
-            // action itself fires on click.
+            // action itself fires on pointerup.
             e.stopPropagation()
           }}
-          onClick={() => onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })}
+          onPointerUp={(e) => {
+            // pointerup, not click: the editor root preventDefaults native
+            // touchstart (its iOS long-press suppression), which cancels the
+            // synthetic mouse-compatibility events — a touch tap never
+            // produces a click here. After pointerdown, so no focus fight
+            // with mousedown's default action either.
+            e.stopPropagation()
+            onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })
+          }}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' && e.key !== ' ') return
             e.preventDefault()

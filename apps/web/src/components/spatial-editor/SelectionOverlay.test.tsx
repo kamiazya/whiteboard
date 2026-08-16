@@ -165,7 +165,9 @@ describe('SelectionOverlay', () => {
       />,
     )
     const more = screen.getByTestId('more-actions-handle')
-    fireEvent.click(more)
+    // pointerup, not click — a touch tap inside the editor never synthesises
+    // a click (the root preventDefaults native touchstart).
+    fireEvent.pointerUp(more)
     // 12/18 screen px inset from the box's top-right corner; at zoom 2 that
     // is 6/9 canvas units, so the menu lands beside the handle at any zoom.
     expect(onMoreActions).toHaveBeenCalledWith({ x: 10 + 100 - 6, y: 20 - 9 })

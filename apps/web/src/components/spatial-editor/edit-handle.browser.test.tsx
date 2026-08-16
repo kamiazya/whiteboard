@@ -4,7 +4,7 @@
 // discrete pointerdown loses the focus fight with mousedown's default
 // action (see SelectionOverlay's onEditRequest doc).
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -62,6 +62,22 @@ it('the More-actions control is keyboard-operable (Enter opens the menu)', async
   const more = container.querySelector('[data-testid="more-actions-handle"]') as SVGGElement
   more.focus()
   await userEvent.keyboard('{Enter}')
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+})
+
+it('a touch tap opens the menu — the root suppresses synthetic clicks on touch', async () => {
+  const { container } = render(<Host />)
+  await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
+  const more = container.querySelector('[data-testid="more-actions-handle"]') as SVGGElement
+  expect(more).not.toBeNull()
+
+  // A real touch inside the editor never synthesises a click: the root's
+  // non-passive touchstart listener calls preventDefault to keep iOS from
+  // hijacking long-presses, and that cancels the whole mouse-compatibility
+  // family. The control must complete on the pointer events themselves.
+  fireEvent.pointerDown(more, { pointerType: 'touch', pointerId: 7, isPrimary: true })
+  fireEvent.pointerUp(more, { pointerType: 'touch', pointerId: 7, isPrimary: true })
+
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 })
 
