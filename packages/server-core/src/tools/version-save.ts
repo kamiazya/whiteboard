@@ -1,4 +1,4 @@
-import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
 import { encodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -7,7 +7,7 @@ import { versionRecordSchema } from './version-record.js'
 
 export const versionSaveInputSchema = z
   .object({
-    canvasId: canvasIdSchema.describe('Canvas ID (ULID) to save a version of.'),
+    documentId: documentIdSchema.describe('Canvas ID (ULID) to save a version of.'),
     label: z.string().min(1).max(200).describe('Human-readable label for this version.'),
   })
   .strict()
@@ -15,7 +15,7 @@ export type VersionSaveInput = z.infer<typeof versionSaveInputSchema>
 
 export const versionSaveOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     versionId: z.string(),
     label: z.string(),
     timestamp: z.string(),
@@ -31,9 +31,9 @@ export function createVersionSaveTool(deps: ServerDeps) {
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
     async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
-      const doc = await loadOrCreateDocument(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.documentId)
 
-      const versionId = generateCanvasId()
+      const versionId = generateDocumentId()
       const timestamp = new Date().toISOString()
       const frontierBytes = encodeFrontiers(doc.oplogFrontiers())
       const frontier = Array.from(frontierBytes, (b) => b.toString(16).padStart(2, '0')).join('')
@@ -43,10 +43,10 @@ export function createVersionSaveTool(deps: ServerDeps) {
       versions.set(versionId, JSON.stringify(record))
       doc.commit()
 
-      await saveDocumentSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
       return {
-        canvasId: input.canvasId,
+        documentId: input.documentId,
         versionId,
         label: input.label,
         timestamp,

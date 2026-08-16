@@ -32,13 +32,13 @@ async function seedWorkspace(store: FakeDocumentStore, ref: string) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
-    canvasId: CANVAS_ID,
+    documentId: CANVAS_ID,
     kind: 'spatial',
   })
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'notes',
-    canvasId: NOTE_ID,
+    documentId: NOTE_ID,
     kind: 'markdown',
     name: 'Weekly',
   })
@@ -77,7 +77,7 @@ describe('wb_scene_render reference resolution', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: true,
     })
 
@@ -92,7 +92,7 @@ describe('wb_scene_render reference resolution', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: true,
     })
 
@@ -108,11 +108,11 @@ describe('wb_scene_render reference resolution', () => {
     // handler agree — calling execute with a hand-written `false` would only
     // prove the handler honours what it was handed.
     const byDefault = await tool.execute(
-      canvasRenderSvgInputSchema.parse({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      canvasRenderSvgInputSchema.parse({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     )
     const explicitlyOff = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: false,
     })
 
@@ -129,7 +129,7 @@ describe('wb_scene_render reference resolution', () => {
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
       path: 'diagram',
-      canvasId: DIAGRAM_ID,
+      documentId: DIAGRAM_ID,
       kind: 'spatial',
     })
     await seedDoc(store, DIAGRAM_ID, (doc) => {
@@ -143,7 +143,7 @@ describe('wb_scene_render reference resolution', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: true,
     })
 
@@ -156,7 +156,7 @@ describe('wb_scene_render reference resolution', () => {
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, embedReferences: true }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, embedReferences: true }),
     ).resolves.toMatchObject({ svg: expect.stringContaining('<svg') })
   })
 })
@@ -169,12 +169,12 @@ describe('reference resolution edge cases', () => {
     // label is strictly better than showing a raw id.
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
-    await store.deleteDoc({ docRef: { kind: 'canvas', canvasId: NOTE_ID } })
+    await store.deleteDoc({ docRef: { kind: 'canvas', documentId: NOTE_ID } })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: true,
     })
 
@@ -192,7 +192,7 @@ describe('reference resolution edge cases', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: true,
     })
 
@@ -205,7 +205,7 @@ describe('wb_scene_render input schema', () => {
   test('defaults embedReferences to false, so an existing caller keeps the pure render', () => {
     const parsed = canvasRenderSvgInputSchema.parse({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
     expect(parsed.embedReferences).toBe(false)
   })
@@ -214,7 +214,7 @@ describe('wb_scene_render input schema', () => {
     expect(
       canvasRenderSvgInputSchema.safeParse({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         embedReferences: 'yes',
       }).success,
     ).toBe(false)
@@ -239,7 +239,7 @@ describe('wb_scene_digest', () => {
     await seedWorkspace(store, NOTE_ID)
     const digest = createCanvasDigestTool(makeDeps(store))
 
-    const before = await digest.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const before = await digest.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     // Edit ONLY the referenced document.
     await seedDoc(store, NOTE_ID, (doc) => {
@@ -260,7 +260,7 @@ describe('wb_scene_digest', () => {
       })
     })
 
-    const after = await digest.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const after = await digest.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
     expect(after).toEqual(before)
   })
 })

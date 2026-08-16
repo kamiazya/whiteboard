@@ -65,7 +65,7 @@ describe('file-node inline embeds', () => {
     )
     const embed = embedOf(scene)
     expect(embed).toBeDefined()
-    expect(embed?.canvasId).toBe('child')
+    expect(embed?.documentId).toBe('child')
 
     // The child's 400x200 shape fits the node's inner area scaled down —
     // every embedded coordinate stays inside the node box.
@@ -186,9 +186,9 @@ describe('file-node inline embeds', () => {
     // the 'b' reference inside that inner 'a' hits the path and degrades
     // to the card. The point pinned here is boundedness, not zero nesting.
     const outer = embedOf(scene)
-    expect(outer?.canvasId).toBe('b')
+    expect(outer?.documentId).toBe('b')
     const inner = outer?.children.find((n): n is EmbedResolvedNode => n.kind === 'embedResolved')
-    expect(inner?.canvasId).toBe('a')
+    expect(inner?.documentId).toBe('a')
     const third = inner?.children.find((n) => n.kind === 'embedResolved')
     expect(third).toBeUndefined()
   })

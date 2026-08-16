@@ -4,7 +4,7 @@ const TIME_CHARS = 10
 const RANDOM_CHARS = 16
 
 /**
- * Generates a canonical ULID matching canvas-model's `canvasIdSchema`
+ * Generates a canonical ULID matching canvas-model's `documentIdSchema`
  * (`/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/`). The 48-bit millisecond timestamp is
  * encoded big-endian into the first 10 base32 characters; 80 bits of
  * `Math.random()`-derived entropy fill the remaining 16. Uses
@@ -12,7 +12,7 @@ const RANDOM_CHARS = 16
  * in a shared-layer package that must run unchanged on Node, the browser,
  * and Cloudflare Workers.
  */
-export function generateCanvasId(): string {
+export function generateDocumentId(): string {
   return encodeTime(Date.now()) + encodeRandom()
 }
 

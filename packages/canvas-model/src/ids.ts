@@ -9,7 +9,7 @@ import { z } from 'zod'
 const ULID_PATTERN = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
 /** Canvas identifiers are canonical ULIDs (sortable, collision-resistant). */
-export const canvasIdSchema = z.string().regex(ULID_PATTERN, 'must be a canonical ULID')
+export const documentIdSchema = z.string().regex(ULID_PATTERN, 'must be a canonical ULID')
 
 /**
  * Node identifiers are nanoid-style strings. The charset is deliberately not
@@ -20,7 +20,7 @@ export const nodeIdSchema = z.string().min(1, 'node id must not be empty')
 
 /**
  * Workspace identifiers are a path-safe SLUG, not a ULID — deliberately
- * different from `canvasIdSchema`. This codifies the workspace-ID contract
+ * different from `documentIdSchema`. This codifies the workspace-ID contract
  * already enforced at runtime by mcp-server's `SAFE_WORKSPACE_ID`
  * (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
  * path segments and cache/index keys, so `.`/`/`/whitespace/non-ASCII must
@@ -58,7 +58,7 @@ export const documentPathSchema = z
     'each segment must be non-empty and contain only ASCII letters, digits and interior hyphens',
   )
 
-export type CanvasId = z.infer<typeof canvasIdSchema>
+export type DocumentId = z.infer<typeof documentIdSchema>
 export type DocumentPath = z.infer<typeof documentPathSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>
 export type WorkspaceId = z.infer<typeof workspaceIdSchema>

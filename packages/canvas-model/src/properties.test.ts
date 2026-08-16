@@ -6,7 +6,7 @@ import {
   facetsRawSchema,
   RESERVED_ROOT_KEYS,
 } from './facets.js'
-import { canvasIdSchema } from './ids.js'
+import { documentIdSchema } from './ids.js'
 import { markdownCanvasSchema } from './markdown.js'
 import {
   mdastFlowContentSchema,
@@ -68,8 +68,8 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
     expect(markdownCanvasSchema.safeParse(value).success).toBe(true)
   })
 
-  fcTest.prop([canonicalUlidArbitrary], withDefaults())('canvasIdSchema', (value) => {
-    expect(canvasIdSchema.safeParse(value).success).toBe(true)
+  fcTest.prop([canonicalUlidArbitrary], withDefaults())('documentIdSchema', (value) => {
+    expect(documentIdSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop(
@@ -240,18 +240,18 @@ describe('JSON Canvas 1.0 conformance invariants', () => {
   )
 })
 
-describe('canvasIdSchema ULID mutations always reject', () => {
+describe('documentIdSchema ULID mutations always reject', () => {
   fcTest.prop([canonicalUlidArbitrary], withDefaults())(
     'truncating the last character rejects',
     (ulid) => {
-      expect(canvasIdSchema.safeParse(ulid.slice(0, -1)).success).toBe(false)
+      expect(documentIdSchema.safeParse(ulid.slice(0, -1)).success).toBe(false)
     },
   )
 
   fcTest.prop([canonicalUlidArbitrary], withDefaults())(
     'appending an extra character rejects',
     (ulid) => {
-      expect(canvasIdSchema.safeParse(`${ulid}0`).success).toBe(false)
+      expect(documentIdSchema.safeParse(`${ulid}0`).success).toBe(false)
     },
   )
 
@@ -259,7 +259,7 @@ describe('canvasIdSchema ULID mutations always reject', () => {
     'replacing the second character with an excluded Crockford char rejects',
     (ulid, excludedChar) => {
       const mutated = ulid[0] + excludedChar + ulid.slice(2)
-      expect(canvasIdSchema.safeParse(mutated).success).toBe(false)
+      expect(documentIdSchema.safeParse(mutated).success).toBe(false)
     },
   )
 
@@ -267,7 +267,7 @@ describe('canvasIdSchema ULID mutations always reject', () => {
     'replacing the first character with 8-9/A-Z rejects',
     (ulid, firstChar) => {
       const mutated = firstChar + ulid.slice(1)
-      expect(canvasIdSchema.safeParse(mutated).success).toBe(false)
+      expect(documentIdSchema.safeParse(mutated).success).toBe(false)
     },
   )
 })

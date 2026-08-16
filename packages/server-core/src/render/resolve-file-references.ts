@@ -1,6 +1,6 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import {
-  canvasIdSchema,
+  documentIdSchema,
   documentPathSchema,
   type SpatialCanvas,
   type WorkspaceId,
@@ -29,10 +29,10 @@ function fileRefs(canvas: SpatialCanvas): readonly string[] {
  * stores an id — a path would dangle the moment the document moved.
  */
 async function resolveEntry(deps: ServerDeps, workspaceId: WorkspaceId, ref: string) {
-  if (canvasIdSchema.safeParse(ref).success) {
+  if (documentIdSchema.safeParse(ref).success) {
     const byId = await deps.documentIndex.resolveDocumentById({
       workspaceId,
-      canvasId: ref,
+      documentId: ref,
     })
     if (byId !== null) return byId
   }
@@ -77,7 +77,7 @@ export async function resolveFileReferences(
         if (entry === null) return
 
         const snapshot = await deps.documentStore.loadSnapshot({
-          docRef: { kind: 'canvas', canvasId: entry.canvasId },
+          docRef: { kind: 'canvas', documentId: entry.documentId },
         })
         if (snapshot === null) {
           if (entry.name !== undefined) resolved.set(ref, { label: entry.name })

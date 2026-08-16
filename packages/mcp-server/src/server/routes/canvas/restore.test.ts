@@ -94,7 +94,7 @@ describe('restore router (real node counts)', () => {
       },
     )
     expect(restoreRes.status).toBe(200)
-    const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
+    const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
     expect(restoreBody.elementCount).toBe(2)
   })
 
@@ -130,7 +130,7 @@ describe('restore router (real node counts)', () => {
       },
     )
     expect(restoreRes.status).toBe(200)
-    const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
+    const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
 
     // Reconcile-onto-live-doc is CRDT merge, not a straight overwrite, so
     // assert the response tracks whatever the live target doc actually

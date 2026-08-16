@@ -30,12 +30,12 @@ describe('wb_facet_set tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
 
     expect(result).toEqual({
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
   })
@@ -47,12 +47,12 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
 
     const loaded = await store.loadSnapshot({
-      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      docRef: { kind: 'canvas', documentId: CANVAS_ID },
     })
     expect(loaded).not.toBeNull()
     const doc = new LoroDoc()
@@ -69,12 +69,12 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'priority/1': { level: 'high' } },
     })
 
@@ -91,19 +91,19 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'done' } },
     })
 
     expect(result.facets).toEqual({ 'kanban/1': { status: 'done' } })
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(documentStore))
@@ -111,7 +111,7 @@ describe('wb_facet_set tool', () => {
     await expect(
       tool.execute({
         workspaceId: 'ws-other',
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         facets: { 'kanban/1': { status: 'todo' } },
       }),
     ).rejects.toThrow(CanvasNotFoundError)
@@ -121,7 +121,7 @@ describe('wb_facet_set tool', () => {
     expect(() =>
       facetSetInputSchema.parse({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         facets: { title: 'not an extension facet' },
       }),
     ).toThrow()
@@ -146,7 +146,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     await expect(
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         facets: { 'example/1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
@@ -160,12 +160,12 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     await expect(
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         facets: { 'example/1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
-    const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId: CANVAS_ID } })
+    const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId: CANVAS_ID } })
     const doc = new LoroDoc()
     if (snap) doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
     expect(readFacets(doc)).toEqual({})
@@ -178,7 +178,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 
     const result = await createFacetSetTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       facets: { 'example/1': { status: 'open' } },
     })
 

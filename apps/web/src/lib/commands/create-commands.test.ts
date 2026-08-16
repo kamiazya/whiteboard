@@ -6,7 +6,7 @@ import { CommandError, type WhiteboardCommandDeps } from './types.js'
 function baseDeps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
     provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
-    canvas: { canvasId: 'c1', name: 'Canvas 1' },
+    canvas: { documentId: 'c1', name: 'Canvas 1' },
     ...overrides,
   }
 }
@@ -24,7 +24,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
 
     expect(result).toEqual({
       provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', canvasId: 'c1' },
+      canvas: { kind: 'browser-local', documentId: 'c1' },
     })
   })
 
@@ -36,7 +36,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
           daemonBaseUrl: 'http://127.0.0.1:9999',
           capabilities: BROWSER_LOCAL_CAPABILITIES,
         },
-        canvas: { workspaceId: 'ws1', canvasId: 'my-canvas', name: 'my-canvas' },
+        canvas: { workspaceId: 'ws1', documentId: 'my-canvas', name: 'my-canvas' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)
@@ -88,7 +88,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
           daemonBaseUrl: 'http://127.0.0.1:9999',
           capabilities: BROWSER_LOCAL_CAPABILITIES,
         },
-        canvas: { canvasId: 'c1', name: 'Canvas 1' },
+        canvas: { documentId: 'c1', name: 'Canvas 1' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)
@@ -114,7 +114,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const depsRef = refOf(
       baseDeps({
         provider: poisoned,
-        canvas: { workspaceId: 'ws1', canvasId: 'c1', name: 'Canvas 1' },
+        canvas: { workspaceId: 'ws1', documentId: 'c1', name: 'Canvas 1' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)

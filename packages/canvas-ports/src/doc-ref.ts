@@ -1,4 +1,4 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 
 /**
@@ -9,7 +9,7 @@ import { z } from 'zod'
  * union rather than overloading either variant.
  */
 export const docRefSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('canvas'), canvasId: canvasIdSchema }).strict(),
+  z.object({ kind: z.literal('canvas'), documentId: documentIdSchema }).strict(),
   z.object({ kind: z.literal('workspace-tree'), workspaceId: workspaceIdSchema }).strict(),
 ])
 

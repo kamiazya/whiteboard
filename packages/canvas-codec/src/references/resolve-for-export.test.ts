@@ -9,7 +9,7 @@ function withWikiLink(alias?: string) {
     children: [
       {
         type: 'paragraph' as const,
-        children: [{ type: 'wikiLink' as const, canvasId: ULID, alias }],
+        children: [{ type: 'wikiLink' as const, documentId: ULID, alias }],
       },
     ],
   }
@@ -58,7 +58,7 @@ describe('resolveReferencesForExport', () => {
               children: [
                 {
                   type: 'paragraph' as const,
-                  children: [{ type: 'wikiLink' as const, canvasId: ULID, alias: 'My Note' }],
+                  children: [{ type: 'wikiLink' as const, documentId: ULID, alias: 'My Note' }],
                 },
               ],
             },
@@ -89,7 +89,7 @@ describe('resolveReferencesForExport', () => {
               children: [
                 {
                   type: 'tableCell' as const,
-                  children: [{ type: 'wikiLink' as const, canvasId: ULID, alias: 'My Note' }],
+                  children: [{ type: 'wikiLink' as const, documentId: ULID, alias: 'My Note' }],
                 },
               ],
             },

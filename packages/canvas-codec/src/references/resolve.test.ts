@@ -19,7 +19,7 @@ describe('resolveReferences', () => {
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
     expect(children.children).toEqual([
       { type: 'text', value: 'see ' },
-      { type: 'wikiLink', canvasId: ULID, alias: undefined },
+      { type: 'wikiLink', documentId: ULID, alias: undefined },
       { type: 'text', value: ' here' },
     ])
   })
@@ -30,7 +30,7 @@ describe('resolveReferences', () => {
 
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(children.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: 'My Note' }])
+    expect(children.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: 'My Note' }])
   })
 
   it('leaves [[alias]] as text when the resolver returns null', () => {
@@ -58,7 +58,7 @@ describe('resolveReferences', () => {
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
     expect(children.children).toEqual([
-      { type: 'wikiLink', canvasId: ULID, alias: undefined },
+      { type: 'wikiLink', documentId: ULID, alias: undefined },
       { type: 'text', value: ' and ' },
       { type: 'text', value: '[[alias]]' },
     ])
@@ -70,7 +70,9 @@ describe('resolveReferences', () => {
 
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(children.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: 'Display Name' }])
+    expect(children.children).toEqual([
+      { type: 'wikiLink', documentId: ULID, alias: 'Display Name' },
+    ])
   })
 
   it('resolves ![[canvas:ULID]] to an embed node, not a wikiLink', () => {
@@ -79,7 +81,7 @@ describe('resolveReferences', () => {
 
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(children.children).toEqual([{ type: 'embed', canvasId: ULID }])
+    expect(children.children).toEqual([{ type: 'embed', documentId: ULID }])
   })
 
   it('resolves ![[alias]] to an embed node through the resolver', () => {
@@ -88,7 +90,7 @@ describe('resolveReferences', () => {
 
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(children.children).toEqual([{ type: 'embed', canvasId: ULID }])
+    expect(children.children).toEqual([{ type: 'embed', documentId: ULID }])
   })
 
   it('leaves ![[Missing]] as text when the resolver returns null', () => {
@@ -121,7 +123,7 @@ describe('resolveReferences', () => {
     if (blockquote.type !== 'blockquote') throw new Error('expected blockquote')
     const inner = blockquote.children[0]
     if (inner.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(inner.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+    expect(inner.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: undefined }])
   })
 
   it('resolves a [[canvas:ULID]] reference nested inside a list item', () => {
@@ -151,7 +153,9 @@ describe('resolveReferences', () => {
     const listItem = list.children[0]
     const paragraphNode = listItem.children[0]
     if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(paragraphNode.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+    expect(paragraphNode.children).toEqual([
+      { type: 'wikiLink', documentId: ULID, alias: undefined },
+    ])
   })
 
   it('does not hang on a pathological unterminated ![[ + many backslashes', () => {
@@ -226,6 +230,6 @@ describe('resolveReferences', () => {
     if (table.type !== 'table') throw new Error('expected table')
     const row = table.children[0]
     const cell = row.children[0]
-    expect(cell.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+    expect(cell.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: undefined }])
   })
 })

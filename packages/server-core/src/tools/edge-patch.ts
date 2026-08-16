@@ -1,7 +1,7 @@
 import {
   canvasColorSchema,
   canvasEdgeSchema,
-  canvasIdSchema,
+  documentIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
@@ -30,7 +30,7 @@ export type EdgePatchFields = z.infer<typeof edgePatchFieldsSchema>
 export const edgePatchInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     // canvas-model has no distinct edgeIdSchema — edges and nodes share
     // the same nanoid-style id shape (`nodeIdSchema` only enforces
     // non-emptiness), so reusing it here is deliberate, not a copy-paste
@@ -43,7 +43,7 @@ export type EdgePatchInput = z.infer<typeof edgePatchInputSchema>
 
 export const edgePatchOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     edge: canvasEdgeSchema,
   })
   .strict()
@@ -57,17 +57,17 @@ export function createEdgePatchTool(deps: ServerDeps) {
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
     execute: async (input: EdgePatchInput): Promise<EdgePatchOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadDocument(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const edge = canvas.edges.find((candidate) => candidate.id === input.edgeId)
-      if (edge === undefined) throw new EdgeNotFoundError(input.canvasId, input.edgeId)
+      if (edge === undefined) throw new EdgeNotFoundError(input.documentId, input.edgeId)
 
       // Checked before any write: the lock binds agents exactly as it binds
       // the pointer. Only the edge's OWN lock counts — a locked endpoint
       // does not freeze the lines touching it (see wb_edge_lock).
       if (readEdgeLocks(doc).has(input.edgeId)) {
-        throw new EdgeLockedError(input.canvasId, input.edgeId)
+        throw new EdgeLockedError(input.documentId, input.edgeId)
       }
 
       const mergedRaw = { ...edge, ...input.patch }
@@ -87,12 +87,12 @@ export function createEdgePatchTool(deps: ServerDeps) {
 
       const updatedEdge = parsed.data.edges.find((existing) => existing.id === input.edgeId)
       if (updatedEdge === undefined) {
-        throw new EdgeNotFoundError(input.canvasId, input.edgeId)
+        throw new EdgeNotFoundError(input.documentId, input.edgeId)
       }
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, edge: updatedEdge }
+      return { documentId: input.documentId, edge: updatedEdge }
     },
   }
 }

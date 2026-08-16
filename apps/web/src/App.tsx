@@ -224,12 +224,12 @@ export function App({ providerState }: AppProps) {
   })
 
   // Derived per render, not read once at mount: '/' (no id) renders the
-  // canvas list, /local/:canvasId mounts the editor. Once mounted, the
+  // canvas list, /local/:documentId mounts the editor. Once mounted, the
   // editor owns URL<->canvas-id sync for in-editor switching (it reads
   // initialCanvasId a single time), so App re-routes only when the URL
   // crosses the list/editor boundary — including browser Back from the
   // editor to the list.
-  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.canvasId
+  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.documentId
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -243,7 +243,7 @@ export function App({ providerState }: AppProps) {
   const isFirstUrlSyncRef = useRef(true)
   useEffect(() => {
     if (isPairRoute) return
-    // /local/:canvasId belongs to the browser-local world, not daemonView —
+    // /local/:documentId belongs to the browser-local world, not daemonView —
     // rewriting it to the daemon path would yank an open browser-local
     // editor back to the list.
     if (parseBrowserLocalRoute(location.pathname) !== null) return
@@ -610,7 +610,7 @@ export function App({ providerState }: AppProps) {
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
             {browserLocalCanvasId === undefined ? (
               // '/' (and any non-/local path) lands on the canvas list. The
-              // editor mounts only for /local/:canvasId, whose in-editor
+              // editor mounts only for /local/:documentId, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
               <BrowserLocalIndexPage

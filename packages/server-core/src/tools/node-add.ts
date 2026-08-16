@@ -1,5 +1,5 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
@@ -14,7 +14,7 @@ import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 export const nodeAddInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     node: spatialNodeSchema.describe(
       'The whole node, including the id you want it to have. Ids are yours to choose so an edge can refer to one before the other end exists.',
     ),
@@ -24,7 +24,7 @@ export type NodeAddInput = z.infer<typeof nodeAddInputSchema>
 
 export const nodeAddOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     node: spatialNodeSchema,
   })
   .strict()
@@ -32,11 +32,11 @@ export type NodeAddOutput = z.infer<typeof nodeAddOutputSchema>
 
 export class NodeAlreadyExistsError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly nodeId: string,
   ) {
     super(
-      `Node ${nodeId} already exists on canvas ${canvasId}. ` +
+      `Node ${nodeId} already exists on canvas ${documentId}. ` +
         'Use wb_node_patch to change it, or add it under a different id.',
     )
     this.name = 'NodeAlreadyExistsError'
@@ -57,8 +57,8 @@ export function createNodeAddTool(deps: ServerDeps) {
     inputSchema: nodeAddInputSchema,
     outputSchema: nodeAddOutputSchema,
     execute: async (input: NodeAddInput): Promise<NodeAddOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadDocument(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // A markdown document keeps its OKF body in a text node, so a node
       // added beside it is content no OKF projection can represent. A
@@ -69,14 +69,14 @@ export function createNodeAddTool(deps: ServerDeps) {
         writeDocumentKind(doc, 'spatial')
       } else if (kind !== 'spatial') {
         throw new DocumentKindMismatchError(
-          input.canvasId,
+          input.documentId,
           kind,
           'This adds a JSON Canvas node, and its only node holds its OKF body. Write its content through wb_document_set, or its body through wb_body_patch.',
         )
       }
 
       if (canvas.nodes.some((existing) => existing.id === input.node.id)) {
-        throw new NodeAlreadyExistsError(input.canvasId, input.node.id)
+        throw new NodeAlreadyExistsError(input.documentId, input.node.id)
       }
 
       const parsed = spatialCanvasSchema.safeParse({
@@ -85,9 +85,9 @@ export function createNodeAddTool(deps: ServerDeps) {
       })
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, node: input.node }
+      return { documentId: input.documentId, node: input.node }
     },
   }
 }

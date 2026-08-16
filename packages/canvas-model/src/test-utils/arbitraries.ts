@@ -209,13 +209,13 @@ const inlineMathLeafArbitrary = fc
   .map((value) => ({ type: 'inlineMath' as const, value }))
 const wikiLinkLeafArbitrary = fc
   .record({
-    canvasId: canonicalUlidArbitrary,
+    documentId: canonicalUlidArbitrary,
     alias: fc.option(fc.string({ maxLength: 10 }), { nil: undefined }),
   })
-  .map(({ canvasId, alias }) => ({ type: 'wikiLink' as const, canvasId, alias }))
-const embedLeafArbitrary = canonicalUlidArbitrary.map((canvasId) => ({
+  .map(({ documentId, alias }) => ({ type: 'wikiLink' as const, documentId, alias }))
+const embedLeafArbitrary = canonicalUlidArbitrary.map((documentId) => ({
   type: 'embed' as const,
-  canvasId,
+  documentId,
 }))
 
 /** Leaves shared by both PhrasingContent and TableCell's phrasing-minus-break. */

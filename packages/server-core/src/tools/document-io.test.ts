@@ -41,7 +41,7 @@ describe('document-io', () => {
     writeSpatialCanvas(seedDoc, canvas)
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
     await documentStore.saveSnapshot({
-      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      docRef: { kind: 'canvas', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,

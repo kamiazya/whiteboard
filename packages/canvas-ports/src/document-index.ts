@@ -1,5 +1,5 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 export const documentEntrySchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     path: documentPathSchema,
     // Optional: a document created before kinds existed has a placement and
     // content but no recorded format. It must still LIST — hiding stored data
@@ -41,7 +41,7 @@ export const createWorkspaceInputSchema = z.object({ workspaceId: workspaceIdSch
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
 
 export const resolveDocumentByIdInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type ResolveDocumentByIdInput = z.infer<typeof resolveDocumentByIdInputSchema>
 
@@ -61,7 +61,7 @@ export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 export const setDocumentNameInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     name: z.string().min(1).optional(),
   })
   .strict()
@@ -171,7 +171,7 @@ export class DocumentMoveIntoSelfError extends Error {
  *
  * It is deliberately separate from `DocumentStore`, which owns a single
  * document's bytes and knows nothing about where that document sits. This
- * one owns placement and is the only thing that assigns a `canvasId`.
+ * one owns placement and is the only thing that assigns a `documentId`.
  *
  * **Mutating operations are serialized per workspace, and each takes effect as
  * one indivisible operation or has no effect at all.** Path uniqueness is the
@@ -195,7 +195,7 @@ export interface DocumentIndex {
    * the path is taken. Creating never silently adopts an existing
    * document, because the caller that wanted a new one would otherwise
    * start writing into somebody else's. Claiming the path and assigning the
-   * `canvasId` is one step, not a check followed by a write.
+   * `documentId` is one step, not a check followed by a write.
    */
   createDocument(input: CreateDocumentInput): Promise<DocumentEntry>
   resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null>

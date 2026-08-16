@@ -8,19 +8,19 @@ describe('assertCanvasInWorkspace', () => {
     const index = new InMemoryDocumentIndex()
     await index.createWorkspace({ workspaceId })
     const entry = await index.createDocument({ workspaceId, path, kind: 'spatial' })
-    return { index, canvasId: entry.canvasId }
+    return { index, documentId: entry.documentId }
   }
 
   it('resolves when the document is registered under the given workspace', async () => {
-    const { index, canvasId } = await indexWith('ws-1', 'doc-a')
-    await expect(assertCanvasInWorkspace(index, 'ws-1', canvasId)).resolves.toBeUndefined()
+    const { index, documentId } = await indexWith('ws-1', 'doc-a')
+    await expect(assertCanvasInWorkspace(index, 'ws-1', documentId)).resolves.toBeUndefined()
   })
 
   it('throws CanvasNotFoundError when the document belongs to a different workspace', async () => {
-    const { index, canvasId } = await indexWith('ws-a', 'doc-a')
+    const { index, documentId } = await indexWith('ws-a', 'doc-a')
     await index.createWorkspace({ workspaceId: 'ws-b' })
     // An id is a handle within a workspace, not a capability across them.
-    await expect(assertCanvasInWorkspace(index, 'ws-b', canvasId)).rejects.toThrow(
+    await expect(assertCanvasInWorkspace(index, 'ws-b', documentId)).rejects.toThrow(
       CanvasNotFoundError,
     )
   })

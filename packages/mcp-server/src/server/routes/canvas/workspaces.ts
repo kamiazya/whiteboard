@@ -148,7 +148,7 @@ export function createWorkspacesRouter() {
     { badRequest: 'problem-details' },
   )
 
-  // Rename a canvas's slug in place: same canvasId, same branches/versions/blob,
+  // Rename a canvas's slug in place: same documentId, same branches/versions/blob,
   // just a new slug column. Old URLs carrying the old slug 404 by design — no
   // redirect, no alias history (0.0.x).
   //

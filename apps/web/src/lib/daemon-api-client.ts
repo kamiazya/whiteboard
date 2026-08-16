@@ -174,7 +174,7 @@ export function setCanvasName(
   )
 }
 
-// ---- OpenCanvas /api/v1 surface (canvasId + derived alias world) ----
+// ---- OpenCanvas /api/v1 surface (documentId + derived alias world) ----
 
 export function listCanvasesV1(
   fetchFn: typeof globalThis.fetch,
@@ -192,11 +192,11 @@ export function getCanvasOkfV1(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  canvasId: string,
+  documentId: string,
 ): Promise<CanvasOkfV1Response> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(canvasId)}/okf`,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(documentId)}/okf`,
     canvasOkfV1ResponseSchema,
   )
 }

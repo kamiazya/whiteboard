@@ -5,10 +5,10 @@ import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 afterEach(cleanup)
 
 const canvases = [
-  { canvasId: 'c-root', path: 'readme' },
-  { canvasId: 'c-notes', path: 'notes' },
-  { canvasId: 'c-child', path: 'notes/design' },
-  { canvasId: 'c-deep', path: 'notes/design/palette' },
+  { documentId: 'c-root', path: 'readme' },
+  { documentId: 'c-notes', path: 'notes' },
+  { documentId: 'c-child', path: 'notes/design' },
+  { documentId: 'c-deep', path: 'notes/design/palette' },
 ]
 
 describe('WorkspaceFileTree', () => {
@@ -24,13 +24,13 @@ describe('WorkspaceFileTree', () => {
     expect(screen.queryByText('notes/design')).toBeNull()
   })
 
-  it('clicking a canvas row reports its canvasId', () => {
+  it('clicking a canvas row reports its documentId', () => {
     const onOpen = vi.fn()
     render(<WorkspaceFileTree canvases={canvases} onOpen={onOpen} />)
 
     fireEvent.click(screen.getByText('readme'))
     expect(onOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ canvasId: 'c-root', path: 'readme' }),
+      expect.objectContaining({ documentId: 'c-root', path: 'readme' }),
     )
   })
 
@@ -54,7 +54,7 @@ describe('WorkspaceFileTree', () => {
     expect(design.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(screen.getByText('design'))
     expect(onOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ canvasId: 'c-child', path: 'notes/design' }),
+      expect.objectContaining({ documentId: 'c-child', path: 'notes/design' }),
     )
   })
 

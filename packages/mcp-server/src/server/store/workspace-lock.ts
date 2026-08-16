@@ -103,8 +103,8 @@ export async function withWorkspaceWriteLock<T>(
  * `saveSnapshot` would take the frontier the caller loaded and reject a
  * stale write, with the shared tool path retrying.
  */
-export function withCanvasDocWriteLock<T>(canvasId: string, fn: () => Promise<T>): Promise<T> {
-  return withWorkspaceWriteLock(`canvas-doc:${canvasId}`, fn)
+export function withCanvasDocWriteLock<T>(documentId: string, fn: () => Promise<T>): Promise<T> {
+  return withWorkspaceWriteLock(`canvas-doc:${documentId}`, fn)
 }
 
 // Test-only helper.

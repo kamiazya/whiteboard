@@ -1,5 +1,5 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
@@ -34,7 +34,7 @@ export const createCanvasInputSchema = z
 
 export const createCanvasOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     path: documentPathSchema,
   })
   .strict()
@@ -42,13 +42,13 @@ export const createCanvasOutputSchema = z
 export const getCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
   })
   .strict()
 
 const canvasDetailSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     path: documentPathSchema,
     // Absent rather than defaulted to the path's last segment: a reader that
     // wants that fallback can choose it, and a listing that invents one reads
@@ -74,7 +74,7 @@ export const listCanvasesOutputSchema = z
 export const deleteCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
   })
   .strict()
 

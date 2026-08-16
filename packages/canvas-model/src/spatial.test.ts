@@ -149,7 +149,7 @@ describe('x-whiteboard extension', () => {
     )
   })
 
-  it('accepts an embed payload with a valid canvasId and rejects a malformed one', () => {
+  it('accepts an embed payload with a valid documentId and rejects a malformed one', () => {
     expect(
       xWhiteboardSchema.safeParse({ kind: 'embed', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
         .success,

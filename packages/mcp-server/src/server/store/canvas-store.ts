@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
-import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
@@ -29,17 +29,17 @@ export class ConflictError extends Error {
 }
 
 // ── canvas blob path helpers ──
-// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{canvasId}.loro.
-// The canvasId is the stable row PK from the canvases table, so renaming a
+// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
+// The documentId is the stable row PK from the canvases table, so renaming a
 // canvas slug does not move blobs around.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
 
-function canvasBlobPath(workspaceId: string, canvasId: string): string {
+function canvasBlobPath(workspaceId: string, documentId: string): string {
   validateWorkspaceId(workspaceId)
-  validateCanvasId(canvasId)
-  return join(blobsRoot(), workspaceId, 'canvas', `${canvasId}.loro`)
+  validateCanvasId(documentId)
+  return join(blobsRoot(), workspaceId, 'canvas', `${documentId}.loro`)
 }
 
 function errorMessage(error: unknown): string {
@@ -84,7 +84,7 @@ export async function saveCanvas(
         `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-    // Pre-allocate the canvasId for new canvases so the blob can be written
+    // Pre-allocate the documentId for new canvases so the blob can be written
     // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
     // transient corruption) we leave no DB row behind, so a retry can succeed
     // instead of hitting a phantom ConflictError on the orphan.
@@ -92,8 +92,8 @@ export async function saveCanvas(
     // table and the port's DocumentEntry accepts only a canonical ULID, so a
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
-    const canvasId = existingCanvasId ?? generateCanvasId()
-    const path = canvasBlobPath(workspaceId, canvasId)
+    const documentId = existingCanvasId ?? generateDocumentId()
+    const path = canvasBlobPath(workspaceId, documentId)
     await mkdir(dirname(path), { recursive: true })
     const snapshot = doc.export({ mode: 'snapshot' })
     await writeFile(path, snapshot)
@@ -109,14 +109,14 @@ export async function saveCanvas(
           updatedAt: Date.now(),
           ...(options.kind !== undefined ? { kind: options.kind } : {}),
         })
-        .where('id', '=', canvasId)
+        .where('id', '=', documentId)
         .execute()
     } else {
       const now = Date.now()
       await db
         .insertInto('canvases')
         .values({
-          id: canvasId,
+          id: documentId,
           workspaceId,
           slug,
           displayName: null,
@@ -168,9 +168,9 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const db = await dbReady()
-  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-  if (!canvasId) return new LoroDoc()
-  const path = canvasBlobPath(workspaceId, canvasId)
+  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  if (!documentId) return new LoroDoc()
+  const path = canvasBlobPath(workspaceId, documentId)
   let doc: LoroDoc
   try {
     const bytes = await readFile(path)
@@ -256,8 +256,8 @@ export async function canvasExists(workspaceId: string, slug: string): Promise<b
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const db = await dbReady()
-  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-  return canvasId !== null
+  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  return documentId !== null
 }
 
 async function unlinkIfExists(path: string): Promise<void> {
@@ -275,7 +275,7 @@ async function unlinkIfExists(path: string): Promise<void> {
 //
 // Order matters for the crash-safety story: the DB row goes first, so a
 // crash between the row delete and the file unlinks below leaves orphan
-// blob/thumbnail files (invisible — nothing lists the deleted canvasId
+// blob/thumbnail files (invisible — nothing lists the deleted documentId
 // anymore) rather than the reverse — a listed canvas whose content is
 // already gone.
 // ponytail: orphaned files from that crash window are not swept by
@@ -287,8 +287,8 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
   validateSlug(slug)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return false
+    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!documentId) return false
 
     // Collect version ids before the row delete — the versions rows are
     // gone the instant the cascade fires, so their ids must be captured
@@ -296,15 +296,15 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
     const versionRows = await db
       .selectFrom('versions')
       .select(['id'])
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .execute()
 
     // branches/versions rows cascade via the ON DELETE CASCADE FKs
     // declared in migration 0001 (PRAGMA foreign_keys=ON is set per
     // connection in db/index.ts).
-    await db.deleteFrom('canvases').where('id', '=', canvasId).execute()
+    await db.deleteFrom('canvases').where('id', '=', documentId).execute()
 
-    const path = canvasBlobPath(workspaceId, canvasId)
+    const path = canvasBlobPath(workspaceId, documentId)
     await unlinkIfExists(path)
     await unlinkIfExists(`${path}.pre-migrate-bak`)
     for (const { id: versionId } of versionRows) {
@@ -362,11 +362,11 @@ export async function compactCanvas(
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const db = await dbReady()
-  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-  if (!canvasId) {
+  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  if (!documentId) {
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
-  const path = canvasBlobPath(workspaceId, canvasId)
+  const path = canvasBlobPath(workspaceId, documentId)
   let beforeBytes: number
   try {
     beforeBytes = (await stat(path)).size
@@ -394,7 +394,7 @@ export async function compactCanvas(
   await db
     .updateTable('canvases')
     .set({ lastCompactedAt: Date.now() })
-    .where('id', '=', canvasId)
+    .where('id', '=', documentId)
     .execute()
   // Drop the cached LoroDoc for this canvas. Without this, a still-resident
   // full doc (held open by an active WS connection or a previous getDoc)
@@ -573,8 +573,8 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 }
 
 // ── rename a canvas's slug ──
-// Updates only canvases.slug. branches/versions FK on canvasId and the blob
-// path also uses canvasId, so none of that moves. Returns null (never
+// Updates only canvases.slug. branches/versions FK on documentId and the blob
+// path also uses documentId, so none of that moves. Returns null (never
 // throws) for a missing source canvas, matching deleteCanvas's boolean-
 // shaped "already gone" handling; a rename onto an already-taken slug
 // throws ConflictError instead of a raw unique-constraint error.
@@ -582,15 +582,15 @@ export async function renameCanvasSlug(
   workspaceId: string,
   oldSlug: string,
   newSlug: string,
-): Promise<{ canvasId: string } | null> {
+): Promise<{ documentId: string } | null> {
   validateWorkspaceId(workspaceId)
   validateSlug(oldSlug)
   validateSlug(newSlug)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, oldSlug)
-    if (!canvasId) return null
-    if (oldSlug === newSlug) return { canvasId }
+    const documentId = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+    if (!documentId) return null
+    if (oldSlug === newSlug) return { documentId }
     const taken = await getCanvasIdBySlug(db, workspaceId, newSlug)
     if (taken) {
       throw new ConflictError(`Canvas "${workspaceId}/${newSlug}" already exists`)
@@ -598,7 +598,7 @@ export async function renameCanvasSlug(
     await db
       .updateTable('canvases')
       .set({ slug: newSlug, updatedAt: Date.now() })
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .execute()
     // Force the next getDoc() to reload under both slug keys. oldSlug: a
     // caller still reading through it should lazily create a fresh canvas
@@ -611,7 +611,7 @@ export async function renameCanvasSlug(
     const { evictDoc } = await import('./doc-cache.js')
     evictDoc(workspaceId, oldSlug)
     evictDoc(workspaceId, newSlug)
-    return { canvasId }
+    return { documentId }
   })
 }
 

@@ -42,7 +42,7 @@ describe('strictDegrade', () => {
     expect(spatialCanvasSchema.safeParse(degraded).success).toBe(true)
   })
 
-  it('keeps file/subpath but drops x-whiteboard.canvasId from an embed file-node', () => {
+  it('keeps file/subpath but drops x-whiteboard.documentId from an embed file-node', () => {
     const canvas: SpatialCanvas = {
       nodes: [
         {

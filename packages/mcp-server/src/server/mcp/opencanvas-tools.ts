@@ -77,7 +77,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.facetSet.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -94,7 +94,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.nodeAdd.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.nodeAdd.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -111,7 +111,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.nodePatch.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.nodePatch.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -128,7 +128,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.nodeLock.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.nodeLock.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -145,7 +145,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.edgeLock.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.edgeLock.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -162,7 +162,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.edgeAdd.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.edgeAdd.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -179,7 +179,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.edgePatch.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.edgePatch.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -196,7 +196,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.tidyCanvas.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.tidyCanvas.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -278,7 +278,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.versionSave.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -310,7 +310,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.versionRestore.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.versionRestore.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -343,7 +343,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
     async (args) => {
       const parsed = tools.documentSet.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.canvasId, () =>
+      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
         tools.documentSet.execute(parsed),
       )
       return structuredJsonResult(result)

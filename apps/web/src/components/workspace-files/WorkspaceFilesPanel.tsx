@@ -52,7 +52,7 @@ export function WorkspaceFilesPanel({
 
   const openCanvas = (canvas: WorkspaceFileTreeCanvas) => {
     setPreview({ kind: 'loading', path: canvas.path })
-    getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.canvasId)
+    getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.documentId)
       .then((res) => {
         setPreview((current) =>
           current.kind === 'loading' && current.path === canvas.path

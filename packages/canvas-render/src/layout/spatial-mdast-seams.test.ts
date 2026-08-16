@@ -24,7 +24,7 @@ const BODY: MdastRoot = {
   children: [
     { type: 'math', value: 'E = mc^2' },
     { type: 'code', lang: 'mermaid', value: 'graph TD; a-->b;' },
-    { type: 'paragraph', children: [{ type: 'embed', canvasId: 'other' }] },
+    { type: 'paragraph', children: [{ type: 'embed', documentId: 'other' }] },
   ],
 }
 
@@ -75,8 +75,8 @@ const svgOf = (nodes: readonly SceneNode[]) => fragmentsOf(nodes).map((node) => 
 const SEAMS = {
   renderMath: (value: string) => `<g data-math="${value}"/>`,
   renderDiagram: (lang: string, value: string) => `<g data-${lang}="${value.length}"/>`,
-  resolveEmbed: (canvasId: string) =>
-    canvasId === 'other'
+  resolveEmbed: (documentId: string) =>
+    documentId === 'other'
       ? {
           title: 'Other',
           root: {

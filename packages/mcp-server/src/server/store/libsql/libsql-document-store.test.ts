@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql-document-store.js'
 
-function canvasRef(canvasId: string): DocRef {
-  return { kind: 'canvas', canvasId }
+function canvasRef(documentId: string): DocRef {
+  return { kind: 'canvas', documentId }
 }
 
 let tempDir: string

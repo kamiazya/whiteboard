@@ -45,7 +45,7 @@ function errorMessage(err: unknown): string {
  * Resolves workspace/canvas defaults and owns the canvas-switcher list state
  * for DaemonCanvasPage. Deliberately does NOT create or own the
  * CanvasBackend/useCanvasSync connection — that stays in the page component,
- * mirroring BrowserLocalCanvasPage's own useMemo(backend, [canvasId]) plus
+ * mirroring BrowserLocalCanvasPage's own useMemo(backend, [documentId]) plus
  * useCanvasSync ownership split.
  */
 export function useDaemonCanvasController(

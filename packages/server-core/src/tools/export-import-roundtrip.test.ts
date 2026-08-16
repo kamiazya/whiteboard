@@ -24,8 +24,8 @@ function makeDeps(documentStore: FakeDocumentStore) {
   return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeDocumentStore, canvasId: string): Promise<LoroDoc> {
-  const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
+async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
+  const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId } })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
@@ -48,9 +48,9 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     const { documentSet, deps } = await setupTools()
 
     const markdown = '---\ntype: note\n---\n# Title\n\nBody text.'
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
 
-    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.markdown).toContain('# Title\n\nBody text.')
   })
@@ -72,9 +72,9 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       '---',
       'Body text.',
     ].join('\n')
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
 
-    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.frontmatter.type).toBe('note')
     expect(result.frontmatter.title).toBe(
@@ -98,9 +98,9 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       '---',
       'Body.',
     ].join('\n')
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
 
-    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.frontmatter.facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
   })
@@ -110,11 +110,11 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\n',
     })
 
-    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.markdown.endsWith('---\n')).toBe(true)
   })
@@ -123,12 +123,12 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     const { store, documentSet, deps } = await setupTools()
 
     const markdown = '---\ntype: note\nfacets:\n  kanban/1:\n    status: todo\n---\nOriginal body.'
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
-    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: exported.markdown,
     })
     const doc = await loadDoc(store, CANVAS_ID)
@@ -154,16 +154,19 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nHello from OKF.',
     })
 
-    const result = await exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportJsonCanvas(deps, {
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+    })
     expect(JSON.parse(result.json).nodes).toEqual([])
 
     // The body is not lost — it is read through its own accessor, which is
     // what the OKF export uses.
-    const okf = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const okf = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
     expect(okf.markdown).toContain('Hello from OKF.')
   })
 
@@ -194,7 +197,7 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
 
     const result = await exportJsonCanvas(deps, {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       options: { strict: true },
     })
     const parsed = JSON.parse(result.json)
@@ -210,10 +213,13 @@ describe('the JSON Canvas exporter output re-parses as valid JSON Canvas', () =>
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nRe-parse me.',
     })
-    const result = await exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await exportJsonCanvas(deps, {
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+    })
 
     expect(parseSpatial(result.json).ok).toBe(true)
   })
@@ -223,12 +229,12 @@ describe('the JSON Canvas exporter output re-parses as valid JSON Canvas', () =>
 
     await documentSet.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nRe-parse me too.',
     })
     const result = await exportJsonCanvas(deps, {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       options: { strict: true },
     })
 
@@ -243,7 +249,7 @@ describe('error paths do not silently produce corrupt output', () => {
     await expect(
       documentSet.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         markdown: 'no frontmatter here',
       }),
     ).rejects.toThrow(OkfParseError)
@@ -251,7 +257,7 @@ describe('error paths do not silently produce corrupt output', () => {
     // No snapshot was ever saved, so the composed export attempt surfaces a
     // clean not-found error rather than reading corrupt/partial state.
     await expect(
-      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
@@ -265,10 +271,10 @@ describe('error paths do not silently produce corrupt output', () => {
     // successfully but must fail the composed export rather than silently
     // emitting corrupt YAML.
     const markdown = '---\ntype: note\nfacets:\n  bad/1:\n    value: .nan\n---\nBody.'
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
 
     await expect(
-      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     ).rejects.toThrow(/yaml-safe/)
   })
 
@@ -276,7 +282,7 @@ describe('error paths do not silently produce corrupt output', () => {
     const deps = makeDeps(new FakeDocumentStore())
 
     await expect(
-      exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 
@@ -284,7 +290,7 @@ describe('error paths do not silently produce corrupt output', () => {
     const deps = makeDeps(new FakeDocumentStore())
 
     await expect(
-      exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     ).rejects.toThrow(CanvasNotFoundError)
   })
 })

@@ -65,7 +65,7 @@ describe('stale /local/:id deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/local/:canvasId?',
+          path: '/local/:documentId?',
           element: (
             <BrowserLocalCanvasPage
               store={store}

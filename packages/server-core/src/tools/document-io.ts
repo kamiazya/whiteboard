@@ -1,4 +1,4 @@
-import type { CanvasId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
@@ -25,10 +25,13 @@ export interface LoadedDocument {
  * doc that has never been saved. This deliberately throws instead of
  * falling back to an empty `LoroDoc`.
  */
-export async function loadDocument(deps: ServerDeps, canvasId: CanvasId): Promise<LoadedDocument> {
-  const docRef = { kind: 'canvas' as const, canvasId }
+export async function loadDocument(
+  deps: ServerDeps,
+  documentId: DocumentId,
+): Promise<LoadedDocument> {
+  const docRef = { kind: 'canvas' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
-  if (existing === null) throw new DocumentNotFoundError(canvasId)
+  if (existing === null) throw new DocumentNotFoundError(documentId)
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
@@ -41,8 +44,11 @@ export async function loadDocument(deps: ServerDeps, canvasId: CanvasId): Promis
  * canvas is valid (unlike spatial patch tools, which require an existing
  * element to target).
  */
-export async function loadOrCreateDocument(deps: ServerDeps, canvasId: CanvasId): Promise<LoroDoc> {
-  const docRef = { kind: 'canvas' as const, canvasId }
+export async function loadOrCreateDocument(
+  deps: ServerDeps,
+  documentId: DocumentId,
+): Promise<LoroDoc> {
+  const docRef = { kind: 'canvas' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
   const doc = new LoroDoc()
   if (existing !== null) {
@@ -58,7 +64,7 @@ export async function loadOrCreateDocument(deps: ServerDeps, canvasId: CanvasId)
  */
 export async function saveDocumentSnapshot(
   deps: ServerDeps,
-  canvasId: CanvasId,
+  documentId: DocumentId,
   doc: LoroDoc,
 ): Promise<void> {
   const { manifest, chunks } = chunkSnapshot(
@@ -66,7 +72,7 @@ export async function saveDocumentSnapshot(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await deps.documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId },
+    docRef: { kind: 'canvas', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -87,10 +93,10 @@ export async function saveDocumentSnapshot(
  */
 export async function saveCanvasDoc(
   deps: ServerDeps,
-  canvasId: CanvasId,
+  documentId: DocumentId,
   doc: LoroDoc,
   canvas: SpatialCanvas,
 ): Promise<void> {
   writeSpatialCanvas(doc, canvas)
-  await saveDocumentSnapshot(deps, canvasId, doc)
+  await saveDocumentSnapshot(deps, documentId, doc)
 }

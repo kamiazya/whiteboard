@@ -64,10 +64,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/canvases/:documentId', async (c) => {
     const parsed = getCanvasInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
@@ -80,10 +80,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  app.delete('/api/v1/workspaces/:workspaceId/canvases/:canvasId', async (c) => {
+  app.delete('/api/v1/workspaces/:workspaceId/canvases/:documentId', async (c) => {
     const parsed = deleteCanvasInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
@@ -100,10 +100,10 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
-  app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId/okf', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/canvases/:documentId/okf', async (c) => {
     const parsed = exportOkfInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
-      canvasId: c.req.param('canvasId'),
+      documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)

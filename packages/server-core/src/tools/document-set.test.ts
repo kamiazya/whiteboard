@@ -26,8 +26,8 @@ function makeDeps(documentStore: FakeDocumentStore) {
   return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeDocumentStore, canvasId: string): Promise<LoroDoc> {
-  const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
+async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
+  const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId } })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
@@ -53,9 +53,13 @@ describe('wb_document_set tool', () => {
       'Something is broken.',
     ].join('\n')
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+      markdown,
+    })
 
-    expect(result.canvasId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(CANVAS_ID)
     expect(result.imported).toBe(true)
 
     const doc = await loadDoc(store, CANVAS_ID)
@@ -76,7 +80,11 @@ describe('wb_document_set tool', () => {
 
     const markdown = '---\ntype: note\n---\n'
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+      markdown,
+    })
 
     expect(result.imported).toBe(true)
 
@@ -91,10 +99,10 @@ describe('wb_document_set tool', () => {
     const tool = createDocumentSetTool(makeDeps(store))
 
     const v1 = '---\ntype: issue\nfacets:\n  example/1:\n    status: open\n---\nFirst body.'
-    await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: v1 })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown: v1 })
 
     const v2 = '---\ntype: issue\nfacets:\n  example/1:\n    status: closed\n---\nUpdated body.'
-    await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: v2 })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown: v2 })
 
     const doc = await loadDoc(store, CANVAS_ID)
     const facets = readFacets(doc)
@@ -112,7 +120,11 @@ describe('wb_document_set tool', () => {
     const tool = createDocumentSetTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown: 'no frontmatter' }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: CANVAS_ID,
+        markdown: 'no frontmatter',
+      }),
     ).rejects.toThrow()
   })
 
@@ -123,7 +135,7 @@ describe('wb_document_set tool', () => {
     const markdown = '---\ntype: note\n---\nBody.'
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown }),
     ).rejects.toThrow()
   })
 
@@ -145,7 +157,7 @@ describe('wb_document_set tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         markdown: '---\ntype: note\n---\nBody.',
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
@@ -163,7 +175,7 @@ describe('wb_document_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nBody.',
     })
 
@@ -180,7 +192,7 @@ describe('wb_document_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nBody.',
     })
 
@@ -207,7 +219,7 @@ describe('wb_document_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nNew body.',
     })
 
@@ -238,7 +250,7 @@ describe('wb_document_set tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         markdown: '---\ntype: note\n---\nBody.',
       }),
     ).rejects.toThrow(DocumentContentLossError)
@@ -262,13 +274,13 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
 
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\ntitle: リリース計画 2026\n---\nBody.',
     })
 
     const entry = await store.documentIndex.resolveDocumentById({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
     expect(entry?.name).toBe('リリース計画 2026')
     expect(readCoreFacets(await loadDoc(store, CANVAS_ID))?.title).toBeUndefined()
@@ -282,19 +294,19 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\ntitle: Keep me\n---\nOne.',
     })
 
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nTwo.',
     })
 
     const entry = await store.documentIndex.resolveDocumentById({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
     expect(entry?.name).toBe('Keep me')
   })
@@ -305,11 +317,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\ntitle: Round trip\n---\nBody.',
     })
 
-    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(exported.frontmatter.title).toBe('Round trip')
     expect(exported.markdown).toContain('title: Round trip')
@@ -325,11 +337,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\ntitle: ""\n---\n',
     })
 
-    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(exported.frontmatter.title).toBeUndefined()
   })
@@ -340,11 +352,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       markdown: '---\ntype: note\n---\nBody.',
     })
 
-    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(exported.frontmatter.title).toBeUndefined()
   })

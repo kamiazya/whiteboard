@@ -5,7 +5,7 @@ describe('docRefSchema', () => {
   it('accepts a canvas doc ref', () => {
     const result = docRefSchema.safeParse({
       kind: 'canvas',
-      canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
     expect(result.success).toBe(true)
   })
@@ -19,12 +19,14 @@ describe('docRefSchema', () => {
     expect(docRefSchema.safeParse({ kind: 'blob', id: 'x' }).success).toBe(false)
   })
 
-  it('rejects a canvas ref missing canvasId', () => {
+  it('rejects a canvas ref missing documentId', () => {
     expect(docRefSchema.safeParse({ kind: 'canvas' }).success).toBe(false)
   })
 
-  it('rejects a canvas ref whose canvasId is not a ULID', () => {
-    expect(docRefSchema.safeParse({ kind: 'canvas', canvasId: 'workspace-a' }).success).toBe(false)
+  it('rejects a canvas ref whose documentId is not a ULID', () => {
+    expect(docRefSchema.safeParse({ kind: 'canvas', documentId: 'workspace-a' }).success).toBe(
+      false,
+    )
   })
 
   it('rejects a workspace-tree ref whose workspaceId is a ULID-shaped value with a slash', () => {
@@ -35,7 +37,7 @@ describe('docRefSchema', () => {
 
   it('rejects an extra unknown key (strict)', () => {
     expect(
-      docRefSchema.safeParse({ kind: 'canvas', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', extra: 1 })
+      docRefSchema.safeParse({ kind: 'canvas', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', extra: 1 })
         .success,
     ).toBe(false)
   })

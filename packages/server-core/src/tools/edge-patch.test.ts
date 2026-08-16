@@ -19,7 +19,7 @@ async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanva
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -46,7 +46,7 @@ describe('wb_edge_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       patch: { color: '3', label: 'connects', fromSide: 'right', toSide: 'left' },
     })
@@ -77,7 +77,7 @@ describe('wb_edge_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       patch: { fromEnd: 'arrow', toEnd: 'none' },
     })
@@ -99,7 +99,7 @@ describe('wb_edge_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edgeId: 'missing',
         patch: { color: '1' },
       }),
@@ -114,14 +114,14 @@ describe('wb_edge_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edgeId: 'e1',
         patch: { toNode: 'does-not-exist' },
       }),
     ).rejects.toThrow(PatchValidationError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, BASE_CANVAS)
     const tool = createEdgePatchTool(makeDeps(documentStore))
@@ -129,7 +129,7 @@ describe('wb_edge_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: 'ws-other',
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edgeId: 'e1',
         patch: { color: '1' },
       }),
@@ -143,7 +143,7 @@ describe('wb_edge_patch tool', () => {
     const lockTool = createEdgeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       locked: true,
     })
@@ -152,7 +152,7 @@ describe('wb_edge_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edgeId: 'e1',
         patch: { label: 'rewritten' },
       }),
@@ -168,13 +168,13 @@ describe('wb_edge_patch tool', () => {
     const lockTool = createEdgeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       locked: true,
     })
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       locked: false,
     })
@@ -182,7 +182,7 @@ describe('wb_edge_patch tool', () => {
     const tool = createEdgePatchTool(makeDeps(documentStore))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       patch: { label: 'now editable' },
     })
@@ -195,7 +195,7 @@ describe('wb_edge_patch tool', () => {
     const { createNodeLockTool } = await import('./node-lock.js')
     await createNodeLockTool(makeDeps(documentStore)).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: true,
     })
@@ -204,7 +204,7 @@ describe('wb_edge_patch tool', () => {
     // freeze every line touching it.
     const result = await createEdgePatchTool(makeDeps(documentStore)).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edgeId: 'e1',
       patch: { color: '2' },
     })

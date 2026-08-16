@@ -27,7 +27,7 @@ describe('canvas CRUD routes', () => {
     expect(res.status).toBe(201)
     const body = createCanvasOutputSchema.parse(await res.json())
     expect(body.path).toBe('doc-a')
-    expect(typeof body.canvasId).toBe('string')
+    expect(typeof body.documentId).toBe('string')
   })
 
   it('POST with an invalid segment returns 400', async () => {
@@ -101,9 +101,9 @@ describe('canvas CRUD routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
-    const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
+    const { documentId } = createCanvasOutputSchema.parse(await createRes.json())
 
-    const getRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}`)
+    const getRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${documentId}`)
     expect(getRes.status).toBe(200)
 
     const notFoundRes = await app.request(
@@ -119,14 +119,14 @@ describe('canvas CRUD routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path: 'doc-a', kind: 'spatial', createWorkspace: true }),
     })
-    const { canvasId } = createCanvasOutputSchema.parse(await createRes.json())
+    const { documentId } = createCanvasOutputSchema.parse(await createRes.json())
 
-    const deleteRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}`, {
+    const deleteRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${documentId}`, {
       method: 'DELETE',
     })
     expect(deleteRes.status).toBe(200)
 
-    const notFoundRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}`, {
+    const notFoundRes = await app.request(`/api/v1/workspaces/ws-1/canvases/${documentId}`, {
       method: 'DELETE',
     })
     expect(notFoundRes.status).toBe(404)
@@ -134,7 +134,7 @@ describe('canvas CRUD routes', () => {
 })
 
 describe('canvas OKF read route', () => {
-  it('GET .../canvases/:canvasId/okf returns the exported OKF markdown', async () => {
+  it('GET .../canvases/:documentId/okf returns the exported OKF markdown', async () => {
     const { app, tools } = makeServer()
     const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
       method: 'POST',
@@ -144,11 +144,11 @@ describe('canvas OKF read route', () => {
     const created = createCanvasOutputSchema.parse(await createRes.json())
     await tools.documentSet.execute({
       workspaceId: 'ws-1',
-      canvasId: created.canvasId,
+      documentId: created.documentId,
       markdown: '---\ntype: note\ntitle: Doc A\n---\n\nHello tree',
     })
 
-    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.canvasId}/okf`)
+    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.documentId}/okf`)
     expect(res.status).toBe(200)
     const body = (await res.json()) as { markdown: string }
     expect(body.markdown).toContain('Hello tree')
@@ -164,13 +164,13 @@ describe('canvas OKF read route', () => {
     const documentIndex = new InMemoryDocumentIndex()
     const { app } = createServer({ documentStore: store, blobStore: {} as never, documentIndex })
     await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    const { canvasId } = await documentIndex.createDocument({
+    const { documentId } = await documentIndex.createDocument({
       workspaceId: 'ws-1',
       path: 'orphan',
       kind: 'spatial',
     })
 
-    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${canvasId}/okf`)
+    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${documentId}/okf`)
     expect(res.status).toBe(404)
   })
 

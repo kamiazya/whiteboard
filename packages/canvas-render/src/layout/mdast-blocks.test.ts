@@ -52,7 +52,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
       },
       {
         type: 'paragraph',
-        children: [{ type: 'wikiLink', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', alias: 'Alias' }],
+        children: [{ type: 'wikiLink', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', alias: 'Alias' }],
       },
     ],
   }
@@ -89,7 +89,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
     expect(paragraph.runs[0].link).toEqual({ kind: 'link', href: 'https://example.com' })
   })
 
-  it('recovers wikiLink canvasId and alias', () => {
+  it('recovers wikiLink documentId and alias', () => {
     const paragraph = scene.nodes.find(
       (n) => n.kind === 'paragraph' && n.runs.some((r) => r.link?.kind === 'wikiLink'),
     )
@@ -97,7 +97,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs[0].link).toEqual({
       kind: 'wikiLink',
-      canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       alias: 'Alias',
     })
   })
@@ -194,7 +194,7 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
             { type: 'imageReference', identifier: 'img', referenceType: 'shortcut' },
             { type: 'delete', children: [{ type: 'text', value: 'struck' }] },
             { type: 'break' },
-            { type: 'embed', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+            { type: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
           ],
         },
       ],
@@ -719,9 +719,9 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     type: 'paragraph',
     children: [{ type: 'text', value: text }],
   })
-  const embedPara = (canvasId: string): Flow => ({
+  const embedPara = (documentId: string): Flow => ({
     type: 'paragraph',
-    children: [{ type: 'embed', canvasId }],
+    children: [{ type: 'embed', documentId }],
   })
   const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
 
@@ -735,7 +735,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     expect(scene.nodes.map((n) => n.kind)).toEqual(['paragraph', 'embedResolved', 'paragraph'])
     const embed = scene.nodes[1]
     if (embed.kind !== 'embedResolved') throw new Error('unreachable')
-    expect(embed.canvasId).toBe(A)
+    expect(embed.documentId).toBe(A)
     expect(embed.children).toHaveLength(1)
     const inner = embed.children[0]
     if (inner.kind !== 'paragraph') throw new Error('expected embedded paragraph')
@@ -823,7 +823,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
         type: 'paragraph',
         children: [
           { type: 'text', value: 'see ' },
-          { type: 'embed', canvasId: A },
+          { type: 'embed', documentId: A },
         ],
       },
     ])

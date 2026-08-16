@@ -91,8 +91,8 @@ describe('wb_document_set -> the OKF exporter round-trip property', () => {
       const { documentSet, deps } = await setupTools()
       const markdown = serializeOkf(doc)
 
-      await documentSet.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
-      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+      await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
+      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
       expect(result.frontmatter.type).toBe(doc.frontmatter.type)
       // Not verbatim: the name lives on the workspace now, and a blank name

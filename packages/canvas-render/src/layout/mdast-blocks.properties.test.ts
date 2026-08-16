@@ -284,7 +284,7 @@ describe('layoutMdastBlocks properties', () => {
         rootOf(
           (graph[id] ?? []).map(
             (child) =>
-              ({ type: 'paragraph', children: [{ type: 'embed', canvasId: child }] }) as const,
+              ({ type: 'paragraph', children: [{ type: 'embed', documentId: child }] }) as const,
           ),
         )
       const scene = layoutMdastBlocks(docOf(rootId), {
@@ -303,8 +303,8 @@ describe('layoutMdastBlocks properties', () => {
           if (!Array.isArray(children)) continue
           let childPath = path
           if (node.kind === 'embedResolved') {
-            expect(path).not.toContain(node.canvasId)
-            childPath = [...path, node.canvasId]
+            expect(path).not.toContain(node.documentId)
+            childPath = [...path, node.documentId]
           }
           deepest = Math.max(deepest, inspect(children, childPath))
         }

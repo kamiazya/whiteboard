@@ -7,12 +7,12 @@ import type { EmbedPlaceholderNode, EmbedResolvedNode } from '../scene-graph.js'
  * more fields.
  */
 export interface DocRef {
-  readonly canvasId: string
+  readonly documentId: string
   readonly version?: string
 }
 
 export interface ResolvedDoc {
-  readonly canvasId: string
+  readonly documentId: string
   readonly title?: string
   /** Ordered canvasIds this doc embeds. */
   readonly embeds: readonly string[]
@@ -31,49 +31,55 @@ const DEPTH_CAP = 3
 const ZERO_BBOX = { x: 0, y: 0, w: 0, h: 0 }
 
 function placeholder(
-  canvasId: string,
+  documentId: string,
   reason: EmbedPlaceholderNode['reason'],
   title?: string,
 ): EmbedPlaceholderNode {
-  return { kind: 'embedPlaceholder', bbox: ZERO_BBOX, canvasId, title: title ?? canvasId, reason }
+  return {
+    kind: 'embedPlaceholder',
+    bbox: ZERO_BBOX,
+    documentId,
+    title: title ?? documentId,
+    reason,
+  }
 }
 
 /**
  * Recursively resolves an embed bundle into a scene node. Total: never
  * throws, never infinite-loops, on any bundle including dense cyclic ones.
- * Cycle detection is PATH-LOCAL — a re-visit of a canvasId on the current
+ * Cycle detection is PATH-LOCAL — a re-visit of a documentId on the current
  * recursion path is a placeholder, but the same doc reached again via a
  * disjoint path renders normally.
  */
 export function resolveEmbeds(bundle: ResolvedDocBundle): EmbedResolvedNode | EmbedPlaceholderNode {
-  return resolveNode(bundle, bundle.root.canvasId, 0, [])
+  return resolveNode(bundle, bundle.root.documentId, 0, [])
 }
 
 function resolveNode(
   bundle: ResolvedDocBundle,
-  canvasId: string,
+  documentId: string,
   depth: number,
   pathVisited: readonly string[],
 ): EmbedResolvedNode | EmbedPlaceholderNode {
   // `docs` is a caller-supplied plain object; a bracket lookup alone would
-  // resolve inherited Object.prototype members (e.g. canvasId '__proto__' or
+  // resolve inherited Object.prototype members (e.g. documentId '__proto__' or
   // 'toString'), breaking totality. `Object.hasOwn` restricts the lookup to
   // the object's own keys.
-  const entry = Object.hasOwn(bundle.docs, canvasId) ? bundle.docs[canvasId] : undefined
+  const entry = Object.hasOwn(bundle.docs, documentId) ? bundle.docs[documentId] : undefined
   const knownTitle = entry && 'embeds' in entry ? entry.title : undefined
 
-  if (pathVisited.includes(canvasId)) {
-    return placeholder(canvasId, 'cycle', knownTitle)
+  if (pathVisited.includes(documentId)) {
+    return placeholder(documentId, 'cycle', knownTitle)
   }
   if (depth > DEPTH_CAP) {
-    return placeholder(canvasId, 'depthCap', knownTitle)
+    return placeholder(documentId, 'depthCap', knownTitle)
   }
   if (!entry || 'unresolved' in entry) {
-    return placeholder(canvasId, 'unresolvable')
+    return placeholder(documentId, 'unresolvable')
   }
 
-  const nextPath = [...pathVisited, canvasId]
+  const nextPath = [...pathVisited, documentId]
   const children = entry.embeds.map((childId) => resolveNode(bundle, childId, depth + 1, nextPath))
 
-  return { kind: 'embedResolved', bbox: ZERO_BBOX, canvasId, children }
+  return { kind: 'embedResolved', bbox: ZERO_BBOX, documentId, children }
 }

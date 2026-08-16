@@ -2,7 +2,7 @@
  * The daemon mounts server-core's /api/v1 OpenCanvas surface when given
  * ServerDeps. Until this slice, createServer(deps) was only used for its
  * MCP tools — the HTTP app it returns was never mounted, so the workspace
- * tree (canvasId + path world) was unreachable over HTTP even though the
+ * tree (documentId + path world) was unreachable over HTTP even though the
  * routes existed. The mount sits under the same /api/* daemon auth as every
  * other API route.
  */

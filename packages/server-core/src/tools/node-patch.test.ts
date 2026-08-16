@@ -19,7 +19,7 @@ async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanva
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -41,7 +41,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       patch: { x: 42, y: 7, width: 200, height: 90, color: '2' },
     })
@@ -58,7 +58,7 @@ describe('wb_node_patch tool', () => {
     })
 
     const reloaded = await documentStore.loadSnapshot({
-      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      docRef: { kind: 'canvas', documentId: CANVAS_ID },
     })
     expect(reloaded).not.toBeNull()
   })
@@ -73,7 +73,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'g1',
       patch: { label: 'My Group' },
     })
@@ -91,7 +91,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       patch: { label: 'ignored' },
     })
@@ -110,7 +110,7 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'missing',
         patch: { x: 1 },
       }),
@@ -125,14 +125,14 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'n1',
         patch: { x: 1 },
       }),
     ).rejects.toThrow(DocumentNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, {
       nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
@@ -143,7 +143,7 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: 'ws-other',
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'n1',
         patch: { x: 1 },
       }),
@@ -153,7 +153,7 @@ describe('wb_node_patch tool', () => {
   test('rejects a negative width at the input-schema level', () => {
     const result = nodePatchInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       patch: { width: -5 },
     })
@@ -170,7 +170,7 @@ describe('wb_node_patch tool', () => {
     const lockTool = createNodeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: true,
     })
@@ -179,7 +179,7 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'n1',
         patch: { x: 999 },
       }),
@@ -199,13 +199,13 @@ describe('wb_node_patch tool', () => {
     const lockTool = createNodeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: true,
     })
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: false,
     })
@@ -213,7 +213,7 @@ describe('wb_node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(documentStore))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       patch: { x: 42 },
     })

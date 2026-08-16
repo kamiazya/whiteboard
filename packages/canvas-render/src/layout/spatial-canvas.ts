@@ -142,7 +142,7 @@ export interface SpatialLayoutOptions {
    * `expandFileNode` stays separate: it is the caller's POLICY over a node
    * (the editor decides by on-screen size, export by intrinsic size), not
    * something known about the reference. `MdastLayoutOptions.resolveEmbed`
-   * likewise stays its own seam — it is keyed by a canvasId appearing in
+   * likewise stays its own seam — it is keyed by a documentId appearing in
    * prose, not by a spatial node's reference.
    */
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
@@ -432,7 +432,7 @@ function composeFileEmbed(
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-    canvasId: node.file,
+    documentId: node.file,
     children: placed.nodes,
   }
 }

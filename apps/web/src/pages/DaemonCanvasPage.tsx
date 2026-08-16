@@ -303,7 +303,7 @@ export function DaemonCanvasPage({
     // slug/updatedAt) — the slug doubles as `name` until that changes.
     canvas:
       canvas !== null
-        ? { workspaceId: canvas.workspaceId, canvasId: canvas.slug, name: canvas.slug }
+        ? { workspaceId: canvas.workspaceId, documentId: canvas.slug, name: canvas.slug }
         : null,
   })
 

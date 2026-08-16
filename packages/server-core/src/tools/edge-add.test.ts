@@ -37,7 +37,7 @@ describe('wb_edge_add', () => {
 
     const result = await createEdgeAddTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edge: EDGE,
     })
 
@@ -57,7 +57,7 @@ describe('wb_edge_add', () => {
 
     await createEdgeAddTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       edge: { id: 'e2', fromNode: 'b', toNode: 'a' },
     })
 
@@ -76,7 +76,7 @@ describe('wb_edge_add', () => {
     await expect(
       createEdgeAddTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edge: { id: 'e1', fromNode: 'b', toNode: 'a' },
       }),
     ).rejects.toThrow(EdgeAlreadyExistsError)
@@ -96,7 +96,7 @@ describe('wb_edge_add', () => {
     await expect(
       createEdgeAddTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edge: { id: 'e1', fromNode: 'a', toNode: 'ghost' },
       }),
     ).rejects.toThrow(PatchValidationError)
@@ -112,7 +112,7 @@ describe('wb_edge_add', () => {
     await expect(
       createEdgeAddTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edge: EDGE,
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
@@ -124,7 +124,7 @@ describe('wb_edge_add', () => {
     await expect(
       createEdgeAddTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         edge: EDGE,
       }),
     ).rejects.toThrow()

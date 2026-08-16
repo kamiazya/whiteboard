@@ -30,7 +30,7 @@ async function seedCanvas(
   for (const id of lockedIds) setNodeLock(seedDoc, id, true)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -63,9 +63,9 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
-    expect(result.canvasId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(CANVAS_ID)
     expect([...result.moved].sort((a, b) => a.id.localeCompare(b.id))).toEqual([
       { id: 'a', x: 0, y: 96 },
       { id: 'b', x: 200, y: 96 },
@@ -84,7 +84,7 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     // b joins a's band (118 - 101 < 24) and lands on round8(101) = 104;
     // locked a stays exactly where it was.
@@ -104,7 +104,7 @@ describe('wb_canvas_tidy tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       scope: ['a'],
     })
 
@@ -120,7 +120,7 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.moved).toEqual([])
   })
@@ -133,8 +133,8 @@ describe('wb_canvas_tidy tool', () => {
     })
     const tool = createTidyCanvasTool(makeDeps(documentStore))
 
-    await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
-    const second = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const second = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(second.moved).toEqual([])
   })
@@ -143,7 +143,9 @@ describe('wb_canvas_tidy tool', () => {
     const documentStore = new FakeDocumentStore()
     const tool = createTidyCanvasTool(makeDeps(documentStore))
 
-    await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow()
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+    ).rejects.toThrow()
   })
 })
 
@@ -174,7 +176,7 @@ describe('wb_canvas_tidy on a markdown document', () => {
     const deps = makeDeps(store)
 
     await expect(
-      createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+      createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
     const { canvas } = await loadDocument(deps, CANVAS_ID)

@@ -33,7 +33,7 @@ describe('exportJsonCanvas', () => {
     })
     const result = await exportJsonCanvas(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       options: { strict: true },
     })
     const parsed = JSON.parse(result.json)
@@ -48,7 +48,7 @@ describe('exportJsonCanvas', () => {
     })
     const result = await exportJsonCanvas(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
     const parsed = JSON.parse(result.json)
 
@@ -62,7 +62,7 @@ describe('exportJsonCanvas', () => {
     await expect(
       exportJsonCanvas(makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
       }),
     ).rejects.toThrow(CanvasNotFoundError)
   })

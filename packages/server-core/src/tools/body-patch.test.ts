@@ -17,7 +17,7 @@ async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanva
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -40,7 +40,7 @@ describe('wb_body_patch tool', () => {
     const result = await tool.execute({
       mode: 'full',
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 't1',
       body: 'replaced',
     })
@@ -69,7 +69,7 @@ describe('wb_body_patch tool', () => {
     const result = await tool.execute({
       mode: 'range',
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 't1',
       range: { startLine: 1, endLine: 2, replacement: 'NEW' },
     })
@@ -89,7 +89,7 @@ describe('wb_body_patch tool', () => {
       tool.execute({
         mode: 'full',
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'g1',
         body: 'x',
       }),
@@ -110,7 +110,7 @@ describe('wb_body_patch tool', () => {
       tool.execute({
         mode: 'range',
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 't1',
         range: { startLine: 0, endLine: 5, replacement: 'x' },
       }),
@@ -129,14 +129,14 @@ describe('wb_body_patch tool', () => {
       tool.execute({
         mode: 'full',
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'missing',
         body: 'x',
       }),
     ).rejects.toThrow(NodeNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, {
       nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'x' }],
@@ -148,7 +148,7 @@ describe('wb_body_patch tool', () => {
       tool.execute({
         mode: 'full',
         workspaceId: 'ws-other',
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 't1',
         body: 'x',
       }),

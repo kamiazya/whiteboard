@@ -38,7 +38,7 @@ afterEach(cleanup)
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialCanvasId prop so a test can assert App derives it from
-// the /local/:canvasId URL (parseBrowserLocalRoute) rather than merely
+// the /local/:documentId URL (parseBrowserLocalRoute) rather than merely
 // mounting the page.
 let receivedInitialCanvasId: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
@@ -396,7 +396,7 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialCanvasId from a /local/:canvasId cold-load URL', async () => {
+  it('derives initialCanvasId from a /local/:documentId cold-load URL', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/local/c2']}>

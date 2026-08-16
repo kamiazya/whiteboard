@@ -1,17 +1,17 @@
-import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import { generateCanvasId } from './generate-canvas-id.js'
+import { generateDocumentId } from './generate-document-id.js'
 
-describe('generateCanvasId', () => {
-  it('produces a 26-character string matching canvasIdSchema', () => {
-    const id = generateCanvasId()
+describe('generateDocumentId', () => {
+  it('produces a 26-character string matching documentIdSchema', () => {
+    const id = generateDocumentId()
     expect(id).toHaveLength(26)
-    expect(() => canvasIdSchema.parse(id)).not.toThrow()
+    expect(() => documentIdSchema.parse(id)).not.toThrow()
   })
 
   it('produces different ids on consecutive calls', () => {
-    const first = generateCanvasId()
-    const second = generateCanvasId()
+    const first = generateDocumentId()
+    const second = generateDocumentId()
     expect(first).not.toBe(second)
   })
 })

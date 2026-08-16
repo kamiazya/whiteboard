@@ -110,12 +110,15 @@ export function describeDocumentIndexConformance(
       })
 
       expect(
-        await index.resolveDocumentById({ workspaceId: WS, canvasId: created.canvasId }),
+        await index.resolveDocumentById({ workspaceId: WS, documentId: created.documentId }),
       ).toEqual(created)
       // The id alone is not the address: another workspace must not see it.
       await index.createWorkspace({ workspaceId: 'ws-other' })
       expect(
-        await index.resolveDocumentById({ workspaceId: 'ws-other', canvasId: created.canvasId }),
+        await index.resolveDocumentById({
+          workspaceId: 'ws-other',
+          documentId: created.documentId,
+        }),
       ).toBeNull()
     })
   })
@@ -184,7 +187,7 @@ export function describeDocumentIndexConformance(
       expect(await index.resolveDocument({ workspaceId: WS, path: 'a/d' })).toBeNull()
       const moved = await index.resolveDocument({ workspaceId: WS, path: 'c/d' })
       // The same document, relocated — not a new one.
-      expect(moved?.canvasId).toBe(child.canvasId)
+      expect(moved?.documentId).toBe(child.documentId)
       expect(moved?.kind).toBe('markdown')
     })
   })
@@ -235,8 +238,8 @@ export function describeDocumentIndexConformance(
         'a',
         'a/b',
       ])
-      expect((await index.resolveDocument({ workspaceId: WS, path: 'a/b' }))?.canvasId).toBe(
-        grandchild.canvasId,
+      expect((await index.resolveDocument({ workspaceId: WS, path: 'a/b' }))?.documentId).toBe(
+        grandchild.documentId,
       )
     })
   })
@@ -316,7 +319,7 @@ export function describeDocumentIndexConformance(
         path: 'p',
         kind: 'markdown',
       })
-      expect(theirs.canvasId).not.toBe(mine.canvasId)
+      expect(theirs.documentId).not.toBe(mine.documentId)
 
       expect((await index.resolveDocument({ workspaceId: WS, path: 'p' }))?.kind).toBe('spatial')
       expect(await index.listDocuments({ workspaceId: WS })).toHaveLength(1)
@@ -329,16 +332,16 @@ export function describeDocumentIndexConformance(
   describe('setDocumentName', () => {
     it('renames a document without moving it', async () => {
       await withIndex(async (index) => {
-        const { canvasId } = await index.createDocument({
+        const { documentId } = await index.createDocument({
           workspaceId: WS,
           path: 'a/b',
           kind: 'markdown',
           name: 'Old',
         })
 
-        await index.setDocumentName({ workspaceId: WS, canvasId, name: 'New' })
+        await index.setDocumentName({ workspaceId: WS, documentId, name: 'New' })
 
-        const entry = await index.resolveDocumentById({ workspaceId: WS, canvasId })
+        const entry = await index.resolveDocumentById({ workspaceId: WS, documentId })
         expect(entry?.name).toBe('New')
         // The name is not the placement: renaming must not relocate it.
         expect(entry?.path).toBe('a/b')
@@ -347,17 +350,17 @@ export function describeDocumentIndexConformance(
 
     it('clears the name when given none', async () => {
       await withIndex(async (index) => {
-        const { canvasId } = await index.createDocument({
+        const { documentId } = await index.createDocument({
           workspaceId: WS,
           path: 'p',
           kind: 'spatial',
           name: 'Named',
         })
 
-        await index.setDocumentName({ workspaceId: WS, canvasId })
+        await index.setDocumentName({ workspaceId: WS, documentId })
 
         expect(
-          (await index.resolveDocumentById({ workspaceId: WS, canvasId }))?.name,
+          (await index.resolveDocumentById({ workspaceId: WS, documentId }))?.name,
         ).toBeUndefined()
       })
     })
@@ -365,21 +368,21 @@ export function describeDocumentIndexConformance(
     it('fails for a document that is not there', async () => {
       await withIndex(async (index) => {
         await expect(
-          index.setDocumentName({ workspaceId: WS, canvasId: ABSENT_ID, name: 'x' }),
+          index.setDocumentName({ workspaceId: WS, documentId: ABSENT_ID, name: 'x' }),
         ).rejects.toThrow(DocumentNotFoundError)
       })
     })
 
     it('will not rename across workspaces', async () => {
       await withIndex(async (index) => {
-        const { canvasId } = await index.createDocument({
+        const { documentId } = await index.createDocument({
           workspaceId: WS,
           path: 'p',
           kind: 'spatial',
         })
 
         await expect(
-          index.setDocumentName({ workspaceId: 'ws-other', canvasId, name: 'x' }),
+          index.setDocumentName({ workspaceId: 'ws-other', documentId, name: 'x' }),
         ).rejects.toThrow(DocumentNotFoundError)
       })
     })

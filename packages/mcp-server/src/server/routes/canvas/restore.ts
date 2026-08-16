@@ -186,7 +186,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
                 sourceKind,
               )
               return c.json({
-                canvasId: `${workspaceId}/${targetSlug}`,
+                documentId: `${workspaceId}/${targetSlug}`,
                 elementCount: countAliveNodes(targetDoc),
               })
             }
@@ -219,7 +219,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
             // this slug being served instead of the just-written snapshot.
             evictDoc(workspaceId, targetSlug)
             return c.json({
-              canvasId: `${workspaceId}/${targetSlug}`,
+              documentId: `${workspaceId}/${targetSlug}`,
               elementCount: countAliveNodes(past),
             })
           }

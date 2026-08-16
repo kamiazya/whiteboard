@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -12,7 +12,7 @@ import type { ServerDeps } from '../server-deps.js'
 export const exportJsonCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     options: z
       .object({ strict: z.boolean().default(false) })
       .strict()
@@ -35,7 +35,7 @@ export async function exportJsonCanvas(
   deps: ServerDeps,
   input: ExportJsonCanvasInput,
 ): Promise<ExportJsonCanvasOutput> {
-  const { canvas } = await loadSpatialCanvas(deps, input.canvasId)
+  const { canvas } = await loadSpatialCanvas(deps, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
   return { json: serializeSpatial(canvas, mode) }
 }

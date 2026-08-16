@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { canvasIdSchema, nodeIdSchema } from './ids.js'
+import { documentIdSchema, nodeIdSchema } from './ids.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
 // six numbered presets or a 6-digit hex string.
@@ -23,7 +23,16 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  */
 export const xWhiteboardSchema = z.object({
   kind: z.literal('embed'),
-  canvasId: canvasIdSchema,
+  /**
+   * `canvasId` while the type is `DocumentId`, deliberately: this field is
+   * WRITTEN INTO exported JSON Canvas files and published as
+   * `docs/reference/x-whiteboard.schema.json`, so its name is a format
+   * contract rather than a name in this codebase's vocabulary. Renaming it
+   * makes every document already carrying an embed unreadable, which is a
+   * different decision from renaming a symbol and belongs in its own
+   * increment with a format-version story.
+   */
+  canvasId: documentIdSchema,
   versionRef: z.string().min(1).optional(),
 })
 

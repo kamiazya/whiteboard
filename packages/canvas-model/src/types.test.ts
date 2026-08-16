@@ -10,8 +10,8 @@ import type {
   facetsRawSchema,
 } from './facets.js'
 import type {
-  CanvasId,
-  canvasIdSchema,
+  DocumentId,
+  documentIdSchema,
   NodeId,
   nodeIdSchema,
   WorkspaceId,
@@ -42,7 +42,7 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<CoreFacets>().toEqualTypeOf<z.infer<typeof coreFacetsSchema>>()
   expectTypeOf<ExtensionFacets>().toEqualTypeOf<z.infer<typeof extensionFacetsSchema>>()
   expectTypeOf<FacetsRaw>().toEqualTypeOf<z.infer<typeof facetsRawSchema>>()
-  expectTypeOf<CanvasId>().toEqualTypeOf<z.infer<typeof canvasIdSchema>>()
+  expectTypeOf<DocumentId>().toEqualTypeOf<z.infer<typeof documentIdSchema>>()
   expectTypeOf<NodeId>().toEqualTypeOf<z.infer<typeof nodeIdSchema>>()
   expectTypeOf<WorkspaceId>().toEqualTypeOf<z.infer<typeof workspaceIdSchema>>()
   expectTypeOf<CanvasColor>().toEqualTypeOf<z.infer<typeof canvasColorSchema>>()

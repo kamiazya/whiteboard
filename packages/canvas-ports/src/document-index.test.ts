@@ -55,9 +55,9 @@ describe('compareDocumentPaths', () => {
 })
 
 describe('documentEntrySchema', () => {
-  it('accepts a ULID canvasId with a path and a kind', () => {
+  it('accepts a ULID documentId with a path and a kind', () => {
     const parsed = documentEntrySchema.safeParse({
-      canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'plan/sub',
       kind: 'markdown',
     })
@@ -68,7 +68,7 @@ describe('documentEntrySchema', () => {
     // ADR-0007 point 5: the nanoid is a storage detail, the ULID is the id.
     // Converging the two id spaces is what this schema is holding the line on.
     const parsed = documentEntrySchema.safeParse({
-      canvasId: 'Go1G4OcJKUBu',
+      documentId: 'Go1G4OcJKUBu',
       path: 'plan',
       kind: 'spatial',
     })

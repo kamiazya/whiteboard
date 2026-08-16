@@ -24,16 +24,16 @@ function assertValidInput(schema: z.ZodTypeAny, input: unknown, commandName: str
 
 // Projects the open-canvas identity into the tool-facing shape field-by-field
 // (never a spread) so a daemon canvas exposes only workspaceId/slug and a
-// browser-local canvas only canvasId — no other ProviderState/canvas field
+// browser-local canvas only documentId — no other ProviderState/canvas field
 // can leak through.
 function projectCanvasContext(
   canvas: WhiteboardCommandDeps['canvas'],
 ): GetAppContextResult['canvas'] {
   if (!canvas) return null
   if (canvas.workspaceId !== undefined) {
-    return { kind: 'daemon', workspaceId: canvas.workspaceId, slug: canvas.canvasId }
+    return { kind: 'daemon', workspaceId: canvas.workspaceId, slug: canvas.documentId }
   }
-  return { kind: 'browser-local', canvasId: canvas.canvasId }
+  return { kind: 'browser-local', documentId: canvas.documentId }
 }
 
 // Exhaustive over every ProviderState.kind rather than a two-way ternary: an

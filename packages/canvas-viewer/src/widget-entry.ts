@@ -65,7 +65,7 @@ function registerFonts(): void {
 
 // MCP Apps (SEP-1865) bridge bootstrap. The host sends the canvas_view tool
 // result via `ui/notifications/tool-result`; `structuredContent` there is
-// the same `{canvasId, scene}` shape returned by canvas_view's Zod
+// the same `{documentId, scene}` shape returned by canvas_view's Zod
 // outputSchema. This widget never receives daemon credentials — only the
 // scene snapshot plus, once connected, the host's own MCP session — so its
 // only outbound path is re-invoking canvas_view through
@@ -96,10 +96,10 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // rule. `computeStickyPlacement` is the old rule, still tested.
 // Both `ui/notifications/tool-result` and the CallToolResult that
 // `app.callServerTool` resolves with wrap canvas_view's payload the same
-// way: `{structuredContent: {canvasId, scene}}`. Sharing one extraction +
+// way: `{structuredContent: {documentId, scene}}`. Sharing one extraction +
 // validation path for the initial mount and every refresh keeps the
 // malformed-payload defense (parseViewerScene before remount) and the
-// canvasId commit rule (never commit from a result that failed validation)
+// documentId commit rule (never commit from a result that failed validation)
 // in exactly one place. The envelope crosses the host↔widget process
 // boundary, so it gets a Zod schema instead of a cast; `scene` stays
 // deliberately unknown here — parseViewerScene is its real validator.
@@ -136,7 +136,7 @@ function parseReferences(raw: Record<string, unknown> | undefined) {
 const toolResultEnvelopeSchema = z.object({
   structuredContent: z
     .object({
-      canvasId: z.string().optional(),
+      documentId: z.string().optional(),
       scene: z.unknown().optional(),
       // Deliberately `unknown` HERE, then parsed per entry below. Putting
       // the strict schema inline would make one bad reference fail the
@@ -150,7 +150,7 @@ const toolResultEnvelopeSchema = z.object({
 })
 
 function extractCanvasIdAndScene(payload: unknown): {
-  canvasId?: string
+  documentId?: string
   scene?: unknown
   references?: MountCanvasViewerOptions['references']
 } {
@@ -158,7 +158,7 @@ function extractCanvasIdAndScene(payload: unknown): {
   if (!parsed.success) return {}
   const structuredContent = parsed.data.structuredContent
   return {
-    canvasId: structuredContent?.canvasId,
+    documentId: structuredContent?.documentId,
     scene: structuredContent?.scene,
     references: parseReferences(structuredContent?.references),
   }
@@ -167,7 +167,7 @@ function extractCanvasIdAndScene(payload: unknown): {
 // Validates BEFORE remount: remount disposes the live viewer first, so a
 // malformed payload would otherwise trade a working view for an empty
 // container. `onValidResult` only fires once parseViewerScene has actually
-// accepted the scene, which is what lets the canvasId commit rule ("never
+// accepted the scene, which is what lets the documentId commit rule ("never
 // remember an ID from an unvalidated result") hold for both the initial
 // tool-result and every subsequent refresh response.
 // Also whether a result is an application-level failure rather than a
@@ -187,13 +187,13 @@ function applyToolResult(
   payload: unknown,
   container: HTMLElement,
   remount: (mount: () => CanvasViewerHandle) => void,
-  onValidResult: (canvasId: string | undefined, scene: ViewerScene) => void,
+  onValidResult: (documentId: string | undefined, scene: ViewerScene) => void,
 ): void {
   if (isErrorResult(payload)) {
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { canvasId, scene, references } = extractCanvasIdAndScene(payload)
+  const { documentId, scene, references } = extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -211,7 +211,7 @@ function applyToolResult(
       ...(references === undefined ? {} : { references }),
     }),
   )
-  onValidResult(canvasId, result.value)
+  onValidResult(documentId, result.value)
 }
 
 // `remount` is the single place a mount produced by this bridge happens.
@@ -236,7 +236,7 @@ async function mountFromHost(
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
 
   // Committed only once a tool-result has actually passed parseViewerScene —
-  // an unvalidated canvasId must never enable Refresh or the sticky-note
+  // an unvalidated documentId must never enable Refresh or the sticky-note
   // affordance (either would call back into the daemon with an ID nobody
   // confirmed is real).
   let committedCanvasId: string | undefined
@@ -247,9 +247,9 @@ async function mountFromHost(
   // last rendered scene). The parameter stays because `applyToolResult`
   // hands it over as part of the "only commit from a VALIDATED result"
   // contract, which is what this callback exists to enforce.
-  const commitResult = (canvasId: string | undefined, _scene: ViewerScene): void => {
-    if (canvasId === undefined) return
-    committedCanvasId = canvasId
+  const commitResult = (documentId: string | undefined, _scene: ViewerScene): void => {
+    if (documentId === undefined) return
+    committedCanvasId = documentId
     refreshControl?.show()
   }
 
@@ -296,7 +296,7 @@ async function mountFromHost(
       try {
         const result = await app.callServerTool({
           name: 'canvas_view',
-          arguments: { canvasId: committedCanvasId },
+          arguments: { documentId: committedCanvasId },
         })
         applyToolResult(result, container, remount, commitResult)
       } catch (err) {

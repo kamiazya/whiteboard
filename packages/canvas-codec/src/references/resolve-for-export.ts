@@ -8,7 +8,7 @@ import type {
   MdastTableRow,
 } from '@kamiazya/whiteboard-canvas-model/mdast'
 
-export type CanvasPathResolver = (canvasId: string) => string | null
+export type CanvasPathResolver = (documentId: string) => string | null
 
 function wikiLinkExportText(alias: string | undefined, path: string): string {
   const label = alias ?? path
@@ -20,10 +20,10 @@ function exportPhrasing(
   resolver: CanvasPathResolver,
 ): MdastPhrasingContent {
   if (node.type === 'wikiLink' || node.type === 'embed') {
-    const path = resolver(node.canvasId)
+    const path = resolver(node.documentId)
     if (path === null) {
       const alias = node.type === 'wikiLink' ? node.alias : undefined
-      return { type: 'text', value: `[[canvas:${node.canvasId}${alias ? `|${alias}` : ''}]]` }
+      return { type: 'text', value: `[[canvas:${node.documentId}${alias ? `|${alias}` : ''}]]` }
     }
     return {
       type: 'text',
@@ -74,7 +74,7 @@ function exportTableCell(node: MdastTableCell, resolver: CanvasPathResolver): Md
 /**
  * Rewrites `wikiLink`/`embed` nodes into plain relative-path markdown links
  * for export to a non-OpenCanvas-aware reader. Pure, single-document: the
- * canvasId->path resolver is injected. An unresolved id stays as literal
+ * documentId->path resolver is injected. An unresolved id stays as literal
  * `[[canvas:ID]]` text rather than being dropped, so re-applying export with
  * the same resolver is idempotent (nothing left to resolve differently the
  * second time).

@@ -45,15 +45,15 @@ const SAVE_DEBOUNCE_MS = 500
  * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
  * one was, so it cannot leave the queue permanently poisoned.
  */
-function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array): Promise<void> {
-  const previous = pendingFlushes.get(canvasId)
+function queueSave(store: LoroStoreLike, documentId: string, snapshot: Uint8Array): Promise<void> {
+  const previous = pendingFlushes.get(documentId)
   const next = Promise.resolve(previous)
-    .then(() => store.save(canvasId, snapshot))
+    .then(() => store.save(documentId, snapshot))
     .catch(() => {})
     .finally(() => {
-      if (pendingFlushes.get(canvasId) === next) pendingFlushes.delete(canvasId)
+      if (pendingFlushes.get(documentId) === next) pendingFlushes.delete(documentId)
     })
-  pendingFlushes.set(canvasId, next)
+  pendingFlushes.set(documentId, next)
   return next
 }
 
@@ -85,7 +85,7 @@ export interface MarkdownCanvasDocState {
 
 export function useMarkdownCanvasDoc(
   loro: LoroStoreLike,
-  canvasId: string | null,
+  documentId: string | null,
   enabled: boolean,
 ): MarkdownCanvasDocState {
   const [body, setBodyState] = useState<string | null>(null)
@@ -101,7 +101,7 @@ export function useMarkdownCanvasDoc(
   const pending = pendingFlushes
 
   useEffect(() => {
-    if (!enabled || canvasId === null) {
+    if (!enabled || documentId === null) {
       docRef.current = null
       setDoc(null)
       setBodyState(null)
@@ -110,9 +110,9 @@ export function useMarkdownCanvasDoc(
     }
     let cancelled = false
     let unsubscribe: (() => void) | undefined
-    void Promise.resolve(pending.get(canvasId))
+    void Promise.resolve(pending.get(documentId))
       .catch(() => {})
-      .then(() => loroRef.current.load(canvasId))
+      .then(() => loroRef.current.load(documentId))
       .then((result) => {
         if (cancelled) return
         const doc = new Loro()
@@ -167,12 +167,12 @@ export function useMarkdownCanvasDoc(
         clearTimeout(timerRef.current)
         timerRef.current = null
         const doc = docRef.current
-        if (doc !== null && canvasId !== null) {
-          void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
+        if (doc !== null && documentId !== null) {
+          void queueSave(loroRef.current, documentId, doc.export({ mode: 'snapshot' }))
         }
       }
     }
-  }, [canvasId, enabled])
+  }, [documentId, enabled])
 
   // One timer for both writers: they export the same document, so a second
   // independent debounce would only duplicate the save. Reached through a
@@ -180,7 +180,7 @@ export function useMarkdownCanvasDoc(
   // before this binding initializes on the first render.
   const scheduleSaveRef = useRef<(() => void) | null>(null)
   const scheduleSave = useCallback(() => {
-    if (canvasId === null) return
+    if (documentId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       // Clearing the ref first means a cleanup arriving after this point
@@ -189,9 +189,9 @@ export function useMarkdownCanvasDoc(
       timerRef.current = null
       const doc = docRef.current
       if (doc === null) return
-      void queueSave(loroRef.current, canvasId, doc.export({ mode: 'snapshot' }))
+      void queueSave(loroRef.current, documentId, doc.export({ mode: 'snapshot' }))
     }, SAVE_DEBOUNCE_MS)
-  }, [canvasId])
+  }, [documentId])
   scheduleSaveRef.current = scheduleSave
 
   const setBody = useCallback(

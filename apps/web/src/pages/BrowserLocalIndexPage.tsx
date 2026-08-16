@@ -7,7 +7,7 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
   store: BrowserLocalStore
-  onOpenCanvas: (canvasId: string) => void
+  onOpenCanvas: (documentId: string) => void
 }
 
 // The browser-local landing surface: the same shared list the daemon gallery

@@ -16,21 +16,21 @@ function makeDeps(): ServerDeps {
 }
 
 async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {
-  const { canvasId } = await wbCanvasCreate(deps, {
+  const { documentId } = await wbCanvasCreate(deps, {
     workspaceId: 'ws',
     path: `doc-${kind}`,
     kind,
     createWorkspace: true,
   })
-  return canvasId
+  return documentId
 }
 
 describe('wb_document_get reads a document in its own format', () => {
   it('a markdown document comes back as OKF, with its frontmatter', async () => {
     const deps = makeDeps()
-    const canvasId = await createDoc(deps, 'markdown')
+    const documentId = await createDoc(deps, 'markdown')
 
-    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId })
+    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId })
 
     expect(result.kind).toBe('markdown')
     expect(result.content).toContain('---')
@@ -39,9 +39,9 @@ describe('wb_document_get reads a document in its own format', () => {
 
   it('a spatial document comes back as JSON Canvas, with no frontmatter', async () => {
     const deps = makeDeps()
-    const canvasId = await createDoc(deps, 'spatial')
+    const documentId = await createDoc(deps, 'spatial')
 
-    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId })
+    const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId })
 
     expect(result.kind).toBe('spatial')
     expect(JSON.parse(result.content)).toMatchObject({ nodes: expect.any(Array) })
@@ -59,8 +59,8 @@ describe('wb_document_get reads a document in its own format', () => {
     const sp = await createDoc(deps, 'spatial')
     const tool = createDocumentGetTool(deps)
 
-    const a = await tool.execute({ workspaceId: 'ws', canvasId: md })
-    const b = await tool.execute({ workspaceId: 'ws', canvasId: sp })
+    const a = await tool.execute({ workspaceId: 'ws', documentId: md })
+    const b = await tool.execute({ workspaceId: 'ws', documentId: sp })
 
     expect(a.kind).not.toBe(b.kind)
   })
@@ -70,11 +70,11 @@ describe('wb_document_get reads a document in its own format', () => {
     // anyway — the OKF one by inventing a placeholder type — which is what
     // made the missing format invisible.
     const deps = makeDeps()
-    const canvasId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, canvasId, new LoroDoc()) // overwrite: no kind
+    const documentId = await createDoc(deps, 'spatial')
+    await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: no kind
 
     await expect(
-      createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),
+      createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId }),
     ).rejects.toThrow(DocumentKindUnknownError)
 
     // The way out has to name the spatial path. A document that predates
@@ -83,7 +83,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // declaring a kind over it, so recommending it alone points the reader
     // at the one action that would destroy what they are trying to read.
     await expect(
-      createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),
+      createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId }),
     ).rejects.toThrow(/wb_node_add/)
   })
 })

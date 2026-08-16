@@ -4,7 +4,7 @@ import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import type { OperatorInfo, VersionEntry, VersionStore } from '../../store/version-store.js'
 
 // Shared auto-version debounce trigger used by both HTTP POST /update and the WS binary path.
-// Tracks the last auto-save time per canvasId and returns no-op below the threshold.
+// Tracks the last auto-save time per documentId and returns no-op below the threshold.
 export const AUTO_VERSION_INTERVAL_MS = 30_000
 
 export function createAutoVersionTrigger(

@@ -24,7 +24,7 @@ async function seedCanvas(documentStore: FakeDocumentStore): Promise<void> {
   writeSpatialCanvas(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -37,7 +37,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 
 async function loadLocks(documentStore: FakeDocumentStore): Promise<ReadonlySet<string>> {
   const stored = await documentStore.loadSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -53,16 +53,16 @@ describe('wb_node_lock tool', () => {
 
     const locked = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: true,
     })
-    expect(locked).toEqual({ canvasId: CANVAS_ID, nodeId: 'n1', locked: true })
+    expect(locked).toEqual({ documentId: CANVAS_ID, nodeId: 'n1', locked: true })
     expect(await loadLocks(documentStore)).toEqual(new Set(['n1']))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n1',
       locked: false,
     })
@@ -77,7 +77,7 @@ describe('wb_node_lock tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'ghost',
         locked: true,
       }),
@@ -91,7 +91,7 @@ describe('wb_node_lock tool', () => {
     const tool = createNodeLockTool(makeDeps(documentStore))
     const input = {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       nodeId: 'n2',
       locked: true,
     } as const

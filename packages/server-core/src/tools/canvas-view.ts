@@ -1,5 +1,5 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -28,7 +28,7 @@ export const canvasViewReferenceSchema = z
   .strict()
 
 export const canvasViewInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type CanvasViewInput = z.infer<typeof canvasViewInputSchema>
 
@@ -38,7 +38,7 @@ export const canvasViewOutputSchema = z
      * Echoed so the widget's Refresh control can re-invoke this tool for the
      * same canvas without the host having to remember what it asked for.
      */
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     /** The document itself: the widget lays it out, it is not pre-rendered. */
     scene: spatialCanvasSchema,
     /**
@@ -72,10 +72,10 @@ export function createCanvasViewTool(deps: ServerDeps) {
     inputSchema: canvasViewInputSchema,
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
-      const { canvas } = await loadSpatialCanvas(deps, input.canvasId)
+      const { canvas } = await loadSpatialCanvas(deps, input.documentId)
       const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
       return {
-        canvasId: input.canvasId,
+        documentId: input.documentId,
         scene: canvas,
         // `markdown` -> `body` is the one place the internal record and the
         // wire disagree. The record is canvas-render's `ResolvedReference`,

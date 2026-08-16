@@ -41,7 +41,7 @@ describe('wb_node_add', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       node: RECT,
     })
 
@@ -62,7 +62,7 @@ describe('wb_node_add', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       node: { ...RECT, id: 'n2', text: 'second' },
     })
 
@@ -81,7 +81,7 @@ describe('wb_node_add', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         node: { ...RECT, text: 'clobber' },
       }),
     ).rejects.toThrow(NodeAlreadyExistsError)
@@ -104,7 +104,7 @@ describe('wb_node_add', () => {
     const tool = createNodeAddTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, node: RECT }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
     expect((await loadDocument(makeDeps(store), CANVAS_ID)).canvas.nodes).toHaveLength(0)
@@ -118,7 +118,7 @@ describe('wb_node_add', () => {
     })
     const tool = createNodeAddTool(makeDeps(store))
 
-    await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, node: RECT })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT })
 
     expect(readDocumentKind((await loadDocument(makeDeps(store), CANVAS_ID)).doc)).toBe('spatial')
   })
@@ -128,7 +128,7 @@ describe('wb_node_add', () => {
     const tool = createNodeAddTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, node: RECT }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT }),
     ).rejects.toThrow()
   })
 })

@@ -1,4 +1,8 @@
-import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import {
+  documentIdSchema,
+  nodeIdSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-canvas-model'
 import { setNodeLock } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -19,7 +23,7 @@ import { NodeNotFoundError } from './errors.js'
 export const nodeLockInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     nodeId: nodeIdSchema,
     locked: z.boolean(),
   })
@@ -28,7 +32,7 @@ export type NodeLockInput = z.infer<typeof nodeLockInputSchema>
 
 export const nodeLockOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     nodeId: nodeIdSchema,
     locked: z.boolean(),
   })
@@ -42,19 +46,19 @@ export function createNodeLockTool(deps: ServerDeps) {
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadDocument(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // Reject a ghost id rather than storing a lock nothing can ever
       // clear from the UI (the editor only offers unlock on a real node).
       if (!canvas.nodes.some((node) => node.id === input.nodeId)) {
-        throw new NodeNotFoundError(input.canvasId, input.nodeId)
+        throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
       setNodeLock(doc, input.nodeId, input.locked)
-      await saveDocumentSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
-      return { canvasId: input.canvasId, nodeId: input.nodeId, locked: input.locked }
+      return { documentId: input.documentId, nodeId: input.nodeId, locked: input.locked }
     },
   }
 }

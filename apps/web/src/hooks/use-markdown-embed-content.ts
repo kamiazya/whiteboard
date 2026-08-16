@@ -26,16 +26,17 @@ export interface MarkdownEmbedEntry {
 }
 
 export type MarkdownEmbedLoader = (
-  canvasId: string,
+  documentId: string,
 ) => Promise<{ body: string; title?: string } | undefined>
 
-/** Every embed canvasId reachable in one parsed document. */
+/** Every embed documentId reachable in one parsed document. */
 function collectEmbedIds(root: MdastRoot): readonly string[] {
   const ids: string[] = []
   const visit = (node: unknown) => {
     if (node === null || typeof node !== 'object') return
-    const record = node as { type?: string; canvasId?: string; children?: unknown[] }
-    if (record.type === 'embed' && typeof record.canvasId === 'string') ids.push(record.canvasId)
+    const record = node as { type?: string; documentId?: string; children?: unknown[] }
+    if (record.type === 'embed' && typeof record.documentId === 'string')
+      ids.push(record.documentId)
     if (Array.isArray(record.children)) for (const child of record.children) visit(child)
   }
   visit(root)
@@ -60,7 +61,7 @@ export function useMarkdownEmbedContent({
   resolveAlias?: AliasResolver
   /** Injection seam for tests; defaults to the browser-local Loro loader. */
   load?: MarkdownEmbedLoader
-}): (canvasId: string) => MarkdownEmbedEntry | undefined {
+}): (documentId: string) => MarkdownEmbedEntry | undefined {
   /**
    * One id, loaded and parsed. References resolve inside embedded bodies
    * too, so their own nested embeds become typed nodes the layout can
@@ -71,9 +72,9 @@ export function useMarkdownEmbedContent({
    * answer to the seam, and neither is worth retrying on every keystroke.
    */
   const loadEntry = useCallback(
-    async (canvasId: string): Promise<MarkdownEmbedEntry | undefined> => {
-      const source = await load(canvasId).catch((err: unknown) => {
-        log.warn('embed source load failed', { canvasId, err })
+    async (documentId: string): Promise<MarkdownEmbedEntry | undefined> => {
+      const source = await load(documentId).catch((err: unknown) => {
+        log.warn('embed source load failed', { documentId, err })
         return undefined
       })
       if (source === undefined) return undefined
@@ -83,7 +84,7 @@ export function useMarkdownEmbedContent({
           root: resolveReferences(parseMarkdownBody(source.body), resolveAlias),
         }
       } catch (err) {
-        log.warn('embed source parse failed', { canvasId, err })
+        log.warn('embed source parse failed', { documentId, err })
         return undefined
       }
     },

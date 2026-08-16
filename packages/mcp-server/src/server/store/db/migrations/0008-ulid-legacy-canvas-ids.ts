@@ -1,6 +1,6 @@
 import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
-import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
 import type { Kysely } from 'kysely'
 import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
@@ -77,7 +77,7 @@ export const migration = {
 
     async function rewriteLegacyRows(): Promise<void> {
       for (const row of legacy) {
-        const newId = generateCanvasId()
+        const newId = generateDocumentId()
         // Insert-new / repoint-children / delete-old / claim-the-slug, in that
         // order: every step satisfies the children's foreign keys AND the
         // (workspaceId, slug) unique index on its own, so this needs no

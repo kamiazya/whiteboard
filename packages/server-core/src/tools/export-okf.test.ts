@@ -23,7 +23,7 @@ describe('exportOkf', () => {
     })
     const result = await exportOkf(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
 
     expect(result.markdown.startsWith('---\n')).toBe(true)
@@ -41,7 +41,7 @@ describe('exportOkf', () => {
     })
     const result = await exportOkf(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
     })
 
     expect(result.markdown.endsWith('---\n')).toBe(true)
@@ -51,7 +51,7 @@ describe('exportOkf', () => {
     await expect(
       exportOkf(makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
       }),
     ).rejects.toThrow(CanvasNotFoundError)
   })

@@ -12,11 +12,11 @@ import type { z } from 'zod'
  */
 export class DocumentKindMismatchError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly kind: DocumentKind,
     detail: string,
   ) {
-    super(`Document ${canvasId} is a ${kind} document. ${detail}`)
+    super(`Document ${documentId} is a ${kind} document. ${detail}`)
     this.name = 'DocumentKindMismatchError'
   }
 }
@@ -30,18 +30,18 @@ export class DocumentKindMismatchError extends Error {
  */
 export class DocumentContentLossError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     detail: string,
   ) {
-    super(`Document ${canvasId} records no kind and is not empty. ${detail}`)
+    super(`Document ${documentId} records no kind and is not empty. ${detail}`)
     this.name = 'DocumentContentLossError'
   }
 }
 
 /** Thrown when a patch tool targets a canvas that has no saved snapshot yet. */
 export class DocumentNotFoundError extends Error {
-  constructor(public readonly canvasId: string) {
-    super(`canvas doc not found: ${canvasId}`)
+  constructor(public readonly documentId: string) {
+    super(`canvas doc not found: ${documentId}`)
     this.name = 'DocumentNotFoundError'
   }
 }
@@ -49,10 +49,10 @@ export class DocumentNotFoundError extends Error {
 /** Thrown when a patch tool targets a nodeId absent from the canvas. */
 export class NodeNotFoundError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly nodeId: string,
   ) {
-    super(`node not found: ${nodeId} in canvas ${canvasId}`)
+    super(`node not found: ${nodeId} in canvas ${documentId}`)
     this.name = 'NodeNotFoundError'
   }
 }
@@ -65,10 +65,10 @@ export class NodeNotFoundError extends Error {
  */
 export class NodeLockedError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly nodeId: string,
   ) {
-    super(`node is locked: ${nodeId} in canvas ${canvasId} (unlock it with wb_node_lock)`)
+    super(`node is locked: ${nodeId} in canvas ${documentId} (unlock it with wb_node_lock)`)
     this.name = 'NodeLockedError'
   }
 }
@@ -76,10 +76,10 @@ export class NodeLockedError extends Error {
 /** Edge counterpart to `NodeLockedError` — see `wb_edge_lock`. */
 export class EdgeLockedError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly edgeId: string,
   ) {
-    super(`edge is locked: ${edgeId} in canvas ${canvasId} (unlock it with wb_edge_lock)`)
+    super(`edge is locked: ${edgeId} in canvas ${documentId} (unlock it with wb_edge_lock)`)
     this.name = 'EdgeLockedError'
   }
 }
@@ -87,10 +87,10 @@ export class EdgeLockedError extends Error {
 /** Thrown when a patch tool targets an edgeId absent from the canvas. */
 export class EdgeNotFoundError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly edgeId: string,
   ) {
-    super(`edge not found: ${edgeId} in canvas ${canvasId}`)
+    super(`edge not found: ${edgeId} in canvas ${documentId}`)
     this.name = 'EdgeNotFoundError'
   }
 }
@@ -115,11 +115,11 @@ export class PatchValidationError extends Error {
  */
 export class NotATextNodeError extends Error {
   constructor(
-    public readonly canvasId: string,
+    public readonly documentId: string,
     public readonly nodeId: string,
     public readonly actualType: string,
   ) {
-    super(`node ${nodeId} in canvas ${canvasId} is not a text node (type: ${actualType})`)
+    super(`node ${nodeId} in canvas ${documentId} is not a text node (type: ${actualType})`)
     this.name = 'NotATextNodeError'
   }
 }

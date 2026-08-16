@@ -1,4 +1,4 @@
-import type { CanvasId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
@@ -10,8 +10,8 @@ import type { ServerDeps } from '../server-deps.js'
  * tool-error path, so this is a plain Error subclass rather than a DTO.
  */
 export class CanvasNotFoundError extends Error {
-  constructor(readonly canvasId: string) {
-    super(`canvas not found: ${canvasId}`)
+  constructor(readonly documentId: string) {
+    super(`canvas not found: ${documentId}`)
     this.name = 'CanvasNotFoundError'
   }
 }
@@ -24,11 +24,11 @@ export class CanvasNotFoundError extends Error {
  */
 export async function loadSpatialCanvas(
   deps: ServerDeps,
-  canvasId: CanvasId,
+  documentId: DocumentId,
 ): Promise<{ doc: LoroDoc; canvas: SpatialCanvas }> {
-  const docRef = { kind: 'canvas' as const, canvasId }
+  const docRef = { kind: 'canvas' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
-  if (existing === null) throw new CanvasNotFoundError(canvasId)
+  if (existing === null) throw new CanvasNotFoundError(documentId)
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))

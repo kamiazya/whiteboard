@@ -88,21 +88,22 @@ describe('mdastNodeSchema', () => {
     expect(mdastNodeSchema.safeParse({ type: 'inlineMath', value: 'x^2' }).success).toBe(true)
   })
 
-  it('parses wikiLink and embed custom nodes with a canvasId', () => {
+  it('parses wikiLink and embed custom nodes with a documentId', () => {
     expect(
       mdastNodeSchema.safeParse({
         type: 'wikiLink',
-        canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         alias: 'Architecture',
       }).success,
     ).toBe(true)
     expect(
-      mdastNodeSchema.safeParse({ type: 'embed', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }).success,
+      mdastNodeSchema.safeParse({ type: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
+        .success,
     ).toBe(true)
   })
 
-  it('rejects a wikiLink with a malformed canvasId', () => {
-    expect(mdastNodeSchema.safeParse({ type: 'wikiLink', canvasId: 'not-a-ulid' }).success).toBe(
+  it('rejects a wikiLink with a malformed documentId', () => {
+    expect(mdastNodeSchema.safeParse({ type: 'wikiLink', documentId: 'not-a-ulid' }).success).toBe(
       false,
     )
   })

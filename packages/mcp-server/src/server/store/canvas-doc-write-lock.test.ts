@@ -61,7 +61,7 @@ async function makeDeps() {
   const documentIndex = new InMemoryDocumentIndex()
   documentIndex.seed({
     workspaceId: WORKSPACE_ID,
-    canvasId: CANVAS_ID,
+    documentId: CANVAS_ID,
     path: 'doc',
     kind: 'spatial',
   })
@@ -70,7 +70,7 @@ async function makeDeps() {
   _w(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -85,7 +85,7 @@ async function makeDeps() {
 /** Positions of both nodes as actually stored, after everything settles. */
 async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
   const stored = await deps.documentStore.loadSnapshot({
-    docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+    docRef: { kind: 'canvas', documentId: CANVAS_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -110,13 +110,13 @@ describe('withCanvasDocWriteLock', () => {
     await Promise.all([
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'n1',
         patch: { x: 11 },
       }),
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         nodeId: 'n2',
         patch: { x: 22 },
       }),
@@ -138,7 +138,7 @@ describe('withCanvasDocWriteLock', () => {
       withCanvasDocWriteLock(CANVAS_ID, () =>
         tool.execute({
           workspaceId: WORKSPACE_ID,
-          canvasId: CANVAS_ID,
+          documentId: CANVAS_ID,
           nodeId: 'n1',
           patch: { x: 11 },
         }),
@@ -146,7 +146,7 @@ describe('withCanvasDocWriteLock', () => {
       withCanvasDocWriteLock(CANVAS_ID, () =>
         tool.execute({
           workspaceId: WORKSPACE_ID,
-          canvasId: CANVAS_ID,
+          documentId: CANVAS_ID,
           nodeId: 'n2',
           patch: { x: 22 },
         }),
@@ -219,11 +219,11 @@ describe('registered MCP handlers', () => {
     const nodePatch = handlers.get('wb_node_patch')!
     await Promise.all([
       nodePatch(
-        { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
+        { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
         {},
       ),
       nodePatch(
-        { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n2', patch: { x: 22 } },
+        { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, nodeId: 'n2', patch: { x: 22 } },
         {},
       ),
     ])
@@ -255,11 +255,11 @@ describe('registered MCP handlers', () => {
     }
 
     const writing = handlers.get('wb_node_patch')!(
-      { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
+      { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, nodeId: 'n1', patch: { x: 11 } },
       {},
     )
     const read = await handlers.get('wb_scene_digest')!(
-      { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID },
+      { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID },
       {},
     )
     expect(read).toBeDefined()

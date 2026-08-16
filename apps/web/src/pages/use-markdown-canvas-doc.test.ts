@@ -68,7 +68,7 @@ describe('useMarkdownCanvasDoc CRDT exposure', () => {
 describe('flush/load ordering across an effect cycle', () => {
   it('a reload sees the edits the unmount flush was still writing', async () => {
     // The cleanup flushes the pending debounce with a fire-and-forget save;
-    // the next effect run loads the same canvasId. Unordered, the load can
+    // the next effect run loads the same documentId. Unordered, the load can
     // read the store BEFORE that flush lands — the reloaded doc then shows
     // pre-edit state and the debounce that held the edit is gone, so it is
     // lost for good. Captured live as a title typed into the real page
@@ -113,7 +113,7 @@ describe('flush/load ordering across an effect cycle', () => {
     expect(result.current.coreFacets?.title).toBe('リリース計画')
 
     // Cycle the effect while the debounce still holds the edit — the shape
-    // any transient enabled/canvasId flicker produces.
+    // any transient enabled/documentId flicker produces.
     rerender({ enabled: false })
     rerender({ enabled: true })
     // One macrotask tick, not a guessed delay: the load effect chains off the

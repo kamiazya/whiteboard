@@ -1,4 +1,4 @@
-import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -87,7 +87,7 @@ export class InMemoryDocumentIndex implements DocumentIndex {
       throw new DocumentPathTakenError(workspaceId, path)
     }
     const entry: DocumentEntry = {
-      canvasId: generateCanvasId(),
+      documentId: generateDocumentId(),
       path,
       kind,
       ...(name === undefined ? {} : { name }),
@@ -105,23 +105,23 @@ export class InMemoryDocumentIndex implements DocumentIndex {
 
   async resolveDocumentById({
     workspaceId,
-    canvasId,
+    documentId,
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     for (const entry of this.#inWorkspace(workspaceId).values()) {
-      if (entry.canvasId === canvasId) return entry
+      if (entry.documentId === documentId) return entry
     }
     return null
   }
 
-  async setDocumentName({ workspaceId, canvasId, name }: SetDocumentNameInput): Promise<void> {
+  async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
     const documents = this.#inWorkspace(workspaceId)
     for (const [path, entry] of documents) {
-      if (entry.canvasId !== canvasId) continue
+      if (entry.documentId !== documentId) continue
       const { name: _dropped, ...rest } = entry
       documents.set(path, { ...rest, ...(name === undefined ? {} : { name }) })
       return
     }
-    throw new DocumentNotFoundError(workspaceId, canvasId)
+    throw new DocumentNotFoundError(workspaceId, documentId)
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {

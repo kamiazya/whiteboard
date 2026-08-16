@@ -392,7 +392,7 @@ export function createApp(options: AppOptions) {
     app.route('/', createPairingRouter({ ...options.pairing, identity }))
   }
 
-  // server-core's OpenCanvas /api/v1 surface (workspace tree, canvasId +
+  // server-core's OpenCanvas /api/v1 surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
   if (options.serverDeps) {

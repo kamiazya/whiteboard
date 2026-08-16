@@ -509,7 +509,7 @@ describe('createApp daemon mutation auth', () => {
     expect(canvasCreateTool).toBeDefined()
     expect(canvasCreateTool?.outputSchema).toBeDefined()
     expect(createResult.structuredContent).toMatchObject({
-      canvasId: expect.any(String),
+      documentId: expect.any(String),
       path: 'via-mcp',
     })
     expect(createResult.content).toEqual([
@@ -555,7 +555,7 @@ describe('createApp daemon mutation auth', () => {
       },
     })
     expect(createResult.structuredContent).toMatchObject({
-      canvasId: expect.any(String),
+      documentId: expect.any(String),
       path: 'via-modern-mcp',
     })
     await transport.close()

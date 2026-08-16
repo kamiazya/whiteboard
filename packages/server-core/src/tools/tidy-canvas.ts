@@ -1,5 +1,5 @@
 import {
-  canvasIdSchema,
+  documentIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
@@ -15,7 +15,7 @@ import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 export const tidyCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     /** Restrict tidy to these unit roots; everything else stands as a fixed obstacle. */
     scope: z.array(nodeIdSchema).min(1).optional(),
   })
@@ -24,7 +24,7 @@ export type TidyCanvasInput = z.infer<typeof tidyCanvasInputSchema>
 
 export const tidyCanvasOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     /** Only the nodes that actually moved, with their new positions. */
     moved: z.array(
       z.object({ id: nodeIdSchema, x: z.number().int(), y: z.number().int() }).strict(),
@@ -41,8 +41,8 @@ export function createTidyCanvasTool(deps: ServerDeps) {
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadDocument(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // A markdown document stores its OKF body in a text node, so its
       // content parses as a perfectly valid spatial canvas and the schema
@@ -51,7 +51,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
       // is already there is no evidence of what the document is.
       if (readDocumentKind(doc) === 'markdown') {
         throw new DocumentKindMismatchError(
-          input.canvasId,
+          input.documentId,
           'markdown',
           'This re-lays-out a spatial canvas, and its only node holds its OKF body. Edit its body through wb_body_patch.',
         )
@@ -64,7 +64,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
         scope: input.scope === undefined ? undefined : new Set(input.scope),
         locked: (id) => locks.has(id),
       })
-      if (moved.length === 0) return { canvasId: input.canvasId, moved: [] }
+      if (moved.length === 0) return { documentId: input.documentId, moved: [] }
 
       const target = new Map(moved.map((move) => [move.id, move]))
       const candidateCanvas = {
@@ -77,9 +77,9 @@ export function createTidyCanvasTool(deps: ServerDeps) {
       const parsed = spatialCanvasSchema.safeParse(candidateCanvas)
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, moved: [...moved] }
+      return { documentId: input.documentId, moved: [...moved] }
     },
   }
 }

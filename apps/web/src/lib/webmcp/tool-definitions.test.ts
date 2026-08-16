@@ -159,7 +159,7 @@ const daemonCanvasArb = fc.record(
     kind: fc.constantFrom('daemon', 'browser-local', 'other'),
     workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
     slug: fc.oneof(fc.string(), fc.constant(undefined)),
-    canvasId: fc.oneof(fc.string(), fc.constant(undefined)),
+    documentId: fc.oneof(fc.string(), fc.constant(undefined)),
   },
   { requiredKeys: [] },
 )

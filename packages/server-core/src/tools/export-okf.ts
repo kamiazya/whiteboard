@@ -1,6 +1,6 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
 import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
@@ -19,7 +19,7 @@ import type { ServerDeps } from '../server-deps.js'
  * future authorization-scoping hook, not passed to the store.
  */
 export const exportOkfInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
 
@@ -49,7 +49,7 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
  * document, and the `/okf` route reaches it directly for the workspace tree.
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
-  const { doc } = await loadSpatialCanvas(deps, input.canvasId)
+  const { doc } = await loadSpatialCanvas(deps, input.documentId)
   const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this
@@ -57,7 +57,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // being handed its slug as a title.
   const entry = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
-    canvasId: input.canvasId,
+    documentId: input.documentId,
   })
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)

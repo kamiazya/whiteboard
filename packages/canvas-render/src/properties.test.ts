@@ -20,9 +20,9 @@ function buildBundle(edgesPerDoc: readonly string[][]): ResolvedDocBundle {
   const ids = ['A', 'B', 'C', 'D', 'E']
   const docs: ResolvedDocBundle['docs'] = {}
   ids.forEach((id, index) => {
-    docs[id] = { canvasId: id, title: id, embeds: edgesPerDoc[index] ?? [] }
+    docs[id] = { documentId: id, title: id, embeds: edgesPerDoc[index] ?? [] }
   })
-  return { root: { canvasId: 'A' }, docs }
+  return { root: { documentId: 'A' }, docs }
 }
 
 function maxDepth(node: SceneNode, depth = 0): number {

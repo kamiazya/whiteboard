@@ -1,4 +1,4 @@
-import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -36,7 +36,7 @@ function toEntry(row: {
   displayName: string | null
 }): DocumentEntry {
   return {
-    canvasId: row.id,
+    documentId: row.id,
     path: row.slug,
     ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
@@ -59,8 +59,8 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
  * makes an agent-created document one a user can see.
  *
  * New rows are assigned a ULID, not the nanoid `saveCanvas` mints for its own
- * rows: ADR-0007 point 5 fixed the ULID as the `canvasId` and the nanoid as a
- * storage detail, and `canvasIdSchema` in the port's `DocumentEntry` accepts
+ * rows: ADR-0007 point 5 fixed the ULID as the `documentId` and the nanoid as a
+ * storage detail, and `documentIdSchema` in the port's `DocumentEntry` accepts
  * only the former. A row predating this cannot round-trip through the port —
  * a deliberate consequence of converging the two id spaces — so `listDocuments`
  * skips such rows (see its comment) rather than letting one of them fail
@@ -92,14 +92,14 @@ export class SqliteDocumentIndex implements DocumentIndex {
       if (!workspace) {
         throw new WorkspaceNotFoundError(workspaceId)
       }
-      const canvasId = generateCanvasId()
+      const documentId = generateDocumentId()
       const now = Date.now()
       // One statement, so the check and the claim cannot be separated: the
       // unique (workspaceId, slug) index decides, and a loser inserts nothing.
       const inserted = await this.db
         .insertInto('canvases')
         .values({
-          id: canvasId,
+          id: documentId,
           workspaceId,
           slug: path,
           displayName: name ?? null,
@@ -116,7 +116,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       if ((inserted.numInsertedOrUpdatedRows ?? 0n) === 0n) {
         throw new DocumentPathTakenError(workspaceId, path)
       }
-      return { canvasId, path, kind, ...(name === undefined ? {} : { name }) }
+      return { documentId, path, kind, ...(name === undefined ? {} : { name }) }
     })
   }
 
@@ -136,27 +136,27 @@ export class SqliteDocumentIndex implements DocumentIndex {
 
   async resolveDocumentById({
     workspaceId,
-    canvasId,
+    documentId,
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     const row = await this.db
       .selectFrom('canvases')
       .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .executeTakeFirst()
     if (!row) return null
     return toEntry(row)
   }
 
-  async setDocumentName({ workspaceId, canvasId, name }: SetDocumentNameInput): Promise<void> {
+  async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
     const result = await this.db
       .updateTable('canvases')
       .set({ displayName: name ?? null })
       .where('workspaceId', '=', workspaceId)
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .executeTakeFirst()
     if (result.numUpdatedRows === 0n) {
-      throw new DocumentNotFoundError(workspaceId, canvasId)
+      throw new DocumentNotFoundError(workspaceId, documentId)
     }
   }
 
@@ -187,7 +187,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     // user's gallery), and the log is where the absence is said.
     const entries: DocumentEntry[] = []
     for (const row of rows) {
-      if (!canvasIdSchema.safeParse(row.id).success) {
+      if (!documentIdSchema.safeParse(row.id).success) {
         log.warning(
           { workspaceId, slug: row.slug },
           'skipping a pre-convergence row the port cannot carry',

@@ -57,8 +57,10 @@ export async function loroCanvasesKeys(): Promise<string[]> {
 }
 
 /** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
-export async function persistedNodeIds(canvasId: string): Promise<string[]> {
-  const envelope = await withCanvasStore<CanvasEnvelope | undefined>((store) => store.get(canvasId))
+export async function persistedNodeIds(documentId: string): Promise<string[]> {
+  const envelope = await withCanvasStore<CanvasEnvelope | undefined>((store) =>
+    store.get(documentId),
+  )
   if (!envelope) {
     return []
   }

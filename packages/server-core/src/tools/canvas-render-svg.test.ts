@@ -24,7 +24,7 @@ describe('wb_scene_render tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: false,
     })
 
@@ -44,7 +44,7 @@ describe('wb_scene_render tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         embedReferences: false,
       }),
     ).rejects.toThrow(CanvasNotFoundError)

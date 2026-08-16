@@ -1683,8 +1683,8 @@ describe('versions API', () => {
         },
       )
       expect(restoreRes.status).toBe(200)
-      const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
-      expect(restoreBody.canvasId).toBe('session1/canvas-b')
+      const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
+      expect(restoreBody.documentId).toBe('session1/canvas-b')
 
       expect(broadcastCalls).toHaveLength(1)
       expect(broadcastCalls[0]?.slug).toBe('canvas-b')
@@ -1720,8 +1720,8 @@ describe('versions API', () => {
         },
       )
       expect(restoreRes.status).toBe(200)
-      const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
-      expect(restoreBody.canvasId).toBe('session1/canvas-new')
+      const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
+      expect(restoreBody.documentId).toBe('session1/canvas-new')
       // The restored doc has one alive legacy element ("keep-me"); the
       // fixed countAliveNodes reports the real count instead of the
       // retired countElements(_doc) stub's always-0.

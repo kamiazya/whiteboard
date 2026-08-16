@@ -27,7 +27,7 @@ describe('wb_scene_digest tool', () => {
     })
     const tool = createCanvasDigestTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     // Pinned explicitly (not computed by calling composeCanvasScene again)
     // so a real scene regression actually turns this test red — an
@@ -60,8 +60,8 @@ describe('wb_scene_digest tool', () => {
   test('rejects when the canvas has no stored snapshot', async () => {
     const tool = createCanvasDigestTool(makeDeps(new FakeDocumentStore()))
 
-    await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow(
-      CanvasNotFoundError,
-    )
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 })

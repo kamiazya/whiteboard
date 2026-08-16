@@ -1,4 +1,4 @@
-import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import type {
   MdastCellPhrasingContent,
   MdastFlowContent,
@@ -128,17 +128,17 @@ function resolveTarget(
   isEmbed: boolean,
 ): MdastPhrasingContent | undefined {
   if (target.startsWith(CANVAS_ID_PREFIX)) {
-    const canvasId = target.slice(CANVAS_ID_PREFIX.length)
-    if (!canvasIdSchema.safeParse(canvasId).success) return undefined
-    return isEmbed ? { type: 'embed', canvasId } : { type: 'wikiLink', canvasId, alias }
+    const documentId = target.slice(CANVAS_ID_PREFIX.length)
+    if (!documentIdSchema.safeParse(documentId).success) return undefined
+    return isEmbed ? { type: 'embed', documentId } : { type: 'wikiLink', documentId, alias }
   }
 
   if (resolver === undefined) return undefined
-  const canvasId = resolver(target)
-  if (canvasId === null) return undefined
+  const documentId = resolver(target)
+  if (documentId === null) return undefined
   return isEmbed
-    ? { type: 'embed', canvasId }
-    : { type: 'wikiLink', canvasId, alias: alias ?? target }
+    ? { type: 'embed', documentId }
+    : { type: 'wikiLink', documentId, alias: alias ?? target }
 }
 
 function resolvePhrasing(

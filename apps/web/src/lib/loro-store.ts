@@ -65,11 +65,11 @@ export class LoroStore {
     return new Loro().export({ mode: 'snapshot' })
   }
 
-  async load(canvasId: string): Promise<LoroLoadResult> {
+  async load(documentId: string): Promise<LoroLoadResult> {
     const db = await openWhiteboardDb()
     return new Promise((resolve) => {
       const tx = db.transaction('loroCanvases', 'readonly')
-      const req = tx.objectStore('loroCanvases').get(canvasId)
+      const req = tx.objectStore('loroCanvases').get(documentId)
       req.onsuccess = () => {
         if (req.result === undefined) {
           resolve({ kind: 'not-found' })
@@ -131,7 +131,7 @@ export class LoroStore {
     })
   }
 
-  async save(canvasId: string, snapshot: Uint8Array): Promise<void> {
+  async save(documentId: string, snapshot: Uint8Array): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const envelope: LoroRecordEnvelope = {
@@ -140,7 +140,7 @@ export class LoroStore {
         updatedAt: new Date().toISOString(),
       }
       const tx = db.transaction('loroCanvases', 'readwrite')
-      tx.objectStore('loroCanvases').put(envelope, canvasId)
+      tx.objectStore('loroCanvases').put(envelope, documentId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -164,12 +164,12 @@ export class LoroStore {
    * read 'not-found' and the second clobbers the first.
    * If no record exists yet, this is a no-op (snapshot must be saved first).
    */
-  async appendDelta(canvasId: string, delta: Uint8Array): Promise<void> {
+  async appendDelta(documentId: string, delta: Uint8Array): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('loroCanvases', 'readwrite')
       const store = tx.objectStore('loroCanvases')
-      const getReq = store.get(canvasId)
+      const getReq = store.get(documentId)
       getReq.onsuccess = () => {
         const raw = getReq.result
         if (raw === undefined) {
@@ -188,7 +188,7 @@ export class LoroStore {
           deltas: [...(parsed.data.deltas ?? []), delta],
           updatedAt: new Date().toISOString(),
         }
-        store.put(updated, canvasId)
+        store.put(updated, documentId)
       }
       tx.oncomplete = () => {
         db.close()

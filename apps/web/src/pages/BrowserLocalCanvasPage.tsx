@@ -100,7 +100,7 @@ interface BrowserLocalCanvasPageProps {
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
   // A canvas id requested by the URL at mount (e.g. a bookmarked
-  // /local/:canvasId deep link), read once — see
+  // /local/:documentId deep link), read once — see
   // useBrowserLocalCanvasController's own contract for the same parameter.
   initialCanvasId?: string
 }
@@ -239,10 +239,10 @@ export function BrowserLocalCanvasPage({
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
-  const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  const documentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
-  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, documentKind === 'markdown')
+  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, documentId, documentKind === 'markdown')
   // Binds CodeMirror straight to the document's 'body' text container:
   // edits land in the CRDT with real deltas (not the wholesale replace
   // setBody does), and an external change moves the local caret exactly.
@@ -271,7 +271,7 @@ export function BrowserLocalCanvasPage({
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
   // /canvas/:workspaceId/:slug contract). This page only mounts on
-  // /local/:canvasId (App routes '/' to the list), so on a normal open the
+  // /local/:documentId (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
   // exists for the stale-deep-link case: a bookmarked id that no longer
   // exists falls back to the default canvas, and repairing the URL with a
@@ -279,19 +279,19 @@ export function BrowserLocalCanvasPage({
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
   // This never fights the URL->canvas effect below: that effect only calls
-  // switchCanvas when the URL disagrees with the already-loaded canvasId, and
+  // switchCanvas when the URL disagrees with the already-loaded documentId, and
   // by the time navigate() below lands, location.pathname already equals
   // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
-    if (canvasId === null) return
-    const path = browserLocalCanvasPath(canvasId)
+    if (documentId === null) return
+    const path = browserLocalCanvasPath(documentId)
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
     navigate(path, { replace: isFirstSync })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId, navigate])
+  }, [documentId, navigate])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -302,7 +302,7 @@ export function BrowserLocalCanvasPage({
   // stale canvas.
   //
   // lastKnownCanvasIdRef distinguishes the two ways this effect's own
-  // dependencies can change: a switcher-driven switchCanvas() updates canvasId
+  // dependencies can change: a switcher-driven switchCanvas() updates documentId
   // before the sibling canvas-id -> URL effect's navigate() call has actually
   // updated `location`, so this effect would otherwise see a stale pathname
   // that still names the PREVIOUS canvas and switch straight back to it. When
@@ -311,23 +311,23 @@ export function BrowserLocalCanvasPage({
   // skip it and let the other effect finish the sync.
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (canvasId === null) return
-    const requestedId = parseBrowserLocalRoute(location.pathname)?.canvasId
+    if (documentId === null) return
+    const requestedId = parseBrowserLocalRoute(location.pathname)?.documentId
     const lastKnownCanvasId = lastKnownCanvasIdRef.current
-    lastKnownCanvasIdRef.current = canvasId
-    if (requestedId === undefined || requestedId === canvasId) return
+    lastKnownCanvasIdRef.current = documentId
+    if (requestedId === undefined || requestedId === documentId) return
     if (requestedId === lastKnownCanvasId) return
     void switchCanvas(requestedId).then((switched) => {
       // A stale deep link (deleted/unknown canvas) is a recoverable miss:
       // keep the loaded canvas and repair the address bar instead of
       // leaving a URL that names nothing.
-      if (!switched) navigate(browserLocalCanvasPath(canvasId), { replace: true })
+      if (!switched) navigate(browserLocalCanvasPath(documentId), { replace: true })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, canvasId, switchCanvas])
+  }, [location.pathname, documentId, switchCanvas])
 
   useEffect(() => {
-    if (canvasId === null) return
+    if (documentId === null) return
     const generation = ++listGenerationRef.current
     listCanvases()
       .then((list) => {
@@ -339,7 +339,7 @@ export function BrowserLocalCanvasPage({
         // rejection; the switcher just keeps showing its last-known list.
         log.error('listCanvases failed', err)
       })
-  }, [canvasId, currentUpdatedAt, listCanvases])
+  }, [documentId, currentUpdatedAt, listCanvases])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged. A markdown canvas
@@ -349,10 +349,12 @@ export function BrowserLocalCanvasPage({
   // written by use-markdown-body.
   const backend = useMemo(
     () =>
-      canvasId != null && documentKind !== 'markdown' ? new BrowserLocalBackend(canvasId) : null,
-    // Re-create backend only when canvasId/kind changes; a null id means not-yet-loaded.
+      documentId != null && documentKind !== 'markdown'
+        ? new BrowserLocalBackend(documentId)
+        : null,
+    // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId, documentKind],
+    [documentId, documentKind],
   )
 
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
@@ -399,14 +401,14 @@ export function BrowserLocalCanvasPage({
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
-    canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
+    canvas: documentId !== null ? { documentId, name: canvasName ?? '' } : null,
   })
 
   // Read once at mount: the routed /settings page is the only place this
   // toggles, and navigating there and back remounts this page (a route
   // change), which re-reads the store fresh — no in-mount reactivity needed.
   const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
-  useBrowserToolRegistry(commands, canvasId, webMcpEnabled)
+  useBrowserToolRegistry(commands, documentId, webMcpEnabled)
 
   // Canvas data lives in IndexedDB; without an explicit persistence grant
   // the browser may evict it under storage pressure. Fire-and-forget — the
@@ -628,7 +630,7 @@ export function BrowserLocalCanvasPage({
       markdownDoc.body !== null && markdownDoc.coreFacets !== null ? (
         <CanvasProperties
           inline
-          key={canvasId ?? 'no-canvas'}
+          key={documentId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
           meta={markdownDoc.coreFacets ?? fallbackCoreFacets(documentKind, canvasName)}
@@ -655,7 +657,7 @@ export function BrowserLocalCanvasPage({
         // which has none to hold one (ADR-0009 decision 3) — wb_facet_set
         // refuses to write them here, so the editor does not offer them.
         showFacets={false}
-        key={canvasId ?? 'no-canvas'}
+        key={documentId ?? 'no-canvas'}
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
@@ -783,7 +785,7 @@ export function BrowserLocalCanvasPage({
             <div className="flex h-full min-h-0 flex-col">
               <div className="min-h-0 flex-1">
                 <MarkdownEditor
-                  key={canvasId ?? 'no-canvas'}
+                  key={documentId ?? 'no-canvas'}
                   value={markdownDoc.body}
                   onChange={markdownBinding === undefined ? markdownDoc.setBody : noopChange}
                   sourceExtensions={markdownBinding}
@@ -808,7 +810,7 @@ export function BrowserLocalCanvasPage({
                   inherits the previous canvas's viewport. (The markdown
                   branch keys for the same reason.) */}
               <SpatialEditor
-                key={canvasId ?? 'no-canvas'}
+                key={documentId ?? 'no-canvas'}
                 // Decided from the canvas's own shape, but only once its
                 // document has loaded — at mount every canvas still looks
                 // empty.
@@ -827,7 +829,7 @@ export function BrowserLocalCanvasPage({
                 // File-node reference = browser-local canvas id; the current
                 // canvas is excluded (a self-reference card is pure noise).
                 fileRefOptions={canvases
-                  .filter((entry) => entry.id !== canvasId)
+                  .filter((entry) => entry.id !== documentId)
                   .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
                 onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
                 missingFileRef={missingFileRef}

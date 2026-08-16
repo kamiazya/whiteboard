@@ -30,10 +30,10 @@ type RemarkNode = {
   [key: string]: unknown
 }
 
-function wikiLinkText(node: { canvasId: string; alias?: string }): string {
+function wikiLinkText(node: { documentId: string; alias?: string }): string {
   return node.alias === undefined
-    ? `[[canvas:${node.canvasId}]]`
-    : `[[canvas:${node.canvasId}|${node.alias}]]`
+    ? `[[canvas:${node.documentId}]]`
+    : `[[canvas:${node.documentId}|${node.alias}]]`
 }
 
 function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
@@ -41,7 +41,7 @@ function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
     case 'wikiLink':
       return { type: 'text', value: wikiLinkText(node) }
     case 'embed':
-      return { type: 'text', value: `![[canvas:${node.canvasId}]]` }
+      return { type: 'text', value: `![[canvas:${node.documentId}]]` }
     case 'emphasis':
     case 'strong':
     case 'delete':

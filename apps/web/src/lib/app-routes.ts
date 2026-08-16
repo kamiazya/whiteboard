@@ -26,8 +26,8 @@ export function browserLocalIndexPath(): string {
   return '/local'
 }
 
-export function browserLocalCanvasPath(canvasId: string): string {
-  return `/local/${encodeURIComponent(canvasId)}`
+export function browserLocalCanvasPath(documentId: string): string {
+  return `/local/${encodeURIComponent(documentId)}`
 }
 
 export type DaemonRoute =
@@ -82,11 +82,11 @@ export function daemonRoutePath(route: DaemonRoute): string {
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 
-export function parseBrowserLocalRoute(pathname: string): { canvasId: string } | null {
+export function parseBrowserLocalRoute(pathname: string): { documentId: string } | null {
   const match = pathname.match(/^\/local\/([^/]+)\/?$/)
   if (!match) return null
-  const canvasId = decodeSegment(match[1])
-  return canvasId === null ? null : { canvasId }
+  const documentId = decodeSegment(match[1])
+  return documentId === null ? null : { documentId }
 }
 
 export type SettingsSection = 'general' | 'data' | 'connections'

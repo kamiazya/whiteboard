@@ -207,12 +207,12 @@ export class FileVersionStore implements VersionStore {
       const operator = opts.operator
 
       const db = await dbReady()
-      const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+      const documentId = await upsertCanvasRow(db, workspaceId, slug)
       await db
         .insertInto('versions')
         .values({
           id,
-          canvasId,
+          canvasId: documentId,
           branchName,
           auto: opts.auto ? 1 : 0,
           label: opts.label ?? null,
@@ -228,7 +228,7 @@ export class FileVersionStore implements VersionStore {
         })
         .execute()
 
-      await this.prune(workspaceId, canvasId)
+      await this.prune(workspaceId, documentId)
 
       return {
         id,
@@ -277,12 +277,12 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateSlug(slug)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return []
+    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!documentId) return []
     const rows = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
       .execute()
@@ -341,12 +341,12 @@ export class FileVersionStore implements VersionStore {
     validateBranchName(newName)
     if (oldName === newName) return 0
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return 0
+    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!documentId) return 0
     const result = await db
       .updateTable('versions')
       .set({ branchName: newName })
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .where('branchName', '=', oldName)
       .executeTakeFirst()
     return Number(result.numUpdatedRows ?? 0)
@@ -359,12 +359,12 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateSlug(slug)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return { deletedCount: 0, deletedIds: [] }
+    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
       .select(['id', 'branchName', 'auto', 'createdAt'])
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .orderBy('branchName', 'asc')
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
@@ -396,7 +396,7 @@ export class FileVersionStore implements VersionStore {
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db
       .deleteFrom('versions')
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .where('id', 'in', toDelete)
       .execute()
     for (const id of toDelete) {
@@ -433,12 +433,12 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateSlug(slug)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return null
+    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!documentId) return null
     const row = await db
       .selectFrom('versions')
       .select(['frontiers'])
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
       .limit(1)
@@ -454,12 +454,12 @@ export class FileVersionStore implements VersionStore {
     }
   }
 
-  private async prune(workspaceId: string, canvasId: string): Promise<void> {
+  private async prune(workspaceId: string, documentId: string): Promise<void> {
     const db = await dbReady()
     const autos = await db
       .selectFrom('versions')
       .select(['id'])
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .where('auto', '=', 1)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
@@ -469,7 +469,7 @@ export class FileVersionStore implements VersionStore {
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
     for (const id of toRemove) {

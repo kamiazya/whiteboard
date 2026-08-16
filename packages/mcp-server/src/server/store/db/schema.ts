@@ -34,6 +34,14 @@ interface CanvasesTable {
   kind: DocumentKind | null
 }
 
+/**
+ * `canvasId` here, and `documentId` in everything that reads it, because a
+ * COLUMN NAME is storage rather than vocabulary: renaming these two needs a
+ * migration, and doing that while the tables around them are still
+ * `canvases` / `canvasDocSnapshots` would leave the schema half-converted.
+ * The DB schema's own vocabulary is a separate increment. Until then the
+ * translation happens at each query, where kysely type-checks it.
+ */
 interface BranchesTable {
   canvasId: string
   name: string

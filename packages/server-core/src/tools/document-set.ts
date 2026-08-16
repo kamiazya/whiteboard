@@ -1,5 +1,5 @@
 import { parseOkf } from '@kamiazya/whiteboard-canvas-codec'
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import {
   readDocumentKind,
   readSpatialCanvas,
@@ -36,7 +36,7 @@ function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: rea
 export const documentSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     markdown: z.string(),
   })
   .strict()
@@ -44,7 +44,7 @@ export type DocumentSetInput = z.infer<typeof documentSetInputSchema>
 
 export const documentSetOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     imported: z.literal(true),
   })
   .strict()
@@ -68,7 +68,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
     inputSchema: documentSetInputSchema,
     outputSchema: documentSetOutputSchema,
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 
       const parsed = parseOkf(input.markdown)
       if (!parsed.ok) {
@@ -76,7 +76,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       }
 
       const { frontmatter, body } = parsed.value
-      const doc = await loadOrCreateDocument(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.documentId)
 
       // The write below replaces the whole spatial canvas, so on a spatial
       // document it is a destruction rather than an edit. A document with no
@@ -91,7 +91,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
         const existing = readSpatialCanvas(doc)
         if (!isMarkdownShaped(existing)) {
           throw new DocumentContentLossError(
-            input.canvasId,
+            input.documentId,
             `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
               'Edit it through wb_node_add / wb_node_patch / wb_edge_patch, which records it as spatial and keeps them.',
           )
@@ -99,7 +99,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
         writeDocumentKind(doc, 'markdown')
       } else if (kind !== 'markdown') {
         throw new DocumentKindMismatchError(
-          input.canvasId,
+          input.documentId,
           kind,
           'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_node_add / wb_node_patch / wb_edge_patch instead.',
         )
@@ -121,7 +121,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
         const trimmed = title.trim()
         await deps.documentIndex.setDocumentName({
           workspaceId: input.workspaceId,
-          canvasId: input.canvasId,
+          documentId: input.documentId,
           ...(trimmed === '' ? {} : { name: trimmed }),
         })
       }
@@ -140,9 +140,9 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // rewritten.
       writeMarkdownBody(doc, body)
 
-      await saveDocumentSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
-      return { canvasId: input.canvasId, imported: true }
+      return { documentId: input.documentId, imported: true }
     },
   }
 }

@@ -24,9 +24,9 @@ import { LoroStore } from './loro-store.js'
 const log = getAppLogger('canvas-embed-content')
 
 /** Loads one referenced canvas's spatial content from IndexedDB. */
-async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocument | undefined> {
+async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocument | undefined> {
   try {
-    const result = await new LoroStore().load(canvasId)
+    const result = await new LoroStore().load(documentId)
     if (result.kind !== 'ok') return undefined
     const doc = new Loro()
     doc.import(result.snapshot)
@@ -41,7 +41,7 @@ async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocumen
       ...(body.length > 0 ? { body } : {}),
     }
   } catch (err) {
-    log.warn('embedded document load failed', { canvasId, err })
+    log.warn('embedded document load failed', { documentId, err })
     return undefined
   }
 }
@@ -52,10 +52,10 @@ async function loadEmbeddedDocument(canvasId: string): Promise<LoadedFileDocumen
  * like its spatial sibling above.
  */
 export async function loadMarkdownEmbedSource(
-  canvasId: string,
+  documentId: string,
 ): Promise<{ body: string; title?: string } | undefined> {
   try {
-    const result = await new LoroStore().load(canvasId)
+    const result = await new LoroStore().load(documentId)
     if (result.kind !== 'ok') return undefined
     const doc = new Loro()
     doc.import(result.snapshot)
@@ -63,7 +63,7 @@ export async function loadMarkdownEmbedSource(
     const title = readCoreFacets(doc)?.title
     return { body: readMarkdownBody(doc), ...(title !== undefined ? { title } : {}) }
   } catch (err) {
-    log.warn('embedded markdown load failed', { canvasId, err })
+    log.warn('embedded markdown load failed', { documentId, err })
     return undefined
   }
 }

@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state'
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
-import { canvasIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
+import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -51,7 +51,7 @@ export interface MarkdownEditorProps {
    * in the preview. The host owns navigation; without it, wikiLink anchors
    * are inert (their href is a bare ULID, not a URL).
    */
-  onOpenCanvas?: (canvasId: string) => void
+  onOpenCanvas?: (documentId: string) => void
   /**
    * Resolves `![[embed]]` targets' parsed bodies so block embeds render
    * inline (canvas-render's layout seam; the host pre-fetches, see
@@ -135,12 +135,12 @@ function countWords(value: string): number {
 /**
  * Whether an anchor href is a bare canvas id rather than a URL. Two id
  * grammars coexist by construction: the daemon mints ULIDs
- * (`canvasIdSchema`), the browser-local store mints `crypto.randomUUID()`
+ * (`documentIdSchema`), the browser-local store mints `crypto.randomUUID()`
  * v4 UUIDs — both reach the preview through the alias resolver.
  */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isCanvasIdHref(href: string): boolean {
-  return canvasIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
+  return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
 function totalSourceLines(value: string): number {

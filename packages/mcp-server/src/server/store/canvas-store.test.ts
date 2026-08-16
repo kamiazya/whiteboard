@@ -779,9 +779,9 @@ describe('deleteCanvas', () => {
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const canvasId = canvasRow.id
+    const documentId = canvasRow.id
 
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${canvasId}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${documentId}.loro`)
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
     await expect(stat(blobPath)).resolves.toBeDefined()
     await expect(stat(thumbPath)).resolves.toBeDefined()
@@ -791,19 +791,19 @@ describe('deleteCanvas', () => {
     const canvasAfter = await db
       .selectFrom('canvases')
       .selectAll()
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .executeTakeFirst()
     expect(canvasAfter).toBeUndefined()
     const branchesAfter = await db
       .selectFrom('branches')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .execute()
     expect(branchesAfter).toEqual([])
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .execute()
     expect(versionsAfter).toEqual([])
 
@@ -890,7 +890,7 @@ describe('renameCanvasSlug', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('moves only the slug: branches/versions rows and the .loro blob stay byte-identical and keyed to the same canvasId', async () => {
+  it('moves only the slug: branches/versions rows and the .loro blob stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch, loadCanvasBranches } = await import('./branches-store.js')
     const { readFile } = await import('node:fs/promises')
@@ -908,11 +908,11 @@ describe('renameCanvasSlug', () => {
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'a')
       .executeTakeFirstOrThrow()
-    const canvasId = before.id
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${canvasId}.loro`)
+    const documentId = before.id
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${documentId}.loro`)
     const blobBefore = await readFile(blobPath)
 
-    await expect(renameCanvasSlug('session1', 'a', 'b')).resolves.toEqual({ canvasId })
+    await expect(renameCanvasSlug('session1', 'a', 'b')).resolves.toEqual({ documentId })
 
     const list = await listCanvases('session1')
     expect(list.map((c) => c.slug)).toEqual(['b'])
@@ -923,19 +923,19 @@ describe('renameCanvasSlug', () => {
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'b')
       .executeTakeFirstOrThrow()
-    expect(after.id).toBe(canvasId)
+    expect(after.id).toBe(documentId)
 
     const branchesAfter = await db
       .selectFrom('branches')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .execute()
     expect(branchesAfter.map((b) => b.name).sort()).toEqual(['feature', 'main'])
 
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('canvasId', '=', documentId)
       .execute()
     expect(versionsAfter.map((v) => v.id)).toEqual([version.id])
 
@@ -966,7 +966,7 @@ describe('renameCanvasSlug', () => {
     await expect(renameCanvasSlug('session1', 'a', '../evil')).rejects.toThrow()
   })
 
-  it('rename to the SAME slug is a no-op success, returning the existing canvasId', async () => {
+  it('rename to the SAME slug is a no-op success, returning the existing documentId', async () => {
     await saveCanvas('session1', 'a', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
@@ -978,7 +978,7 @@ describe('renameCanvasSlug', () => {
       .executeTakeFirstOrThrow()
 
     await expect(renameCanvasSlug('session1', 'a', 'a')).resolves.toEqual({
-      canvasId: before.id,
+      documentId: before.id,
     })
 
     const list = await listCanvases('session1')

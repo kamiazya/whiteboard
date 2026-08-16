@@ -124,7 +124,7 @@ describe('daemonRoutePath', () => {
 
 describe('parseBrowserLocalRoute', () => {
   it('parses a browser-local canvas route', () => {
-    expect(parseBrowserLocalRoute('/local/abc-123')).toEqual({ canvasId: 'abc-123' })
+    expect(parseBrowserLocalRoute('/local/abc-123')).toEqual({ documentId: 'abc-123' })
   })
 
   it('returns null for the bare /local index and unrelated paths', () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { canvasIdSchema } from '../ids.js'
+import { documentIdSchema } from '../ids.js'
 
 /**
  * Versioned mdast subset. Exported via the package's `./mdast` subpath,
@@ -87,9 +87,9 @@ export type MdastPhrasingContent =
   | { type: 'delete'; children: MdastPhrasingContent[] }
   | { type: 'inlineMath'; value: string }
   // Official custom nodes. Internal link representation is ID-based:
-  // wikiLink/embed carry a canvasId (ULID) rather than a file path.
-  | { type: 'wikiLink'; canvasId: string; alias?: string }
-  | { type: 'embed'; canvasId: string }
+  // wikiLink/embed carry a documentId (ULID) rather than a file path.
+  | { type: 'wikiLink'; documentId: string; alias?: string }
+  | { type: 'embed'; documentId: string }
 
 /** PhrasingContent minus `break` — see the TableCell note above. */
 export type MdastCellPhrasingContent =
@@ -116,8 +116,8 @@ export type MdastCellPhrasingContent =
     }
   | { type: 'delete'; children: MdastCellPhrasingContent[] }
   | { type: 'inlineMath'; value: string }
-  | { type: 'wikiLink'; canvasId: string; alias?: string }
-  | { type: 'embed'; canvasId: string }
+  | { type: 'wikiLink'; documentId: string; alias?: string }
+  | { type: 'embed'; documentId: string }
 
 export type MdastFlowContent =
   | { type: 'paragraph'; children: MdastPhrasingContent[] }
@@ -190,10 +190,10 @@ const imageReferenceNodeSchema = z.object({
 const inlineMathNodeSchema = z.object({ type: z.literal('inlineMath'), value: z.string() })
 const wikiLinkNodeSchema = z.object({
   type: z.literal('wikiLink'),
-  canvasId: canvasIdSchema,
+  documentId: documentIdSchema,
   alias: z.string().optional(),
 })
-const embedNodeSchema = z.object({ type: z.literal('embed'), canvasId: canvasIdSchema })
+const embedNodeSchema = z.object({ type: z.literal('embed'), documentId: documentIdSchema })
 const thematicBreakNodeSchema = z.object({ type: z.literal('thematicBreak') })
 const definitionNodeSchema = z.object({
   type: z.literal('definition'),

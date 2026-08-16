@@ -31,9 +31,9 @@ function installFetchMock(
     status: 200,
     body: {
       canvases: [
-        { canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
+        { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
         {
-          canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
           path: 'notes/design',
         },
       ],

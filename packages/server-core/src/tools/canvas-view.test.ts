@@ -23,13 +23,13 @@ async function seedWorkspace(store: FakeDocumentStore) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
-    canvasId: CANVAS_ID,
+    documentId: CANVAS_ID,
     kind: 'spatial',
   })
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'notes',
-    canvasId: NOTE_ID,
+    documentId: NOTE_ID,
     kind: 'markdown',
     name: 'Weekly',
   })
@@ -68,9 +68,9 @@ describe('canvas_view tool', () => {
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
-    expect(result.canvasId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(CANVAS_ID)
     // Sorted: node order is whatever `readSpatialCanvas` gives back, not the
     // order they were written in. What this pins is that the whole document
     // reaches the widget, not a projection of it.
@@ -82,7 +82,7 @@ describe('canvas_view tool', () => {
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     const reference = result.references[NOTE_ID]
     expect(reference?.label).toBe('Weekly')
@@ -94,7 +94,7 @@ describe('canvas_view tool', () => {
     // so `references` is schematized rather than passed as unknown — a
     // hand-written type on the widget side is the drift this prevents.
     const parsed = canvasViewOutputSchema.safeParse({
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       scene: { nodes: [], edges: [] },
       references: { [NOTE_ID]: { label: 'Weekly', body: { type: 'root', children: [] } } },
     })
@@ -103,7 +103,7 @@ describe('canvas_view tool', () => {
 
   test('rejects a reference body that is not a real mdast root', () => {
     const parsed = canvasViewOutputSchema.safeParse({
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       scene: { nodes: [], edges: [] },
       references: { x: { body: { type: 'nonsense' } } },
     })
@@ -115,7 +115,7 @@ describe('canvas_view tool', () => {
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
       path: 'board',
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       kind: 'spatial',
     })
     await seedDoc(store, CANVAS_ID, (doc) => {
@@ -127,7 +127,7 @@ describe('canvas_view tool', () => {
     })
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.references).toEqual({})
   })

@@ -6,11 +6,11 @@ import { upsertCanvasRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
-//   branches table         -> one row per branch keyed on (canvasId, name)
+//   branches table         -> one row per branch keyed on (documentId, name)
 //   canvases.currentBranch -> HEAD pointer per canvas row
 //
 // All accessors take (workspaceId, slug) so the public API stays stable
-// across the slug → canvasId migration. Internally the slug is resolved to
+// across the slug → documentId migration. Internally the slug is resolved to
 // the stable canvas id before any branches/canvases write.
 
 export interface BranchMeta {
@@ -100,15 +100,15 @@ async function saveCanvasBranchesLocked(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+  const documentId = await upsertCanvasRow(db, workspaceId, slug)
   await db.transaction().execute(async (trx) => {
-    await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
+    await trx.deleteFrom('branches').where('canvasId', '=', documentId).execute()
     if (state.branches.length > 0) {
       await trx
         .insertInto('branches')
         .values(
           state.branches.map((b) => ({
-            canvasId,
+            canvasId: documentId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -122,7 +122,7 @@ async function saveCanvasBranchesLocked(
     await trx
       .updateTable('canvases')
       .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .execute()
   })
 }

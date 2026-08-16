@@ -1,4 +1,4 @@
-import type { CanvasId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -21,7 +21,7 @@ const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 function docRefKey(docRef: DocRef): string {
   return docRef.kind === 'canvas'
-    ? `canvas:${docRef.canvasId}`
+    ? `canvas:${docRef.documentId}`
     : `workspace-tree:${docRef.workspaceId}`
 }
 
@@ -72,11 +72,11 @@ export class FakeDocumentStore implements DocumentStore {
 
 /**
  * Configures a `LoroDoc` via `configure`, then snapshots it into the
- * given `FakeDocumentStore` under the provided `canvasId`.
+ * given `FakeDocumentStore` under the provided `documentId`.
  */
 export async function seedDoc(
   store: FakeDocumentStore,
-  canvasId: CanvasId,
+  documentId: DocumentId,
   configure: (doc: LoroDoc) => void,
 ): Promise<void> {
   const doc = new LoroDoc()
@@ -86,7 +86,7 @@ export async function seedDoc(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await store.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId },
+    docRef: { kind: 'canvas', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -94,7 +94,7 @@ export async function seedDoc(
 }
 
 /**
- * Registers `canvasId` under `workspaceId`'s workspace tree so
+ * Registers `documentId` under `workspaceId`'s workspace tree so
  * `assertCanvasInWorkspace` (the workspace-ownership guard every mutation
  * tool runs before touching a canvas doc) accepts the pair. Tool tests that
  * seed a canvas doc directly via `seedDoc`/`seedCanvas` — bypassing
@@ -104,8 +104,8 @@ export async function seedDoc(
 export async function registerCanvasInWorkspace(
   store: FakeDocumentStore,
   workspaceId: WorkspaceId,
-  canvasId: CanvasId,
+  documentId: DocumentId,
   path = 'doc',
 ): Promise<void> {
-  store.documentIndex.seed({ workspaceId, canvasId, path, kind: 'spatial' })
+  store.documentIndex.seed({ workspaceId, documentId, path, kind: 'spatial' })
 }
