@@ -1,7 +1,19 @@
 // Property catalog: hosted web app / npm package boundary invariants.
 // Drift guards:
-//   - apps/web must not import src/server, src/cli, src/daemon, or Node-only
-//     builtins; src/shared imports are restricted to an explicit allowlist
+//   - apps/web's RELATIVE imports ('./...', '../...') must not resolve into
+//     src/server, src/cli, src/daemon, or a Node-only builtin; a relative
+//     src/shared import is restricted to an explicit allowlist
+//     (forbiddenResolvedPath, isAllowedSharedImport)
+//   - apps/web's BARE '@kamiazya/whiteboard-mcp/<subpath>' imports — the style
+//     it actually uses for every shared/daemon-client module — are resolved
+//     through packages/mcp-server/package.json's `exports` map back to their
+//     src/ source file (resolveMcpSubpathEntry), and that file's transitive
+//     closure of relative imports is walked with the SAME bans
+//     (collectTransitiveViolations). A subpath absent from the exports map,
+//     or from the small TEST_ONLY_SUBPATHS alias list mirroring
+//     apps/web/vitest.config.ts, is itself a violation — nothing is silently
+//     skipped. forbiddenResolvedPath alone is blind to this whole import
+//     style, since it bails out on any specifier not starting with '.'.
 //   - @kamiazya/whiteboard-mcp package.json files must not include apps/ or src/
 //   - pnpm-workspace.yaml must declare apps/* so apps/web participates in workspace builds
 //   - apps/web skeleton must exist at the intended deploy-target location
@@ -11,11 +23,20 @@
 // was deleted in Stage 5 of the MCP-UI retirement (ADR 0001); apps/web is
 // the sole browser app now.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { builtinModules } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname → packages/mcp-server/src/server/release
@@ -323,6 +344,329 @@ describe('src/shared allowlist', () => {
     expect(check('../../shared/some-new-node-helper.js')).not.toBeNull()
   })
 })
+
+// ── Bare-specifier package-subpath boundary (exports-map driven) ─────────────
+// forbiddenResolvedPath only ever inspects relative specifiers ('./...'); a
+// bare '@kamiazya/whiteboard-mcp/<subpath>' import — the style apps/web
+// actually uses — bails out via its `!specifier.startsWith('.')` guard. The
+// tests below pin that gap and close it by resolving each bare subpath
+// through packages/mcp-server/package.json's `exports` map back to its
+// source file, then re-running the same server/cli/daemon/node-builtin bans
+// transitively over that file's relative-import closure.
+
+describe('hole pin: bare-specifier subpath imports bypass forbiddenResolvedPath', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'whiteboard-boundary-hole-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('forbiddenResolvedPath sees nothing for a bare subpath specifier reaching a banned target, while the exports-map scan catches it', () => {
+    const fromFile = resolve(FIXTURE_BROWSER_APP_DIR, 'lib/dummy.ts')
+    const specifier = '@kamiazya/whiteboard-mcp/fixture-subpath'
+
+    // Today's guard: a bare specifier is invisible to it, no matter what it resolves to.
+    expect(forbiddenResolvedPath(fromFile, specifier, FIXTURE_BROWSER_APP_DIR)).toBeNull()
+
+    // Fixture package mirroring the real shape: exports subpath -> src/entry.ts -> src/server/leak.js
+    mkdirSync(join(dir, 'src/server'), { recursive: true })
+    writeFileSync(join(dir, 'src/entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'src/a.ts'), "export * from './server/leak.js'\n")
+    writeFileSync(join(dir, 'src/server/leak.ts'), 'export const leaked = true\n')
+    const exportsMap = {
+      './fixture-subpath': { types: './src/entry.ts' },
+    }
+
+    const resolvedEntry = resolveMcpSubpathEntry(exportsMap, specifier, dir)
+    expect(resolvedEntry).not.toBe('unknown')
+    expect(resolvedEntry).not.toBe('root-forbidden')
+    const violations = collectTransitiveViolations(resolvedEntry as string, dir)
+    expect(
+      violations.length,
+      'the exports-map scan must catch the chain the relative-only guard misses',
+    ).toBeGreaterThan(0)
+  })
+})
+
+describe('resolveMcpSubpathEntry', () => {
+  const realExportsMap = (
+    JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
+      exports: Record<string, { types?: string } | string>
+    }
+  ).exports
+
+  it('resolves a real subpath against the real exports map to its src/ file', () => {
+    const resolved = resolveMcpSubpathEntry(
+      realExportsMap,
+      '@kamiazya/whiteboard-mcp/api-client',
+      PACKAGE_ROOT,
+    )
+    expect(resolved).toBe(resolve(PACKAGE_SRC_DIR, 'shared/api-client.ts'))
+  })
+
+  it('every real exports subpath whose types target points into ./src exists on disk', () => {
+    const missing: string[] = []
+    for (const [subpath, entry] of Object.entries(realExportsMap)) {
+      if (typeof entry === 'string') continue // e.g. "./package.json": "./package.json"
+      const typesPath = entry.types
+      if (!typesPath?.startsWith('./src/')) continue
+      const full = resolve(PACKAGE_ROOT, typesPath)
+      if (!existsSync(full)) missing.push(`${subpath}: ${typesPath}`)
+    }
+    expect(missing, 'exports map subpath types target must exist on disk').toEqual([])
+  })
+
+  it('an unknown subpath is reported, not silently skipped', () => {
+    expect(
+      resolveMcpSubpathEntry({}, '@kamiazya/whiteboard-mcp/does-not-exist', PACKAGE_ROOT),
+    ).toBe('unknown')
+  })
+
+  it('the bare package root is reported as forbidden (its types target is compiled dist, not src)', () => {
+    expect(resolveMcpSubpathEntry(realExportsMap, '@kamiazya/whiteboard-mcp', PACKAGE_ROOT)).toBe(
+      'root-forbidden',
+    )
+  })
+
+  it('a synthetic subpath resolves to its declared types file', () => {
+    const exportsMap = { './widget': { types: './src/widget.ts' } }
+    expect(
+      resolveMcpSubpathEntry(exportsMap, '@kamiazya/whiteboard-mcp/widget', PACKAGE_ROOT),
+    ).toBe(resolve(PACKAGE_ROOT, './src/widget.ts'))
+  })
+
+  it('a subpath whose types target does not point into ./src is reported, asking the mapper to be extended', () => {
+    const exportsMap = { './odd': { types: './dist/odd.d.ts' } }
+    expect(resolveMcpSubpathEntry(exportsMap, '@kamiazya/whiteboard-mcp/odd', PACKAGE_ROOT)).toBe(
+      'unknown',
+    )
+  })
+})
+
+describe('collectTransitiveViolations', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'whiteboard-boundary-transitive-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a clean chain with no banned imports yields no violations', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'a.ts'), 'export const x = 1\n')
+    expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
+  })
+
+  it('a Node builtin import deep in the closure is caught and names the file that imports it', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'a.ts'), "export * from './b.js'\n")
+    writeFileSync(join(dir, 'b.ts'), "import 'node:fs'\nexport const x = 1\n")
+    const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
+    expect(violations.length).toBeGreaterThan(0)
+    expect(violations.some((v) => v.includes('b.ts'))).toBe(true)
+  })
+
+  it('a reach into ../server/* deep in the closure is caught', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'a.ts'), "export * from './b.js'\n")
+    writeFileSync(join(dir, 'b.ts'), "export * from '../server/leak.js'\n")
+    const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
+    expect(violations.some((v) => v.includes('b.ts'))).toBe(true)
+  })
+
+  it('a cyclic import graph terminates and reports the same violation set', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'a.ts'), "export * from './b.js'\nimport 'node:fs'\n")
+    writeFileSync(join(dir, 'b.ts'), "export * from './a.js'\n")
+    const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
+    expect(violations.some((v) => v.includes('a.ts'))).toBe(true)
+    expect(violations.length).toBe(1)
+  })
+
+  it('an unresolvable relative import is a violation, never a silent skip', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './missing.js'\n")
+    const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
+    expect(violations.length).toBeGreaterThan(0)
+  })
+})
+
+describe('TEST_ONLY_SUBPATHS', () => {
+  it('every mapped target exists on disk', () => {
+    const missing = Object.entries(TEST_ONLY_SUBPATHS).filter(([, target]) => !existsSync(target))
+    expect(missing, 'TEST_ONLY_SUBPATHS lists a target with no corresponding source file').toEqual(
+      [],
+    )
+  })
+
+  it('mirrors the two test-only aliases declared in apps/web/vitest.config.ts', () => {
+    expect(Object.keys(TEST_ONLY_SUBPATHS).sort()).toEqual(
+      ['canvas-backend-contract-suite', 'sse-stream-source-contract'].sort(),
+    )
+  })
+})
+
+describe('apps/web bare package-subpath import boundary (exports-map driven)', () => {
+  const realExportsMap = (
+    JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
+      exports: Record<string, { types?: string } | string>
+    }
+  ).exports
+  const PACKAGE_SPECIFIER_PREFIX = '@kamiazya/whiteboard-mcp'
+
+  it('every bare @kamiazya/whiteboard-mcp/* import in apps/web/src resolves and its transitive closure is clean', () => {
+    const browserAppFiles = collectBrowserAppFiles()
+    const violations: string[] = []
+    for (const { file } of browserAppFiles) {
+      const source = readFileSync(file, 'utf-8')
+      for (const specifier of extractImportSpecifiers(source)) {
+        if (
+          specifier !== PACKAGE_SPECIFIER_PREFIX &&
+          !specifier.startsWith(`${PACKAGE_SPECIFIER_PREFIX}/`)
+        ) {
+          continue
+        }
+        const testOnlySubpath = specifier.slice(`${PACKAGE_SPECIFIER_PREFIX}/`.length)
+        let entry: string | 'unknown' | 'root-forbidden'
+        if (Object.hasOwn(TEST_ONLY_SUBPATHS, testOnlySubpath)) {
+          if (!isTestFile(file)) {
+            violations.push(
+              `${relative(REPO_ROOT, file)}: import "${specifier}" is test-only, forbidden from a production source file`,
+            )
+            continue
+          }
+          entry = TEST_ONLY_SUBPATHS[testOnlySubpath]
+        } else {
+          entry = resolveMcpSubpathEntry(realExportsMap, specifier, PACKAGE_ROOT)
+        }
+        if (entry === 'unknown' || entry === 'root-forbidden') {
+          violations.push(
+            `${relative(REPO_ROOT, file)}: import "${specifier}" does not resolve through the exports map (${entry})`,
+          )
+          continue
+        }
+        for (const v of collectTransitiveViolations(entry, PACKAGE_ROOT)) {
+          violations.push(`${relative(REPO_ROOT, file)}: import "${specifier}" -> ${v}`)
+        }
+      }
+    }
+    expect(
+      violations,
+      'forbidden cross-boundary imports reached through a bare @kamiazya/whiteboard-mcp/* subpath',
+    ).toEqual([])
+  })
+})
+
+// Maps a bare '@kamiazya/whiteboard-mcp/<subpath>' (or bare-root) specifier back
+// to its source file via packages/mcp-server/package.json's `exports` map, using
+// each subpath's `types` target (which points at ./src/*.ts, never dist). The
+// bare package root is reported 'root-forbidden' rather than resolved — its own
+// `types` target is a compiled dist/ .d.ts, a shape this mapper cannot walk, and
+// importing the whole server MCP entry from the browser app would be a violation
+// on its face regardless. An entry absent from the map, or whose `types` target
+// does not point into ./src, resolves to 'unknown': a subpath the mapper cannot
+// vouch for is a violation, never a silent pass.
+const MCP_PACKAGE_SPECIFIER = '@kamiazya/whiteboard-mcp'
+
+function resolveMcpSubpathEntry(
+  exportsMap: Record<string, { types?: string } | string>,
+  specifier: string,
+  packageRoot: string,
+): string | 'unknown' | 'root-forbidden' {
+  if (specifier === MCP_PACKAGE_SPECIFIER) return 'root-forbidden'
+  if (!specifier.startsWith(`${MCP_PACKAGE_SPECIFIER}/`)) return 'unknown'
+  const subpath = `.${specifier.slice(MCP_PACKAGE_SPECIFIER.length)}`
+  const entry = exportsMap[subpath]
+  if (!entry || typeof entry === 'string') return 'unknown'
+  const typesPath = entry.types
+  if (!typesPath?.startsWith('./src/')) return 'unknown'
+  return resolve(packageRoot, typesPath)
+}
+
+// Two test-only aliases declared in apps/web/vitest.config.ts that have no
+// corresponding entry in packages/mcp-server/package.json's exports map — they
+// resolve straight to the test-utils source that owns the shared behavioural
+// contract, and are only legitimate to import from a test file.
+const TEST_ONLY_SUBPATHS: Record<string, string> = {
+  'canvas-backend-contract-suite': resolve(
+    PACKAGE_SRC_DIR,
+    'shared/test-utils/canvas-backend-contract.ts',
+  ),
+  'sse-stream-source-contract': resolve(
+    PACKAGE_SRC_DIR,
+    'shared/test-utils/sse-stream-source-contract.ts',
+  ),
+}
+
+// Resolves a relative import specifier (as written against a compiled '.js'
+// extension, e.g. './a.js') to its on-disk TypeScript source file. Returns null
+// — never guesses — when no candidate exists, so an exotic layout fails loudly
+// in collectTransitiveViolations instead of being silently skipped.
+function resolveRelativeSourceFile(fromFile: string, specifier: string): string | null {
+  const resolvedBase = resolve(dirname(fromFile), specifier).replace(/\.jsx?$/, '')
+  const candidates = [
+    `${resolvedBase}.ts`,
+    `${resolvedBase}.tsx`,
+    resolve(resolvedBase, 'index.ts'),
+    resolve(resolvedBase, 'index.tsx'),
+  ]
+  return candidates.find(existsSync) ?? null
+}
+
+// BFS over an entry file's transitive closure of relative value imports,
+// applying the same bans forbiddenResolvedPath applies to the browser app's own
+// relative imports: Node-only builtins, and reach into src/server, src/cli, or
+// src/daemon (resolved against packageRoot's own src/ dir, not PACKAGE_SRC_DIR —
+// the fixture-based unit tests below pass a synthetic packageRoot with no
+// server/cli/daemon dirs of its own). A visited set makes this terminate on a
+// cyclic import graph and gives an order-independent result. An unresolvable
+// relative import is a violation, not a skip — the property whose absence was
+// this guard's bug in the first place.
+function collectTransitiveViolations(entryFile: string, packageRoot: string): string[] {
+  const packageSrcDir = resolve(packageRoot, 'src')
+  const violations: string[] = []
+  const visited = new Set<string>()
+  const queue: string[] = [entryFile]
+  while (queue.length > 0) {
+    const file = queue.shift() as string
+    if (visited.has(file)) continue
+    visited.add(file)
+    const source = readFileSync(file, 'utf-8')
+    for (const specifier of extractImportSpecifiers(source)) {
+      if (isForbiddenNodeBuiltin(specifier)) {
+        violations.push(`${relative(REPO_ROOT, file)}: import "${specifier}" (Node builtin)`)
+        continue
+      }
+      if (!specifier.startsWith('.')) continue // bare third-party specifiers are outside this scan's scope
+      const resolvedFile = resolveRelativeSourceFile(file, specifier)
+      if (resolvedFile === null) {
+        violations.push(
+          `${relative(REPO_ROOT, file)}: import "${specifier}" could not be resolved on disk`,
+        )
+        continue
+      }
+      const relToSrc = relative(packageSrcDir, resolvedFile)
+      if (
+        relToSrc.startsWith('server/') ||
+        relToSrc.startsWith('cli/') ||
+        relToSrc.startsWith('daemon/')
+      ) {
+        violations.push(
+          `${relative(REPO_ROOT, file)}: import "${specifier}" (resolves to src/${relToSrc})`,
+        )
+        continue
+      }
+      queue.push(resolvedFile)
+    }
+  }
+  return violations
+}
 
 // ── Full codebase scans ───────────────────────────────────────────────────────
 // Covers apps/web/src.
