@@ -45,22 +45,42 @@ conclusion was backwards and was published before anyone noticed.
 Make the command prove its own premise:
 
 ```bash
-cp $F /tmp/orig.tsx
+F=path/to/file.tsx
+BAK=$(mktemp)
+cp "$F" "$BAK"
+trap 'cp "$BAK" "$F"; rm -f "$BAK"' EXIT   # restore even on ^C or a set -e exit
+
 python3 - "$F" <<'EOF'
-import sys; p=sys.argv[1]; s=open(p).read()
-old="the exact line"
-assert old in s, "pattern not found"      # fails loudly instead of silently no-op'ing
-open(p,'w').write(s.replace(old, "the mutation"))
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "the exact line"
+assert s.count(old) == 1, f"expected 1 occurrence, found {s.count(old)}"
+open(p, 'w').write(s.replace(old, "the mutation", 1))   # once, not everywhere
 EOF
-echo "mutated: $(grep -c 'the exact line' $F)"   # expect 0
-<run the test>
-cp /tmp/orig.tsx $F
-echo "restored: $(grep -c 'the exact line' $F)"  # expect 1
+echo "mutated: $(grep -c 'the exact line' "$F")"        # expect 0
+
+<run the test — expect RED>
+
+trap - EXIT; cp "$BAK" "$F"; rm -f "$BAK"
+echo "restored: $(grep -c 'the exact line' "$F")"       # expect 1
 ```
 
-A mutation check under conditions where the baseline is green is **inconclusive,
-not negative** — you cannot detect the removal of something that was not being
-exercised. Reproduce the failure first, then mutate.
+The `trap` and the count assertion are the parts that matter. Without the trap a
+failure between mutate and restore leaves the working tree mutated, and the next
+command you run measures something you did not intend. Without the count, a
+pattern that appears twice mutates both sites and the red you get may not be the
+red you were testing for.
+
+A green baseline is the normal starting point — that is what the fix bought, and
+`test-layer-selection` asks for exactly that shape: fixed code green, revert,
+confirm red, restore. What makes a run **inconclusive rather than negative** is a
+mutated run that *stays* green while you never saw the original failure. Then the
+scenario was not being reached at all, and the check could not have detected the
+removal either way.
+
+The sweeper case: the flake only appeared under parallel load, so on a quiet
+machine both the fixed and the mutated build passed. The mutation only became
+informative once the failure had been reproduced first.
 
 ## Assert the count, not the absence of failures
 

@@ -86,8 +86,9 @@ saying nothing about what was actually exercised. In one session that produced t
 wrong conclusions: a cause read off an assertion string without checking which of two identical
 assertions failed; a regression denied by a property of the diff instead of an A/B of the
 behaviour; and a mutation check whose restore had already run, so eleven "mutated" runs used the
-original file. Each was one printed line away from being caught. Load the `diagnosis-evidence`
-skill before reporting a cause.
+original file. Each was one printed line away from being caught. Load the `diagnosis-evidence` skill before
+reporting ANY diagnostic or verification conclusion — a cause, a "not a regression", a mutation
+result, or a fix you are calling verified by hand.
 
 **Visual evidence for a change that moves pixels** is a repeatable procedure, not a screenshot of whatever was on screen: render the SAME canvas through the real pipeline before and after, side by side, chosen by the metric the change targets rather than by eye. Load the `visual-evidence` skill — its traps (a no-op `git stash` producing identical panels, unfilled rects rendering black) have each produced a misleading figure at least once.
 
