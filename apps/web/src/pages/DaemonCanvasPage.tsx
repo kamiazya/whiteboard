@@ -1,4 +1,8 @@
-import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import { type CanvasKind, isImageRef } from '@kamiazya/whiteboard-canvas-model'
+import {
+  canvasWithMarkdownBody,
+  markdownBodyFromCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -6,18 +10,25 @@ import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-tr
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
+import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
+import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
+import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
+import {
+  type MarkdownEmbedLoader,
+  useMarkdownEmbedContent,
+} from '../hooks/use-markdown-embed-content.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
@@ -231,6 +242,8 @@ export function DaemonCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    coreFacets,
+    setCoreFacets,
     syncStatus,
   } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
@@ -267,22 +280,24 @@ export function DaemonCanvasPage({
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [controller.canvases])
 
+  const fileAdapter = useMemo(
+    () =>
+      createDaemonFileAdapter({
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId: canvas?.workspaceId ?? '',
+        slug: canvas?.slug ?? '',
+        resolveRefSlug,
+      }),
+    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug, resolveRefSlug],
+  )
+
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
   // updatedAt, exactly as in browser-local mode.
   const fileSeams = useCanvasFileSeams({
     canvas: canvasValue,
-    adapter: useMemo(
-      () =>
-        createDaemonFileAdapter({
-          daemonFetch,
-          daemonBaseUrl,
-          workspaceId: canvas?.workspaceId ?? '',
-          slug: canvas?.slug ?? '',
-          resolveRefSlug,
-        }),
-      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug, resolveRefSlug],
-    ),
+    adapter: fileAdapter,
     // Keyed by BOTH id and slug so id refs and legacy slug refs each find
     // their staleness stamp.
     stampOf: useMemo(
@@ -295,6 +310,64 @@ export function DaemonCanvasPage({
         ),
       [controller.canvases],
     ),
+  })
+
+  // The open document's kind, from the canvases list summary (default
+  // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
+  // page itself no longer chooses an editor.
+  const documentKind: CanvasKind =
+    controller.canvases.find((entry) => entry.slug === controller.slug)?.kind ?? 'spatial'
+
+  // A markdown document's body lives in the canvas's single `okf-body` text
+  // node (the shape wb_document_set writes), so reads derive from the same
+  // synced canvas the spatial editor uses and writes travel the session's
+  // ordinary command path — debounce, undo and local-update forwarding
+  // included, with no second write pipeline. The ref keeps setMarkdownBody
+  // total under bursts: `next` is the whole body, so a canvas one commit
+  // behind only affects node identity, never content.
+  const canvasValueRef = useRef(canvasValue)
+  canvasValueRef.current = canvasValue
+  const setMarkdownBody = useCallback(
+    (next: string) => {
+      const {
+        canvas: nextCanvas,
+        node,
+        created,
+      } = canvasWithMarkdownBody(canvasValueRef.current, next)
+      onChange(
+        nextCanvas,
+        created ? { kind: 'create-node', node } : { kind: 'set-text', id: node.id, text: next },
+      )
+    },
+    [onChange],
+  )
+  const markdownBody =
+    documentKind === 'markdown' && canvasLoaded ? markdownBodyFromCanvas(canvasValue) : null
+
+  // `[[Name]]` aliases resolve against the same list the user can see; the
+  // daemon summary carries no display name yet, so the slug doubles as one.
+  const resolveAlias = useMemo(
+    () =>
+      createSnapshotAliasResolver(
+        controller.canvases.map((entry) => ({ id: entry.id ?? entry.slug, name: entry.slug })),
+      ),
+    [controller.canvases],
+  )
+  const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
+    async (canvasId) => {
+      const target = await fileAdapter.loadDocument(canvasId)
+      if (target?.body === undefined) return undefined
+      return {
+        body: target.body,
+        ...(target.facets?.title !== undefined ? { title: target.facets.title } : {}),
+      }
+    },
+    [fileAdapter],
+  )
+  const resolveEmbed = useMarkdownEmbedContent({
+    body: markdownBody ?? '',
+    resolveAlias,
+    load: loadEmbedSource,
   })
 
   const commands = useWhiteboardCommands({
@@ -518,6 +591,21 @@ export function DaemonCanvasPage({
           {canvas && (
             <WorkspaceTopBar
               statusSlot={connectionStatus}
+              // Canvas identity (title + core facets) in the merged header
+              // row, mirroring the browser-local page. Facets are OKF
+              // frontmatter, so only markdown documents get the disclosure
+              // (ADR-0009 decision 3); writes travel the sync session's
+              // facet path. The daemon summary has no display name, so the
+              // title here is the document's own core facet, not a rename.
+              titleSlot={
+                <CanvasProperties
+                  inline
+                  key={`${canvas.workspaceId}/${canvas.slug}`}
+                  showFacets={documentKind === 'markdown'}
+                  meta={coreFacets ?? { type: documentKind }}
+                  onChange={setCoreFacets}
+                />
+              }
               workspaceId={canvas.workspaceId}
               slug={canvas.slug}
               canvases={controller.canvases}
@@ -663,74 +751,86 @@ export function DaemonCanvasPage({
             </Button>
           </div>
         ) : (
-          // Spatial is the only view this slice supports; markdown-view
-          // persistence is deferred (canvas-workspace has no markdown-body
-          // container to write to yet).
-          <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
-            {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
+          <DocumentEditorSurface
+            kind={documentKind}
+            documentKey={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
+            markdown={{
+              body: markdownBody,
+              setBody: setMarkdownBody,
+              theme: resolvedTheme,
+              meta: coreFacets ?? { type: documentKind },
+              resolveAlias,
+              onOpenCanvas: (id) => controller.switchCanvas(resolveRefSlug(id) ?? id),
+              resolveEmbed,
+            }}
+            spatial={() => (
+              <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                 gesture and open text editor all describe ONE canvas, and
                 `SpatialCanvas` carries no id for the editor to notice a switch
                 by. Without the key, switching canvases silently inherits the
                 previous canvas's viewport. */}
-            <SpatialEditor
-              key={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
-              // Decided from the canvas's own shape, but only once its
-              // document has loaded — at mount every canvas still looks
-              // empty.
-              initialTool={
-                canvasLoaded
-                  ? resolveInitialTool({
-                      isEmpty: canvasValue.nodes.length === 0,
-                      lastTool: readLastTool(),
-                    })
-                  : undefined
-              }
-              ref={spatialEditorRef}
-              canvas={canvasValue}
-              onChange={onChange}
-              externalVersion={externalVersion}
-              theme={resolvedTheme}
-              // File-node reference = the target's immutable id (rename-
-              // safe); the label shows its current slug and the current
-              // canvas is excluded. Legacy documents still carry slug refs,
-              // which resolveRefSlug misses and switchCanvas takes as-is.
-              // An older daemon's list has no ids yet; those entries fall
-              // back to slug refs (same behavior as before ids existed).
-              fileRefOptions={controller.canvases
-                .filter((entry) => entry.slug !== canvas?.slug)
-                .map((entry) => ({
-                  file: entry.id ?? entry.slug,
-                  label: entry.slug,
-                  kind: entry.kind,
-                }))}
-              onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
-              missingFileRef={missingFileRef}
-              {...fileSeams}
-              lockedNodeIds={lockedNodeIds}
-              lockedEdgeIds={lockedEdgeIds}
-              onToggleNodeLock={setNodeLock}
-              onToggleEdgeLock={setEdgeLock}
-              paletteLeading={
-                <HistoryCluster
-                  onUndo={() => void undo()}
-                  onRedo={() => void redo()}
-                  canUndo={canUndo()}
-                  canRedo={canRedo()}
-                  versions={
-                    capabilities.versions && canvas
-                      ? {
-                          workspaceId: canvas.workspaceId,
-                          slug: canvas.slug,
-                          onRestored: clearLocalUndo,
-                          refreshSignal: versionRefreshSignal,
-                          versionPanelExtra,
-                        }
+                <SpatialEditor
+                  key={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
+                  // Decided from the canvas's own shape, but only once its
+                  // document has loaded — at mount every canvas still looks
+                  // empty.
+                  initialTool={
+                    canvasLoaded
+                      ? resolveInitialTool({
+                          isEmpty: canvasValue.nodes.length === 0,
+                          lastTool: readLastTool(),
+                        })
                       : undefined
                   }
+                  ref={spatialEditorRef}
+                  canvas={canvasValue}
+                  onChange={onChange}
+                  externalVersion={externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = the target's immutable id (rename-
+                  // safe); the label shows its current slug and the current
+                  // canvas is excluded. Legacy documents still carry slug refs,
+                  // which resolveRefSlug misses and switchCanvas takes as-is.
+                  // An older daemon's list has no ids yet; those entries fall
+                  // back to slug refs (same behavior as before ids existed).
+                  fileRefOptions={controller.canvases
+                    .filter((entry) => entry.slug !== canvas?.slug)
+                    .map((entry) => ({
+                      file: entry.id ?? entry.slug,
+                      label: entry.slug,
+                      kind: entry.kind,
+                    }))}
+                  onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
+                  missingFileRef={missingFileRef}
+                  {...fileSeams}
+                  lockedNodeIds={lockedNodeIds}
+                  lockedEdgeIds={lockedEdgeIds}
+                  onToggleNodeLock={setNodeLock}
+                  onToggleEdgeLock={setEdgeLock}
+                  paletteLeading={
+                    <HistoryCluster
+                      onUndo={() => void undo()}
+                      onRedo={() => void redo()}
+                      canUndo={canUndo()}
+                      canRedo={canRedo()}
+                      versions={
+                        capabilities.versions && canvas
+                          ? {
+                              workspaceId: canvas.workspaceId,
+                              slug: canvas.slug,
+                              onRestored: clearLocalUndo,
+                              refreshSignal: versionRefreshSignal,
+                              versionPanelExtra,
+                            }
+                          : undefined
+                      }
+                    />
+                  }
                 />
-              }
-            />
-          </div>
+              </div>
+            )}
+          />
         )}
         {capabilities.merge && canvas && (
           <MergeToast
