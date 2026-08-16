@@ -56,7 +56,7 @@ pnpm lint        # list violations
 pnpm lint:fix    # apply auto-fixable changes
 ```
 
-This is not yet enforced as a hard CI gate because the existing codebase still has many warnings. The expectation is to improve it incrementally.
+The codebase is warning-free and `pnpm lint` runs as part of the pre-push gate (see Git hooks below), so a new warning blocks the push. Intentional exceptions carry a `biome-ignore` comment with a reason.
 
 ## Git hooks
 

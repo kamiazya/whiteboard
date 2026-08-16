@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { evictDoc } from '../../store/doc-cache.js'
 import { compactDocument, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
-import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 

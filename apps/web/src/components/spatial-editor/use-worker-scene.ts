@@ -196,7 +196,6 @@ export function useWorkerScene(
     }
     // `renderNow` closes over the current inputs by design: a fallback must
     // lay out what was asked for, not what the effect last saw.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [inputs, offloadable])
 
   // Started at MOUNT, not on the first edit. The worker's module load and its

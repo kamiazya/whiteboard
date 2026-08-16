@@ -187,7 +187,6 @@ it('a javascript: URL is neither followable nor accepted by the dialog', async (
         y: 100,
         width: 200,
         height: 60,
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal fixture
         url: 'javascript:alert(1)',
       },
     ],

@@ -2,12 +2,7 @@
 // tools rather than argued from the code: every mutating tool is a
 // load-modify-save and `saveSnapshot` writes unconditionally, so two calls
 // that load the same base before either saves drop one of the changes.
-
-import {
-  writeSpatialCanvas as _w,
-  readSpatialCanvas,
-  WorkspaceTree,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'

@@ -9,7 +9,7 @@ import {
   setCanvasPinned,
   setWorkspaceName,
 } from '../../store/names-store.js'
-import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 

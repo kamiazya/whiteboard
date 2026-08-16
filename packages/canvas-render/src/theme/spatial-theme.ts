@@ -54,7 +54,7 @@ function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
 
 /** An author-supplied raw hex, passed through untouched; undefined otherwise. */
 function rawHex(color: CanvasColor | undefined): string | undefined {
-  return color !== undefined && color.startsWith('#') ? color : undefined
+  return color?.startsWith('#') ? color : undefined
 }
 
 function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {

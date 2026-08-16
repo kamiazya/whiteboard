@@ -12,12 +12,7 @@ import {
 } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
-import {
-  validateDocumentPath,
-  validateVersionId,
-  validateWorkspaceId,
-  validationErrorBody,
-} from '../../validators.js'
+import { validateDocumentPath, validateVersionId, validationErrorBody } from '../../validators.js'
 import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 

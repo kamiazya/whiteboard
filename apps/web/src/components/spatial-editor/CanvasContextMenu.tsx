@@ -237,9 +237,9 @@ export function CanvasContextMenu({
           // the native color input covers the hex half the swatches
           // cannot.
           customColor: {
-            value: current !== undefined && current.startsWith('#') ? current : '#808080',
+            value: current?.startsWith('#') === true ? current : '#808080',
             ariaLabel: 'Custom color',
-            selected: current !== undefined && current.startsWith('#'),
+            selected: current?.startsWith('#') === true,
             onPick: (hex: string) => apply(hex as CanvasColor),
           },
         })
