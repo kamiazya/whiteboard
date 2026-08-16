@@ -89,10 +89,6 @@ export const saveVersionResponseSchema = z.object({
 
 // RFC 7807 / RFC 9457 Problem Details error response. Only the fields the UI
 // needs to surface a human-readable error string without leaking server internals.
-export const problemDetailsErrorSchema = z.object({
-  title: z.string().optional(),
-})
-
 // POST /api/workspaces/:workspaceId/canvases — success body.
 export const createCanvasResponseSchema = z.object({
   slug: z.string(),
@@ -171,7 +167,6 @@ export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>
 export type CanvasSummary = z.infer<typeof canvasSummarySchema>
 export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
-export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
 export type UpdateCanvasResponse = z.infer<typeof updateCanvasResponseSchema>
 export type DeleteCanvasResponse = z.infer<typeof deleteCanvasResponseSchema>

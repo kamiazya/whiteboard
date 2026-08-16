@@ -134,6 +134,26 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     expect(alert.textContent).toContain('Failed to create variation')
   })
 
+  it("shows the daemon's own conflict reason, not the generic fallback", async () => {
+    // The branch routes carry the human-readable reason in the
+    // {error, message} body; the shared error reader forwards it. Before
+    // that fold this banner showed only "Failed to create variation" and
+    // the server\'s actual reason was discarded.
+    stateHolder.current.createBranch = vi.fn().mockRejectedValue({
+      status: 409,
+      body: { error: 'branch_conflict', message: 'A variation named "main" already exists' },
+    })
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    await userEvent.click(screen.getByTestId('header-branch-chip'))
+    await userEvent.click(await screen.findByText(/New variation/))
+    const input = await screen.findByPlaceholderText('New variation name')
+    await userEvent.type(input, 'main{Enter}')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('A variation named "main" already exists')
+    expect(alert.textContent).not.toContain('Failed to create variation')
+  })
+
   it('surfaces setHead rejection as a role=alert with the safe error copy', async () => {
     stateHolder.current.setHead = vi.fn().mockRejectedValue(new Error('boom'))
     render(<HeaderBranchChip workspaceId="s1" slug="c1" />)

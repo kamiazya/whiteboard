@@ -4,6 +4,7 @@ import {
   canvasPathForFile,
   parseCanvasApiPath,
 } from '../../../shared/api-contracts/canvas-url.js'
+import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 
 export const CANVAS_WILDCARD = '/api/w/:workspaceId/canvas/*'
@@ -32,7 +33,7 @@ function validated(
     // caller says which its route speaks.
     if (body) {
       return badRequest === 'problem-details'
-        ? c.json({ title: body.message }, 400)
+        ? c.json({ title: body.message } satisfies ApiErrorBody, 400)
         : c.json(body, 400)
     }
     throw err

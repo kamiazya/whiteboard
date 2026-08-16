@@ -30,10 +30,8 @@ import {
   type OptimizeAllCanvasesResponse,
   operatorInfoSchema,
   optimizeAllCanvasesResponseSchema,
-  type ProblemDetailsError,
   type PruneSandwichedVersionsResponse,
   type PurgeResult,
-  problemDetailsErrorSchema,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
   type RestoreVersionRequest,
@@ -298,19 +296,6 @@ describe('saveVersionResponseSchema', () => {
 
   it('rejects missing version', () => {
     expect(saveVersionResponseSchema.safeParse({}).success).toBe(false)
-  })
-})
-
-describe('problemDetailsErrorSchema', () => {
-  it('parses an empty object (all fields optional)', () => {
-    const result: ProblemDetailsError = problemDetailsErrorSchema.parse({})
-    expect(result.title).toBeUndefined()
-  })
-
-  it('roundtrip with title', () => {
-    const valid: ProblemDetailsError = { title: 'Not Found' }
-    const result: ProblemDetailsError = roundtrip(problemDetailsErrorSchema, valid)
-    expect(result).toEqual(valid)
   })
 })
 
