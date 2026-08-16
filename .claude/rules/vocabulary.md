@@ -66,13 +66,16 @@ here buys nobody anything and doubles the surface that has to be read.
 
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
-- `canvasId` throughout, for what is a document id
+- The `x-whiteboard.canvasId` field and the `branches`/`versions` `canvasId`
+  COLUMNS — the two places the word survives on purpose. Both are format or
+  storage contracts rather than names; see the notes at each. `canvasId` as
+  an identifier is otherwise done
 - `canvas-store.ts` (mcp-server's daemon-side file/db store) — `CanvasDocStore`
   and `canvas-doc-io.ts` are done
 - The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not
-- `/local/:canvasId` and the UI copy around routes. The daemon URL is now
+- `/local/:documentId` and the UI copy around routes. The daemon URL is now
   `/w/:ws/canvas/<document path>` end to end; what remains is internal
   variable names still saying `slug` for what is a path
 - MCP tool names — ADR-0009 point 5, its own increment
