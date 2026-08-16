@@ -2,6 +2,24 @@
 
 **Status:** Accepted
 
+> **Addendum (2026-08-16): the field is spelled `kind`, not `format`.** This
+> ADR uses both words for one concept and says so itself ("Kind and format are
+> already the same field"). Implementing it settled the spelling: `kind` won,
+> because it was already everywhere the concept is stored or published — the
+> daemon's column, the index row's field, `readDocumentKind`/`writeDocumentKind`,
+> and the `kind` each contract publishes — while `format` survived only in a
+> `meta.ts` nothing imported, since deleted. `documentKindSchema` is the single
+> source of truth. Recorded here rather than only in
+> `.claude/rules/vocabulary.md` so the decision record and the rule cannot
+> disagree about which word is normative; the rule carries the longer rationale.
+>
+> Decisions 3 and 4 are now IMPLEMENTED, which the Consequences below describe
+> as a target: a document persists its kind, `wb_document_get` branches on it
+> instead of taking a format parameter, and a spatial document holds no facets
+> (`readCoreFacets` answers `undefined` for one). The replacement this ADR names
+> for a spatial document's lost `type`/`tags` — workspace-level metadata —
+> remains unbuilt.
+
 ## Context
 
 This started as a tidy-up of MCP tool names and turned into a model

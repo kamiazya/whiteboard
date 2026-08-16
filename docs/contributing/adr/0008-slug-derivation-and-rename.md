@@ -2,6 +2,15 @@
 
 **Status:** Accepted
 
+> **Vocabulary note (2026-08-16):** read **slug** as **path** everywhere below,
+> including in the title. [ADR-0009](0009-mcp-tool-naming.md) renamed the
+> concept; the derivation, rename and sibling-uniqueness rules this ADR decides
+> are all still in force, and `SAFE_SLUG_SEGMENT` is now
+> `DOCUMENT_PATH_SEGMENT_PATTERN` (imported from `@kamiazya/whiteboard-model`,
+> so the shared layer and the validator cannot drift). The word itself is
+> retired and fails `tools/arch-lint/src/vocabulary-check.test.ts`; this ADR is
+> history and keeps it. See `.claude/rules/vocabulary.md`.
+
 ## Context
 
 [ADR-0007](0007-canvas-identity-and-store-split.md) fixed `(workspaceId,
