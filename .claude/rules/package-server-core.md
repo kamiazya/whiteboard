@@ -26,12 +26,12 @@ paths:
   process lifecycle — `mcp-server` owns that.
 - InversifyJS or any DI container wiring — composition roots only.
 - Scene graph, layout, rendering internals — `canvas-render`.
-- Tree ops, alias/index derivation — `crdt`.
+- Tree ops, alias/index derivation — `loro-adapter`.
 
 ## Dependency rules
 
 - Runtime dependencies: `model`, `codec`, `canvas-render`,
-  `ports`, `crdt`, `hono`, and `zod` (via `catalog:` or
+  `ports`, `loro-adapter`, `hono`, and `zod` (via `catalog:` or
   `workspace:*`).
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.

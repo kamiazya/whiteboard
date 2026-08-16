@@ -1,6 +1,6 @@
 import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-crdt'
+import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
   documentPathSchema,

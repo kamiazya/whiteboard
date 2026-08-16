@@ -1,5 +1,5 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
-import { readDocumentKind } from '@kamiazya/whiteboard-crdt'
+import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, documentKindSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

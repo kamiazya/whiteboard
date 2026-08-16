@@ -3,7 +3,7 @@ import { exemptedBoundaryViolationKinds } from './architecture-map.js'
 
 describe('exemptedBoundaryViolationKinds', () => {
   it('exempts workspace from loro-crdt-import via allowedThirdParty, not an explicit list', () => {
-    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-crdt')
+    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-loro-adapter')
     expect(kinds.has('loro-crdt-import')).toBe(true)
     expect(kinds.has('dom-global')).toBe(false)
   })

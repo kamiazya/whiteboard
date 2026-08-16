@@ -49,10 +49,13 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
-  '@kamiazya/whiteboard-crdt': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-ports'],
+  '@kamiazya/whiteboard-loro-adapter': {
+    // Deliberately NOT ports: this package adapts loro-crdt to the model and
+    // knows nothing about where a document sits, so it implements no port.
+    // The port implementations live in the composition roots.
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     // loro-crdt: this package owns the LoroDoc<->model bridge (see
-    // .claude/rules/package-crdt.md), so it's the one shared-
+    // .claude/rules/package-loro-adapter.md), so it's the one shared-
     // layer package (besides server-core, which re-exposes the bridge via
     // its Loro-backed store ports) allowed to import it directly.
     // zod: the bridge validates the persisted `core` LoroMap entries against
@@ -65,7 +68,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-ports',
-      '@kamiazya/whiteboard-crdt',
+      '@kamiazya/whiteboard-loro-adapter',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
@@ -106,7 +109,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-crdt',
+      '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
     ],

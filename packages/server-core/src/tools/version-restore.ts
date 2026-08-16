@@ -1,4 +1,4 @@
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'

@@ -9,7 +9,11 @@
  * take down the page.
  */
 
-import { readCoreFacets, readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import {
+  readCoreFacets,
+  readMarkdownBody,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'

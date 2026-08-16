@@ -54,7 +54,7 @@ export default defineConfig({
     '@kamiazya/whiteboard-codec',
     '@kamiazya/whiteboard-canvas-render',
     '@kamiazya/whiteboard-ports',
-    '@kamiazya/whiteboard-crdt',
+    '@kamiazya/whiteboard-loro-adapter',
     '@kamiazya/whiteboard-server-core',
   ],
 })

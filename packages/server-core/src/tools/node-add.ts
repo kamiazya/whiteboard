@@ -1,4 +1,4 @@
-import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-crdt'
+import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
   spatialCanvasSchema,

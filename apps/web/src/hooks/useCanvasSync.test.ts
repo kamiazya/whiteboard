@@ -10,7 +10,7 @@
  * derivation.
  */
 
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,

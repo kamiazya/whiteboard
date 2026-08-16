@@ -7,7 +7,7 @@ import {
   writeDocumentKind,
   writeFacets,
   writeMarkdownBody,
-} from '@kamiazya/whiteboard-crdt'
+} from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

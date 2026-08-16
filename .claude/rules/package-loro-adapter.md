@@ -1,9 +1,13 @@
 ---
 paths:
-  - "packages/crdt/**"
+  - "packages/loro-adapter/**"
 ---
 
-# crdt — LoroDoc<->model bridge
+# loro-adapter — LoroDoc<->model bridge
+
+The name states what it adapts. It is NOT an adapter of `ports` — it
+implements no port and does not depend on that package; the store/sync port
+implementations live in the composition roots.
 
 ## What belongs here
 
@@ -26,8 +30,8 @@ paths:
 
 ## Dependency rules
 
-- Runtime dependencies: `model`, `ports`,
-  `loro-crdt`, and `zod` (all via `catalog:` or `workspace:*`).
+- Runtime dependencies: `model`, `loro-crdt`, and `zod` (all via `catalog:`
+  or `workspace:*`). Not `ports` — see the note under the heading.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.
 - Enforced by `tools/arch-lint` (`arch-lint-node` vitest project).
@@ -52,7 +56,7 @@ paths:
 
 ## Tests
 
-- Vitest project: `crdt-node` (registered in root
+- Vitest project: `loro-adapter-node` (registered in root
   `vitest.config.ts`).
 - Unit tests for CRDT merge behavior across the bridge.
 - `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types

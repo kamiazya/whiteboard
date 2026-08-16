@@ -7,7 +7,7 @@ import {
   writeSpatialCanvas as _w,
   readSpatialCanvas,
   WorkspaceTree,
-} from '@kamiazya/whiteboard-crdt'
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'

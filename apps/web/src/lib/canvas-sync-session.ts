@@ -10,7 +10,7 @@ import {
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
-} from '@kamiazya/whiteboard-crdt'
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'

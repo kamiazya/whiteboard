@@ -38,7 +38,7 @@ const SCAN_DIRS = [
   'packages/ports/src',
   'packages/canvas-render/src',
   'packages/canvas-viewer/src',
-  'packages/crdt/src',
+  'packages/loro-adapter/src',
   'apps/web/scripts',
   'packages/canvas-viewer/scripts',
   'packages/mcp-server/scripts',

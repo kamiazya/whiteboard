@@ -95,16 +95,25 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   migration-bearing increment, not a rename.
 
 The four mis-prefixed package names are DONE: `@kamiazya/whiteboard-{model,
-codec,ports,crdt}`, with directories and vitest projects following. `render`
-and `viewer` keep `canvas-` because they ARE about the spatial scene.
+codec,ports,loro-adapter}`, with directories and vitest projects following.
+`render` and `viewer` keep `canvas-` because they ARE about the spatial scene.
 
-The fourth is worth knowing, because the obvious name was the wrong one:
-dropping the prefix from `canvas-workspace` gives `workspace`, which is a
-domain noun this rule defines as the tree that holds documents — and that
-package explicitly knows nothing about placement. Its own comments came out
-reading `workspace's withSpatialBatch`, indistinguishable from the dozens of
-correct uses of the domain word around them. `crdt` names what it is (the
-merge-aware LoroDoc bridge) and collides with nothing.
+The fourth took two tries, and both wrong answers are worth knowing.
+Dropping the prefix from `canvas-workspace` gives `workspace`, a domain noun
+this rule defines as the tree that holds documents — and that package
+explicitly knows nothing about placement. Its own comments came out reading
+`workspace's withSpatialBatch`, indistinguishable from the dozens of correct
+uses of the domain word around them. `crdt` fixed the collision but named a
+technique rather than a role, and left the package's place in the
+architecture unsaid.
+
+`loro-adapter` names what it adapts. The distinction that settles it: this
+package depends on `loro-crdt` and NOT on `ports` — it implements no port
+and its whole production surface is one file, `loro-bridge.ts`. The store and
+sync ports are implemented in the composition roots, so "adapter" here can
+only mean an adapter of the vendor library, and the name says so. Renaming it
+to suggest a port relationship would have stated the opposite of the
+dependency graph.
 
 `slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
 is what keeps it retired — the one part of this rule that could stop being

@@ -63,7 +63,7 @@
     "packages/ports": {
       "project": ["src/**/*.ts"]
     },
-    "packages/crdt": {
+    "packages/loro-adapter": {
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {

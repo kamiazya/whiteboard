@@ -5,7 +5,7 @@
 // `wb_scene_digest`. Resolving by default would make a canvas's digest move
 // whenever a DIFFERENT document was edited, which is the property that makes
 // the digest usable as a change signal at all.
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasDigestTool } from './canvas-digest.js'

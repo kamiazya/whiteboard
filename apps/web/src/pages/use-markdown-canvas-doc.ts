@@ -21,7 +21,7 @@ import {
   readMarkdownBody,
   writeCoreFacets,
   writeMarkdownBody,
-} from '@kamiazya/whiteboard-crdt'
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'

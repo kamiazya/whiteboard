@@ -1,4 +1,4 @@
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,

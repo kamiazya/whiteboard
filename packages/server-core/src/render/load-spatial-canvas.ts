@@ -1,4 +1,4 @@
-import { readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'

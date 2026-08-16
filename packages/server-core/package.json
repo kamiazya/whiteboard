@@ -23,7 +23,7 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
-    "@kamiazya/whiteboard-crdt": "workspace:*",
+    "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "hono": "^4.12.34",
     "loro-crdt": "catalog:",
     "zod": "catalog:"

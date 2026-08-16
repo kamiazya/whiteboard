@@ -91,7 +91,7 @@ jobs:
           --project=model-node
           --project=ports-node
           --project=codec-node
-          --project=crdt-node
+          --project=loro-adapter-node
           --project=server-core-node
           --project=canvas-render-node
           --project=arch-lint-node

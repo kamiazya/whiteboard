@@ -93,7 +93,7 @@ paths:
    a newline to `measure`, and clamps any non-finite `advanceWidth` to `0`
    (`clampAdvance`) before it reaches geometry.
 4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
-   internal/versioned shape consumed later by crdt's View-
+   internal/versioned shape consumed later by loro-adapter's View-
    resolution layer. Root depth is `0`; a 4th nesting level is the cap
    hit (depth cap `3`). Cycle detection is PATH-LOCAL — a re-visit on the
    *current* recursion path is a placeholder, but the same doc reached

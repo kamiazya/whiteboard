@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
-import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-crdt'
+import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'

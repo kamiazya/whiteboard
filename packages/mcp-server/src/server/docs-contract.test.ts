@@ -50,7 +50,7 @@ describe('docs/ contract', () => {
       'packages/ports': 'ports',
       'packages/codec': 'codec',
       'packages/canvas-render': 'canvas-render',
-      'packages/crdt': 'workspace',
+      'packages/loro-adapter': 'workspace',
       'packages/server-core': 'server-core',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',

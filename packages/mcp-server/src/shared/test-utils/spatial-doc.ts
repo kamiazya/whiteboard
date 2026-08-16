@@ -12,7 +12,7 @@
  * legacy shape.
  */
 
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'

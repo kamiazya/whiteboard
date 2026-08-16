@@ -24,7 +24,7 @@ paths:
 ## What does NOT belong here
 
 - The LoroDoc<->model bridge, attachments, multi-canvas OKF bundles, or bundle manifests —
-  deferred to `crdt` (see architecture-map.md).
+  deferred to `loro-adapter` (see architecture-map.md).
 - Scene graph, layout, rendering (`canvas-render`, planned).
 - Storage, HTTP/MCP surfaces, Inversify DI (composition roots only: `mcp-server`, `apps/web`).
 - Any runtime behavior beyond parsing/serializing a single document.
@@ -38,7 +38,7 @@ construct scan and the package.json dependency-direction check run against this 
 
 ## Consumers
 
-Besides `crdt` and `canvas-viewer`, `apps/web` depends on this package directly (its
+Besides `loro-adapter` and `canvas-viewer`, `apps/web` depends on this package directly (its
 markdown-editor preview pane calls `parseMarkdownBody` to feed canvas-render's
 `layoutMdastBlocks`/`renderSceneToSvg`, the same parse path `canvas-viewer` and `mcp-server` use
 for spatial text nodes and export — kept as one renderer instead of a second markdown-to-HTML

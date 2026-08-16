@@ -1,4 +1,4 @@
-import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-crdt'
+import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
   type ExtensionFacets,

@@ -1,6 +1,6 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
 import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-codec'
-import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-crdt'
+import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'

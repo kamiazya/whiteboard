@@ -1,4 +1,4 @@
-import { readEdgeLocks } from '@kamiazya/whiteboard-crdt'
+import { readEdgeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   canvasColorSchema,
   canvasEdgeSchema,

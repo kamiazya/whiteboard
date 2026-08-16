@@ -1,4 +1,4 @@
-import { readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc, PeerID } from 'loro-crdt'
 import { VersionVector } from 'loro-crdt'
 

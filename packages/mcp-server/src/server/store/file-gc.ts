@@ -1,6 +1,6 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'

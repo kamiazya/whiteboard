@@ -1,4 +1,4 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

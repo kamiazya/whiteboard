@@ -1,4 +1,4 @@
-import { writeDocumentKind } from '@kamiazya/whiteboard-crdt'
+import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'

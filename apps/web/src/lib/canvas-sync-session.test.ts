@@ -6,7 +6,11 @@
  * OpenCanvas-shaped surface this session now owns.
  */
 
-import { readSpatialCanvas, setNodeLock, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import {
+  readSpatialCanvas,
+  setNodeLock,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,

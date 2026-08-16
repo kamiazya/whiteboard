@@ -6,7 +6,7 @@
 // no store of its own — it receives a snapshot and lays it out itself, so a
 // file node's referenced markdown can only reach it if the server puts it in
 // the payload.
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'

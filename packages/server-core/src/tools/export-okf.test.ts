@@ -1,4 +1,4 @@
-import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'

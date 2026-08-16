@@ -1,4 +1,4 @@
-import { setEdgeLock } from '@kamiazya/whiteboard-crdt'
+import { setEdgeLock } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

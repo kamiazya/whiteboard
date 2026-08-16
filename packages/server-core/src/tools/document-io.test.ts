@@ -35,7 +35,7 @@ describe('document-io', () => {
 
     // Seed the store directly (bypassing the tool under test).
     const { LoroDoc } = await import('loro-crdt')
-    const { writeSpatialCanvas } = await import('@kamiazya/whiteboard-crdt')
+    const { writeSpatialCanvas } = await import('@kamiazya/whiteboard-loro-adapter')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const seedDoc = new LoroDoc()
     writeSpatialCanvas(seedDoc, canvas)

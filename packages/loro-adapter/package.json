@@ -1,9 +1,9 @@
 {
-  "name": "@kamiazya/whiteboard-crdt",
+  "name": "@kamiazya/whiteboard-loro-adapter",
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Workspace domain logic: Loro Tree ops, alias derivation, and LoroDoc-to-model bridge.",
+  "description": "Adapter between loro-crdt's LoroDoc and the OpenCanvas model.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

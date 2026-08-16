@@ -1,5 +1,5 @@
 import { parseSpatial } from '@kamiazya/whiteboard-codec'
-import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'

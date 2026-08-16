@@ -30,7 +30,7 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
-    "@kamiazya/whiteboard-crdt": "workspace:*",
+    "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-mcp": "workspace:*",
     "@lezer/highlight": "^1.2.1",
     "@lezer/markdown": "^1.7.2",

@@ -1,4 +1,4 @@
-import { readNodeLocks } from '@kamiazya/whiteboard-crdt'
+import { readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   canvasColorSchema,
   documentIdSchema,

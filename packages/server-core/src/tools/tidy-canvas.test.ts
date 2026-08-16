@@ -1,4 +1,8 @@
-import { setNodeLock, writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import {
+  setNodeLock,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'

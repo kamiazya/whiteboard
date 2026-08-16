@@ -1,4 +1,4 @@
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-crdt'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'

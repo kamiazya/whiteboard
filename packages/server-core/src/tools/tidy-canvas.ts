@@ -1,5 +1,5 @@
 import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
-import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-crdt'
+import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
   nodeIdSchema,
