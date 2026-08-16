@@ -2,19 +2,24 @@
 //
 // Contract:
 //   - Error.message is never forwarded — it may contain internal paths, tokens, or stack traces.
-//   - body.message is never forwarded — it is not a standard Problem Details field and may be internal.
-//   - body.title (RFC 9457 Problem Details) IS forwarded — it is a static, human-readable string
-//     that server authors intend for display and is not derived from user input or request context.
+//   - body.title (RFC 9457 Problem Details) IS forwarded — static, display-intended copy.
+//   - body.message IS forwarded ONLY beside an `error` code: that pairing is the daemon's own
+//     code+reason family (branch conflicts, unsupported merge), where `message` is
+//     daemon-authored display copy. A bare `message` with no code is out of contract and stays
+//     unforwarded.
 //   - All other values return fallback.
+//
+// The reading goes through the shared apiErrorBodySchema — the single owner of what a daemon
+// error body may look like — rather than hand-rolled field checks; three separate readers is
+// how the branch routes' reasons got discarded while every test stayed green.
+import { apiErrorReason } from '@kamiazya/whiteboard-mcp/api-contracts'
 
 export function safeErrorCopy(err: unknown, fallback: string): string {
   if (err instanceof Error) return fallback
   if (err && typeof err === 'object') {
-    const body = (err as { body?: Record<string, unknown> }).body
-    if (body && typeof body === 'object') {
-      // RFC 9457 §3.1: 'title' is a short, human-readable summary of the problem type.
-      if (typeof body.title === 'string' && body.title.length > 0) return body.title
-    }
+    const body = (err as { body?: unknown }).body
+    const reason = apiErrorReason(body)
+    if (reason !== undefined) return reason
   }
   return fallback
 }

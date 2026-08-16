@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
+import { apiErrorBodySchema, apiErrorReason } from '../../shared/api-contracts/errors.js'
 import { withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('branches-route-test-')
@@ -75,6 +76,23 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('branch_conflict')
     expect(body.message).toMatch(/already exists/i)
+  })
+
+  it('emits a 409 body the shared error contract parses, with the reason recoverable', async () => {
+    // The client reads every daemon error through apiErrorBodySchema /
+    // apiErrorReason. A route emitting a shape outside the contract would
+    // strand its reason behind the generic fallback — which is exactly how
+    // "A variation named X already exists" was discarded for months.
+    const app = makeApp()
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'main' }),
+    })
+    expect(res.status).toBe(409)
+    const body: unknown = await res.json()
+    expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
+    expect(apiErrorReason(body)).toMatch(/already exists/i)
   })
 
   it('returns 400 for an invalid name', async () => {

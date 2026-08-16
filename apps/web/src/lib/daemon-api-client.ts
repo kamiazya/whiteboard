@@ -1,5 +1,6 @@
 import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
+  apiErrorReason,
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
   canvasApiUrl,
@@ -14,7 +15,6 @@ import {
   listCanvasesResponseSchema,
   listCanvasesV1ResponseSchema,
   listWorkspacesResponseSchema,
-  problemDetailsErrorSchema,
   type UpdateCanvasResponse,
   updateCanvasResponseSchema,
   type WorkspaceNames,
@@ -42,9 +42,8 @@ export class DaemonApiError extends Error {
 
 async function parseProblemDetails(res: Response): Promise<string> {
   try {
-    const json = await res.json()
-    const parsed = problemDetailsErrorSchema.safeParse(json)
-    if (parsed.success && parsed.data.title) return parsed.data.title
+    const reason = apiErrorReason(await res.json())
+    if (reason !== undefined) return reason
   } catch {
     // fall through to the generic message below
   }
