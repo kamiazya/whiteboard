@@ -1913,6 +1913,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
+     * `lostpointercapture` is NOT a synonym for "the gesture broke". It also
+     * fires on the ordinary release of a captured pointer — and the browser
+     * captures touch pointers IMPLICITLY, so on a touch device it arrives
+     * after every single tap.
+     *
+     * `activePointerIdRef` is what tells the two apart: `handlePointerUp`
+     * clears it, so a null ref means the interaction already ended normally
+     * and there is nothing to recover. Cancelling there deleted the node the
+     * empty-canvas double-TAP had just created for editing — it appeared and
+     * vanished, while the same double-CLICK was fine because a stationary
+     * mouse press takes no capture to lose.
+     */
+    const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (activePointerIdRef.current === null) return
+      handlePointerCancel(e)
+    }
+
+    /**
      * The selection as reorder targets, primary + extras, deduped. The
      * command treats ids as a set and takes relative order from the canvas.
      */
@@ -2873,7 +2891,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onLostPointerCapture={handlePointerCancel}
+        onLostPointerCapture={handleLostPointerCapture}
         onKeyDown={handleKeyDown}
       >
         {/* Screen space, outside the pan/zoom transform — an overview that
