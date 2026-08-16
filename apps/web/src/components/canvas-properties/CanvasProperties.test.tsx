@@ -41,15 +41,15 @@ describe('CanvasProperties', () => {
     render(
       <CanvasProperties
         {...titleProps({ title: 'Release plan' })}
-        meta={meta()}
-        onChange={vi.fn()}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
       />,
     )
     expect(textboxValue(/title/i)).toBe('Release plan')
   })
 
   it('keeps type and tags behind the disclosure until it is opened', async () => {
-    render(<CanvasProperties {...titleProps()} meta={meta()} onChange={vi.fn()} />)
+    render(<CanvasProperties {...titleProps()} facets={meta()} onFacetsChange={vi.fn()} />)
     expect(screen.queryByRole('combobox', { name: /type/i })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /properties/i }))
@@ -62,8 +62,8 @@ describe('CanvasProperties', () => {
     render(
       <CanvasProperties
         {...titleProps({ title: 'old', onTitleChange })}
-        meta={meta()}
-        onChange={onChange}
+        facets={meta()}
+        onFacetsChange={onChange}
       />,
     )
 
@@ -81,8 +81,8 @@ describe('CanvasProperties', () => {
     render(
       <CanvasProperties
         {...titleProps({ title: 'old', onTitleChange })}
-        meta={meta()}
-        onChange={vi.fn()}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
       />,
     )
 
@@ -93,7 +93,7 @@ describe('CanvasProperties', () => {
   it('preserves facetsRaw across an edit to another field', () => {
     const onChange = vi.fn()
     const withRaw = meta({ facetsRaw: { author: 'kamiazya' } })
-    render(<CanvasProperties {...titleProps()} meta={withRaw} onChange={onChange} />)
+    render(<CanvasProperties {...titleProps()} facets={withRaw} onFacetsChange={onChange} />)
     fireEvent.click(screen.getByRole('button', { name: /properties/i }))
 
     const tagInput = screen.getByRole('textbox', { name: /add tag/i })
@@ -109,7 +109,7 @@ describe('CanvasProperties', () => {
   it('adds a tag on Enter and removes it again', () => {
     const onChange = vi.fn()
     const { rerender } = render(
-      <CanvasProperties {...titleProps()} meta={meta()} onChange={onChange} />,
+      <CanvasProperties {...titleProps()} facets={meta()} onFacetsChange={onChange} />,
     )
     fireEvent.click(screen.getByRole('button', { name: /properties/i }))
 
@@ -121,7 +121,11 @@ describe('CanvasProperties', () => {
     // No second Properties click: rerender keeps the same instance, so the
     // panel is still open — clicking again would close it.
     rerender(
-      <CanvasProperties {...titleProps()} meta={meta({ tags: ['ops'] })} onChange={onChange} />,
+      <CanvasProperties
+        {...titleProps()}
+        facets={meta({ tags: ['ops'] })}
+        onFacetsChange={onChange}
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: /remove tag ops/i }))
     expect(onChange).toHaveBeenLastCalledWith({ type: 'markdown' })
@@ -130,7 +134,11 @@ describe('CanvasProperties', () => {
   it('ignores a duplicate or blank tag instead of storing it', () => {
     const onChange = vi.fn()
     render(
-      <CanvasProperties {...titleProps()} meta={meta({ tags: ['ops'] })} onChange={onChange} />,
+      <CanvasProperties
+        {...titleProps()}
+        facets={meta({ tags: ['ops'] })}
+        onFacetsChange={onChange}
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: /properties/i }))
 
@@ -144,7 +152,7 @@ describe('CanvasProperties', () => {
 
   it('refuses to emit an empty type, the one field the schema requires', () => {
     const onChange = vi.fn()
-    render(<CanvasProperties {...titleProps()} meta={meta()} onChange={onChange} />)
+    render(<CanvasProperties {...titleProps()} facets={meta()} onFacetsChange={onChange} />)
     fireEvent.click(screen.getByRole('button', { name: /properties/i }))
 
     fireEvent.change(typeBox(), { target: { value: '' } })
@@ -166,8 +174,8 @@ describe('CanvasProperties title typing (controlled-input round trip)', () => {
       <CanvasProperties
         title={current === 'untitled' ? '' : current}
         onTitleChange={onTitleChange}
-        meta={{ type: 'markdown' }}
-        onChange={vi.fn()}
+        facets={{ type: 'markdown' }}
+        onFacetsChange={vi.fn()}
       />
     )
     const { rerender } = render(view())
@@ -189,8 +197,8 @@ describe('CanvasProperties title typing (controlled-input round trip)', () => {
     render(
       <CanvasProperties
         {...titleProps({ title: 'Release plan', onTitleChange })}
-        meta={meta()}
-        onChange={vi.fn()}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
       />,
     )
     const box = screen.getByRole('textbox', { name: /title/i })
@@ -205,7 +213,9 @@ describe('CanvasProperties title typing (controlled-input round trip)', () => {
 
 describe('CanvasProperties as the canvas row', () => {
   it('the Properties toggle is an icon button with a real accessible name and controls link', () => {
-    render(<CanvasProperties {...titleProps()} meta={{ type: 'markdown' }} onChange={vi.fn()} />)
+    render(
+      <CanvasProperties {...titleProps()} facets={{ type: 'markdown' }} onFacetsChange={vi.fn()} />,
+    )
     const toggle = screen.getByRole('button', { name: 'Properties' })
     // Icon-only: the word moved into aria-label + tooltip, off the surface.
     expect(toggle.textContent).not.toContain('Properties')
@@ -221,8 +231,8 @@ describe('CanvasProperties as the canvas row', () => {
     render(
       <CanvasProperties
         {...titleProps()}
-        meta={{ type: 'markdown' }}
-        onChange={vi.fn()}
+        facets={{ type: 'markdown' }}
+        onFacetsChange={vi.fn()}
         settings={<button type="button" aria-label="Display settings" />}
         actions={<span data-testid="row-actions">ops</span>}
       />,
@@ -235,7 +245,12 @@ describe('CanvasProperties as the canvas row', () => {
 describe('CanvasProperties inline variant (merged header row)', () => {
   it('renders as a row segment without its own chrome, and the disclosure overlays', () => {
     const { container } = render(
-      <CanvasProperties inline {...titleProps()} meta={{ type: 'canvas' }} onChange={() => {}} />,
+      <CanvasProperties
+        inline
+        {...titleProps()}
+        facets={{ type: 'canvas' }}
+        onFacetsChange={() => {}}
+      />,
     )
     const wrapper = container.firstElementChild as HTMLElement
     // No own border/背景 chrome — the merged header row provides it.
@@ -252,33 +267,25 @@ describe('CanvasProperties inline variant (merged header row)', () => {
 
 describe('a spatial document has no facets to edit', () => {
   // ADR-0009 decision 3: a facet is OKF frontmatter, and a JSON Canvas
-  // document has none to hold one. The server refuses to write facets there;
-  // offering the editor is the same claim made in the UI.
+  // document has none to hold one. The server refuses to write facets there,
+  // so a spatial canvas passes none — and there is no shape in which it
+  // hides the disclosure while still emitting through it.
   it('offers no properties disclosure', () => {
-    render(
-      <CanvasProperties {...titleProps()} meta={meta()} onChange={vi.fn()} showFacets={false} />,
-    )
+    render(<CanvasProperties {...titleProps()} />)
 
     expect(screen.queryByRole('button', { name: /properties/i })).toBeNull()
   })
 
   it('still shows the title, which is the workspace name and not a facet', () => {
-    // The name is a workspace concern (ADR-0009 decision 2), so hiding the
-    // facet disclosure must not take it with it.
-    render(
-      <CanvasProperties
-        {...titleProps({ title: 'Architecture' })}
-        meta={meta()}
-        onChange={vi.fn()}
-        showFacets={false}
-      />,
-    )
+    // The name is a workspace concern (ADR-0009 decision 2), so having no
+    // facets must not take it with them.
+    render(<CanvasProperties {...titleProps({ title: 'Architecture' })} />)
 
     expect(textboxValue(/title/i)).toBe('Architecture')
   })
 
   it('a markdown document keeps the disclosure', () => {
-    render(<CanvasProperties {...titleProps()} meta={meta()} onChange={vi.fn()} />)
+    render(<CanvasProperties {...titleProps()} facets={meta()} onFacetsChange={vi.fn()} />)
 
     expect(screen.queryByRole('button', { name: /properties/i })).not.toBeNull()
   })

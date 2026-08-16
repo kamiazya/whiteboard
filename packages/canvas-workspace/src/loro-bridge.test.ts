@@ -19,6 +19,7 @@ import {
   setNodeLock,
   withSpatialBatch,
   writeCoreFacets,
+  writeDocumentKind,
   writeFacets,
   writeSpatialCanvas,
   writeSpatialEdge,
@@ -482,6 +483,31 @@ describe('core facets bridge', () => {
     doc.commit()
 
     expect(readCoreFacets(doc)).toEqual({ type: 'note' })
+  })
+
+  test('a spatial document reports no facets, whatever its core map still holds', () => {
+    // A facet is OKF frontmatter and JSON Canvas has none (ADR-0009
+    // decision 3). Documents written before that stopped being true carry
+    // one anyway; surfacing it puts frontmatter on a diagram that no
+    // exporter of that format can round-trip.
+    const doc = makeDoc()
+    writeCoreFacets(doc, { type: 'diagram', tags: ['stale'] })
+    writeDocumentKind(doc, 'spatial')
+
+    expect(readCoreFacets(doc)).toBeUndefined()
+  })
+
+  test('a markdown document still reports them, and so does one with no kind', () => {
+    const markdown = makeDoc()
+    writeCoreFacets(markdown, { type: 'note' })
+    writeDocumentKind(markdown, 'markdown')
+    expect(readCoreFacets(markdown)).toEqual({ type: 'note' })
+
+    // An absent kind is not evidence of a format, exactly as wb_facet_set
+    // treats it.
+    const kindless = makeDoc()
+    writeCoreFacets(kindless, { type: 'note' })
+    expect(readCoreFacets(kindless)).toEqual({ type: 'note' })
   })
 
   test('a write purges a title an older writer left behind', () => {

@@ -453,8 +453,23 @@ export function writeCoreFacets(doc: LoroDoc, meta: StoredCoreFacets): void {
  * a missing/invalid `type` after that per-field filter makes the whole
  * result unrepresentable, since `type` is the one field every consumer
  * (`canvas_export_okf`'s placeholder fallback) depends on being present.
+ *
+ * A SPATIAL document answers `undefined` whatever its `core` map holds. A
+ * facet is OKF frontmatter and a JSON Canvas document has none to put one in
+ * (ADR-0009 decision 3), so a spatial document carrying facets is one written
+ * before that stopped being true — and every reader that surfaces them
+ * (a facet card beside a diagram, an OKF export's frontmatter) is showing
+ * metadata the format cannot represent. Enforced on the READ because it is
+ * total: it needs no migration, and no writer can reintroduce the state
+ * behind it — `wb_facet_set` and `wb_document_set` both refuse a spatial
+ * document, and after this there is no other writer.
+ *
+ * A document with no kind is allowed through, exactly as those tools allow
+ * one: an absent kind is not evidence of a format.
  */
 export function readCoreFacets(doc: LoroDoc): StoredCoreFacets | undefined {
+  if (readDocumentKind(doc) === 'spatial') return undefined
+
   const coreMap = doc.getMap(CORE_KEY)
   if (coreMap.keys().length === 0) return undefined
 

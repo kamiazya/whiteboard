@@ -1,5 +1,4 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -107,14 +106,6 @@ interface BrowserLocalCanvasPageProps {
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
 // own message; the other states are not shown as raw enum tokens.
-
-/**
- * The core meta to show when a canvas has none stored yet — every canvas
- * that predates the facet bar, which is all of them.
- */
-function fallbackCoreFacets(kind: CanvasSnapshot['kind']): StoredCoreFacets {
-  return { type: kind }
-}
 
 /**
  * The canvas name as a TITLE. `untitled` is the store's sentinel for an
@@ -377,8 +368,6 @@ export function BrowserLocalCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
-    coreFacets,
-    setCoreFacets,
   } = useCanvasSync(backend)
 
   // Export rides the canvas row's operations kebab on this page (the top
@@ -650,25 +639,24 @@ export function BrowserLocalCanvasPage({
           actions={canvasRowActions}
           title={titleOf(canvasName)}
           onTitleChange={onTitleChange}
-          meta={markdownDoc.coreFacets ?? fallbackCoreFacets(documentKind)}
-          onChange={markdownDoc.setCoreFacets}
+          facets={markdownDoc.coreFacets}
+          onFacetsChange={markdownDoc.setCoreFacets}
         />
       ) : null
     ) : (
+      // No facets at all: this branch is the SPATIAL canvas, and a facet is
+      // OKF frontmatter that JSON Canvas has nowhere to put (ADR-0009
+      // decision 3). It used to pass `showFacets={false}` and keep WRITING
+      // them, which is the shape the ADR calls out — the editor hid what the
+      // document went on storing.
       <CanvasProperties
         inline
-        // A facet is OKF frontmatter and this branch is the SPATIAL canvas,
-        // which has none to hold one (ADR-0009 decision 3) — wb_facet_set
-        // refuses to write them here, so the editor does not offer them.
-        showFacets={false}
         key={documentId ?? 'no-canvas'}
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
         title={titleOf(canvasName)}
         onTitleChange={onTitleChange}
-        meta={coreFacets ?? fallbackCoreFacets(documentKind)}
-        onChange={setCoreFacets}
       />
     )
 

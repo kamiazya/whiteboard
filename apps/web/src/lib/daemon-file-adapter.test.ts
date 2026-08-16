@@ -3,7 +3,11 @@
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
  * (J5b) silently did nothing there while working in browser-local mode.
  */
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  writeCoreFacets,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDaemonFileAdapter } from './daemon-file-adapter.js'
@@ -170,6 +174,47 @@ describe('createDaemonFileAdapter', () => {
     })
 
     expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
+  })
+
+  it('reports no facets for a spatial document, whatever its content still holds', async () => {
+    // A facet is OKF frontmatter and a JSON Canvas document has none
+    // (ADR-0009 decision 3). A document written before that stopped being
+    // true still carries a `core` map; surfacing it puts a facet card on a
+    // diagram the server would refuse to write one to.
+    const doc = new Loro()
+    writeDocumentKind(doc, 'spatial')
+    writeCoreFacets(doc, { type: 'diagram', tags: ['stale'] })
+    const daemonFetch = vi.fn(
+      async () => new Response(doc.export({ mode: 'snapshot' }) as BodyInit),
+    )
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: SLUG,
+    })
+
+    expect((await adapter.loadDocument('diagram'))?.facets).toBeUndefined()
+  })
+
+  it('still reports facets for a markdown document, which is what OKF frontmatter is', async () => {
+    const doc = new Loro()
+    writeDocumentKind(doc, 'markdown')
+    writeCoreFacets(doc, { type: 'note', tags: ['ops'] })
+    const daemonFetch = vi.fn(
+      async () => new Response(doc.export({ mode: 'snapshot' }) as BodyInit),
+    )
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: SLUG,
+    })
+
+    expect((await adapter.loadDocument('notes'))?.facets).toEqual({
+      type: 'note',
+      tags: ['ops'],
+    })
   })
 
   it('resolves an unreachable referenced canvas to undefined', async () => {

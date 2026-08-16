@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -54,8 +54,6 @@ export interface UseCanvasSyncResult {
   lockedNodeIds: ReadonlySet<string>
   setNodeLock: (nodeId: string, locked: boolean) => void
   /** OKF core facets from the doc's sidecar map; undefined until hydrated or when never written. */
-  coreFacets: StoredCoreFacets | undefined
-  setCoreFacets: (meta: StoredCoreFacets) => void
   lockedEdgeIds: ReadonlySet<string>
   setEdgeLock: (edgeId: string, locked: boolean) => void
   canRedo: () => boolean
@@ -172,7 +170,6 @@ export function useCanvasSync(
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
-  const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -235,18 +232,12 @@ export function useCanvasSync(
       setLockedNodeIds(session.getNodeLocks())
       setLockedEdgeIds(session.getEdgeLocks())
     })
-    // Facets change no canvas value either, so they need their own
-    // notification for the same reason locks do.
-    const unsubscribeCoreFacets = session.subscribeCoreFacets(() => {
-      setCoreFacetsState(session.getCoreFacets())
-    })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
     // synchronously), and a missed notification would otherwise leave a
     // persisted lock invisible until the next toggle.
     setLockedNodeIds(session.getNodeLocks())
     setLockedEdgeIds(session.getEdgeLocks())
-    setCoreFacetsState(session.getCoreFacets())
     session.connect()
     session.onEditorReady()
 
@@ -254,7 +245,6 @@ export function useCanvasSync(
       unsubscribe()
       unsubscribeHistory()
       unsubscribeLocks()
-      unsubscribeCoreFacets()
       session.dispose()
     }
   }, [backend])
@@ -276,10 +266,6 @@ export function useCanvasSync(
   // the session on each render is always current and never stale.
   const setEdgeLock = useCallback((edgeId: string, locked: boolean) => {
     sessionRef.current?.setEdgeLock(edgeId, locked)
-  }, [])
-
-  const setCoreFacets = useCallback((meta: StoredCoreFacets) => {
-    sessionRef.current?.setCoreFacets(meta)
   }, [])
 
   const setNodeLock = useCallback((nodeId: string, locked: boolean) => {
@@ -376,8 +362,6 @@ export function useCanvasSync(
     canUndo,
     lockedNodeIds,
     setNodeLock,
-    coreFacets,
-    setCoreFacets,
     lockedEdgeIds,
     setEdgeLock,
     canRedo,

@@ -87,6 +87,17 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not
 - MCP tool names — ADR-0009 point 5, its own increment
-- Core facets written to spatial documents (`CanvasProperties` mounted for
-  both kinds) — this one is a behaviour change, not a rename; see ADR-0009
-  point 3 and the consequence it names
+
+Two are done and worth knowing HOW, because both were fixed by removing the
+place the wrong state could live rather than by correcting a call site:
+
+- **A document's name stored twice.** `storedCoreFacetsSchema` omits `title`,
+  so `writeCoreFacets` cannot be handed one and `readCoreFacets` does not
+  surface one an older writer left. The name is the workspace's; OKF
+  frontmatter `title` is projected from it on export and applied to it on
+  import.
+- **Core facets written to spatial documents.** `readCoreFacets` answers
+  `undefined` for a document whose kind is `spatial`, and apps/web's spatial
+  canvas row passes no facets at all rather than hiding the disclosure while
+  still writing through it. A document with no kind is still allowed through,
+  exactly as `wb_facet_set` allows one.

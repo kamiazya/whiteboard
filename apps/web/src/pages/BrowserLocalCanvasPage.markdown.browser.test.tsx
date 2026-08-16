@@ -237,7 +237,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // content: the document a rename touches holds no `title` facet at all
     // (ADR-0009 decision 2). Without this the test passes on a document that
     // stores the name twice, which is the state it exists to rule out.
-    const [entry] = await store.listCanvases()
+    // By kind, not by index: the workspace still holds the initial spatial
+    // canvas this flow started from.
+    const entry = (await store.listCanvases()).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
     const loaded = await new LoroStore().load(entry?.id ?? '')
     expect(loaded.kind).toBe('ok')
@@ -360,6 +362,10 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     // the markdown one does.
     const title = await screen.findByRole('textbox', { name: /title/i }, { timeout: 10_000 })
     expect((title as HTMLInputElement).value).toBe('Diagram A')
+    // But NOT the facets beside it: a facet is OKF frontmatter and JSON
+    // Canvas has nowhere to put one (decision 3). The disclosure used to be
+    // hidden while the page went on writing through it.
+    expect(screen.queryByRole('button', { name: /properties/i })).toBeNull()
 
     // clear(), not a select-all chord: the browser's select-all is Cmd+A on
     // macOS and Ctrl+A elsewhere, so `{Control>}a{/Control}` selects nothing

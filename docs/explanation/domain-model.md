@@ -19,6 +19,22 @@ backed by more than one representation today. Read
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.
 
+  The display name is the **only** place a canvas is named. Exporting a
+  markdown canvas to OKF writes it as the frontmatter `title`, and
+  importing OKF applies an incoming `title` back to the display name —
+  both directions are projections of the one value, not a second copy.
+  An OKF file with no `title` says nothing about the name, so importing
+  it leaves the existing name alone.
+- **Facets** — a markdown canvas's OKF frontmatter: its `type`, its
+  `tags`, and any root-level keys this app does not model. A spatial
+  canvas has none. JSON Canvas is nodes and edges with no frontmatter
+  concept, so there is nowhere in that format for a facet to live — which
+  is why the editor offers the Properties disclosure on a markdown canvas
+  only, and why `wb_facet_set` refuses a spatial one. Metadata on a
+  diagram is a reasonable thing to want and is not built: it would be a
+  workspace-level capability, not a facet
+  ([ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
+
 ## Identity, per mode
 
 | mode | identity of a canvas | shown to the user |
