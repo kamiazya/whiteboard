@@ -1,8 +1,10 @@
 export {
+  canvasWithMarkdownBody,
   deleteSpatialEdge,
   deleteSpatialNode,
   MARKDOWN_BODY_KEY,
   MARKDOWN_BODY_NODE_ID,
+  markdownBodyFromCanvas,
   readCoreFacets,
   readDocumentKind,
   readEdgeLocks,

@@ -529,10 +529,72 @@ export function readMarkdownBody(doc: LoroDoc): string {
   const container = doc.getText(MARKDOWN_BODY_KEY).toString()
   if (container.length > 0) return container
 
-  const { nodes } = readSpatialCanvas(doc)
+  return markdownBodyFromCanvas(readSpatialCanvas(doc))
+}
+
+type SpatialTextNode = Extract<SpatialNode, { type: 'text' }>
+
+/**
+ * The node a markdown document's body lives in, given an already-read
+ * canvas: the stable id first, then the first text node (pre-stable-id
+ * documents), matching `readMarkdownBody`'s node-side selection exactly.
+ */
+function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialTextNode | undefined {
   const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
-  if (byId?.type === 'text') return byId.text
-  return nodes.find((node) => node.type === 'text')?.text ?? ''
+  if (byId?.type === 'text') return byId
+  return nodes.find((node): node is SpatialTextNode => node.type === 'text')
+}
+
+/**
+ * The node-side half of `readMarkdownBody`, for callers that already hold
+ * the canvas (a live sync session, say) and must not re-read the doc.
+ */
+export function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
+  return findMarkdownBodyNode(canvas.nodes)?.text ?? ''
+}
+
+/**
+ * The geometry `wb_document_set` gives the single body node — the UI's
+ * created node must match, or which side wrote a body would be visible in
+ * its layout.
+ */
+const MARKDOWN_BODY_NODE_FRAME = { x: 0, y: 0, width: 600, height: 400 } as const
+
+/**
+ * An immutable canvas update that stores `body` where the daemon side
+ * keeps a markdown document's body: the existing body node when there is
+ * one (geometry untouched — `wb_body_patch` edits in place the same way),
+ * else a fresh `okf-body` node. `created` tells the caller which happened,
+ * so an editor command can say create-node vs set-text truthfully.
+ */
+export function canvasWithMarkdownBody(
+  canvas: SpatialCanvas,
+  body: string,
+): { canvas: SpatialCanvas; node: SpatialTextNode; created: boolean } {
+  const existing = findMarkdownBodyNode(canvas.nodes)
+  if (existing) {
+    const node: SpatialTextNode = { ...existing, text: body }
+    return {
+      canvas: {
+        ...canvas,
+        nodes: canvas.nodes.map((candidate) => (candidate.id === existing.id ? node : candidate)),
+      },
+      node,
+      created: false,
+    }
+  }
+  const node: SpatialTextNode = {
+    id: MARKDOWN_BODY_NODE_ID,
+    type: 'text',
+    ...MARKDOWN_BODY_NODE_FRAME,
+    text: body,
+  }
+  // The reserved id belongs to the body. A NON-text node squatting on it is
+  // already unreadable as a body (the read path ignores it), so it is
+  // replaced rather than duplicated — two nodes sharing an id would make
+  // the keyed-by-id persistence layer silently drop one of them.
+  const withoutSquatter = canvas.nodes.filter((candidate) => candidate.id !== node.id)
+  return { canvas: { ...canvas, nodes: [...withoutSquatter, node] }, node, created: true }
 }
 
 /**

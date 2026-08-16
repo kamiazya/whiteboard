@@ -3,14 +3,14 @@ import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
+import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
-import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -249,7 +249,6 @@ export function BrowserLocalCanvasPage({
         : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText(MARKDOWN_BODY_KEY))],
     [markdownDoc.doc],
   )
-  const noopChange = useCallback(() => {}, [])
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
   // [[Name]] resolution for the markdown preview: display names from the
@@ -765,78 +764,76 @@ export function BrowserLocalCanvasPage({
         </Button>
       )}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
-        {documentKind === 'markdown' ? (
-          markdownDoc.body !== null &&
-          markdownDoc.coreFacets !== null && (
+        <DocumentEditorSurface
+          kind={documentKind}
+          documentKey={documentId ?? 'no-canvas'}
+          markdown={
+            markdownDoc.coreFacets === null
+              ? { body: null, setBody: markdownDoc.setBody }
+              : {
+                  body: markdownDoc.body,
+                  setBody: markdownDoc.setBody,
+                  sourceExtensions: markdownBinding,
+                  autoFocus: true,
+                  theme: resolvedTheme,
+                  meta: markdownDoc.coreFacets,
+                  title: titleOf(canvasName),
+                  resolveAlias,
+                  onOpenCanvas: (id) => navigate(browserLocalCanvasPath(id)),
+                  resolveEmbed,
+                }
+          }
+          spatial={() => (
             <div className="flex h-full min-h-0 flex-col">
-              <div className="min-h-0 flex-1">
-                <MarkdownEditor
-                  key={documentId ?? 'no-canvas'}
-                  value={markdownDoc.body}
-                  onChange={markdownBinding === undefined ? markdownDoc.setBody : noopChange}
-                  sourceExtensions={markdownBinding}
-                  autoFocus
-                  className="h-full"
-                  theme={resolvedTheme}
-                  meta={markdownDoc.coreFacets}
-                  title={titleOf(canvasName)}
-                  resolveAlias={resolveAlias}
-                  onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
-                  resolveEmbed={resolveEmbed}
-                />
-              </div>
-            </div>
-          )
-        ) : (
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="relative min-h-0 flex-1">
-              {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
+              <div className="relative min-h-0 flex-1">
+                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                   gesture and open text editor all describe ONE canvas, and
                   `SpatialCanvas` carries no id for the editor to notice a
                   switch by. Without the key, switching canvases silently
                   inherits the previous canvas's viewport. (The markdown
                   branch keys for the same reason.) */}
-              <SpatialEditor
-                key={documentId ?? 'no-canvas'}
-                // Decided from the canvas's own shape, but only once its
-                // document has loaded — at mount every canvas still looks
-                // empty.
-                initialTool={
-                  canvasLoaded
-                    ? resolveInitialTool({
-                        isEmpty: canvas.nodes.length === 0,
-                        lastTool: readLastTool(),
-                      })
-                    : undefined
-                }
-                canvas={canvas}
-                onChange={onChange}
-                externalVersion={externalVersion}
-                theme={resolvedTheme}
-                // File-node reference = browser-local canvas id; the current
-                // canvas is excluded (a self-reference card is pure noise).
-                fileRefOptions={canvases
-                  .filter((entry) => entry.id !== documentId)
-                  .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
-                onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
-                missingFileRef={missingFileRef}
-                {...fileSeams}
-                lockedNodeIds={lockedNodeIds}
-                lockedEdgeIds={lockedEdgeIds}
-                onToggleNodeLock={setNodeLock}
-                onToggleEdgeLock={setEdgeLock}
-                paletteLeading={
-                  <HistoryCluster
-                    onUndo={() => void undo()}
-                    onRedo={() => void redo()}
-                    canUndo={canUndo()}
-                    canRedo={canRedo()}
-                  />
-                }
-              />
+                <SpatialEditor
+                  key={documentId ?? 'no-canvas'}
+                  // Decided from the canvas's own shape, but only once its
+                  // document has loaded — at mount every canvas still looks
+                  // empty.
+                  initialTool={
+                    canvasLoaded
+                      ? resolveInitialTool({
+                          isEmpty: canvas.nodes.length === 0,
+                          lastTool: readLastTool(),
+                        })
+                      : undefined
+                  }
+                  canvas={canvas}
+                  onChange={onChange}
+                  externalVersion={externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = browser-local canvas id; the current
+                  // canvas is excluded (a self-reference card is pure noise).
+                  fileRefOptions={canvases
+                    .filter((entry) => entry.id !== documentId)
+                    .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
+                  onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
+                  missingFileRef={missingFileRef}
+                  {...fileSeams}
+                  lockedNodeIds={lockedNodeIds}
+                  lockedEdgeIds={lockedEdgeIds}
+                  onToggleNodeLock={setNodeLock}
+                  onToggleEdgeLock={setEdgeLock}
+                  paletteLeading={
+                    <HistoryCluster
+                      onUndo={() => void undo()}
+                      onRedo={() => void redo()}
+                      canUndo={canUndo()}
+                      canRedo={canRedo()}
+                    />
+                  }
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        />
         {/* Markdown canvases keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
