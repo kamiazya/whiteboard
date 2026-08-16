@@ -159,8 +159,8 @@ describe('toFacetCard', () => {
     })
   })
 
-  it('prefers the facet title over the type for the heading', () => {
-    expect(toFacetCard('spec-a1b2c3', { type: 'note', title: 'Spec' })).toEqual({
+  it('uses the workspace name for the heading when the adapter supplies one', () => {
+    expect(toFacetCard('spec-a1b2c3', { type: 'note' }, 'Spec')).toEqual({
       title: 'Spec',
       rows: [{ label: 'type', value: 'note' }],
     })
@@ -196,7 +196,8 @@ describe('useCanvasFileSeams facets', () => {
     const adapter = makeAdapter({
       loadDocument: vi.fn(async (ref: string) => ({
         canvas: embedded(ref),
-        facets: { type: 'note', title: 'Spec', tags: ['x'] },
+        facets: { type: 'note', tags: ['x'] },
+        name: 'Spec',
       })),
     })
     const { result } = renderHook(() =>
@@ -296,10 +297,10 @@ describe('toFacetCard heading when the document has no stored title', () => {
     expect(toFacetCard('release-plan', { type: 'note' })?.title).toBe('release-plan')
   })
 
-  it('a stored title still wins, so browser-local documents are unaffected', () => {
-    // Browser-local canvases keep writing `title` into core facets; only the
-    // daemon path stopped. Both must keep working from this one function.
-    expect(toFacetCard('release-plan', { type: 'note', title: 'Release plan' })?.title).toBe(
+  it('a name from the workspace replaces that fallback', () => {
+    // Naming is the workspace's job for BOTH backends, so the name arrives
+    // beside the facets rather than inside them.
+    expect(toFacetCard('release-plan', { type: 'note' }, 'Release plan')?.title).toBe(
       'Release plan',
     )
   })

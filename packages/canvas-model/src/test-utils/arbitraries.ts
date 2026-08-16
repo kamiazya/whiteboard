@@ -88,11 +88,6 @@ export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, facetValu
   maxKeys: 4,
 })
 
-/** Valid-by-construction arbitrary for `storedCoreFacetsSchema`: core facets plus facetsRaw. */
-export const canvasCoreMetaArbitrary = fc
-  .tuple(coreFacetsArbitrary, fc.option(facetsRawArbitrary, { nil: undefined }))
-  .map(([core, facetsRaw]) => (facetsRaw === undefined ? core : { ...core, facetsRaw }))
-
 const geometryArbitrary = fc.integer({ min: -10_000, max: 10_000 })
 const sizeArbitrary = fc.integer({ min: 0, max: 10_000 })
 const canvasColorArbitrary: fc.Arbitrary<string> = fc.oneof(

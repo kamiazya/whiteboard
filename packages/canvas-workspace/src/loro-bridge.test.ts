@@ -470,11 +470,35 @@ describe('core facets bridge', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
+  test('does not surface a title an older writer stored in the content', () => {
+    // A document's name belongs to the workspace and the OKF `title` is a
+    // projection of it (ADR-0009 decision 2), so `core` is not a place a
+    // title can live. Documents written before that landed hold one anyway —
+    // surfacing it would put the second source of truth straight back into
+    // the editor, and the next write would keep it alive.
+    const doc = makeDoc()
+    doc.getMap('core').set('type', 'note')
+    doc.getMap('core').set('title', 'Copied from the workspace name')
+    doc.commit()
+
+    expect(readCoreFacets(doc)).toEqual({ type: 'note' })
+  })
+
+  test('a write purges a title an older writer left behind', () => {
+    const doc = makeDoc()
+    doc.getMap('core').set('type', 'note')
+    doc.getMap('core').set('title', 'Copied from the workspace name')
+    doc.commit()
+
+    writeCoreFacets(doc, { type: 'note', tags: ['idea'] })
+
+    expect(doc.getMap('core').get('title')).toBeUndefined()
+  })
+
   test('round-trips every core field', () => {
     const doc = makeDoc()
     const meta: StoredCoreFacets = {
       type: 'note',
-      title: 'A note',
       tags: ['idea', 'browser'],
       view: 'kanban/1',
       facetsRaw: { customKey: 'value' },
@@ -497,7 +521,7 @@ describe('core facets bridge', () => {
   test('a later write replaces the whole document meta: an omitted optional field disappears', () => {
     const doc = makeDoc()
 
-    writeCoreFacets(doc, { type: 'note', title: 'First title', tags: ['a'] })
+    writeCoreFacets(doc, { type: 'note', view: 'kanban/1', tags: ['a'] })
     writeCoreFacets(doc, { type: 'note' })
 
     expect(readCoreFacets(doc)).toEqual({ type: 'note' })
@@ -507,18 +531,18 @@ describe('core facets bridge', () => {
     const doc = makeDoc()
     writeFacets(doc, { 'kanban/1': { status: 'todo' } })
 
-    writeCoreFacets(doc, { type: 'note', title: 'Untouched-adjacent' })
+    writeCoreFacets(doc, { type: 'note', tags: ['untouched-adjacent'] })
 
     expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
   })
 
   test('writing extension facets never touches the core meta bucket', () => {
     const doc = makeDoc()
-    writeCoreFacets(doc, { type: 'note', title: 'Stable' })
+    writeCoreFacets(doc, { type: 'note', view: 'kanban/1' })
 
     writeFacets(doc, { 'kanban/1': { status: 'todo' } })
 
-    expect(readCoreFacets(doc)).toEqual({ type: 'note', title: 'Stable' })
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'kanban/1' })
   })
 
   test('CRDT merge: two docs independently write different core-meta fields converge on both', () => {
@@ -527,30 +551,30 @@ describe('core facets bridge', () => {
 
     writeCoreFacets(doc1, { type: 'note' })
     doc2.import(doc1.export({ mode: 'snapshot' }))
-    writeCoreFacets(doc1, { type: 'note', title: 'From doc1' })
+    writeCoreFacets(doc1, { type: 'note', view: 'from-doc1' })
     writeCoreFacets(doc2, { type: 'note', tags: ['from-doc2'] })
 
     doc1.import(doc2.export({ mode: 'snapshot' }))
 
     const merged = readCoreFacets(doc1)
     expect(merged?.type).toBe('note')
-    expect(merged?.title).toBe('From doc1')
+    expect(merged?.view).toBe('from-doc1')
     expect(merged?.tags).toEqual(['from-doc2'])
   })
 
   test('drops a single corrupt field but keeps the rest when type is still valid', () => {
     const doc = makeDoc()
     doc.getMap('core').set('type', 'note')
-    doc.getMap('core').set('title', 'Kept title')
+    doc.getMap('core').set('view', 'kanban/1')
     doc.getMap('core').set('tags', 'not-an-array')
     doc.commit()
 
-    expect(readCoreFacets(doc)).toEqual({ type: 'note', title: 'Kept title' })
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'kanban/1' })
   })
 
   test('returns undefined when the required type field is missing or invalid', () => {
     const doc = makeDoc()
-    doc.getMap('core').set('title', 'Orphan title, no type')
+    doc.getMap('core').set('view', 'orphan view, no type')
     doc.commit()
 
     expect(readCoreFacets(doc)).toBeUndefined()

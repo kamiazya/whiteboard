@@ -80,8 +80,16 @@ export type FacetsRaw = z.infer<typeof facetsRawSchema>
  * `readFacets` in canvas-workspace) so one domain's CRDT merge never
  * overwrites another's; folding it into this object would lose that
  * per-key merge granularity.
+ *
+ * `title` is omitted, and that omission is the whole point: a document's name
+ * belongs to its place in the workspace, not to its content (ADR-0009
+ * decision 2). The OKF frontmatter `title` is a PROJECTION of that name on
+ * serialise and a write to it on parse — `coreFacetsSchema` keeps the field
+ * because OKF has it, and this schema drops it because storage must not be a
+ * second copy to keep in sync. Omitting it here is what makes the second copy
+ * unrepresentable rather than merely discouraged.
  */
-export const storedCoreFacetsSchema = coreFacetsSchema.extend({
+export const storedCoreFacetsSchema = coreFacetsSchema.omit({ title: true }).extend({
   facetsRaw: facetsRawSchema.optional(),
 })
 

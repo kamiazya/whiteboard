@@ -15,7 +15,7 @@
  * the card — a broken reference never takes down a page.
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { FacetCardData, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -31,7 +31,13 @@ const log = getAppLogger('canvas-file-seams')
  */
 export interface LoadedFileDocument {
   readonly canvas?: SpatialCanvas
-  readonly facets?: CoreFacets
+  readonly facets?: StoredCoreFacets
+  /**
+   * The referenced document's NAME, which the workspace owns rather than the
+   * content (ADR-0009 decision 2) — so an adapter reads it from wherever its
+   * backend keeps placement, not from the facets it loaded alongside.
+   */
+  readonly name?: string
   /**
    * A markdown document's raw body. Raw rather than parsed, because an
    * adapter's job is to reach the backend — parsing is this hook's, done
@@ -228,7 +234,7 @@ export function useCanvasFileSeams({
       if (document === undefined || document === null) return undefined
       const canvas = embeddableCanvas(document)
       const markdown = markdownBodies.get(ref)
-      const facets = toFacetCard(ref, document.facets)
+      const facets = toFacetCard(ref, document.facets, document.name)
       return {
         ...(canvas !== undefined ? { canvas } : {}),
         ...(markdown !== undefined ? { markdown } : {}),
@@ -254,24 +260,20 @@ export function useCanvasFileSeams({
  */
 export function toFacetCard(
   ref: string,
-  facets: CoreFacets | undefined,
+  facets: StoredCoreFacets | undefined,
+  name?: string,
 ): FacetCardData | undefined {
   if (facets === undefined) return undefined
   const rows = [{ label: 'type', value: facets.type }]
   if (facets.tags !== undefined && facets.tags.length > 0) {
     rows.push({ label: 'tags', value: facets.tags.join(', ') })
   }
-  // The heading falls back to the REFERENCE, not to `type`. A document's name
-  // lives in the workspace now (ADR-0009 decision 2), so one written through
-  // wb_document_set stores no `title` facet at all — and `type` as a heading
-  // made every such card read "note", identifying nothing. `ref` is the path,
-  // which is the fallback this model uses wherever a name is absent.
+  // The heading is the document's NAME, which the workspace owns (ADR-0009
+  // decision 2) — never `type`, which made every card read "note" and
+  // identified nothing.
   //
-  // A stored `title` still wins: browser-local canvases keep writing one, and
-  // both paths come through this function.
-  //
-  // ponytail: the path, because the daemon's canvas summary carries no
-  // display name yet (see DaemonCanvasPage's note). Once it does, the real
-  // name goes here and this fallback moves behind it.
-  return { title: facets.title ?? ref, rows }
+  // ponytail: `ref` — the id or path — when the adapter cannot supply a name,
+  // because the daemon's canvas summary carries no display name yet (see
+  // DaemonCanvasPage's note). Once it does, that fallback goes.
+  return { title: name ?? ref, rows }
 }

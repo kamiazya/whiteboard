@@ -18,10 +18,32 @@ import {
 import { Loro } from 'loro-crdt'
 import type { CanvasFileAdapter, LoadedFileDocument } from '../hooks/use-canvas-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import { IndexedDBStore } from './browser-local-store.js'
 import { CanvasFileStore } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('canvas-embed-content')
+
+/**
+ * A referenced document's NAME. It lives in the snapshot row rather than the
+ * Loro document, because the workspace owns naming and the content holds no
+ * copy of it (ADR-0009 decision 2) — so reading one costs a second store hit
+ * that no amount of care over the content load can save.
+ *
+ * Total like every loader here: an unnamed, missing or corrupt row is
+ * `undefined`, and the caller falls back to the reference.
+ */
+async function loadDocumentName(documentId: string): Promise<string | undefined> {
+  try {
+    const result = await new IndexedDBStore().load(documentId)
+    if (result.kind !== 'ok') return undefined
+    // `untitled` is the store's sentinel for an unnamed canvas, not a name.
+    return result.snapshot.name === 'untitled' ? undefined : result.snapshot.name
+  } catch (err) {
+    log.warn('document name load failed', { documentId, err })
+    return undefined
+  }
+}
 
 /** Loads one referenced canvas's spatial content from IndexedDB. */
 async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocument | undefined> {
@@ -35,9 +57,11 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
     // read, which is why neither facets nor the body need a second store
     // round-trip.
     const body = readMarkdownBody(doc)
+    const name = await loadDocumentName(documentId)
     return {
       canvas: readSpatialCanvas(doc),
       facets: readCoreFacets(doc),
+      ...(name !== undefined ? { name } : {}),
       ...(body.length > 0 ? { body } : {}),
     }
   } catch (err) {
@@ -60,7 +84,7 @@ export async function loadMarkdownEmbedSource(
     const doc = new Loro()
     doc.import(result.snapshot)
     for (const delta of result.deltas ?? []) doc.import(delta)
-    const title = readCoreFacets(doc)?.title
+    const title = await loadDocumentName(documentId)
     return { body: readMarkdownBody(doc), ...(title !== undefined ? { title } : {}) }
   } catch (err) {
     log.warn('embedded markdown load failed', { documentId, err })

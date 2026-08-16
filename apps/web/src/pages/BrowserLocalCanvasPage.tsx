@@ -111,16 +111,19 @@ interface BrowserLocalCanvasPageProps {
 /**
  * The core meta to show when a canvas has none stored yet — every canvas
  * that predates the facet bar, which is all of them.
- *
- * `title` is seeded from the canvas NAME rather than left blank: the two are
- * one concept, so a canvas already called "Diagram A" must show that as its
- * title, not an empty box the user has to retype. `untitled` is the list's
- * placeholder for an unnamed canvas, so it stays a placeholder here instead
- * of becoming a real stored title on the first unrelated edit.
  */
-function fallbackCoreFacets(kind: CanvasSnapshot['kind'], name: string | null): StoredCoreFacets {
-  const title = name && name !== 'untitled' ? name : undefined
-  return { type: kind, ...(title ? { title } : {}) }
+function fallbackCoreFacets(kind: CanvasSnapshot['kind']): StoredCoreFacets {
+  return { type: kind }
+}
+
+/**
+ * The canvas name as a TITLE. `untitled` is the store's sentinel for an
+ * unnamed canvas (`renameCanvas` normalises a cleared name to it), so it
+ * becomes the empty string here and the title box falls back to its
+ * placeholder rather than showing the sentinel as a real name.
+ */
+function titleOf(name: string | null): string {
+  return name === null || name === 'untitled' ? '' : name
 }
 
 export function BrowserLocalCanvasPage({
@@ -622,6 +625,18 @@ export function BrowserLocalCanvasPage({
     </>
   )
 
+  // The name goes to the workspace and NOWHERE else: it is a property of the
+  // document's place, not of its content (ADR-0009 decision 2), so the
+  // snapshot row is the one copy and the OKF `title` is projected from it on
+  // export. Both kinds share this — the same callback for both mount sites
+  // below is the point, not a coincidence.
+  const onTitleChange = (next: string) => {
+    void renameCanvas(next).catch(() => {
+      // Surfaced through persistence state, which the save chip beside this
+      // box already renders.
+    })
+  }
+
   // The merged header row's flexible middle: canvas identity (title, core
   // facets, display settings) lives in the SAME row as workspace context —
   // the second chrome strip is gone. Kind decides the exact segment.
@@ -633,21 +648,10 @@ export function BrowserLocalCanvasPage({
           key={documentId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
-          meta={markdownDoc.coreFacets ?? fallbackCoreFacets(documentKind, canvasName)}
-          onChange={(next) => {
-            markdownDoc.setCoreFacets(next)
-            // title and the canvas name are ONE concept: the facet is the
-            // document's own truth, the snapshot row is the copy the canvas
-            // list reads without loading every document. `renameCanvas`
-            // normalises a cleared title to 'untitled', which is exactly
-            // what an absent facet should list as.
-            if (next.title !== markdownDoc.coreFacets?.title) {
-              void renameCanvas(next.title ?? '').catch(() => {
-                // Surfaced through persistence state; the facet write is
-                // independent and has already landed in the document.
-              })
-            }
-          }}
+          title={titleOf(canvasName)}
+          onTitleChange={onTitleChange}
+          meta={markdownDoc.coreFacets ?? fallbackCoreFacets(documentKind)}
+          onChange={markdownDoc.setCoreFacets}
         />
       ) : null
     ) : (
@@ -661,16 +665,10 @@ export function BrowserLocalCanvasPage({
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
-        meta={coreFacets ?? fallbackCoreFacets(documentKind, canvasName)}
-        onChange={(next) => {
-          setCoreFacets(next)
-          if (next.title !== coreFacets?.title) {
-            void renameCanvas(next.title ?? '').catch(() => {
-              // Surfaced through persistence state; the facet write is
-              // independent and has already landed in the document.
-            })
-          }
-        }}
+        title={titleOf(canvasName)}
+        onTitleChange={onTitleChange}
+        meta={coreFacets ?? fallbackCoreFacets(documentKind)}
+        onChange={setCoreFacets}
       />
     )
 
@@ -793,6 +791,7 @@ export function BrowserLocalCanvasPage({
                   className="h-full"
                   theme={resolvedTheme}
                   meta={markdownDoc.coreFacets}
+                  title={titleOf(canvasName)}
                   resolveAlias={resolveAlias}
                   onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
                   resolveEmbed={resolveEmbed}

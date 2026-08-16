@@ -12,6 +12,14 @@ export interface CanvasPropertiesProps {
    * push the canvas down mid-edit).
    */
   inline?: boolean
+  /**
+   * The document's NAME, which is a workspace concern rather than stored
+   * content (ADR-0009 decision 2) — so it arrives as its own prop instead of
+   * a `meta` field, and leaves through `onTitleChange` instead of `onChange`.
+   * The empty string is an unnamed document; the box shows its placeholder.
+   */
+  readonly title: string
+  readonly onTitleChange: (next: string) => void
   readonly meta: StoredCoreFacets
   /**
    * Whether this document can hold facets at all. A facet is OKF frontmatter
@@ -19,10 +27,6 @@ export interface CanvasPropertiesProps {
    * canvas passes `false` and gets no disclosure — the server refuses to
    * write facets there, and offering the editor would make the same claim
    * in the UI that the server just stopped honouring.
-   *
-   * The title is unaffected: it is the document's NAME, a workspace concern
-   * (decision 2), which this editor still keeps in core meta for
-   * browser-local canvases.
    */
   readonly showFacets?: boolean
   readonly onChange: (next: StoredCoreFacets) => void
@@ -56,9 +60,10 @@ export interface CanvasPropertiesProps {
 const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as const
 
 /**
- * Editor for the OKF CORE facets (`type` / `title` / `tags`).
+ * The canvas row: the document's name, plus an editor for the OKF CORE
+ * facets (`type` / `tags`) behind a disclosure.
  *
- * Every handler emits a WHOLE `StoredCoreFacets`, never a patch, because
+ * Every facet handler emits a WHOLE `StoredCoreFacets`, never a patch, because
  * `writeCoreFacets` replaces the stored bucket outright and deletes any
  * field the caller omitted. `facetsRaw` — root-level frontmatter keys this
  * app does not model — therefore has to survive every edit here untouched,
@@ -72,6 +77,8 @@ const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'
 export function CanvasProperties({
   inline = false,
   showFacets = true,
+  title,
+  onTitleChange,
   meta,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
@@ -81,24 +88,15 @@ export function CanvasProperties({
 }: CanvasPropertiesProps) {
   const [open, setOpen] = useState(false)
   const [draftTag, setDraftTag] = useState('')
+  // Null means "not being edited" — the box then shows the canonical name.
+  // While it is a string the box shows that instead, because the name comes
+  // back NORMALISED (trimmed, and blank replaced by the unnamed sentinel) and
+  // rendering the normalised form on the keystroke that typed a space erases
+  // it: the next character lands flush against the previous word, and
+  // "Release plan" typed one key at a time arrives as "Releaseplan".
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
   const suggestionsId = useId()
   const tags = meta.tags ?? []
-
-  // An absent optional field and an empty one are different documents in
-  // OKF: `title: ''` round-trips as an empty frontmatter value, while a
-  // dropped key is simply untitled. Blank input means the latter.
-  //
-  // Only PRESENCE is decided by the trimmed form — the stored value stays
-  // raw. The box is controlled from `meta.title`, so trimming here is not a
-  // tidy-up, it is destructive: a trailing space is erased on the very
-  // keystroke that types it, the input re-renders without it, and the next
-  // character lands flush against the previous word ("Release plan" typed
-  // one key at a time arrives as "Releaseplan"). `onBlur` does the tidying
-  // instead, once the edit is finished.
-  const withTitle = (raw: string): StoredCoreFacets => {
-    const { title: _dropped, ...rest } = meta
-    return raw.trim() === '' ? rest : { ...rest, title: raw }
-  }
 
   const withTags = (next: readonly string[]): StoredCoreFacets => {
     const { tags: _dropped, ...rest } = meta
@@ -129,12 +127,14 @@ export function CanvasProperties({
         </label>
         <input
           id={`${suggestionsId}-title`}
-          value={meta.title ?? ''}
-          onChange={(event) => onChange(withTitle(event.target.value))}
-          onBlur={() => {
-            const tidied = withTitle((meta.title ?? '').trim())
-            if (tidied.title !== meta.title) onChange(tidied)
+          value={draftTitle ?? title}
+          onChange={(event) => {
+            setDraftTitle(event.target.value)
+            onTitleChange(event.target.value)
           }}
+          // Dropping the draft is the whole tidy-up: the box falls back to the
+          // canonical name, which is already trimmed.
+          onBlur={() => setDraftTitle(null)}
           placeholder="Untitled"
           className={`text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent font-medium outline-none ${
             inline ? 'text-sm' : 'text-base'

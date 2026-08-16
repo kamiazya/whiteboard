@@ -42,6 +42,11 @@ export interface MarkdownEditorProps {
    */
   meta?: StoredCoreFacets
   /**
+   * The document's name, shown as the Read-mode heading. Separate from
+   * `meta` because the workspace owns it (ADR-0009 decision 2).
+   */
+  title?: string
+  /**
    * Maps `[[Name]]` aliases to canvas ids for the preview (canvas-codec's
    * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
    */
@@ -197,6 +202,7 @@ export function MarkdownEditor({
   autoFocus = false,
   theme = 'light',
   meta,
+  title,
   resolveAlias,
   onOpenCanvas,
   resolveEmbed,
@@ -413,7 +419,9 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div className="mx-auto px-6 py-8" style={{ maxWidth: previewWidth + 48 }}>
-              {effectiveMode === 'read' && meta !== undefined && <DocumentHeader meta={meta} />}
+              {effectiveMode === 'read' && meta !== undefined && (
+                <DocumentHeader title={title} meta={meta} />
+              )}
               {previewEmpty ? (
                 <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
               ) : (

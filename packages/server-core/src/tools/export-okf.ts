@@ -61,11 +61,8 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   })
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)
-  const { title: _storedTitle, ...storedMeta } = coreFacets ?? {
-    type: OKF_EXPORT_PLACEHOLDER_TYPE,
-  }
   const frontmatter: OkfMarkdownFrontmatter = {
-    ...storedMeta,
+    ...(coreFacets ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
     ...(entry?.name === undefined ? {} : { title: entry.name }),
     facets,
   }

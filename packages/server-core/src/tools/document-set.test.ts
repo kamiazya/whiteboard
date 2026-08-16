@@ -1,6 +1,5 @@
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import {
-  readCoreFacets,
   readDocumentKind,
   readFacets,
   readMarkdownBody,
@@ -283,7 +282,11 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
       documentId: CANVAS_ID,
     })
     expect(entry?.name).toBe('リリース計画 2026')
-    expect(readCoreFacets(await loadDoc(store, CANVAS_ID))?.title).toBeUndefined()
+    // Asserted against the raw `core` map rather than `readCoreFacets`: the
+    // stored shape no longer HAS a title field, so a read can only ever
+    // answer undefined. What is worth pinning is that the write did not put
+    // one in the document behind that read.
+    expect((await loadDoc(store, CANVAS_ID)).getMap('core').get('title')).toBeUndefined()
   })
 
   test('writing OKF without a title leaves the existing name alone', async () => {

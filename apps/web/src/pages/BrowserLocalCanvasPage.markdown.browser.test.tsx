@@ -215,10 +215,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('リリース計画')
     await expectTitleValue('リリース計画')
 
-    // title and the canvas name are one concept: the switcher label is the
-    // snapshot row, written from the same edit as the OKF core facet.
-    // title and the canvas name are one concept — observed in the switcher's
-    // LIST, since its trigger names the workspace rather than the canvas.
+    // The title IS the canvas name — one value in the snapshot row, observed
+    // in the switcher's LIST since its trigger names the workspace rather
+    // than the canvas.
     await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
     // Scoped to the menu item: the title INPUT holds the same string, so a
     // bare text query matches both and cannot tell them apart.
@@ -228,13 +227,26 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await waitForSaved()
     first.unmount()
 
-    // The facet itself round-trips through the Loro 'core' map, so the
-    // title comes back even though the switcher could have supplied a name.
     render(<BrowserLocalCanvasPage store={store} />)
     await waitFor(() => {
       const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
       expect(restored.value).toBe('リリース計画')
     })
+
+    // And it came back from the WORKSPACE, not from a second copy in the
+    // content: the document a rename touches holds no `title` facet at all
+    // (ADR-0009 decision 2). Without this the test passes on a document that
+    // stores the name twice, which is the state it exists to rule out.
+    const [entry] = await store.listCanvases()
+    expect(entry?.name).toBe('リリース計画')
+    const loaded = await new LoroStore().load(entry?.id ?? '')
+    expect(loaded.kind).toBe('ok')
+    if (loaded.kind === 'ok') {
+      const doc = new Loro()
+      doc.import(loaded.snapshot)
+      for (const delta of loaded.deltas ?? []) doc.import(delta)
+      expect(doc.getMap('core').get('title')).toBeUndefined()
+    }
   })
 
   it('keeps the body when core facets are written, and vice versa', async () => {
@@ -309,9 +321,10 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('Fast switch')
     await expectTitleValue('Fast switch')
 
-    // Unmount INSIDE the save debounce. `renameCanvas` has already written the
-    // snapshot name, so a cancelled facet save would leave the list name and
-    // the OKF title permanently disagreeing.
+    // Unmount immediately after typing. The name goes through `renameCanvas`,
+    // which flushes rather than debouncing — but the markdown document's own
+    // save is still pending, and an unmount that tore the page down before
+    // the rename landed would lose the title with it.
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
@@ -342,12 +355,10 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     const first = render(<BrowserLocalCanvasPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
 
-    // Facets belong to the CANVAS, so a spatial canvas has the bar too —
-    // its document just lives behind the sync session's delta protocol
-    // rather than the markdown hook's snapshot save.
+    // Naming is format-agnostic (ADR-0009 decision 2), so a spatial canvas
+    // carries the same title box — reading and writing the same snapshot row
+    // the markdown one does.
     const title = await screen.findByRole('textbox', { name: /title/i }, { timeout: 10_000 })
-    // A canvas that predates the facet bar shows its NAME as the title, not
-    // an empty box the user would have to retype.
     expect((title as HTMLInputElement).value).toBe('Diagram A')
 
     // clear(), not a select-all chord: the browser's select-all is Cmd+A on

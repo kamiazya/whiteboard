@@ -1044,13 +1044,13 @@ describe('createCanvasSyncSession', () => {
 
       const doc = new LoroDoc()
       writeSpatialCanvas(doc, twoNodeCanvas())
-      writeCoreFacets(doc, { type: 'diagram', title: 'Stored title' })
+      writeCoreFacets(doc, { type: 'diagram', tags: ['stored'] })
       const listener = vi.fn()
       session.subscribeCoreFacets(listener)
 
       backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
 
-      expect(session.getCoreFacets()).toEqual({ type: 'diagram', title: 'Stored title' })
+      expect(session.getCoreFacets()).toEqual({ type: 'diagram', tags: ['stored'] })
       expect(listener).toHaveBeenCalled()
     })
 
@@ -1075,13 +1075,13 @@ describe('createCanvasSyncSession', () => {
       session.subscribeCoreFacets(facetListener)
       const pushesBefore = backend._ctrl.pushLocalUpdateCalls.length
 
-      session.setCoreFacets({ type: 'diagram', title: 'Renamed' })
+      session.setCoreFacets({ type: 'diagram', tags: ['retagged'] })
       await Promise.resolve()
 
-      expect(session.getCoreFacets()).toEqual({ type: 'diagram', title: 'Renamed' })
+      expect(session.getCoreFacets()).toEqual({ type: 'diagram', tags: ['retagged'] })
       expect(facetListener).toHaveBeenCalled()
       // A facet is not a canvas value — republishing would make the editor
-      // re-render its whole scene for a title edit.
+      // re-render its whole scene for a tag edit.
       expect(canvasListener).not.toHaveBeenCalled()
       expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(pushesBefore)
     })
@@ -1095,13 +1095,13 @@ describe('createCanvasSyncSession', () => {
       const snapshot = makeSnapshot(twoNodeCanvas())
       backend._ctrl.handlers!.onSnapshot(snapshot)
 
-      session.setCoreFacets({ type: 'diagram', title: 'Renamed' })
+      session.setCoreFacets({ type: 'diagram', tags: ['retagged'] })
 
       const peer = new LoroDoc()
       peer.import(snapshot)
       for (const update of backend._ctrl.pushLocalUpdateCalls) peer.import(update)
       expect(readSpatialCanvas(peer).nodes).toHaveLength(twoNodeCanvas().nodes.length)
-      expect(readCoreFacets(peer)).toEqual({ type: 'diagram', title: 'Renamed' })
+      expect(readCoreFacets(peer)).toEqual({ type: 'diagram', tags: ['retagged'] })
     })
 
     it('is a no-op before a doc exists rather than throwing', () => {

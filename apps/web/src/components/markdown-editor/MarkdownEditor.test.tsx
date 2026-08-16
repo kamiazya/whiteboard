@@ -218,7 +218,8 @@ describe('MarkdownEditor', () => {
       <MarkdownEditor
         value="body"
         onChange={() => {}}
-        meta={{ type: 'issue', title: 'Release plan', tags: ['q3', 'infra'] }}
+        title="Release plan"
+        meta={{ type: 'issue', tags: ['q3', 'infra'] }}
       />,
     )
     fireEvent.click(getByRole('button', { name: 'Read' }))
