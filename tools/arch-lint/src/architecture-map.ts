@@ -132,21 +132,21 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
  * either is its own lane, not this one's.
  */
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
-  // doc-cache.ts imports canvas-store.ts statically; canvas-store.ts closes
-  // the loop with `await import('./doc-cache.js')` at three eviction call
-  // sites — resolved at call time, so no module-eval TDZ risk.
+  // doc-cache.ts imports canvas-store.ts statically; canvas-store.ts closes the
+  // loop with `await import('./doc-cache.js')` at three eviction call sites.
+  //
+  // This list used to say a call-time dynamic import carries "no module-eval
+  // TDZ risk". It does not follow, and the sibling entry that said it was
+  // removed after the risk landed: a request reached ws.ts's `sendRestoreEvent`
+  // while ws.ts's own body had not run, so its module-level `const connections`
+  // was still in its TDZ and the restore route 500'd with a bare ReferenceError
+  // — intermittently, under a full parallel suite. A dynamic import defers
+  // WHEN the module is fetched, not whether the fetch can observe a module that
+  // is mid-evaluation somewhere up the stack. Treat an entry here as debt with
+  // a known failure mode, not as a cycle that has been reasoned safe.
   [
     'packages/mcp-server/src/server/store/canvas-store.ts',
     'packages/mcp-server/src/server/store/doc-cache.ts',
-  ],
-  // ws.ts imports canvas.ts statically (setBroadcastFn); canvas.ts and its
-  // live-doc.ts/restore.ts routers close the loop with `await import('../ws.js')` /
-  // `await import('./ws.js')` — resolved at call time, so no module-eval TDZ risk.
-  [
-    'packages/mcp-server/src/server/routes/canvas.ts',
-    'packages/mcp-server/src/server/routes/canvas/live-doc.ts',
-    'packages/mcp-server/src/server/routes/canvas/restore.ts',
-    'packages/mcp-server/src/server/routes/ws.ts',
   ],
 ]
 
