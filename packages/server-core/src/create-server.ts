@@ -14,6 +14,7 @@ import {
 } from './tools/canvas-crud.schemas.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+import { createCanvasViewTool } from './tools/canvas-view.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { createDocumentSetTool } from './tools/document-set.js'
 import { createEdgeAddTool } from './tools/edge-add.js'
@@ -133,6 +134,7 @@ export function createServer(deps: ServerDeps) {
     tidyCanvas: createTidyCanvasTool(deps),
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
+    canvasView: createCanvasViewTool(deps),
     canvasDigest: createCanvasDigestTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSet: createDocumentSetTool(deps),

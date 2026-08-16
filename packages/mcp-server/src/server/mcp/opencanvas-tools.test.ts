@@ -6,6 +6,8 @@ import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
 import { InMemoryCanvasDocStore } from '../store/inmemory/in-memory-canvas-doc-store.js'
 // Side-effect import: registering these tools also installs the server-core
 // log-sink wiring at module scope (see opencanvas-tools.ts).
+import { CANVAS_VIEW_RESOURCE_URI, RESOURCE_URI_META_KEY } from './mcp-apps.js'
+import { UI_LINKED_TOOLS } from './mcp-smoke-coverage.js'
 import { registerOpenCanvasTools } from './opencanvas-tools.js'
 
 function fakeServer() {
@@ -30,6 +32,38 @@ describe('registerOpenCanvasTools', () => {
     expect(names).toContain('wb_version_save')
     expect(names).toContain('wb_version_list')
     expect(names).toContain('wb_version_restore')
+  })
+
+  it.each(UI_LINKED_TOOLS)('%s is registered with the MCP Apps widget linkage', (name) => {
+    // Without `_meta.ui.resourceUri` the widget resource stays registered
+    // and unreachable — a host renders the tool's JSON instead of the
+    // canvas. That was this repo's actual state: the resource, the
+    // capability and the widget bundle all shipped, and no tool linked
+    // them. UI_LINKED_TOOLS is only a claim until this asserts it.
+    const server = fakeServer()
+    registerOpenCanvasTools(server, fakeDeps())
+
+    const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)
+    expect(call, `${name} is not registered at all`).toBeDefined()
+    const meta = (call?.[1] as { _meta?: Record<string, unknown> })?._meta
+    expect(meta?.ui).toEqual({ resourceUri: CANVAS_VIEW_RESOURCE_URI })
+    // The wrapper mirrors it into the deprecated key for older hosts.
+    expect(meta?.[RESOURCE_URI_META_KEY]).toBe(CANVAS_VIEW_RESOURCE_URI)
+  })
+
+  it('registers no UI linkage on a data-plane tool', () => {
+    // The mirror-into-legacy-key branch runs for every tool, so a bug there
+    // could stamp the linkage onto tools that must not render as a widget.
+    const server = fakeServer()
+    registerOpenCanvasTools(server, fakeDeps())
+    const dataPlane = vi
+      .mocked(server.registerTool)
+      .mock.calls.filter((c) => !UI_LINKED_TOOLS.includes(c[0] as never))
+    expect(dataPlane.length).toBeGreaterThan(0)
+    for (const call of dataPlane) {
+      const meta = (call[1] as { _meta?: Record<string, unknown> })?._meta
+      expect(meta?.ui, `${call[0]} carries a UI linkage it should not`).toBeUndefined()
+    }
   })
 
   it("forwards a server-core log record to this composition root's logger", () => {

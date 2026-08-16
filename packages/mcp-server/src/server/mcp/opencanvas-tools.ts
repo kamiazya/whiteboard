@@ -23,6 +23,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { withCanvasDocWriteLock } from '../store/workspace-lock.js'
+import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
 // server-core is a shared layer and cannot depend on this composition
@@ -213,6 +214,26 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     async (args) => {
       const parsed = tools.canvasRenderSvg.inputSchema.parse(args)
       const result = await tools.canvasRenderSvg.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  // The one UI-linked tool: `_meta.ui.resourceUri` is what makes an
+  // MCP Apps host render the result through the canvas-view widget instead
+  // of printing its JSON. Without this line the widget resource stays
+  // registered and unreachable, which is the state this repo was in.
+  registerToolWithAnnotations(
+    server,
+    tools.canvasView.name,
+    {
+      description: tools.canvasView.description,
+      inputSchema: tools.canvasView.inputSchema.shape,
+      outputSchema: tools.canvasView.outputSchema,
+      _meta: { ui: { resourceUri: CANVAS_VIEW_RESOURCE_URI } },
+    },
+    async (args) => {
+      const parsed = tools.canvasView.inputSchema.parse(args)
+      const result = await tools.canvasView.execute(parsed)
       return structuredJsonResult(result)
     },
   )

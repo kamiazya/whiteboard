@@ -1,3 +1,4 @@
+import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 /**
  * Canvas picker — the reference-entry surface for file nodes, used by the
  * palette's Document entry (create) and the context menu's "Change target"
@@ -16,6 +17,14 @@ export interface FileRefOption {
   readonly file: string
   /** Human-readable name shown in the picker. */
   readonly label: string
+  /**
+   * What the referenced document IS, used to size the node the picker
+   * creates. A markdown document renders its prose inside the node, which
+   * needs room a reference card does not — at the card's height not one
+   * block fits and the body silently does not render at all. Absent keeps
+   * the card-sized default.
+   */
+  readonly kind?: CanvasKind
 }
 
 export interface CanvasPickerDialogProps {

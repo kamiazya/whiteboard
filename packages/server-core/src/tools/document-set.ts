@@ -3,6 +3,7 @@ import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-m
 import {
   readDocumentKind,
   readSpatialCanvas,
+  MARKDOWN_BODY_NODE_ID as TEXT_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
@@ -13,8 +14,6 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
-
-const TEXT_NODE_ID = 'okf-body'
 
 /**
  * Whether a canvas is one this tool could itself have written, and so holds
