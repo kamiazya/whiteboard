@@ -6,7 +6,7 @@ describe('isImageRef', () => {
     expect(isImageRef('asset:abc123')).toBe(true)
   })
 
-  it('rejects a plain canvas-slug/id value with no prefix', () => {
+  it('rejects a plain canvas-path/id value with no prefix', () => {
     expect(isImageRef('some-canvas')).toBe(false)
   })
 })

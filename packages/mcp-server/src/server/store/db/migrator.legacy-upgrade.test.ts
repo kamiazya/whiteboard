@@ -43,7 +43,8 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
   expect(error).toBeUndefined()
 
   // The legacy state, written against the schema as it stood at 0007: the
-  // documents table was still `canvases`, and ids were nanoids.
+  // documents table was still `canvases`, its path column was still `slug`,
+  // and ids were nanoids.
   await db.insertInto('workspaces').values({ id: 'ws-boot', createdAt: 0, updatedAt: 0 }).execute()
   await db
     .insertInto('canvases')

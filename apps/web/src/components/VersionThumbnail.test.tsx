@@ -4,11 +4,11 @@ import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
 
 // Deliberately include characters that need percent-encoding so the URL
-// construction is proven to encode EVERY dynamic segment, not just the slug.
+// construction is proven to encode EVERY dynamic segment, not just the path.
 const WORKSPACE_ID = 'w 1#a'
 const SLUG = 'main/x'
 const VERSION_ID = 'v?1'
-// The slug is a document path: each segment is encoded, the separators are
+// The path is a document path: each segment is encoded, the separators are
 // structure (the canvasesApiUrl contract).
 const THUMBNAIL_PATH = `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${SLUG.split('/').map(encodeURIComponent).join('/')}/versions/${encodeURIComponent(VERSION_ID)}/thumbnail`
 
@@ -17,7 +17,7 @@ function renderInDaemonMode(fetchFn: typeof fetch, props: Partial<{ versionId: s
     <DaemonApiContext.Provider value={fetchFn}>
       <VersionThumbnail
         workspaceId={WORKSPACE_ID}
-        slug={SLUG}
+        path={SLUG}
         versionId={props.versionId ?? VERSION_ID}
         hasThumbnail={true}
       />
@@ -72,7 +72,7 @@ describe('VersionThumbnail', () => {
         <DaemonApiContext.Provider value={fetchMock as unknown as typeof fetch}>
           <VersionThumbnail
             workspaceId={WORKSPACE_ID}
-            slug={SLUG}
+            path={SLUG}
             versionId="v-2"
             hasThumbnail={true}
           />
@@ -112,7 +112,7 @@ describe('VersionThumbnail', () => {
           <DaemonApiContext.Provider value={fetchMock as unknown as typeof fetch}>
             <VersionThumbnail
               workspaceId={WORKSPACE_ID}
-              slug={SLUG}
+              path={SLUG}
               versionId={VERSION_ID}
               hasThumbnail={true}
             />
@@ -180,7 +180,7 @@ describe('VersionThumbnail', () => {
       render(
         <VersionThumbnail
           workspaceId={WORKSPACE_ID}
-          slug={SLUG}
+          path={SLUG}
           versionId={VERSION_ID}
           hasThumbnail={true}
         />,
@@ -200,7 +200,7 @@ describe('VersionThumbnail', () => {
         <DaemonApiContext.Provider value={fetchMock as unknown as typeof fetch}>
           <VersionThumbnail
             workspaceId={WORKSPACE_ID}
-            slug={SLUG}
+            path={SLUG}
             versionId={VERSION_ID}
             hasThumbnail={false}
           />

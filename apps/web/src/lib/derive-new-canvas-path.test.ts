@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveNewCanvasSlug } from './derive-new-canvas-slug.js'
+import { deriveNewCanvasSlug } from './derive-new-canvas-path.js'
 
 describe('deriveNewCanvasSlug', () => {
   it('returns "untitled" when the set is empty', () => {

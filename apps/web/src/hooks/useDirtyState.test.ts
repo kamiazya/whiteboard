@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { useDirtyState } from './useDirtyState.js'
 
 // Thin CustomEvent helpers; jsdom can dispatch these directly.
-function dispatchDocChanged(workspaceId: string, slug: string): void {
-  window.dispatchEvent(new CustomEvent('excalidraw:doc_changed', { detail: { workspaceId, slug } }))
+function dispatchDocChanged(workspaceId: string, path: string): void {
+  window.dispatchEvent(new CustomEvent('excalidraw:doc_changed', { detail: { workspaceId, path } }))
 }
-function dispatchVersionSaved(workspaceId: string, slug: string): void {
+function dispatchVersionSaved(workspaceId: string, path: string): void {
   window.dispatchEvent(
-    new CustomEvent('excalidraw:wb_version_saved', { detail: { workspaceId, slug } }),
+    new CustomEvent('excalidraw:wb_version_saved', { detail: { workspaceId, path } }),
   )
 }
 
@@ -47,12 +47,12 @@ describe('useDirtyState', () => {
 
   it('resets counters when the canvas changes', () => {
     const { result, rerender } = renderHook(
-      ({ sid, slug }: { sid: string; slug: string }) => useDirtyState(sid, slug),
-      { initialProps: { sid: 's1', slug: 'c1' } },
+      ({ sid, path }: { sid: string; path: string }) => useDirtyState(sid, path),
+      { initialProps: { sid: 's1', path: 'c1' } },
     )
     act(() => dispatchDocChanged('s1', 'c1'))
     expect(result.current.isDirty).toBe(true)
-    rerender({ sid: 's1', slug: 'c2' })
+    rerender({ sid: 's1', path: 'c2' })
     expect(result.current.isDirty).toBe(false)
   })
 

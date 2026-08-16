@@ -138,9 +138,9 @@ describe('merge event wiring (browser — MergeDialog dispatch drives Toast)', (
           onClose={onClose}
           runMerge={runMerge}
           workspaceId="w1"
-          slug="c1"
+          path="c1"
         />
-        <MergeToast workspaceId="w1" slug="c1" />
+        <MergeToast workspaceId="w1" path="c1" />
       </>,
     )
 
@@ -151,7 +151,7 @@ describe('merge event wiring (browser — MergeDialog dispatch drives Toast)', (
   })
 
   it('a hand-crafted invalid merge_committed event produces no toast and no error', async () => {
-    render(<MergeToast workspaceId="w1" slug="c1" />)
+    render(<MergeToast workspaceId="w1" path="c1" />)
 
     window.dispatchEvent(new CustomEvent(MERGE_COMMITTED_EVENT, { detail: { nope: true } }))
 

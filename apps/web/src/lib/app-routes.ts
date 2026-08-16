@@ -17,8 +17,8 @@ export function workspacePath(workspaceId: string): string {
 // The tail is the document's path, one URL segment per path segment: each
 // segment is encoded, the separators are not — encoding them would collapse
 // the hierarchy the workspace shows into one opaque URL segment.
-export function canvasPath(workspaceId: string, slug: string): string {
-  const tail = slug.split('/').map(encodeURIComponent).join('/')
+export function canvasPath(workspaceId: string, path: string): string {
+  const tail = path.split('/').map(encodeURIComponent).join('/')
   return `${workspacePath(workspaceId)}/canvas/${tail}`
 }
 
@@ -32,7 +32,7 @@ export function browserLocalCanvasPath(documentId: string): string {
 
 export type DaemonRoute =
   | { kind: 'index'; workspaceId?: string }
-  | { kind: 'canvas'; workspaceId: string; slug: string }
+  | { kind: 'canvas'; workspaceId: string; path: string }
 
 // Deliberately regex-based rather than react-router's matchPath: App.tsx
 // needs this result inside a useState lazy initializer (before any Route
@@ -49,7 +49,7 @@ export function parseDaemonRoute(pathname: string): DaemonRoute | null {
     if (workspaceId === null || segments.some((segment) => segment === null || segment === '')) {
       return null
     }
-    return { kind: 'canvas', workspaceId, slug: segments.join('/') }
+    return { kind: 'canvas', workspaceId, path: segments.join('/') }
   }
   const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
   if (workspaceMatch) {
@@ -78,7 +78,7 @@ function decodeSegment(segment: string): string | null {
 // back into the URL it should be addressable at, so App.tsx's state->URL
 // sync and parseDaemonRoute can never drift from each other.
 export function daemonRoutePath(route: DaemonRoute): string {
-  if (route.kind === 'canvas') return canvasPath(route.workspaceId, route.slug)
+  if (route.kind === 'canvas') return canvasPath(route.workspaceId, route.path)
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 

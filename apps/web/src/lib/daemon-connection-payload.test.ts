@@ -20,7 +20,7 @@ describe('daemonConnectionPayloadSchema', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'https://daemon.example.com',
       workspaceId: 'ws-1',
-      slug: 'canvas-slug',
+      path: 'canvas-path',
       bootstrapToken: 'a-long-enough-token',
       authMode: 'bootstrap',
       fullscreen: true,
@@ -61,7 +61,7 @@ describe('daemonConnectionPayloadSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('accepts workspaceId without slug (workspace-level target)', () => {
+  it('accepts workspaceId without path (workspace-level target)', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-1',
@@ -70,10 +70,10 @@ describe('daemonConnectionPayloadSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects slug without workspaceId (a canvas is addressed by the pair)', () => {
+  it('rejects path without workspaceId (a canvas is addressed by the pair)', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
-      slug: 'my-canvas',
+      path: 'my-canvas',
       authMode: 'none',
     })
     expect(result.success).toBe(false)
@@ -109,7 +109,7 @@ describe('parseDaemonConnectionFragment', () => {
   const payload = {
     baseUrl: 'http://127.0.0.1:3099',
     workspaceId: 'ws-1',
-    slug: 'my-canvas',
+    path: 'my-canvas',
     bootstrapToken: 'a-long-enough-token',
     authMode: 'bootstrap' as const,
     fullscreen: true,

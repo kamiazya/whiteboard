@@ -189,8 +189,8 @@ describe('BrowserLocalIndexPage', () => {
     expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
   })
 
-  it('shows the name alone — a browser-local canvas has no slug to put under it', async () => {
-    // These names carry no ASCII, so any name-derived slug collapses them to
+  it('shows the name alone — a browser-local canvas has no path to put under it', async () => {
+    // These names carry no ASCII, so any name-derived path collapses them to
     // `untitled` / `untitled-2` — indistinguishable in the very column a
     // secondary line exists to distinguish.
     const store = await seededStore([

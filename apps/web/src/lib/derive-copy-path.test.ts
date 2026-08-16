@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveCopySlug } from './derive-copy-slug.js'
+import { deriveCopySlug } from './derive-copy-path.js'
 
 describe('deriveCopySlug', () => {
   it('appends "-copy" when no collision exists', () => {
@@ -16,11 +16,11 @@ describe('deriveCopySlug', () => {
     )
   })
 
-  it('does not collide with an unrelated numbered copy of a different base slug', () => {
+  it('does not collide with an unrelated numbered copy of a different base path', () => {
     expect(deriveCopySlug('diagram', ['sketch-copy', 'sketch-copy-2'])).toBe('diagram-copy')
   })
 
-  it('produces a slug containing only ASCII letters, digits, and hyphens', () => {
+  it('produces a path containing only ASCII letters, digits, and hyphens', () => {
     expect(deriveCopySlug('diagram', [])).toMatch(/^[a-zA-Z0-9-]+$/)
   })
 })

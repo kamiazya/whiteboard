@@ -19,7 +19,7 @@ export const createCanvasInputSchema = z
       .string()
       .optional()
       .describe(
-        'What a human reads. Free text, unlike `path`, which is a slug and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the slug as a title.',
+        'What a human reads. Free text, unlike `path`, which is a path and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the path as a title.',
       ),
     // Workspaces are never materialized implicitly: a typo'd or hallucinated
     // workspaceId must fail loudly instead of silently writing data into a
@@ -52,7 +52,7 @@ const canvasDetailSchema = z
     path: documentPathSchema,
     // Absent rather than defaulted to the path's last segment: a reader that
     // wants that fallback can choose it, and a listing that invents one reads
-    // as if somebody typed the slug as the title.
+    // as if somebody typed the path as the title.
     name: z.string().optional(),
   })
   .strict()

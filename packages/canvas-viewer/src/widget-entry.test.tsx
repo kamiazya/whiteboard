@@ -115,7 +115,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledWith(
@@ -192,7 +192,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
     expect(mountCanvasViewer).toHaveBeenLastCalledWith(
@@ -214,7 +214,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
     const liveHandle = vi.mocked(mountCanvasViewer).mock.results[0]?.value
@@ -246,7 +246,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'c', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     await vi.advanceTimersByTimeAsync(2_100)
 
@@ -294,7 +294,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     // A committed documentId would normally reveal Refresh (see the next
     // test); the missing serverTools capability must suppress that.
@@ -318,7 +318,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     resolveConnect?.()
     await Promise.resolve()
@@ -348,7 +348,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const body = { type: 'root', children: [{ type: 'paragraph', children: [] }] }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
-        documentId: 'ws/slug',
+        documentId: 'ws/path',
         scene,
         references: { notes: { label: 'W', body } },
       },
@@ -376,7 +376,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
-        documentId: 'ws/slug',
+        documentId: 'ws/path',
         scene,
         references: { notes: { body: { type: 'root', children: [null] } } },
       },
@@ -405,7 +405,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -432,7 +432,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     const button = queryRefreshButton()
     expect(button).not.toBeNull()
@@ -454,7 +454,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'c', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     await vi.advanceTimersByTimeAsync(2_100)
     expect(queryRefreshButton()).toBeNull()
@@ -464,7 +464,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
     expect(queryRefreshButton()).toBeNull()
 
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
     expect(queryRefreshButton()).toBeNull()
 
     vi.useRealTimers()
@@ -507,7 +507,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     fakeAppInstances[0].ontoolresult?.({
-      structuredContent: { documentId: 'ws/slug', scene: scene1 },
+      structuredContent: { documentId: 'ws/path', scene: scene1 },
     })
 
     const { mountCanvasViewer } = await import('./mount.js')
@@ -518,7 +518,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/slug', scene: scene2 },
+      structuredContent: { documentId: 'ws/path', scene: scene2 },
     })
 
     const button = queryRefreshButton()
@@ -530,7 +530,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(callServerToolMock).toHaveBeenCalledTimes(1)
     expect(callServerToolMock).toHaveBeenCalledWith({
       name: 'canvas_view',
-      arguments: { documentId: 'ws/slug' },
+      arguments: { documentId: 'ws/path' },
     })
     expect(initialHandle.dispose).toHaveBeenCalledTimes(1)
     expect(mountCanvasViewer).toHaveBeenCalledWith(
@@ -550,7 +550,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
@@ -569,7 +569,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/slug', scene: scene2 },
+      structuredContent: { documentId: 'ws/path', scene: scene2 },
     })
     button.click()
     await Promise.resolve()
@@ -591,13 +591,13 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
 
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/slug', scene: { nodes: 'not an array' } },
+      structuredContent: { documentId: 'ws/path', scene: { nodes: 'not an array' } },
     })
     const button = queryRefreshButton() as HTMLButtonElement
     button.click()
@@ -612,7 +612,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/slug', scene: scene2 },
+      structuredContent: { documentId: 'ws/path', scene: scene2 },
     })
     button.click()
     await Promise.resolve()
@@ -634,7 +634,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     let resolveCall: ((value: unknown) => void) | undefined
     callServerToolMock.mockImplementation(
@@ -653,7 +653,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(callServerToolMock).toHaveBeenCalledTimes(1)
     expect(button.disabled).toBe(true)
 
-    resolveCall?.({ structuredContent: { documentId: 'ws/slug', scene: { nodes: [] } } })
+    resolveCall?.({ structuredContent: { documentId: 'ws/path', scene: { nodes: [] } } })
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()
@@ -671,7 +671,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/slug', scene } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
@@ -680,7 +680,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/slug', scene: scene2 },
+      structuredContent: { documentId: 'ws/path', scene: scene2 },
     })
     const button = queryRefreshButton() as HTMLButtonElement
     button.click()
@@ -693,7 +693,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // Host also echoes the refreshed result via its normal notification path.
     expect(() =>
       fakeAppInstances[0].ontoolresult?.({
-        structuredContent: { documentId: 'ws/slug', scene: scene2 },
+        structuredContent: { documentId: 'ws/path', scene: scene2 },
       }),
     ).not.toThrow()
     expect(mountCanvasViewer).toHaveBeenCalledTimes(2)

@@ -25,14 +25,14 @@ export interface DaemonFileAdapterOptions {
   readonly daemonFetch: typeof fetch
   readonly daemonBaseUrl: string
   readonly workspaceId: string
-  readonly slug: string
+  readonly path: string
   /**
-   * Maps an immutable canvas id to its CURRENT slug (undefined when the
-   * ref is not a known id). New file nodes store ids so a slug rename
-   * cannot dangle them; the daemon's read routes stay slug-addressed, so
+   * Maps an immutable canvas id to its CURRENT path (undefined when the
+   * ref is not a known id). New file nodes store ids so a path rename
+   * cannot dangle them; the daemon's read routes stay path-addressed, so
    * resolution happens here. Refs are resolved by LOOKUP, never by format:
-   * the id alphabet overlaps the slug charset, so an unknown ref is
-   * treated as a legacy slug reference.
+   * the id alphabet overlaps the path charset, so an unknown ref is
+   * treated as a legacy path reference.
    */
   readonly resolveRefSlug?: (ref: string) => string | undefined
 }
@@ -41,7 +41,7 @@ export function createDaemonFileAdapter({
   daemonFetch,
   daemonBaseUrl,
   workspaceId,
-  slug,
+  path,
   resolveRefSlug,
 }: DaemonFileAdapterOptions): CanvasFileAdapter {
   const canvasPath = (target: string) =>
@@ -74,9 +74,9 @@ export function createDaemonFileAdapter({
 
     async loadImageUrl(ref) {
       try {
-        // This canvas's own slug, not the reference: the file route scopes
+        // This canvas's own path, not the reference: the file route scopes
         // reads by the canvas that owns the workspace's file directory.
-        const res = await daemonFetch(`${canvasPath(slug)}/file/${imageRefId(ref)}`)
+        const res = await daemonFetch(`${canvasPath(path)}/file/${imageRefId(ref)}`)
         if (!res.ok) return undefined
         return URL.createObjectURL(await res.blob())
       } catch (err) {
@@ -88,7 +88,7 @@ export function createDaemonFileAdapter({
     async storeImage(file) {
       const id = crypto.randomUUID()
       try {
-        const res = await daemonFetch(`${canvasPath(slug)}/file/${id}`, {
+        const res = await daemonFetch(`${canvasPath(path)}/file/${id}`, {
           method: 'PUT',
           // The route answers 415 for a Content-Type it has no extension
           // mapping for, so the picked file's own type has to travel.

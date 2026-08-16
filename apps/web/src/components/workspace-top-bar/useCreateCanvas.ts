@@ -1,16 +1,16 @@
 import { problemDetailsErrorSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { MutableRefObject } from 'react'
 import { useRef, useState } from 'react'
-import { deriveNewCanvasSlug } from '../../lib/derive-new-canvas-slug.js'
+import { deriveNewCanvasSlug } from '../../lib/derive-new-canvas-path.js'
 import type { CanvasInfo } from './types'
 
 interface UseCreateCanvasOptions {
   workspaceId: string
-  slug: string
+  path: string
   canvases: CanvasInfo[]
   isLocalMode: boolean
   onCreateCanvas: (() => void | Promise<void>) | undefined
-  onNavigateToCanvas: (slug: string) => void
+  onNavigateToCanvas: (path: string) => void
   daemonFetch: typeof globalThis.fetch
   // Shared with rename/copy — a single mountedRef guards every async write in
   // this top bar against setState-after-unmount when a canvas switch/delete
@@ -20,13 +20,13 @@ interface UseCreateCanvasOptions {
 
 // New canvas flow, both modes: create IMMEDIATELY, name afterwards (ADR-0006
 // point 3 — a name field before the object exists is the shape this replaced).
-// Local mode hands off to onCreateCanvas; daemon mode derives a slug from the
+// Local mode hands off to onCreateCanvas; daemon mode derives a path from the
 // loaded list — inside the current group, so creating from "design/foo" yields
 // "design/untitled", preserving the grouping the old dialog seeded — and POSTs
 // it. Failures surface through newCanvasError's existing role="alert" line.
 export function useCreateCanvas({
   workspaceId,
-  slug,
+  path,
   canvases,
   isLocalMode,
   onCreateCanvas,
@@ -57,18 +57,18 @@ export function useCreateCanvas({
           await onCreateCanvas?.()
           return
         }
-        const ix = slug.indexOf('/')
-        const prefix = ix !== -1 ? slug.slice(0, ix + 1) : ''
+        const ix = path.indexOf('/')
+        const prefix = ix !== -1 ? path.slice(0, ix + 1) : ''
         const scoped = canvases
-          .filter((c) => c.slug.startsWith(prefix))
-          .map((c) => c.slug.slice(prefix.length))
+          .filter((c) => c.path.startsWith(prefix))
+          .map((c) => c.path.slice(prefix.length))
         const target = `${prefix}${deriveNewCanvasSlug(scoped)}`
         const res = await daemonFetch(
           `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slug: target }),
+            body: JSON.stringify({ path: target }),
           },
         )
         if (res.ok) {

@@ -42,11 +42,11 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
     if (!snapshots) return []
     const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     // No `secondary`: a browser-local canvas is addressed by UUID and has no
-    // slug. Deriving a label from the name instead collapses every non-Latin
+    // path. Deriving a label from the name instead collapses every non-Latin
     // name to `untitled`/`untitled-2` — indistinguishable in the one column
     // that exists to distinguish rows (ADR-0008).
     return sorted.map((s) => ({
-      slug: s.id,
+      path: s.id,
       displayName: s.name,
       updatedAt: s.updatedAt,
       kind: s.kind,
@@ -135,7 +135,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
               onClick={(event) => {
                 // Prevents the click from bubbling to the wrapping open-button.
                 event.stopPropagation()
-                setPendingDelete({ id: row.slug, displayName: row.displayName })
+                setPendingDelete({ id: row.path, displayName: row.displayName })
               }}
               className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
             >

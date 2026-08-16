@@ -109,7 +109,7 @@ describe('backup-restore drill', () => {
       // Re-point DATA_DIR at the restored copy and verify.
       dataDir = roots.target
       const canvases = await listCanvases('session1')
-      expect(canvases.map((c) => c.slug)).toContain('canvas-a')
+      expect(canvases.map((c) => c.path)).toContain('canvas-a')
 
       const restoredDoc = await loadCanvas('session1', 'canvas-a')
       const restoredElements = restoredDoc.getMovableList('elements').toJSON() as {
@@ -142,7 +142,7 @@ describe('backup-restore drill', () => {
       // Source canvas blob must still be present.
       dataDir = roots.src
       const srcList = await listCanvases('session1')
-      expect(srcList.map((c) => c.slug)).toContain('canvas-a')
+      expect(srcList.map((c) => c.path)).toContain('canvas-a')
 
       // Canary outside src/backup/target is preserved.
       const canary = await readFile(roots.canary, 'utf8')

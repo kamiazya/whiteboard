@@ -12,7 +12,7 @@ import type { BinaryFileDataLike } from './canvas-backend-contract.js'
 export async function uploadFiles(
   newEntries: [string, BinaryFileDataLike][],
   workspaceId: string,
-  slug: string,
+  path: string,
   onSuccess: (fileId: string) => void,
   // Cross-origin daemon pairing needs a fetch that targets the daemon's
   // origin instead of the page origin the module-level apiFetch assumes.
@@ -28,7 +28,7 @@ export async function uploadFiles(
         throw new Error(`file ${fileId}: malformed dataURL (no base64 payload)`)
       }
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await fetchFn(canvasFileApiUrl(workspaceId, slug, fileId), {
+      const res = await fetchFn(canvasFileApiUrl(workspaceId, path, fileId), {
         method: 'PUT',
         headers: { 'Content-Type': fd.mimeType },
         body: binary,

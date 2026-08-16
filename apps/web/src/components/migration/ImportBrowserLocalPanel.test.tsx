@@ -61,7 +61,7 @@ describe('ImportBrowserLocalPanel', () => {
     await store.save(makeCanvas('c1', 'Notes', 'markdown'))
     const daemonFetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'notes' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'notes' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
     render(
@@ -86,7 +86,7 @@ describe('ImportBrowserLocalPanel', () => {
     // non-null assertion (allowed by config) makes the intent explicit instead of casting past it.
     const init = post![1] as RequestInit
     expect(JSON.parse(String(init.body))).toEqual({
-      slug: expect.any(String),
+      path: expect.any(String),
       kind: 'markdown',
     })
   })
@@ -122,7 +122,7 @@ describe('ImportBrowserLocalPanel', () => {
 
     const daemonFetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'good' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'good' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
     const settingsStore = createUserSettingsStore()
@@ -160,7 +160,7 @@ describe('ImportBrowserLocalPanel', () => {
     }
     const daemonFetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'good' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'good' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
     const settingsStore = createUserSettingsStore()
 
@@ -235,7 +235,7 @@ describe('ImportBrowserLocalPanel', () => {
 
     const daemonFetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'alpha' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'alpha' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
     render(
@@ -255,7 +255,7 @@ describe('ImportBrowserLocalPanel', () => {
     expect(after).toEqual(before)
   })
 
-  it('imports two same-named canvases sequentially with distinct destination slugs on 409', async () => {
+  it('imports two same-named canvases sequentially with distinct destination paths on 409', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'My Canvas!'))
     await store.save(makeCanvas('c2', 'My Canvas!'))
@@ -264,10 +264,10 @@ describe('ImportBrowserLocalPanel', () => {
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/canvases')) {
-        const { slug } = JSON.parse(init?.body as string) as { slug: string }
-        if (takenSlugs.has(slug)) return jsonResponse({ title: 'exists' }, 409)
-        takenSlugs.add(slug)
-        return jsonResponse({ slug })
+        const { path } = JSON.parse(init?.body as string) as { path: string }
+        if (takenSlugs.has(path)) return jsonResponse({ title: 'exists' }, 409)
+        takenSlugs.add(path)
+        return jsonResponse({ path })
       }
       return jsonResponse({ ok: true })
     })

@@ -627,7 +627,7 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
     )
   })
 
-  it('project name matches production origin slug "kamiazya-whiteboard"', () => {
+  it('project name matches production origin path "kamiazya-whiteboard"', () => {
     if (!existsSync(wranglerPath)) return
     const content = readFileSync(wranglerPath, 'utf-8')
     expect(

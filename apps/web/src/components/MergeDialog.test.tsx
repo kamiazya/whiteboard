@@ -25,7 +25,7 @@ const feature: BranchMeta = {
 function versionEntry(overrides: Partial<VersionEntry>): VersionEntry {
   return {
     id: 'v0',
-    slug: 'c1',
+    path: 'c1',
     createdAt: '2026-04-23T00:00:00Z',
     elementCount: 1,
     auto: false,
@@ -36,7 +36,7 @@ function versionEntry(overrides: Partial<VersionEntry>): VersionEntry {
 }
 
 beforeEach(() => {
-  // The thumbnail-fallback effect calls apiFetch(.../versions) whenever workspaceId/slug
+  // The thumbnail-fallback effect calls apiFetch(.../versions) whenever workspaceId/path
   // are provided; default to an empty (but schema-valid) list so tests that don't care
   // about thumbnails resolve deterministically instead of hitting the real network.
   const fetchMock = vi
@@ -151,7 +151,7 @@ describe('MergeDialog', () => {
         onClose={onClose}
         runMerge={runMerge}
         workspaceId="w1"
-        slug="c1"
+        path="c1"
       />,
     )
     // Wait for the dry run to complete.
@@ -169,11 +169,11 @@ describe('MergeDialog', () => {
     const detail = (captured[0] as CustomEvent).detail
     const parsed = mergeCommittedDetailSchema.parse(detail)
     expect(parsed.workspaceId).toBe('w1')
-    expect(parsed.slug).toBe('c1')
+    expect(parsed.path).toBe('c1')
     expect(parsed.newElementIds).toEqual(['a'])
   })
 
-  it('does not dispatch merge_committed when workspaceId/slug are absent', async () => {
+  it('does not dispatch merge_committed when workspaceId/path are absent', async () => {
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
       .mockResolvedValueOnce({ badges: [], preview: { elementCount: 5 } })
@@ -269,7 +269,7 @@ describe('MergeDialog', () => {
         onClose={() => undefined}
         runMerge={runMerge}
         workspaceId="w1"
-        slug="c1"
+        path="c1"
       />,
     )
     const sourceCard = await screen.findByTestId('merge-branch-card-source')
@@ -288,7 +288,7 @@ describe('MergeDialog', () => {
         onClose={() => undefined}
         runMerge={runMerge}
         workspaceId="w1"
-        slug="c1"
+        path="c1"
       />,
     )
     await waitFor(() => {
@@ -441,7 +441,7 @@ describe('MergeDialog', () => {
         onClose={() => undefined}
         runMerge={runMerge}
         workspaceId="w1"
-        slug="c1"
+        path="c1"
       />,
     )
     const sourceCard = await screen.findByTestId('merge-branch-card-source')
@@ -528,7 +528,7 @@ describe('MergeDialog', () => {
           onClose={() => undefined}
           runMerge={runMerge}
           workspaceId="w1"
-          slug="c1"
+          path="c1"
         />
       </DaemonApiContext.Provider>,
     )

@@ -24,7 +24,7 @@ import {
 } from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
-// Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
+// Connection registry: key = "workspaceId/path", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
 const readyConnections = new Map<string, Set<WebSocket>>()
 
@@ -49,8 +49,8 @@ function omitUndefined<T extends object>(o: T): Partial<T> {
   return out
 }
 
-function forEachClient(workspaceId: string, slug: string, fn: (ws: WebSocket) => void): void {
-  const clients = connections.get(`${workspaceId}/${slug}`)
+function forEachClient(workspaceId: string, path: string, fn: (ws: WebSocket) => void): void {
+  const clients = connections.get(`${workspaceId}/${path}`)
   if (!clients) return
   for (const ws of clients) fn(ws)
 }
@@ -60,32 +60,32 @@ function forEachClient(workspaceId: string, slug: string, fn: (ws: WebSocket) =>
 // the request is already replayed when the client emits `client_ready`,
 // so broadcasting to non-ready sockets would just deliver the message
 // twice.
-function forEachReadyClient(workspaceId: string, slug: string, fn: (ws: WebSocket) => void): void {
-  const ready = readyConnections.get(`${workspaceId}/${slug}`)
+function forEachReadyClient(workspaceId: string, path: string, fn: (ws: WebSocket) => void): void {
+  const ready = readyConnections.get(`${workspaceId}/${path}`)
   if (!ready) return
   for (const ws of ready) fn(ws)
 }
 
-function broadcastTextMessage(workspaceId: string, slug: string, message: ServerTextMessage): void {
+function broadcastTextMessage(workspaceId: string, path: string, message: ServerTextMessage): void {
   const raw = JSON.stringify(message)
-  forEachClient(workspaceId, slug, (ws) => ws.send(raw))
-  sseBroadcastText(workspaceId, slug, raw)
+  forEachClient(workspaceId, path, (ws) => ws.send(raw))
+  sseBroadcastText(workspaceId, path, raw)
 }
 
 // Exported so app.ts can wire it into the branches router checkoutTo flow.
 export function broadcastLoroUpdate(
   workspaceId: string,
-  slug: string,
+  path: string,
   update: Uint8Array,
   excludeWs?: WebSocket,
 ): void {
-  forEachClient(workspaceId, slug, (ws) => {
+  forEachClient(workspaceId, path, (ws) => {
     if (ws !== excludeWs) ws.send(update)
   })
   // SSE subscribers are the same audience reached by a different transport, so
   // every producer that reaches WS clients must reach them too — otherwise an
   // MCP tool edit would be invisible to a hosted page that has no ws:// path.
-  sseBroadcastUpdate(workspaceId, slug, update)
+  sseBroadcastUpdate(workspaceId, path, update)
 }
 
 // Set the broadcastFn used by canvas.ts.
@@ -103,7 +103,7 @@ setSyncSseHooks({
 // Called after WS binary messages; creates a new version and pushes it to the browser when the interval has elapsed.
 type AutoVersionTrigger = (
   workspaceId: string,
-  slug: string,
+  path: string,
   doc: LoroDoc,
 ) => Promise<VersionEntry | null>
 var autoVersionTrigger: AutoVersionTrigger = () => Promise.resolve(null)
@@ -115,22 +115,22 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
 // after `saveCanvas` resolves lets a real-socket test await a deterministic
 // event instead of polling the filesystem/store — a no-op in production
 // since nothing ever registers a callback.
-let onPersistedForTests: ((workspaceId: string, slug: string) => void) | undefined
+let onPersistedForTests: ((workspaceId: string, path: string) => void) | undefined
 export function setOnPersistedForTests(
-  fn: ((workspaceId: string, slug: string) => void) | undefined,
+  fn: ((workspaceId: string, path: string) => void) | undefined,
 ): void {
   onPersistedForTests = fn
 }
 
-export function sendVersionCreated(workspaceId: string, slug: string, version: VersionEntry): void {
-  broadcastTextMessage(workspaceId, slug, { type: 'version_created', version })
+export function sendVersionCreated(workspaceId: string, path: string, version: VersionEntry): void {
+  broadcastTextMessage(workspaceId, path, { type: 'version_created', version })
 }
 
 // Soft lock for restore: clients block pointer events while started is active to
 // reduce races with other peers during the typically short restore window (<1s).
 export function sendRestoreEvent(
   workspaceId: string,
-  slug: string,
+  path: string,
   phase: 'started' | 'complete',
   label?: string,
 ): void {
@@ -138,11 +138,11 @@ export function sendRestoreEvent(
     phase === 'started'
       ? { type: 'restore_started', ...omitUndefined({ label }) }
       : { type: 'restore_complete' }
-  broadcastTextMessage(workspaceId, slug, message)
+  broadcastTextMessage(workspaceId, path, message)
 }
 
-export function sendHeadChanged(workspaceId: string, slug: string, head: string): void {
-  broadcastTextMessage(workspaceId, slug, { type: 'head_changed', head })
+export function sendHeadChanged(workspaceId: string, path: string, head: string): void {
+  broadcastTextMessage(workspaceId, path, { type: 'head_changed', head })
 }
 
 let resolveViewportFn: ((requestId: string) => void) | null = null
@@ -152,7 +152,7 @@ export function setResolveViewportFn(fn: (requestId: string) => void): void {
 
 export function sendViewportRequest(
   workspaceId: string,
-  slug: string,
+  path: string,
   requestId: string,
   params: {
     mode?: 'fit' | 'move'
@@ -172,23 +172,23 @@ export function sendViewportRequest(
   // both ship the same bytes, and JSON.stringify is the only allocation that
   // needs to happen at viewport_set time.
   const raw = JSON.stringify(message)
-  lastViewportRequestByCanvas.set(`${workspaceId}/${slug}`, raw)
+  lastViewportRequestByCanvas.set(`${workspaceId}/${path}`, raw)
   // Send only to ready sockets. Pre-ready tabs cannot apply the viewport
   // yet AND will already get the cached request replayed when they
   // signal `client_ready`, so broadcasting to all sockets here would
   // deliver the message twice and re-trigger the pre-ready race the
   // cache was meant to fix.
-  forEachReadyClient(workspaceId, slug, (ws) => ws.send(raw))
-  sseBroadcastTextToReady(workspaceId, slug, raw)
+  forEachReadyClient(workspaceId, path, (ws) => ws.send(raw))
+  sseBroadcastTextToReady(workspaceId, path, raw)
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.
-export function getClientCount(workspaceId: string, slug: string): number {
-  return connections.get(`${workspaceId}/${slug}`)?.size ?? 0
+export function getClientCount(workspaceId: string, path: string): number {
+  return connections.get(`${workspaceId}/${path}`)?.size ?? 0
 }
 
-export function getReadyClientCount(workspaceId: string, slug: string): number {
-  return readyConnections.get(`${workspaceId}/${slug}`)?.size ?? 0
+export function getReadyClientCount(workspaceId: string, path: string): number {
+  return readyConnections.get(`${workspaceId}/${path}`)?.size ?? 0
 }
 
 export function getConnectionStats(): { connectedClients: number; readyClients: number } {
@@ -204,9 +204,9 @@ export function getConnectionStats(): { connectedClients: number; readyClients: 
 }
 
 // WS upgrade handler, called from server/index.ts.
-// URL pattern: /ws/:workspaceId/:slug
-// slug arrives URL-encoded because hierarchical paths may include "/".
-// Example: /ws/abc/621%2Fheader -> workspaceId="abc", slug="621/header"
+// URL pattern: /ws/:workspaceId/:path
+// path arrives URL-encoded because hierarchical paths may include "/".
+// Example: /ws/abc/621%2Fheader -> workspaceId="abc", path="621/header"
 //
 // `scopes` is the grant the upgrade authorized (see `authorizeWsUpgrade`).
 // Defaults to the full grant set so every existing call site — which
@@ -219,17 +219,17 @@ export async function handleWsUpgrade(
   scopes: readonly AuthScope[] = ALL_AUTH_SCOPES,
 ): Promise<void> {
   let workspaceId = ''
-  let slug = ''
+  let path = ''
   try {
     const target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
     workspaceId = target.workspaceId
-    slug = target.slug
+    path = target.path
   } catch {
     ws.close()
     return
   }
 
-  const key = `${workspaceId}/${slug}`
+  const key = `${workspaceId}/${path}`
 
   // Before anything is registered or served: a workspace this daemon has
   // never heard of gets a refusal, not a phantom. getDoc() lazily creates an
@@ -255,7 +255,7 @@ export async function handleWsUpgrade(
   runtimeTouch()
 
   // On connect, send the latest snapshot as binary for the initial load.
-  const doc = await getDoc(workspaceId, slug)
+  const doc = await getDoc(workspaceId, path)
   ws.send(doc.export({ mode: 'snapshot' }))
 
   // Holds the most recent W3C trace-context the client announced via
@@ -299,7 +299,7 @@ export async function handleWsUpgrade(
       if (msg === null) return
       if (!hasRequiredScopes(scopes, requiredScopesForClientTextMessage(msg.type))) {
         getLogger('ws').warning(
-          { workspaceId, slug, messageType: msg.type },
+          { workspaceId, path, messageType: msg.type },
           'ws message rejected: insufficient scope',
         )
         closeForInsufficientScope()
@@ -341,7 +341,7 @@ export async function handleWsUpgrade(
     // completed the handshake.
     if (!hasRequiredScopes(scopes, WS_BINARY_UPDATE_REQUIRED_SCOPES)) {
       getLogger('ws').warning(
-        { workspaceId, slug },
+        { workspaceId, path },
         'ws binary update rejected: insufficient scope',
       )
       closeForInsufficientScope()
@@ -363,7 +363,7 @@ export async function handleWsUpgrade(
       kind: SpanKind.SERVER,
       attributes: {
         'whiteboard.workspace_id': workspaceId,
-        'whiteboard.slug': slug,
+        'whiteboard.path': path,
         'whiteboard.update_bytes': bytes.byteLength,
       },
     } as const
@@ -374,14 +374,14 @@ export async function handleWsUpgrade(
       // Resolve the doc AND persist it inside one workspace-lock hold. getDoc()
       // alone is unlocked, so a rename/delete that runs its whole lock-protected
       // section between an unlocked read here and saveCanvas()'s own later lock
-      // acquisition would find no row left at this slug and silently insert a
+      // acquisition would find no row left at this path and silently insert a
       // brand-new phantom canvas back at it (or resurrect deleted content).
       // Sharing the lock across the read and the write closes that window —
       // mirrors live-doc.ts's POST /update handler. Only the read-import-save
       // span is covered: broadcast, the test hook, and auto-version trigger
       // below stay outside since they never wait on another writer.
       const currentDoc = await withWorkspaceWriteLock(workspaceId, async () => {
-        const doc = await getDoc(workspaceId, slug)
+        const doc = await getDoc(workspaceId, path)
         // A second (or later) frame's handler can pass the `isClosing` check
         // above before this frame's `await getDoc` resolves — both were
         // still false at the top when they started. Recheck immediately after
@@ -402,14 +402,14 @@ export async function handleWsUpgrade(
           doc.import(bytes)
         } catch (err: unknown) {
           getLogger('ws').warning(
-            { workspaceId, slug, updateBytes: bytes.byteLength, err },
+            { workspaceId, path, updateBytes: bytes.byteLength, err },
             'ws binary update rejected: malformed Loro import data',
           )
           closeSocket(1003, 'Malformed canvas update')
           return null
         }
 
-        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+        await saveCanvas(workspaceId, path, doc, { overwrite: true })
         return doc
       })
       if (currentDoc === null) return
@@ -420,21 +420,21 @@ export async function handleWsUpgrade(
       // save look like a persistence failure (cache eviction + 1011 close
       // + dropped broadcast) to real clients.
       try {
-        onPersistedForTests?.(workspaceId, slug)
+        onPersistedForTests?.(workspaceId, path)
       } catch (err: unknown) {
         getLogger('ws').warning(
-          { workspaceId, slug, err },
+          { workspaceId, path, err },
           'onPersistedForTests test hook threw; ignoring',
         )
       }
-      broadcastLoroUpdate(workspaceId, slug, bytes, ws)
+      broadcastLoroUpdate(workspaceId, path, bytes, ws)
 
       // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
       // The trigger is throttled, so frequent edits stay safe.
       // On success, push version_created to all clients so the browser can generate and upload a thumbnail.
-      autoVersionTrigger(workspaceId, slug, currentDoc)
+      autoVersionTrigger(workspaceId, path, currentDoc)
         .then((entry) => {
-          if (entry) sendVersionCreated(workspaceId, slug, entry)
+          if (entry) sendVersionCreated(workspaceId, path, entry)
         })
         .catch((err: unknown) => {
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
@@ -450,8 +450,8 @@ export async function handleWsUpgrade(
       // server never persisted and other clients never received — close
       // 1011 (Internal Error) so the client reconnects and resyncs from the
       // persisted (evicted, disk-backed) state instead.
-      getLogger('ws').error({ workspaceId, slug, err }, 'ws binary update failed')
-      evictDoc(workspaceId, slug)
+      getLogger('ws').error({ workspaceId, path, err }, 'ws binary update failed')
+      evictDoc(workspaceId, path)
       closeSocket(1011, 'Failed to persist canvas update')
     } finally {
       wsSpan.end()

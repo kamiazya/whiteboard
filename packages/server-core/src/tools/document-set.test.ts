@@ -346,7 +346,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     expect(exported.frontmatter.title).toBeUndefined()
   })
 
-  test('an unnamed document exports no title at all, rather than its slug', async () => {
+  test('an unnamed document exports no title at all, rather than its path', async () => {
     const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)

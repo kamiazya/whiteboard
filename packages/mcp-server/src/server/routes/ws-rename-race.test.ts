@@ -64,7 +64,7 @@ describe('handleWsUpgrade binary update vs rename race', () => {
     clearCache()
   })
 
-  it('does not fork a phantom duplicate canvas when a rename races an in-flight binary update that already resolved a doc reference through the old slug', async () => {
+  it('does not fork a phantom duplicate canvas when a rename races an in-flight binary update that already resolved a doc reference through the old path', async () => {
     const baseDoc = new LoroDoc()
     baseDoc.getText('content').insert(0, 'original')
     baseDoc.commit()
@@ -85,14 +85,14 @@ describe('handleWsUpgrade binary update vs rename race', () => {
     const actual =
       await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')
     vi.mocked(getDoc)
-      .mockImplementationOnce(async (workspaceId, slug) => {
+      .mockImplementationOnce(async (workspaceId, path) => {
         // First call: the WS upgrade's initial snapshot send. Resolve normally.
-        return actual.getDoc(workspaceId, slug)
+        return actual.getDoc(workspaceId, path)
       })
-      .mockImplementationOnce(async (workspaceId, slug) => {
+      .mockImplementationOnce(async (workspaceId, path) => {
         signalGetDocCalled()
         await getDocGate
-        return actual.getDoc(workspaceId, slug)
+        return actual.getDoc(workspaceId, path)
       })
 
     const ws = new FakeWebSocket()
@@ -114,8 +114,8 @@ describe('handleWsUpgrade binary update vs rename race', () => {
     await Promise.all([updatePromise, renamePromise])
 
     // Exactly one canvas must survive -- the update must not have silently
-    // inserted a phantom duplicate back at the old slug.
+    // inserted a phantom duplicate back at the old path.
     const canvases = await listCanvases('session1')
-    expect(canvases.map((c) => c.slug)).toEqual(['b'])
+    expect(canvases.map((c) => c.path)).toEqual(['b'])
   })
 })

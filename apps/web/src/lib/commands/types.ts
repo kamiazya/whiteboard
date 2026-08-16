@@ -68,7 +68,7 @@ export const getAppContextResultSchema = z
           .object({
             kind: z.literal('daemon'),
             workspaceId: z.string(),
-            slug: z.string(),
+            path: z.string(),
           })
           .strict(),
         z

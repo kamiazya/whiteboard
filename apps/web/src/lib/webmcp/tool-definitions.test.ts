@@ -110,11 +110,11 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
   it('get-app-context: accepts a valid fixture and rejects an extra-key fixture, in both directions', () => {
     const valid = {
       provider: { mode: 'daemon' },
-      canvas: { kind: 'daemon', workspaceId: 'ws1', slug: 'c1' },
+      canvas: { kind: 'daemon', workspaceId: 'ws1', path: 'c1' },
     }
     const withExtraKey = {
       provider: { mode: 'daemon', daemonBaseUrl: 'http://leak' },
-      canvas: { kind: 'daemon', workspaceId: 'ws1', slug: 'c1' },
+      canvas: { kind: 'daemon', workspaceId: 'ws1', path: 'c1' },
     }
 
     expect(getAppContextResultSchema.safeParse(valid).success).toBe(true)
@@ -137,7 +137,7 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
   it('get-app-context: rejects a canvas.kind that does not match its const, in both directions', () => {
     const wrongConst = {
       provider: { mode: 'daemon' },
-      canvas: { kind: 'browser-local', workspaceId: 'ws1', slug: 'c1' },
+      canvas: { kind: 'browser-local', workspaceId: 'ws1', path: 'c1' },
     }
 
     expect(getAppContextResultSchema.safeParse(wrongConst).success).toBe(false)
@@ -158,7 +158,7 @@ const daemonCanvasArb = fc.record(
   {
     kind: fc.constantFrom('daemon', 'browser-local', 'other'),
     workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
-    slug: fc.oneof(fc.string(), fc.constant(undefined)),
+    path: fc.oneof(fc.string(), fc.constant(undefined)),
     documentId: fc.oneof(fc.string(), fc.constant(undefined)),
   },
   { requiredKeys: [] },

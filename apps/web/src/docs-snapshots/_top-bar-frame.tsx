@@ -26,7 +26,7 @@ export function TopBarFrame({ testId, width, height, canvases, scene }: TopBarFr
     >
       <WorkspaceTopBar
         workspaceId="ws_main"
-        slug="design/architecture"
+        path="design/architecture"
         canvases={canvases}
         onNavigateToCanvas={() => undefined}
         onToggleFullscreen={() => undefined}

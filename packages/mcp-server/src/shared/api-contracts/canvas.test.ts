@@ -54,11 +54,11 @@ import {
 import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('createCanvasRequestSchema', () => {
-  const valid: CreateCanvasRequest = { slug: 'my-canvas', kind: 'spatial' }
+  const valid: CreateCanvasRequest = { path: 'my-canvas', kind: 'spatial' }
 
   it('parses a well-formed value', () => {
     const result: CreateCanvasRequest = createCanvasRequestSchema.parse(valid)
-    expect(result.slug).toBe('my-canvas')
+    expect(result.path).toBe('my-canvas')
   })
 
   it('roundtrip preserves fields', () => {
@@ -66,28 +66,28 @@ describe('createCanvasRequestSchema', () => {
     expect(result).toEqual(valid)
   })
 
-  it('trims whitespace from slug', () => {
-    const result = createCanvasRequestSchema.parse({ slug: '  canvas  ' })
-    expect(result.slug).toBe('canvas')
+  it('trims whitespace from path', () => {
+    const result = createCanvasRequestSchema.parse({ path: '  canvas  ' })
+    expect(result.path).toBe('canvas')
   })
 
-  it('rejects empty slug', () => {
-    expect(createCanvasRequestSchema.safeParse({ slug: '' }).success).toBe(false)
-    expect(createCanvasRequestSchema.safeParse({ slug: '   ' }).success).toBe(false)
+  it('rejects empty path', () => {
+    expect(createCanvasRequestSchema.safeParse({ path: '' }).success).toBe(false)
+    expect(createCanvasRequestSchema.safeParse({ path: '   ' }).success).toBe(false)
   })
 
   it('accepts an explicit kind: markdown', () => {
-    const result = createCanvasRequestSchema.parse({ slug: 'notes', kind: 'markdown' })
+    const result = createCanvasRequestSchema.parse({ path: 'notes', kind: 'markdown' })
     expect(result.kind).toBe('markdown')
   })
 
   it('defaults kind to spatial when absent — back-compat for existing callers', () => {
-    const result = createCanvasRequestSchema.parse({ slug: 'legacy' })
+    const result = createCanvasRequestSchema.parse({ path: 'legacy' })
     expect(result.kind).toBe('spatial')
   })
 
   it('rejects an unknown kind', () => {
-    expect(createCanvasRequestSchema.safeParse({ slug: 'x', kind: 'bogus' }).success).toBe(false)
+    expect(createCanvasRequestSchema.safeParse({ path: 'x', kind: 'bogus' }).success).toBe(false)
   })
 })
 
@@ -213,7 +213,7 @@ describe('exportCanvasJsonRequestSchema', () => {
 describe('versionEntrySchema', () => {
   const valid: VersionEntry = {
     id: 'ver-1',
-    slug: 'my-canvas',
+    path: 'my-canvas',
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 42,
     auto: false,
@@ -250,7 +250,7 @@ describe('versionEntrySchema', () => {
 describe('listVersionsResponseSchema', () => {
   const entry: VersionEntry = {
     id: 'ver-1',
-    slug: 'canvas',
+    path: 'canvas',
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 1,
     auto: true,
@@ -277,7 +277,7 @@ describe('listVersionsResponseSchema', () => {
 describe('saveVersionResponseSchema', () => {
   const entry: VersionEntry = {
     id: 'ver-2',
-    slug: 'canvas',
+    path: 'canvas',
     createdAt: '2024-06-01T00:00:00.000Z',
     elementCount: 5,
     auto: false,
@@ -315,19 +315,19 @@ describe('problemDetailsErrorSchema', () => {
 })
 
 describe('createCanvasResponseSchema', () => {
-  const valid: CreateCanvasResponse = { slug: 'new-canvas' }
+  const valid: CreateCanvasResponse = { path: 'new-canvas' }
 
   it('parses a well-formed value', () => {
     const result: CreateCanvasResponse = createCanvasResponseSchema.parse(valid)
-    expect(result.slug).toBe('new-canvas')
+    expect(result.path).toBe('new-canvas')
   })
 
-  it('roundtrip preserves slug', () => {
+  it('roundtrip preserves path', () => {
     const result: CreateCanvasResponse = roundtrip(createCanvasResponseSchema, valid)
     expect(result).toEqual(valid)
   })
 
-  it('rejects missing slug', () => {
+  it('rejects missing path', () => {
     expect(createCanvasResponseSchema.safeParse({}).success).toBe(false)
   })
 })
@@ -370,14 +370,14 @@ describe('listWorkspacesResponseSchema', () => {
 
 describe('canvasSummarySchema', () => {
   const valid: CanvasSummary = {
-    slug: 'canvas-1',
+    path: 'canvas-1',
     updatedAt: '2024-01-01T00:00:00.000Z',
     kind: 'spatial',
   }
 
   it('parses a well-formed value', () => {
     const result: CanvasSummary = canvasSummarySchema.parse(valid)
-    expect(result.slug).toBe('canvas-1')
+    expect(result.path).toBe('canvas-1')
   })
 
   it('roundtrip preserves fields', () => {
@@ -386,7 +386,7 @@ describe('canvasSummarySchema', () => {
   })
 
   it('rejects missing updatedAt', () => {
-    expect(canvasSummarySchema.safeParse({ slug: 'canvas-1' }).success).toBe(false)
+    expect(canvasSummarySchema.safeParse({ path: 'canvas-1' }).success).toBe(false)
   })
 
   it('accepts an explicit kind: markdown', () => {
@@ -396,7 +396,7 @@ describe('canvasSummarySchema', () => {
 
   it('defaults kind to spatial when absent — back-compat for rows stored before this change', () => {
     const result = canvasSummarySchema.parse({
-      slug: 'canvas-1',
+      path: 'canvas-1',
       updatedAt: '2024-01-01T00:00:00.000Z',
     })
     expect(result.kind).toBe('spatial')
@@ -409,7 +409,7 @@ describe('canvasSummarySchema', () => {
 
 describe('listCanvasesResponseSchema', () => {
   const valid: ListCanvasesResponse = {
-    canvases: [{ slug: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z', kind: 'spatial' }],
+    canvases: [{ path: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z', kind: 'spatial' }],
   }
 
   it('parses a well-formed value', () => {

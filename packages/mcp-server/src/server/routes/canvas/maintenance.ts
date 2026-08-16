@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { compactCanvas, listCanvases } from '../../store/canvas-store.js'
 import { evictDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 
@@ -10,7 +10,7 @@ export interface MaintenanceRouterOptions {
   versionStore: VersionStore
 }
 
-// POST /api/workspaces/:workspaceId/canvases/:slug/compact
+// POST /api/workspaces/:workspaceId/canvases/:path/compact
 // POST /api/workspaces/:workspaceId/versions/prune-sandwiched
 // POST /api/workspaces/:workspaceId/canvases/optimize-all
 export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
@@ -20,10 +20,10 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // GC the op-log before the oldest retained version frontiers using shallow-snapshot.
   // Side effects: replace the on-disk .loro file and evict doc-cache so the next getDoc reloads the shallow doc.
   // Avoid calling this frequently on highly active multi-peer canvases because concurrent applyAndPersist calls can race.
-  onCanvasesRoute(app, 'post', ['compact'], async (c, workspaceId, slug) => {
+  onCanvasesRoute(app, 'post', ['compact'], async (c, workspaceId, path) => {
     try {
-      const result = await compactCanvas(workspaceId, slug, versionStore)
-      if (result.compacted) evictDoc(workspaceId, slug)
+      const result = await compactCanvas(workspaceId, path, versionStore)
+      if (result.compacted) evictDoc(workspaceId, path)
       return c.json(result)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -47,11 +47,11 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
     }
     try {
       const canvases = await listCanvases(workspaceId)
-      const results: Array<{ slug: string; deletedCount: number }> = []
+      const results: Array<{ path: string; deletedCount: number }> = []
       let totalDeleted = 0
-      for (const { slug } of canvases) {
-        const r = await versionStore.pruneSandwichedAutoVersions(workspaceId, slug)
-        results.push({ slug, deletedCount: r.deletedCount })
+      for (const { path } of canvases) {
+        const r = await versionStore.pruneSandwichedAutoVersions(workspaceId, path)
+        results.push({ path, deletedCount: r.deletedCount })
         totalDeleted += r.deletedCount
       }
       return c.json({ results, totalDeleted })
@@ -79,7 +79,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
     try {
       const canvases = await listCanvases(workspaceId)
       const results: Array<{
-        slug: string
+        path: string
         compacted: boolean
         beforeBytes: number
         afterBytes: number
@@ -87,10 +87,10 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
       }> = []
       let totalBeforeBytes = 0
       let totalAfterBytes = 0
-      for (const { slug } of canvases) {
-        const result = await compactCanvas(workspaceId, slug, versionStore)
-        if (result.compacted) evictDoc(workspaceId, slug)
-        results.push({ slug, ...result })
+      for (const { path } of canvases) {
+        const result = await compactCanvas(workspaceId, path, versionStore)
+        if (result.compacted) evictDoc(workspaceId, path)
+        results.push({ path, ...result })
         totalBeforeBytes += result.beforeBytes
         totalAfterBytes += result.afterBytes
       }

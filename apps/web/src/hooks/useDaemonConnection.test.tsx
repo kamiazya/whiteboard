@@ -65,7 +65,7 @@ describe('useDaemonConnection', () => {
   })
 
   it('returns {status:"error"} for a schema-invalid payload', () => {
-    const json = JSON.stringify({ baseUrl: 'http://127.0.0.1:3000', slug: 'no-workspace' })
+    const json = JSON.stringify({ baseUrl: 'http://127.0.0.1:3000', path: 'no-workspace' })
     const b64 = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
     setHash(`#wb=${b64}`)
     render(<Consumer />)

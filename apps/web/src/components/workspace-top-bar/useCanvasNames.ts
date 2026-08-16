@@ -58,7 +58,7 @@ export function useCanvasNames({
     if (!isLocalMode) return EMPTY_NAMES
     const byId: Record<string, string> = {}
     for (const c of canvases) {
-      if (c.name) byId[c.slug] = c.name
+      if (c.name) byId[c.path] = c.name
     }
     return { canvases: byId, pinned: [] }
   }, [isLocalMode, canvases])

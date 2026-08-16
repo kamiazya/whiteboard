@@ -1,12 +1,12 @@
 import { describe } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { deriveNewCanvasSlug } from './derive-new-canvas-slug.js'
+import { deriveNewCanvasSlug } from './derive-new-canvas-path.js'
 
 const PROPERTY_PARAMS = withDefaults({ numRuns: 100 })
 
 describe('deriveNewCanvasSlug (fast-check)', () => {
   fcTest.prop([fc.array(fc.string())], PROPERTY_PARAMS)(
-    'never returns a slug already in the existing set',
+    'never returns a path already in the existing set',
     (existing) => {
       const result = deriveNewCanvasSlug(existing)
       return !existing.includes(result)
@@ -14,7 +14,7 @@ describe('deriveNewCanvasSlug (fast-check)', () => {
   )
 
   fcTest.prop([fc.array(fc.string())], PROPERTY_PARAMS)(
-    'always matches the server-accepted slug charset',
+    'always matches the server-accepted path charset',
     (existing) => {
       const result = deriveNewCanvasSlug(existing)
       return /^[a-zA-Z0-9-]+$/.test(result)

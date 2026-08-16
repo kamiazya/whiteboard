@@ -1,10 +1,10 @@
 /**
  * File-reference identity on the daemon page: new file nodes reference the
  * target canvas's immutable id (rename-safe, ADR-0008), while everything
- * user-facing stays on slugs. These tests pin the page-level wiring — the
- * options handed to the editor carry ids labeled with slugs, and opening a
- * ref resolves the id back to the CURRENT slug by lookup, with unknown refs
- * passing through as legacy slug references.
+ * user-facing stays on paths. These tests pin the page-level wiring — the
+ * options handed to the editor carry ids labeled with paths, and opening a
+ * ref resolves the id back to the CURRENT path by lookup, with unknown refs
+ * passing through as legacy path references.
  */
 import type {
   CanvasBackend,
@@ -47,7 +47,7 @@ const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
 class FakeBackend implements CanvasBackend {
   constructor(
     public workspaceId: string,
-    public slug: string,
+    public path: string,
   ) {
     createdBackends.push(this)
   }
@@ -81,7 +81,7 @@ async function renderPage() {
     rtlRender(
       <DaemonCanvasPage
         daemonBaseUrl={DAEMON_BASE_URL}
-        createBackend={(workspaceId, slug) => new FakeBackend(workspaceId, slug)}
+        createBackend={(workspaceId, path) => new FakeBackend(workspaceId, path)}
       />,
       { wrapper: MemoryRouterWrapper, container: document.body },
     )
@@ -98,8 +98,8 @@ describe('DaemonCanvasPage file refs', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
   })
@@ -109,10 +109,10 @@ describe('DaemonCanvasPage file refs', () => {
     vi.clearAllMocks()
   })
 
-  it('offers other canvases as id-valued refs labeled with their slug', async () => {
+  it('offers other canvases as id-valued refs labeled with their path', async () => {
     await renderPage()
     // The open canvas (main) is excluded; the ref stored into the document
-    // is the id, the label the user sees is the slug. `kind` rides along
+    // is the id, the label the user sees is the path. `kind` rides along
     // because it decides the geometry of the node the picker creates — a
     // markdown reference renders prose and needs room a card does not.
     expect(capturedEditorProps?.fileRefOptions).toEqual([
@@ -120,31 +120,31 @@ describe('DaemonCanvasPage file refs', () => {
     ])
   })
 
-  it('opens an id ref on the target canvas current slug', async () => {
+  it('opens an id ref on the target canvas current path', async () => {
     await renderPage()
     await act(async () => {
       capturedEditorProps?.onOpenFileRef?.('id-second')
     })
     await waitFor(() =>
-      expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', slug: 'second' }),
+      expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path: 'second' }),
     )
   })
 
-  it('passes an unknown ref through unchanged as a legacy slug reference', async () => {
+  it('passes an unknown ref through unchanged as a legacy path reference', async () => {
     await renderPage()
     await act(async () => {
       capturedEditorProps?.onOpenFileRef?.('second')
     })
     await waitFor(() =>
-      expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', slug: 'second' }),
+      expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path: 'second' }),
     )
   })
 
-  it('marks refs matching neither a live id nor a live slug as missing, sparing image refs', async () => {
+  it('marks refs matching neither a live id nor a live path as missing, sparing image refs', async () => {
     await renderPage()
     const missing = capturedEditorProps?.missingFileRef
     expect(missing).toBeDefined()
-    // Live id and live slug (a legacy ref) are both known; a ref matching
+    // Live id and live path (a legacy ref) are both known; a ref matching
     // neither points at a deleted canvas. Image refs live in the file
     // store, not the canvases list, so they are never "missing" here.
     expect(missing?.('id-second')).toBe(false)
@@ -153,11 +153,11 @@ describe('DaemonCanvasPage file refs', () => {
     expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
   })
 
-  it('falls back to slug refs for entries an older daemon lists without ids', async () => {
+  it('falls back to path refs for entries an older daemon lists without ids', async () => {
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { slug: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
     await renderPage()

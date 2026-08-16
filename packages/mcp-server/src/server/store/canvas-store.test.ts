@@ -84,7 +84,7 @@ describe('saveCanvas / loadCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'ulid-mint')
+      .where('path', '=', 'ulid-mint')
       .executeTakeFirst()
     expect(row?.id).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
   })
@@ -153,7 +153,7 @@ describe('saveCanvas / loadCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'broken')
+      .where('path', '=', 'broken')
       .executeTakeFirstOrThrow()
     const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
@@ -161,7 +161,7 @@ describe('saveCanvas / loadCanvas', () => {
     await expect(loadCanvas('session1', 'broken')).rejects.toThrow()
   })
 
-  it('saves and loads separate slugs independently', async () => {
+  it('saves and loads separate paths independently', async () => {
     const doc1 = new LoroDoc()
     doc1.getMovableList('elements')
     doc1.commit()
@@ -285,7 +285,7 @@ describe('listCanvases', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns only .loro files as slugs without extensions', async () => {
+  it('returns only .loro files as paths without extensions', async () => {
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
     await saveCanvas('session1', 'canvas-b', new LoroDoc())
 
@@ -294,12 +294,12 @@ describe('listCanvases', () => {
     await writeFile(join(tempDir, 'session1', '.port'), '3099')
 
     const list = await listCanvases('session1')
-    const slugs = list.map((c) => c.slug)
+    const paths = list.map((c) => c.path)
 
-    expect(slugs).toContain('canvas-a')
-    expect(slugs).toContain('canvas-b')
-    expect(slugs).not.toContain('.port')
-    expect(slugs).not.toContain('exports')
+    expect(paths).toContain('canvas-a')
+    expect(paths).toContain('canvas-b')
+    expect(paths).not.toContain('.port')
+    expect(paths).not.toContain('exports')
   })
 
   it('returns an empty array for an empty session', async () => {
@@ -318,14 +318,14 @@ describe('listCanvases', () => {
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
-  it('includes the immutable canvas id on each entry, stable across a slug rename', async () => {
+  it('includes the immutable canvas id on each entry, stable across a path rename', async () => {
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
     const before = await listCanvases('session1')
     expect(before[0].id).toBeTruthy()
 
     await renameCanvasSlug('session1', 'canvas-a', 'canvas-renamed')
     const after = await listCanvases('session1')
-    expect(after[0].slug).toBe('canvas-renamed')
+    expect(after[0].path).toBe('canvas-renamed')
     // The id is what stored references key on; a rename must not move it.
     expect(after[0].id).toBe(before[0].id)
   })
@@ -333,38 +333,38 @@ describe('listCanvases', () => {
   it('persists kind: markdown and lists it back', async () => {
     await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
     const list = await listCanvases('session1')
-    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+    expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
   it('lists kind: spatial when saveCanvas is called without a kind option (back-compat)', async () => {
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
     const list = await listCanvases('session1')
-    expect(list.find((c) => c.slug === 'canvas-a')?.kind).toBe('spatial')
+    expect(list.find((c) => c.path === 'canvas-a')?.kind).toBe('spatial')
   })
 
   it('does not reset kind on an overwrite:true re-save', async () => {
     await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
     await saveCanvas('session1', 'note', new LoroDoc(), { overwrite: true })
     const list = await listCanvases('session1')
-    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+    expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
   it('syncs kind on an overwrite:true re-save when kind is explicitly passed', async () => {
     await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'spatial' })
     await saveCanvas('session1', 'note', new LoroDoc(), { overwrite: true, kind: 'markdown' })
     const list = await listCanvases('session1')
-    expect(list.find((c) => c.slug === 'note')?.kind).toBe('markdown')
+    expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
-  it('recursively lists nested slugs as session-relative paths', async () => {
+  it('recursively lists nested paths as session-relative paths', async () => {
     await saveCanvas('session1', 'top-level', new LoroDoc())
     await saveCanvas('session1', '621/header', new LoroDoc())
     await saveCanvas('session1', '621/footer', new LoroDoc())
     await saveCanvas('session1', '622/a/b', new LoroDoc())
 
     const list = await listCanvases('session1')
-    const slugs = list.map((c) => c.slug).sort()
-    expect(slugs).toEqual(['621/footer', '621/header', '622/a/b', 'top-level'])
+    const paths = list.map((c) => c.path).sort()
+    expect(paths).toEqual(['621/footer', '621/header', '622/a/b', 'top-level'])
   })
 
   it('excludes exports/, files/, and versions/ from listing', async () => {
@@ -381,7 +381,7 @@ describe('listCanvases', () => {
     await writeFile(join(tempDir, 'session1', 'versions', 'snap-002.loro'), '')
 
     const list = await listCanvases('session1')
-    expect(list.map((c) => c.slug)).toEqual(['real-canvas'])
+    expect(list.map((c) => c.path)).toEqual(['real-canvas'])
   })
 
   // listCanvases no longer walks the filesystem; the previous corruption
@@ -423,7 +423,7 @@ describe('getDocumentKind', () => {
   })
 })
 
-describe('saveCanvas / loadCanvas - slug validation', () => {
+describe('saveCanvas / loadCanvas - path validation', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
@@ -434,14 +434,14 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('accepts valid kebab-case slugs', async () => {
+  it('accepts valid kebab-case paths', async () => {
     // Verify that saveCanvas does not throw.
     await expect(saveCanvas('session1', 'my-canvas', new LoroDoc())).resolves.toBeUndefined()
     await expect(saveCanvas('session1', '123-design', new LoroDoc())).resolves.toBeUndefined()
     await expect(saveCanvas('session1', 'abc', new LoroDoc())).resolves.toBeUndefined()
   })
 
-  it('accepts slash-separated nested slugs when each segment is kebab-case', async () => {
+  it('accepts slash-separated nested paths when each segment is kebab-case', async () => {
     await expect(saveCanvas('session1', '621/header', new LoroDoc())).resolves.toBeUndefined()
     await expect(
       saveCanvas('session1', '621/header-v2/layout', new LoroDoc()),
@@ -449,54 +449,54 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
   })
 
   it('rejects leading, trailing, and consecutive slashes', async () => {
-    await expect(saveCanvas('session1', '/foo', new LoroDoc())).rejects.toThrow('Invalid slug')
-    await expect(saveCanvas('session1', 'foo/', new LoroDoc())).rejects.toThrow('Invalid slug')
-    await expect(saveCanvas('session1', 'a//b', new LoroDoc())).rejects.toThrow('Invalid slug')
+    await expect(saveCanvas('session1', '/foo', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveCanvas('session1', 'foo/', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveCanvas('session1', 'a//b', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
-  it('rejects slugs that contain ".."', async () => {
-    await expect(saveCanvas('session1', '../escape', new LoroDoc())).rejects.toThrow('Invalid slug')
-    await expect(loadCanvas('session1', '../../etc/passwd')).rejects.toThrow('Invalid slug')
+  it('rejects paths that contain ".."', async () => {
+    await expect(saveCanvas('session1', '../escape', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(loadCanvas('session1', '../../etc/passwd')).rejects.toThrow('Invalid path')
     // SAFE_SLUG_SEGMENT also rejects dots inside a segment such as `foo.bar/baz`.
     await expect(saveCanvas('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow(
-      'Invalid slug',
+      'Invalid path',
     )
   })
 
-  it('rejects slugs that contain dots', async () => {
-    await expect(saveCanvas('session1', 'foo.bar', new LoroDoc())).rejects.toThrow('Invalid slug')
-    await expect(saveCanvas('session1', '.hidden', new LoroDoc())).rejects.toThrow('Invalid slug')
+  it('rejects paths that contain dots', async () => {
+    await expect(saveCanvas('session1', 'foo.bar', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveCanvas('session1', '.hidden', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
-  it('rejects slugs that contain spaces', async () => {
-    await expect(saveCanvas('session1', 'my canvas', new LoroDoc())).rejects.toThrow('Invalid slug')
+  it('rejects paths that contain spaces', async () => {
+    await expect(saveCanvas('session1', 'my canvas', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
-  it('rejects empty slugs', async () => {
-    await expect(saveCanvas('session1', '', new LoroDoc())).rejects.toThrow('Invalid slug')
+  it('rejects empty paths', async () => {
+    await expect(saveCanvas('session1', '', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
-  it('rejects slugs that end with a hyphen', async () => {
-    await expect(saveCanvas('session1', 'canvas-', new LoroDoc())).rejects.toThrow('Invalid slug')
+  it('rejects paths that end with a hyphen', async () => {
+    await expect(saveCanvas('session1', 'canvas-', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects path-traversal workspaceIds', async () => {
-    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow(
+    await expect(saveCanvas('..', 'safe-path', new LoroDoc())).rejects.toThrow(
       'Invalid workspaceId',
     )
-    await expect(loadCanvas('../escape', 'safe-slug')).rejects.toThrow('Invalid workspaceId')
+    await expect(loadCanvas('../escape', 'safe-path')).rejects.toThrow('Invalid workspaceId')
   })
 
   it('rejects workspaceIds that contain slashes', async () => {
-    await expect(saveCanvas('nested/session', 'safe-slug', new LoroDoc())).rejects.toThrow(
+    await expect(saveCanvas('nested/session', 'safe-path', new LoroDoc())).rejects.toThrow(
       'Invalid workspaceId',
     )
     await expect(listCanvases('nested/session')).rejects.toThrow('Invalid workspaceId')
   })
 })
 
-// Slug validation error messages should identify the exact segment and reason.
-describe('slug validation - self-describing error messages', () => {
+// Path validation error messages should identify the exact segment and reason.
+describe('path validation - self-describing error messages', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
@@ -530,8 +530,8 @@ describe('slug validation - self-describing error messages', () => {
     await expect(saveCanvas('session1', 'a//b', new LoroDoc())).rejects.toThrow(/empty segment/)
   })
 
-  it('reports "slug is empty" for an empty slug', async () => {
-    await expect(saveCanvas('session1', '', new LoroDoc())).rejects.toThrow(/slug is empty/)
+  it('reports "path is empty" for an empty path', async () => {
+    await expect(saveCanvas('session1', '', new LoroDoc())).rejects.toThrow(/path is empty/)
   })
 
   it('reports "leading hyphen" for segments that start with a hyphen', async () => {
@@ -560,7 +560,7 @@ describe('slug validation - self-describing error messages', () => {
     )
   })
 
-  it('includes the full slug in the error message for context', async () => {
+  it('includes the full path in the error message for context', async () => {
     await expect(saveCanvas('session1', 'valid-top/.bad', new LoroDoc())).rejects.toThrow(
       /"valid-top\/\.bad"/,
     )
@@ -643,7 +643,7 @@ describe('compactCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'broken')
+      .where('path', '=', 'broken')
       .executeTakeFirstOrThrow()
     const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
@@ -696,13 +696,13 @@ describe('compactCanvas', () => {
     const { LoroMap } = await import('loro-crdt')
     const { getDb } = await import('./db/index.js')
 
-    async function readLastCompactedAt(slug: string): Promise<number | null> {
+    async function readLastCompactedAt(path: string): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
         .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
-        .where('slug', '=', slug)
+        .where('path', '=', path)
         .executeTakeFirst()
       return row?.lastCompactedAt ?? null
     }
@@ -777,7 +777,7 @@ describe('deleteCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'canvas-a')
+      .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
     const documentId = canvasRow.id
 
@@ -818,9 +818,9 @@ describe('deleteCanvas', () => {
     expect(wsRow).toBeDefined()
     const siblingRow = await db
       .selectFrom('documents')
-      .select(['slug'])
+      .select(['path'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'canvas-b')
+      .where('path', '=', 'canvas-b')
       .executeTakeFirst()
     expect(siblingRow).toBeDefined()
   })
@@ -835,7 +835,7 @@ describe('deleteCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'migrated')
+      .where('path', '=', 'migrated')
       .executeTakeFirstOrThrow()
     const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
     await writeFile(bakPath, new Uint8Array([9, 9, 9]))
@@ -862,7 +862,7 @@ describe('deleteCanvas', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'row-only')
+      .where('path', '=', 'row-only')
       .executeTakeFirstOrThrow()
     const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await unlink(blobPath)
@@ -890,7 +890,7 @@ describe('renameCanvasSlug', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('moves only the slug: branches/versions rows and the .loro blob stay byte-identical and keyed to the same documentId', async () => {
+  it('moves only the path: branches/versions rows and the .loro blob stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch, loadCanvasBranches } = await import('./branches-store.js')
     const { readFile } = await import('node:fs/promises')
@@ -906,7 +906,7 @@ describe('renameCanvasSlug', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'a')
+      .where('path', '=', 'a')
       .executeTakeFirstOrThrow()
     const documentId = before.id
     const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${documentId}.loro`)
@@ -915,13 +915,13 @@ describe('renameCanvasSlug', () => {
     await expect(renameCanvasSlug('session1', 'a', 'b')).resolves.toEqual({ documentId })
 
     const list = await listCanvases('session1')
-    expect(list.map((c) => c.slug)).toEqual(['b'])
+    expect(list.map((c) => c.path)).toEqual(['b'])
 
     const after = await db
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'b')
+      .where('path', '=', 'b')
       .executeTakeFirstOrThrow()
     expect(after.id).toBe(documentId)
 
@@ -942,7 +942,7 @@ describe('renameCanvasSlug', () => {
     const blobAfter = await readFile(blobPath)
     expect(blobAfter).toEqual(blobBefore)
 
-    // loadCanvasBranches also resolves under the new slug.
+    // loadCanvasBranches also resolves under the new path.
     const branches = await loadCanvasBranches('session1', 'b')
     expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
   })
@@ -951,22 +951,22 @@ describe('renameCanvasSlug', () => {
     await expect(renameCanvasSlug('session1', 'ghost', 'somewhere')).resolves.toBeNull()
   })
 
-  it('throws ConflictError for an already-taken target slug and mutates neither canvas', async () => {
+  it('throws ConflictError for an already-taken target path and mutates neither canvas', async () => {
     await saveCanvas('session1', 'a', new LoroDoc())
     await saveCanvas('session1', 'b', new LoroDoc())
 
     await expect(renameCanvasSlug('session1', 'a', 'b')).rejects.toThrow(ConflictError)
 
     const list = await listCanvases('session1')
-    expect(list.map((c) => c.slug).sort()).toEqual(['a', 'b'])
+    expect(list.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
-  it('throws the slug validator error for an invalid target slug', async () => {
+  it('throws the path validator error for an invalid target path', async () => {
     await saveCanvas('session1', 'a', new LoroDoc())
     await expect(renameCanvasSlug('session1', 'a', '../evil')).rejects.toThrow()
   })
 
-  it('rename to the SAME slug is a no-op success, returning the existing documentId', async () => {
+  it('rename to the SAME path is a no-op success, returning the existing documentId', async () => {
     await saveCanvas('session1', 'a', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
@@ -974,7 +974,7 @@ describe('renameCanvasSlug', () => {
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
-      .where('slug', '=', 'a')
+      .where('path', '=', 'a')
       .executeTakeFirstOrThrow()
 
     await expect(renameCanvasSlug('session1', 'a', 'a')).resolves.toEqual({
@@ -982,10 +982,10 @@ describe('renameCanvasSlug', () => {
     })
 
     const list = await listCanvases('session1')
-    expect(list.map((c) => c.slug)).toEqual(['a'])
+    expect(list.map((c) => c.path)).toEqual(['a'])
   })
 
-  it('evicts the old cache key so a subsequent getDoc under the old slug misses the cache', async () => {
+  it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {
     const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
     clearCache()
     try {
@@ -1000,7 +1000,7 @@ describe('renameCanvasSlug', () => {
     }
   })
 
-  it('evicts a phantom doc-cache entry already sitting at the destination slug, so the renamed content is not overwritten', async () => {
+  it('evicts a phantom doc-cache entry already sitting at the destination path, so the renamed content is not overwritten', async () => {
     const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
     clearCache()
     try {
@@ -1011,7 +1011,7 @@ describe('renameCanvasSlug', () => {
       await saveCanvas('session1', 'a', doc)
 
       // Simulate a WS connect (or update route) against a not-yet-created
-      // slug 'b': getDoc() lazily caches an empty in-memory doc for it
+      // path 'b': getDoc() lazily caches an empty in-memory doc for it
       // even though there is no DB row yet.
       await getDoc('session1', 'b')
       expect(peekDoc('session1', 'b')).toBeDefined()
@@ -1019,7 +1019,7 @@ describe('renameCanvasSlug', () => {
       await renameCanvasSlug('session1', 'a', 'b')
 
       // The stale phantom doc must not still shadow the just-renamed
-      // canvas's real content at the destination slug.
+      // canvas's real content at the destination path.
       expect(peekDoc('session1', 'b')).toBeUndefined()
 
       const reloaded = await getDoc('session1', 'b')
@@ -1046,7 +1046,7 @@ describe('auto-compact', () => {
   })
 
   it('saveCanvas invokes the registered auto-compact trigger', async () => {
-    const trigger = vi.fn<(workspaceId: string, slug: string) => void>()
+    const trigger = vi.fn<(workspaceId: string, path: string) => void>()
     setAutoCompactTrigger(trigger)
     await saveCanvas('session1', 'foo', new LoroDoc())
     expect(trigger).toHaveBeenCalledTimes(1)
@@ -1063,7 +1063,7 @@ describe('auto-compact', () => {
         .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
-        .where('slug', '=', 'big')
+        .where('path', '=', 'big')
         .executeTakeFirst()
       return row?.lastCompactedAt ?? null
     }
@@ -1187,7 +1187,7 @@ describe('auto-compact disposal', () => {
   })
 
   async function buildCompactableCanvas(
-    slug: string,
+    path: string,
   ): Promise<InstanceType<typeof FileVersionStore>> {
     const { LoroMap } = await import('loro-crdt')
     const doc = new LoroDoc()
@@ -1197,15 +1197,15 @@ describe('auto-compact disposal', () => {
       m.set('id', `e-${i}`)
     }
     doc.commit()
-    await saveCanvas('session1', slug, doc)
+    await saveCanvas('session1', path, doc)
     const store = new FileVersionStore()
-    await store.save('session1', slug, doc, { auto: true })
+    await store.save('session1', path, doc, { auto: true })
     for (let i = 0; i < 30; i++) {
       const m = list.insertContainer(list.length, new LoroMap())
       m.set('id', `x-${i}`)
     }
     doc.commit()
-    await saveCanvas('session1', slug, doc, { overwrite: true })
+    await saveCanvas('session1', path, doc, { overwrite: true })
     return store
   }
 
@@ -1221,9 +1221,9 @@ describe('auto-compact disposal', () => {
     return new Proxy(store, {
       get(target, prop, receiver) {
         if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, slug: string) => {
+          return async (workspaceId: string, path: string) => {
             await new Promise((r) => setTimeout(r, delayMs))
-            return target.earliestFrontiers(workspaceId, slug)
+            return target.earliestFrontiers(workspaceId, path)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -1262,7 +1262,7 @@ describe('auto-compact disposal', () => {
         .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
-        .where('slug', '=', 'cached')
+        .where('path', '=', 'cached')
         .executeTakeFirst()
       return row?.lastCompactedAt ?? null
     }
@@ -1302,9 +1302,9 @@ describe('auto-compact disposal', () => {
     const countingStore = new Proxy(store, {
       get(target, prop, receiver) {
         if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, slug: string) => {
+          return async (workspaceId: string, path: string) => {
             rescheduleCallCount.count += 1
-            return target.earliestFrontiers(workspaceId, slug)
+            return target.earliestFrontiers(workspaceId, path)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -1313,10 +1313,10 @@ describe('auto-compact disposal', () => {
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
         if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, slug: string) => {
+          return async (workspaceId: string, path: string) => {
             await rescheduleGate
             scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 0 })
-            return target.earliestFrontiers(workspaceId, slug)
+            return target.earliestFrontiers(workspaceId, path)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -1360,12 +1360,12 @@ describe('auto-compact disposal', () => {
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
         if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, slug: string) => {
+          return async (workspaceId: string, path: string) => {
             await new Promise((r) => setTimeout(r, 100))
             // Mirrors a compaction resuming and touching the DB again
             // (e.g. via loadCanvas()) while teardown is draining hooks.
             reentrantDb = await getDb(tempDir)
-            return target.earliestFrontiers(workspaceId, slug)
+            return target.earliestFrontiers(workspaceId, path)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -1401,7 +1401,7 @@ describe('auto-compact disposal', () => {
         .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
-        .where('slug', '=', 'again')
+        .where('path', '=', 'again')
         .executeTakeFirst()
       return row?.lastCompactedAt ?? null
     }
@@ -1428,7 +1428,7 @@ describe('auto-compact disposal', () => {
         .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
-        .where('slug', '=', 'composed')
+        .where('path', '=', 'composed')
         .executeTakeFirst()
       return row?.lastCompactedAt ?? null
     }

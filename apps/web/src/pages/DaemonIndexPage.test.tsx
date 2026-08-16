@@ -30,18 +30,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 interface MockRoutes {
   workspaces: Array<{ workspaceId: string }>
-  canvasesByWorkspace: Record<string, Array<{ slug: string; updatedAt: string; kind?: string }>>
+  canvasesByWorkspace: Record<string, Array<{ path: string; updatedAt: string; kind?: string }>>
   namesByWorkspace?: Record<
     string,
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
   >
-  onCreateCanvas?: (workspaceId: string, slug: string, kind?: string) => void
+  onCreateCanvas?: (workspaceId: string, path: string, kind?: string) => void
   // Return a Response (or a pending promise of one) to override the
   // default 200 {ok:true}.
-  onDeleteCanvas?: (workspaceId: string, slug: string) => Response | Promise<Response> | undefined
+  onDeleteCanvas?: (workspaceId: string, path: string) => Response | Promise<Response> | undefined
   snapshotByCanvas?: Record<string, Uint8Array>
-  onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
-  onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
+  onUpdateCanvas?: (workspaceId: string, path: string, bytes: Uint8Array) => void
+  onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
   /** When set, the canvases fetch resolves only after this promise settles. */
   delayCanvases?: Promise<void>
 }
@@ -63,15 +63,15 @@ function installFetchMock(routes: MockRoutes) {
     }
     if (canvasesMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(canvasesMatch[1])
-      const body = JSON.parse(String(init.body)) as { slug: string; kind?: string }
-      routes.onCreateCanvas?.(workspaceId, body.slug, body.kind)
-      return Promise.resolve(jsonResponse({ slug: body.slug }))
+      const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
+      routes.onCreateCanvas?.(workspaceId, body.path, body.kind)
+      return Promise.resolve(jsonResponse({ path: body.path }))
     }
     const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)$/)
     if (canvasDeleteMatch && init?.method === 'DELETE') {
       const workspaceId = decodeURIComponent(canvasDeleteMatch[1])
-      const slug = decodeURIComponent(canvasDeleteMatch[2])
-      const override = routes.onDeleteCanvas?.(workspaceId, slug)
+      const path = decodeURIComponent(canvasDeleteMatch[2])
+      const override = routes.onDeleteCanvas?.(workspaceId, path)
       return Promise.resolve(override ?? jsonResponse({ ok: true }))
     }
     const namesMatch = url.match(/\/api\/workspaces\/([^/]+)\/names$/)
@@ -85,8 +85,8 @@ function installFetchMock(routes: MockRoutes) {
     }
     const snapshotMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/)
     if (snapshotMatch) {
-      const slug = decodeURIComponent(snapshotMatch[2])
-      const bytes = routes.snapshotByCanvas?.[slug]
+      const path = decodeURIComponent(snapshotMatch[2])
+      const bytes = routes.snapshotByCanvas?.[path]
       if (!bytes) return Promise.resolve(jsonResponse({ title: 'Not found' }, 404))
       return Promise.resolve(
         new Response(bytes as BodyInit, {
@@ -98,20 +98,20 @@ function installFetchMock(routes: MockRoutes) {
     const updateMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/)
     if (updateMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(updateMatch[1])
-      const slug = decodeURIComponent(updateMatch[2])
-      routes.onUpdateCanvas?.(workspaceId, slug, new Uint8Array(init.body as ArrayBuffer))
+      const path = decodeURIComponent(updateMatch[2])
+      routes.onUpdateCanvas?.(workspaceId, path, new Uint8Array(init.body as ArrayBuffer))
       return Promise.resolve(jsonResponse({ ok: true }))
     }
     const canvasNameMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)\/name$/)
     if (canvasNameMatch && init?.method === 'PUT') {
       const workspaceId = decodeURIComponent(canvasNameMatch[1])
-      const slug = decodeURIComponent(canvasNameMatch[2])
+      const path = decodeURIComponent(canvasNameMatch[2])
       const body = JSON.parse(String(init.body)) as { name: string }
-      routes.onSetCanvasName?.(workspaceId, slug, body.name)
+      routes.onSetCanvasName?.(workspaceId, path, body.name)
       const names = routes.namesByWorkspace?.[workspaceId]
       const canvases = names && names !== 'fail' ? names.canvases : {}
       return Promise.resolve(
-        jsonResponse({ canvases: { ...canvases, [slug]: body.name }, pinned: [] }),
+        jsonResponse({ canvases: { ...canvases, [path]: body.name }, pinned: [] }),
       )
     }
     return Promise.resolve(jsonResponse({}, 404))
@@ -140,8 +140,8 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
-        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: {
         'ws-a': { canvases: { alpha: 'Alpha Board' }, pinned: [] },
@@ -163,8 +163,8 @@ describe('DaemonIndexPage', () => {
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
         'ws-a': [
-          { slug: 'note', updatedAt: new Date().toISOString(), kind: 'markdown' },
-          { slug: 'board', updatedAt: new Date().toISOString() },
+          { path: 'note', updatedAt: new Date().toISOString(), kind: 'markdown' },
+          { path: 'board', updatedAt: new Date().toISOString() },
         ],
       },
     })
@@ -188,7 +188,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {},
-      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -204,7 +204,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -220,8 +220,8 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
-        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -242,8 +242,8 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
-        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -262,8 +262,8 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
-        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -278,7 +278,7 @@ describe('DaemonIndexPage', () => {
 
   it("clears the previous workspace's cards immediately on switch, before the new load resolves", async () => {
     // A stale card clicked in the switch window would pair the NEW workspace
-    // id with the OLD workspace's slug — a mismatched identity.
+    // id with the OLD workspace's path — a mismatched identity.
     // Each pending call gets its own deferred + fresh Response (a Response
     // body is single-use, and the load may retry/refire).
     const waiters: Array<() => void> = []
@@ -294,14 +294,14 @@ describe('DaemonIndexPage', () => {
       }
       if (url.includes('/ws-a/canvases')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
       if (url.includes('/ws-b/canvases')) {
         return new Promise<Response>((resolve) => {
           waiters.push(() =>
             resolve(
-              jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+              jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
             ),
           )
         })
@@ -327,9 +327,9 @@ describe('DaemonIndexPage', () => {
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
         'ws-a': [
-          { slug: 'old', updatedAt: '2020-01-01T00:00:00Z' },
-          { slug: 'new', updatedAt: '2026-01-01T00:00:00Z' },
-          { slug: 'pinned-one', updatedAt: '2019-01-01T00:00:00Z' },
+          { path: 'old', updatedAt: '2020-01-01T00:00:00Z' },
+          { path: 'new', updatedAt: '2026-01-01T00:00:00Z' },
+          { path: 'pinned-one', updatedAt: '2019-01-01T00:00:00Z' },
         ],
       },
       namesByWorkspace: {
@@ -347,13 +347,13 @@ describe('DaemonIndexPage', () => {
     expect(within(cards[2]!).getByText('old')).toBeTruthy()
   })
 
-  it('filters cards by search input matching slug or display name', async () => {
+  it('filters cards by search input matching path or display name', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
         'ws-a': [
-          { slug: 'alpha', updatedAt: new Date().toISOString() },
-          { slug: 'beta', updatedAt: new Date().toISOString() },
+          { path: 'alpha', updatedAt: new Date().toISOString() },
+          { path: 'beta', updatedAt: new Date().toISOString() },
         ],
       },
     })
@@ -367,11 +367,11 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByText('beta')).toBeTruthy()
   })
 
-  it('degrades gracefully to unpinned/slug-only when the names fetch fails', async () => {
+  it('degrades gracefully to unpinned/path-only when the names fetch fails', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': 'fail' },
     })
@@ -417,7 +417,7 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-b/canvases')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
         )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
@@ -430,7 +430,7 @@ describe('DaemonIndexPage', () => {
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
     expect(await screen.findByText('beta')).toBeTruthy()
 
-    resolveA?.(jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }))
+    resolveA?.(jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }))
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(screen.queryByText('alpha')).toBeNull()
@@ -441,7 +441,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
     const onOpenCanvas = vi.fn()
@@ -460,13 +460,13 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
       snapshotByCanvas: { alpha: new Uint8Array([1, 2, 3]) },
-      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
-      onUpdateCanvas: (workspaceId, slug, bytes) => updates.push([workspaceId, slug, bytes]),
-      onSetCanvasName: (workspaceId, slug, name) => names.push([workspaceId, slug, name]),
+      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      onUpdateCanvas: (workspaceId, path, bytes) => updates.push([workspaceId, path, bytes]),
+      onSetCanvasName: (workspaceId, path, name) => names.push([workspaceId, path, name]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -494,13 +494,13 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { slug: string }
-        created.push(['ws-a', body.slug])
-        return Promise.resolve(jsonResponse({ slug: body.slug }))
+        const body = JSON.parse(String(init.body)) as { path: string }
+        created.push(['ws-a', body.path])
+        return Promise.resolve(jsonResponse({ path: body.path }))
       }
       if (url.endsWith('/api/workspaces/ws-a/names')) {
         return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
@@ -547,7 +547,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
       // No snapshotByCanvas entry for 'alpha' -> the mock 404s the snapshot read.
@@ -573,17 +573,17 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-b/canvases') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { slug: string }
-        return Promise.resolve(jsonResponse({ slug: body.slug }))
+        const body = JSON.parse(String(init.body)) as { path: string }
+        return Promise.resolve(jsonResponse({ path: body.path }))
       }
       if (
         url.endsWith('/api/workspaces/ws-a/names') ||
@@ -636,9 +636,9 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'existing', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -657,9 +657,9 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'existing', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, slug, kind) => created.push([workspaceId, slug, kind]),
+      onCreateCanvas: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -672,14 +672,14 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual([['ws-a', 'untitled', 'markdown']])
   })
 
-  it('derives a unique slug from the loaded rows, skipping an already-used "untitled"', async () => {
+  it('derives a unique path from the loaded rows, skipping an already-used "untitled"', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'untitled', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'untitled', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -721,7 +721,7 @@ describe('DaemonIndexPage', () => {
   // The `disabled` attribute only protects AFTER React re-renders. Two presses inside one tick
   // (a real double-click, or Enter held down) both run the handler, and a guard that reads
   // `creating` from the render closure still sees `false` in the second — so it must not be the
-  // only defence. Two POSTs deriving the same slug means the loser 409s.
+  // only defence. Two POSTs deriving the same path means the loser 409s.
   it('sends one create for two presses inside a single tick', async () => {
     const created: string[] = []
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -730,8 +730,8 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        created.push(JSON.parse(String(init.body)).slug as string)
-        return Promise.resolve(jsonResponse({ slug: 'untitled' }))
+        created.push(JSON.parse(String(init.body)).path as string)
+        return Promise.resolve(jsonResponse({ path: 'untitled' }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases')) {
         return Promise.resolve(jsonResponse({ canvases: [] }))
@@ -755,8 +755,8 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual(['untitled'])
   })
 
-  // Mirrors the Duplicate action's own in-flight test above: the slug is derived from the loaded
-  // rows, so two creates racing on the same rows derive the SAME slug and the loser 409s. Covers
+  // Mirrors the Duplicate action's own in-flight test above: the path is derived from the loaded
+  // rows, so two creates racing on the same rows derive the SAME path and the loser 409s. Covers
   // both entry points — the empty state's button shares one `creating` flag with the toolbar's
   // menu trigger.
   it('disables the toolbar create menu while a create is in flight', async () => {
@@ -768,14 +768,14 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        created.push(JSON.parse(String(init.body)).slug as string)
+        created.push(JSON.parse(String(init.body)).path as string)
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
         })
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'existing', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ canvases: [{ path: 'existing', updatedAt: new Date().toISOString() }] }),
         )
       }
       return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
@@ -797,7 +797,7 @@ describe('DaemonIndexPage', () => {
     if (item) fireEvent.pointerUp(item)
     expect(created).toEqual(['untitled'])
 
-    resolveCreate?.(jsonResponse({ slug: 'untitled' }))
+    resolveCreate?.(jsonResponse({ path: 'untitled' }))
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
@@ -811,7 +811,7 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        created.push(JSON.parse(String(init.body)).slug as string)
+        created.push(JSON.parse(String(init.body)).path as string)
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
         })
@@ -834,15 +834,15 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(button)
     expect(created).toEqual(['untitled'])
 
-    resolveCreate?.(jsonResponse({ slug: 'untitled' }))
+    resolveCreate?.(jsonResponse({ path: 'untitled' }))
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
 
   // Reproduces the defect the dev-loop's QA agent found: after a failed create the list was never
-  // re-fetched, so the next click re-derived the SAME slug from stale rows and collided again,
+  // re-fetched, so the next click re-derived the SAME path from stale rows and collided again,
   // deterministically, until the user reloaded the page.
-  it('re-reads the list after a failed create so the retry does not repeat the same slug', async () => {
+  it('re-reads the list after a failed create so the retry does not repeat the same path', async () => {
     const created: string[] = []
     let serverSlugs: string[] = ['untitled']
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -851,13 +851,13 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
-        const slug = JSON.parse(String(init?.body ?? '{}')).slug as string
-        created.push(slug)
-        if (serverSlugs.includes(slug)) {
-          return Promise.resolve(jsonResponse({ title: `Canvas "${slug}" already exists` }, 409))
+        const path = JSON.parse(String(init?.body ?? '{}')).path as string
+        created.push(path)
+        if (serverSlugs.includes(path)) {
+          return Promise.resolve(jsonResponse({ title: `Canvas "${path}" already exists` }, 409))
         }
-        serverSlugs = [...serverSlugs, slug]
-        return Promise.resolve(jsonResponse({ slug }))
+        serverSlugs = [...serverSlugs, path]
+        return Promise.resolve(jsonResponse({ path }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases')) {
         // The list starts EMPTY (a second tab created "untitled"), so the first derive collides.
@@ -866,7 +866,7 @@ describe('DaemonIndexPage', () => {
             canvases:
               created.length === 0
                 ? []
-                : serverSlugs.map((slug) => ({ slug, updatedAt: new Date().toISOString() })),
+                : serverSlugs.map((path) => ({ path, updatedAt: new Date().toISOString() })),
           }),
         )
       }
@@ -882,7 +882,7 @@ describe('DaemonIndexPage', () => {
 
     // The failed create re-reads the list, which now shows the colliding
     // canvas — so the retry entry point is the toolbar menu, and it must not
-    // repeat the losing slug.
+    // repeat the losing path.
     await screen.findByText('untitled')
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'New canvas' }).hasAttribute('disabled')).toBe(
@@ -901,11 +901,11 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha Board' }, pinned: [] } },
-      onDeleteCanvas: (_ws, slug) => {
-        deleted.push(slug)
+      onDeleteCanvas: (_ws, path) => {
+        deleted.push(path)
         return undefined
       },
     })
@@ -930,8 +930,8 @@ describe('DaemonIndexPage', () => {
   it('confirming Delete sends DELETE and the card disappears from the refreshed list', async () => {
     const deleted: string[] = []
     let rows = [
-      { slug: 'alpha', updatedAt: new Date().toISOString() },
-      { slug: 'beta', updatedAt: new Date().toISOString() },
+      { path: 'alpha', updatedAt: new Date().toISOString() },
+      { path: 'beta', updatedAt: new Date().toISOString() },
     ]
     const routes: Parameters<typeof installFetchMock>[0] = {
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -940,9 +940,9 @@ describe('DaemonIndexPage', () => {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, slug) => {
-        deleted.push(slug)
-        rows = rows.filter((r) => r.slug !== slug)
+      onDeleteCanvas: (_ws, path) => {
+        deleted.push(path)
+        rows = rows.filter((r) => r.path !== path)
         return undefined
       },
     }
@@ -972,10 +972,10 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
-        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
-      onDeleteCanvas: (_ws, slug) => {
-        deleted.push(slug)
+      onDeleteCanvas: (_ws, path) => {
+        deleted.push(path)
         return new Promise<Response>((resolve) => {
           resolveDelete = resolve
         })
@@ -1003,7 +1003,7 @@ describe('DaemonIndexPage', () => {
 
   it('a failed Delete shows the sanitized error in the dialog and refreshes after dismissal', async () => {
     let listFetches = 0
-    let rows = [{ slug: 'alpha', updatedAt: new Date().toISOString() }]
+    let rows = [{ path: 'alpha', updatedAt: new Date().toISOString() }]
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: {
@@ -1039,7 +1039,7 @@ describe('DaemonIndexPage', () => {
   it('has no Storage tab — storage and pairing live on the routed Settings page (design refactor D2)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
     const router = createMemoryRouter(
@@ -1068,7 +1068,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'dTMMrBP3c5ah8_SXTRVvC' }],
       canvasesByWorkspace: {
-        dTMMrBP3c5ah8_SXTRVvC: [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        dTMMrBP3c5ah8_SXTRVvC: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 
@@ -1083,7 +1083,7 @@ describe('DaemonIndexPage', () => {
   it('exposes the New canvas control as an icon-only button whose glyph is aria-hidden', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
@@ -1099,7 +1099,7 @@ describe('DaemonIndexPage', () => {
   it('mounts no permanent creation form in the toolbar (ADR-0006)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
@@ -1120,7 +1120,7 @@ describe('DaemonIndexPage', () => {
     })
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
       delayCanvases: gate,
     })
 
@@ -1141,7 +1141,7 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       canvasesByWorkspace: { 'ws-a': [] },
-      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
     })
     const onOpenCanvas = vi.fn()
 
@@ -1159,7 +1159,7 @@ describe('DaemonIndexPage', () => {
   it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)

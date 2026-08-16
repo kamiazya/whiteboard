@@ -45,7 +45,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
 
     expect(result).toEqual({
       provider: { mode: 'daemon' },
-      canvas: { kind: 'daemon', workspaceId: 'ws1', slug: 'my-canvas' },
+      canvas: { kind: 'daemon', workspaceId: 'ws1', path: 'my-canvas' },
     })
     const serialized = JSON.stringify(result).toLowerCase()
     expect(serialized).not.toContain('daemonbaseurl')

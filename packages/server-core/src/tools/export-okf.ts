@@ -54,7 +54,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this
   // emits is a projection, and an unnamed document emits none rather than
-  // being handed its slug as a title.
+  // being handed its path as a title.
   const entry = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
     documentId: input.documentId,

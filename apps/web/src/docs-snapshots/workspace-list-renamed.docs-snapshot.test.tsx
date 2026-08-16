@@ -9,7 +9,7 @@ import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 // Generates docs/assets/workspace-list-renamed.png — companion to
 // workspace-list.png. Same dataset, but with display names + a pinned
 // canvas set, so the cards show friendly titles ("Auth signup flow")
-// above the raw slug instead of the slug alone.
+// above the raw path instead of the path alone.
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
@@ -36,19 +36,19 @@ beforeEach(() => {
       if (url.endsWith('/api/workspaces/ws_main/canvases')) {
         return jsonResponse({
           canvases: [
-            { slug: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
-            { slug: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
-            { slug: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
+            { path: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
+            { path: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
+            { path: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
           ],
         })
       }
       if (url.endsWith('/api/workspaces/ws_sketches/canvases')) {
         return jsonResponse({
-          canvases: [{ slug: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
+          canvases: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
       // The "renamed" half: every canvas has a friendly display name and a
-      // pinned entry, so the cards show titles instead of the raw slug.
+      // pinned entry, so the cards show titles instead of the raw path.
       if (url.endsWith('/api/workspaces/ws_main/names')) {
         return jsonResponse({
           workspace: 'Production designs',

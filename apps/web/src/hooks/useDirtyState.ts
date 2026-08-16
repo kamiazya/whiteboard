@@ -13,7 +13,7 @@ export type { DirtyEventDetail }
 // Implementation notes:
 //  useWhiteboardSync dispatches excalidraw:doc_changed whenever doc.subscribe observes a local or remote edit.
 //  When version_created arrives, it dispatches excalidraw:wb_version_saved.
-//  This hook filters those events by workspaceId/slug and tracks dirty vs clean counts.
+//  This hook filters those events by workspaceId/path and tracks dirty vs clean counts.
 //  Passing the doc reference around would couple tests to Loro internals, so this stays event-based.
 
 export interface UseDirtyStateResult {
@@ -23,7 +23,7 @@ export interface UseDirtyStateResult {
   markSaved: () => void
 }
 
-export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateResult {
+export function useDirtyState(workspaceId: string, path: string): UseDirtyStateResult {
   const [isDirty, setIsDirty] = useState(false)
   const changeCountRef = useRef(0)
   const savedAtRef = useRef(0)
@@ -33,19 +33,19 @@ export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateR
     changeCountRef.current = 0
     savedAtRef.current = 0
     setIsDirty(false)
-  }, [workspaceId, slug])
+  }, [workspaceId, path])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onChanged = (event: Event) => {
       const detail = (event as CustomEvent<DirtyEventDetail>).detail
-      if (!detail || detail.workspaceId !== workspaceId || detail.slug !== slug) return
+      if (!detail || detail.workspaceId !== workspaceId || detail.path !== path) return
       changeCountRef.current += 1
       if (changeCountRef.current > savedAtRef.current) setIsDirty(true)
     }
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<DirtyEventDetail>).detail
-      if (!detail || detail.workspaceId !== workspaceId || detail.slug !== slug) return
+      if (!detail || detail.workspaceId !== workspaceId || detail.path !== path) return
       savedAtRef.current = changeCountRef.current
       setIsDirty(false)
     }
@@ -55,7 +55,7 @@ export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateR
       window.removeEventListener('excalidraw:doc_changed', onChanged)
       window.removeEventListener('excalidraw:wb_version_saved', onSaved)
     }
-  }, [workspaceId, slug])
+  }, [workspaceId, path])
 
   const markSaved = useCallback(() => {
     savedAtRef.current = changeCountRef.current

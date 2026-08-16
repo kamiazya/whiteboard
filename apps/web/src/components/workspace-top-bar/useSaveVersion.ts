@@ -5,7 +5,7 @@ import type { AppLogger } from '@/lib/app-logger'
 
 interface UseSaveVersionOptions {
   workspaceId: string
-  slug: string
+  path: string
   daemonFetch: typeof globalThis.fetch
   getThumbnailBlob: (() => Promise<Blob | null>) | undefined
   log?: AppLogger
@@ -17,7 +17,7 @@ interface UseSaveVersionOptions {
 // re-entrant calls issued before React re-renders `saving`.
 export function useSaveVersion({
   workspaceId,
-  slug,
+  path,
   daemonFetch,
   getThumbnailBlob,
   log,
@@ -37,7 +37,7 @@ export function useSaveVersion({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, slug, 'versions'), {
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, path, 'versions'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ label }),
@@ -51,7 +51,7 @@ export function useSaveVersion({
         // Dispatch only after schema validation confirms the server response is well-formed.
         // Manual save can bypass the server's version_created websocket path; a later WS event becomes a no-op.
         if (typeof window !== 'undefined') {
-          const detail: DirtyEventDetail = { workspaceId, slug }
+          const detail: DirtyEventDetail = { workspaceId, path }
           window.dispatchEvent(new CustomEvent('excalidraw:wb_version_saved', { detail }))
         }
         const id = parsed.data.version.id
@@ -59,7 +59,7 @@ export function useSaveVersion({
           try {
             const blob = await getThumbnailBlob()
             if (blob) {
-              await daemonFetch(canvasesApiUrl(workspaceId, slug, `versions/${id}/thumbnail`), {
+              await daemonFetch(canvasesApiUrl(workspaceId, path, `versions/${id}/thumbnail`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'image/png' },
                 body: blob,
@@ -75,7 +75,7 @@ export function useSaveVersion({
         setSaving(false)
       }
     },
-    [workspaceId, slug, getThumbnailBlob, log, daemonFetch],
+    [workspaceId, path, getThumbnailBlob, log, daemonFetch],
   )
 
   return { saving, savingRef, saveVersion }

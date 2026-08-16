@@ -23,7 +23,7 @@ const log = getAppLogger('merge-toast')
 
 export interface MergeToastProps {
   workspaceId: string
-  slug: string
+  path: string
   // Called after a successful restore so CanvasPage can clear its local undo stack.
   onRestored?: () => void
 }
@@ -33,7 +33,7 @@ interface ActiveToast {
   detail: MergeCommittedDetail
 }
 
-export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): JSX.Element | null {
+export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): JSX.Element | null {
   const fetchFn = useDaemonApi()
   const [active, setActive] = useState<ActiveToast | null>(null)
   const [undoing, setUndoing] = useState(false)
@@ -47,13 +47,13 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     const handler = (event: Event) => {
       const detail = parseMergeCommittedEvent(event)
       if (!detail) return
-      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.path !== path) return
       setUndoError(null)
       setActive({ key: Date.now(), detail })
     }
     window.addEventListener(MERGE_COMMITTED_EVENT, handler)
     return () => window.removeEventListener(MERGE_COMMITTED_EVENT, handler)
-  }, [workspaceId, slug])
+  }, [workspaceId, path])
 
   useEffect(() => {
     if (!active) return
@@ -78,7 +78,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
 
   const {
     workspaceId: mergeWorkspaceId,
-    slug: mergeSlug,
+    path: mergeSlug,
     sourceName,
     newCount,
     changedCount,
@@ -114,12 +114,12 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       log.error('restore request failed', {
         status: res.status,
         workspaceId: mergeWorkspaceId,
-        slug: mergeSlug,
+        path: mergeSlug,
       })
       setUndoError(message)
     } catch (err) {
       // Keep the toast (and its retry affordance) visible; the restore did not happen.
-      log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, slug: mergeSlug })
+      log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, path: mergeSlug })
       setUndoError(safeErrorCopy(err, 'Undo failed. Try again.'))
     } finally {
       setUndoing(false)

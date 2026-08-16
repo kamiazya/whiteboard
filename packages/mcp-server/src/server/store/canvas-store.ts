@@ -7,7 +7,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
+import { validateCanvasId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
   isCorruptStoredDataError,
@@ -31,7 +31,7 @@ export class ConflictError extends Error {
 // ── canvas blob path helpers ──
 // Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
 // The documentId is the stable row PK from the canvases table, so renaming a
-// canvas slug does not move blobs around.
+// canvas path does not move blobs around.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
@@ -63,12 +63,12 @@ async function dbReady() {
 // compactCanvas) must pass overwrite: true.
 export async function saveCanvas(
   workspaceId: string,
-  slug: string,
+  path: string,
   doc: LoroDoc,
   options: { overwrite?: boolean; kind?: DocumentKind } = {},
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   // Hold the workspace write barrier across the snapshot write + DB
   // upsert so a concurrent purgeDanglingFiles cannot observe a referenced
   // file as dangling: GC's collectReferencedFileIds() runs over the same
@@ -78,10 +78,10 @@ export async function saveCanvas(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const overwrite = options.overwrite ?? false
     const db = await dbReady()
-    const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+    const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, path)
     if (existingCanvasId && !overwrite) {
       throw new ConflictError(
-        `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
+        `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
     // Pre-allocate the documentId for new canvases so the blob can be written
@@ -93,10 +93,10 @@ export async function saveCanvas(
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
     const documentId = existingCanvasId ?? generateDocumentId()
-    const path = canvasBlobPath(workspaceId, documentId)
-    await mkdir(dirname(path), { recursive: true })
+    const blobPath = canvasBlobPath(workspaceId, documentId)
+    await mkdir(dirname(blobPath), { recursive: true })
     const snapshot = doc.export({ mode: 'snapshot' })
-    await writeFile(path, snapshot)
+    await writeFile(blobPath, snapshot)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingCanvasId) {
       // A plain re-save (WS updates, applyAndPersist, compactCanvas) omits
@@ -118,7 +118,7 @@ export async function saveCanvas(
         .values({
           id: documentId,
           workspaceId,
-          slug,
+          path,
           displayName: null,
           isPinned: 0,
           pinOrder: null,
@@ -132,17 +132,17 @@ export async function saveCanvas(
           // re-save, does not touch `kind`.
           kind: options.kind ?? null,
         })
-        .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
+        .onConflict((oc) => oc.columns(['workspaceId', 'path']).doUpdateSet({ updatedAt: now }))
         .execute()
     }
     if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
-      const key = `${workspaceId}/${slug}`
+      const key = `${workspaceId}/${path}`
       if (!warnedSnapshots.has(key)) {
         warnedSnapshots.add(key)
         getLogger('canvas-store').warning(
           {
             workspaceId,
-            slug,
+            path,
             bytes: snapshot.byteLength,
             thresholdBytes: SNAPSHOT_WARN_BYTES,
           },
@@ -155,29 +155,29 @@ export async function saveCanvas(
     // does not depend on the version-store concrete type.
     if (autoCompactTrigger) {
       try {
-        autoCompactTrigger(workspaceId, slug)
+        autoCompactTrigger(workspaceId, path)
       } catch (err) {
-        getLogger('canvas-store').warning({ workspaceId, slug, err }, 'autoCompactTrigger threw')
+        getLogger('canvas-store').warning({ workspaceId, path, err }, 'autoCompactTrigger threw')
       }
     }
   })
 }
 
 // ── load LoroDoc, returning an empty document when the blob is missing ──
-export async function loadCanvas(workspaceId: string, slug: string): Promise<LoroDoc> {
+export async function loadCanvas(workspaceId: string, path: string): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
-  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  const documentId = await getCanvasIdBySlug(db, workspaceId, path)
   if (!documentId) return new LoroDoc()
-  const path = canvasBlobPath(workspaceId, documentId)
+  const blobPath = canvasBlobPath(workspaceId, documentId)
   let doc: LoroDoc
   try {
-    const bytes = await readFile(path)
+    const bytes = await readFile(blobPath)
     try {
       doc = LoroDoc.fromSnapshot(new Uint8Array(bytes))
     } catch (error) {
-      throw corruptStoredData(path, `invalid canvas snapshot (${errorMessage(error)})`)
+      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`)
     }
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -186,7 +186,7 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
     if (isCorruptStoredDataError(error)) {
       throw error
     }
-    throw corruptStoredData(path, `failed to read canvas snapshot (${errorMessage(error)})`)
+    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`)
   }
   // One-shot legacy container migration. Older data stored "elements" in
   // LoroList; current code uses LoroMovableList. Repair on load and rewrite.
@@ -198,13 +198,13 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
         .then(() => true)
         .catch(() => false)
       if (!bakExists) {
-        const origBytes = await readFile(path).catch(() => null)
+        const origBytes = await readFile(blobPath).catch(() => null)
         if (origBytes) await writeFile(bakPath, origBytes)
       }
-      await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+      await saveCanvas(workspaceId, path, doc, { overwrite: true })
     } catch (err) {
       getLogger('canvas-store').warning(
-        { workspaceId, slug, err: err as Error },
+        { workspaceId, path, err: err as Error },
         'legacy list→movable migration persist failed',
       )
     }
@@ -252,11 +252,11 @@ export async function workspaceExists(workspaceId: string): Promise<boolean> {
   return row !== undefined
 }
 
-export async function canvasExists(workspaceId: string, slug: string): Promise<boolean> {
+export async function canvasExists(workspaceId: string, path: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
-  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  const documentId = await getCanvasIdBySlug(db, workspaceId, path)
   return documentId !== null
 }
 
@@ -282,12 +282,12 @@ async function unlinkIfExists(path: string): Promise<void> {
 // file-gc (its collectReferencedFileIds targets uploaded images, not these
 // canvas/version blobs); revisit if orphan blobs start showing up in the
 // storage report.
-export async function deleteCanvas(workspaceId: string, slug: string): Promise<boolean> {
+export async function deleteCanvas(workspaceId: string, path: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await dbReady()
-    const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+    const documentId = await getCanvasIdBySlug(db, workspaceId, path)
     if (!documentId) return false
 
     // Collect version ids before the row delete — the versions rows are
@@ -304,9 +304,9 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
     // connection in db/index.ts).
     await db.deleteFrom('documents').where('id', '=', documentId).execute()
 
-    const path = canvasBlobPath(workspaceId, documentId)
-    await unlinkIfExists(path)
-    await unlinkIfExists(`${path}.pre-migrate-bak`)
+    const blobPath = canvasBlobPath(workspaceId, documentId)
+    await unlinkIfExists(blobPath)
+    await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
     for (const { id: versionId } of versionRows) {
       await unlinkIfExists(thumbnailPath(workspaceId, versionId))
     }
@@ -315,7 +315,7 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
     // reload from — a fresh create should not inherit a doc instance that
     // still holds the deleted canvas's history).
     const { evictDoc } = await import('./doc-cache.js')
-    evictDoc(workspaceId, slug)
+    evictDoc(workspaceId, path)
 
     return true
   })
@@ -333,16 +333,16 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
 // copying the source's kind to avoid.
 export async function getDocumentKind(
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<DocumentKind | null> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
   const row = await db
     .selectFrom('documents')
     .select(['kind'])
     .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('path', '=', path)
     .executeTakeFirst()
   return row?.kind ?? null
 }
@@ -356,38 +356,38 @@ export interface CompactResult {
 
 export async function compactCanvas(
   workspaceId: string,
-  slug: string,
+  path: string,
   versionStore: VersionStore,
 ): Promise<CompactResult> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
-  const documentId = await getCanvasIdBySlug(db, workspaceId, slug)
+  const documentId = await getCanvasIdBySlug(db, workspaceId, path)
   if (!documentId) {
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
-  const path = canvasBlobPath(workspaceId, documentId)
+  const blobPath = canvasBlobPath(workspaceId, documentId)
   let beforeBytes: number
   try {
-    beforeBytes = (await stat(path)).size
+    beforeBytes = (await stat(blobPath)).size
   } catch (error) {
     if (isMissingFileError(error)) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
-    throw corruptStoredData(path, `failed to stat canvas file (${errorMessage(error)})`)
+    throw corruptStoredData(blobPath, `failed to stat canvas file (${errorMessage(error)})`)
   }
 
-  const cut = await versionStore.earliestFrontiers(workspaceId, slug)
+  const cut = await versionStore.earliestFrontiers(workspaceId, path)
   if (!cut) {
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
   }
 
-  const doc = await loadCanvas(workspaceId, slug)
+  const doc = await loadCanvas(workspaceId, path)
   const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
   if (shallow.byteLength >= beforeBytes) {
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
   }
-  await writeFile(path, shallow)
+  await writeFile(blobPath, shallow)
   // Stamp the canvas row so the auto-Optimize loop can skip canvases that
   // have not changed since the last successful compaction, and so the UI
   // can surface "Auto-optimised Ns ago" without reading file mtimes.
@@ -403,7 +403,7 @@ export async function compactCanvas(
   // optimize_canvases route and the debounced auto-compact alike — gets
   // the same invariant for free.
   const { evictDoc } = await import('./doc-cache.js')
-  evictDoc(workspaceId, slug)
+  evictDoc(workspaceId, path)
   return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
 }
 
@@ -425,7 +425,7 @@ export async function readLatestCompactedAt(): Promise<number | null> {
 // wires that trigger to scheduleAutoCompact below; tests can register a spy
 // instead to verify call ordering. Per-canvas timers coalesce a burst of
 // edits into a single compaction once the editing pause exceeds debounceMs.
-type AutoCompactTrigger = (workspaceId: string, slug: string) => void
+type AutoCompactTrigger = (workspaceId: string, path: string) => void
 let autoCompactTrigger: AutoCompactTrigger | null = null
 
 // Shared by setAutoCompactTrigger(null) and disposeAutoCompact() so the two
@@ -451,7 +451,7 @@ const AUTO_COMPACT_DEBOUNCE_MS = 30_000
 const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 // Tracks compactCanvas() calls that have already fired but not yet settled.
-// A Set of the promises themselves (not a Map keyed by workspaceId/slug) is
+// A Set of the promises themselves (not a Map keyed by workspaceId/path) is
 // required: two overlapping compactions for the same key must both stay
 // tracked until they individually settle, since a keyed map with an
 // unconditional delete-on-settle would let a still-in-flight entry get
@@ -478,23 +478,23 @@ let disposingAutoCompactCount = 0
 
 export function scheduleAutoCompact(
   workspaceId: string,
-  slug: string,
+  path: string,
   versionStore: VersionStore,
   options: { debounceMs?: number } = {},
 ): void {
   if (disposingAutoCompactCount > 0) return
-  const key = `${workspaceId}/${slug}`
+  const key = `${workspaceId}/${path}`
   const existing = autoCompactTimers.get(key)
   if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
     autoCompactTimers.delete(key)
-    const compaction = compactCanvas(workspaceId, slug, versionStore)
+    const compaction = compactCanvas(workspaceId, path, versionStore)
       .then((result) => {
         if (result.compacted) {
           getLogger('auto-compact').info(
             {
               workspaceId,
-              slug,
+              path,
               beforeBytes: result.beforeBytes,
               afterBytes: result.afterBytes,
             },
@@ -503,7 +503,7 @@ export function scheduleAutoCompact(
         }
       })
       .catch((err) => {
-        getLogger('auto-compact').warning({ workspaceId, slug, err }, 'failed')
+        getLogger('auto-compact').warning({ workspaceId, path, err }, 'failed')
       })
       .finally(() => {
         inFlightAutoCompacts.delete(compaction)
@@ -572,11 +572,11 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
   return rows.map((r) => ({ workspaceId: r.id }))
 }
 
-// ── rename a canvas's slug ──
-// Updates only canvases.slug. branches/versions FK on documentId and the blob
+// ── rename a canvas's path ──
+// Updates only canvases.path. branches/versions FK on documentId and the blob
 // path also uses documentId, so none of that moves. Returns null (never
 // throws) for a missing source canvas, matching deleteCanvas's boolean-
-// shaped "already gone" handling; a rename onto an already-taken slug
+// shaped "already gone" handling; a rename onto an already-taken path
 // throws ConflictError instead of a raw unique-constraint error.
 export async function renameCanvasSlug(
   workspaceId: string,
@@ -584,8 +584,8 @@ export async function renameCanvasSlug(
   newSlug: string,
 ): Promise<{ documentId: string } | null> {
   validateWorkspaceId(workspaceId)
-  validateSlug(oldSlug)
-  validateSlug(newSlug)
+  validateDocumentPath(oldSlug)
+  validateDocumentPath(newSlug)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await dbReady()
     const documentId = await getCanvasIdBySlug(db, workspaceId, oldSlug)
@@ -597,15 +597,15 @@ export async function renameCanvasSlug(
     }
     await db
       .updateTable('documents')
-      .set({ slug: newSlug, updatedAt: Date.now() })
+      .set({ path: newSlug, updatedAt: Date.now() })
       .where('id', '=', documentId)
       .execute()
-    // Force the next getDoc() to reload under both slug keys. oldSlug: a
+    // Force the next getDoc() to reload under both path keys. oldSlug: a
     // caller still reading through it should lazily create a fresh canvas
     // rather than resurrect the renamed doc's cached instance. newSlug: a
-    // WS connect or update-route call against the destination slug before
+    // WS connect or update-route call against the destination path before
     // this rename can lazily cache an empty phantom doc there (getDoc()
-    // creates one for any slug with no DB row yet) — leaving that phantom
+    // creates one for any path with no DB row yet) — leaving that phantom
     // cached would shadow the just-renamed canvas's real content and the
     // next write through newSlug would persist the phantom over it.
     const { evictDoc } = await import('./doc-cache.js')
@@ -618,16 +618,16 @@ export async function renameCanvasSlug(
 // ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
-): Promise<Pick<CanvasSummary, 'slug' | 'id' | 'updatedAt' | 'kind'>[]> {
+): Promise<Pick<CanvasSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
     .selectFrom('documents')
-    .select(['slug', 'id', 'updatedAt', 'kind'])
+    .select(['path', 'id', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   return rows.map((r) => ({
-    slug: r.slug,
+    path: r.path,
     id: r.id,
     updatedAt: new Date(r.updatedAt).toISOString(),
     kind: r.kind ?? 'spatial',

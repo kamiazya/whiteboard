@@ -32,7 +32,7 @@ export interface SseTransport {
 
 export class SseBackend implements CanvasBackend {
   private readonly workspaceId: string
-  private readonly slug: string
+  private readonly path: string
   private readonly baseUrl: string
   private readonly transport: SseTransport | undefined
   private readonly docKey: string
@@ -44,17 +44,17 @@ export class SseBackend implements CanvasBackend {
 
   constructor(
     workspaceId: string,
-    slug: string,
+    path: string,
     baseUrl: string,
     transport?: SseTransport,
     streamSource?: SseStreamSource,
   ) {
     this.workspaceId = workspaceId
-    this.slug = slug
+    this.path = path
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.transport = transport
     this.streamSource = streamSource
-    this.docKey = `${workspaceId}/${slug}`
+    this.docKey = `${workspaceId}/${path}`
   }
 
   private get fetchFn(): typeof globalThis.fetch {
@@ -159,7 +159,7 @@ export class SseBackend implements CanvasBackend {
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
-    const res = await this.fetchFn(this.url(canvasFileApiUrl(this.workspaceId, this.slug, fileId)))
+    const res = await this.fetchFn(this.url(canvasFileApiUrl(this.workspaceId, this.path, fileId)))
     if (!res.ok) return null
     return res.blob()
   }
@@ -168,7 +168,7 @@ export class SseBackend implements CanvasBackend {
     newEntries: [string, BinaryFileDataLike][],
     onFileSuccess: (fileId: string) => void,
   ): Promise<void> {
-    await uploadFiles(newEntries, this.workspaceId, this.slug, onFileSuccess, this.transport?.fetch)
+    await uploadFiles(newEntries, this.workspaceId, this.path, onFileSuccess, this.transport?.fetch)
   }
 
   sendClientReady(): void {

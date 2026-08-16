@@ -49,7 +49,7 @@ describe('useCanvasNames', () => {
 
   it('derives local-mode names from the canvases array instead of fetching', () => {
     const daemonFetch = vi.fn()
-    const canvases: CanvasInfo[] = [{ slug: 'foo', updatedAt: '2026-01-01', name: 'Foo Local' }]
+    const canvases: CanvasInfo[] = [{ path: 'foo', updatedAt: '2026-01-01', name: 'Foo Local' }]
     const { result } = renderHook(() =>
       useCanvasNames({
         workspaceId: 'ws1',

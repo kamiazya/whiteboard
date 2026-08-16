@@ -1,13 +1,13 @@
 import { type ClientTextMessage, clientTextMessageSchema } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
-import { ValidationError, validateSlug, validateWorkspaceId } from '../validators.js'
+import { ValidationError, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 
 const log = getLogger('ws')
 
 export function parseWsTargetFromRequestUrl(
   rawUrl: string | undefined,
   host = 'localhost',
-): { workspaceId: string; slug: string } {
+): { workspaceId: string; path: string } {
   const url = new URL(rawUrl ?? '/', `http://${host}`)
   const parts = url.pathname.split('/')
   // The tail is a document path, so anything from one segment up is valid —
@@ -21,13 +21,16 @@ export function parseWsTargetFromRequestUrl(
   }
 
   const workspaceId = validateWorkspaceId(parts[2] ?? '')
-  let slug = ''
+  let path = ''
   try {
-    slug = parts.slice(3).map(decodeURIComponent).join('/')
+    path = parts.slice(3).map(decodeURIComponent).join('/')
   } catch {
-    throw new ValidationError('invalid_slug', `Invalid slug in websocket path "${url.pathname}"`)
+    throw new ValidationError(
+      'invalid_document_path',
+      `Invalid path in websocket path "${url.pathname}"`,
+    )
   }
-  return { workspaceId, slug: validateSlug(slug) }
+  return { workspaceId, path: validateDocumentPath(path) }
 }
 
 export function parseWsClientTextMessage(text: string): ClientTextMessage | null {

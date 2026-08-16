@@ -44,7 +44,7 @@ describe('SqliteDocumentIndex', () => {
         .values({
           id: 'Go1G4OcJKUBu',
           workspaceId: 'ws1',
-          slug: 'legacy-row',
+          path: 'legacy-row',
           kind: 'spatial',
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -79,7 +79,7 @@ describe('rows written before canvasIds were ULIDs', () => {
         .values({
           id: 'uH6qTx6Ai2hl',
           workspaceId: 'ws-legacy',
-          slug: 'pre-ulid-doc',
+          path: 'pre-ulid-doc',
           displayName: null,
           isPinned: 0,
           pinOrder: null,
@@ -150,7 +150,7 @@ describe('rows written before documents had a kind', () => {
         .values({
           id: documentId,
           workspaceId: 'ws-k',
-          slug: 'pre-kind-doc',
+          path: 'pre-kind-doc',
           displayName: 'Old diagram',
           isPinned: 0,
           pinOrder: null,

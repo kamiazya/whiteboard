@@ -5,7 +5,7 @@ export function sortCanvasesByRecency(canvases: readonly CanvasInfo[]): CanvasIn
   return [...canvases].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
 }
 
-// Matches by slug or by the caller-supplied display name, case-insensitively.
+// Matches by path or by the caller-supplied display name, case-insensitively.
 export function filterCanvasesBySearch(
   canvases: readonly CanvasInfo[],
   query: string,
@@ -14,8 +14,8 @@ export function filterCanvasesBySearch(
   const q = query.trim().toLowerCase()
   if (!q) return [...canvases]
   return canvases.filter((c) => {
-    const n = namesBySlug[c.slug]
-    return c.slug.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
+    const n = namesBySlug[c.path]
+    return c.path.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
   })
 }
 
@@ -25,11 +25,11 @@ export function derivePinnedCanvases(
   canvases: readonly CanvasInfo[],
   pinnedSlugs: readonly string[],
 ): CanvasInfo[] {
-  const bySlug = new Map(canvases.map((c) => [c.slug, c]))
+  const bySlug = new Map(canvases.map((c) => [c.path, c]))
   return pinnedSlugs.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
 }
 
-// Groups by slug prefix (the first "/"-delimited segment); canvases without
+// Groups by path prefix (the first "/"-delimited segment); canvases without
 // a "/" land in the ungrouped bucket (empty-string key). Group headers sort
 // alphabetically, with the ungrouped bucket always last. Canvases already
 // present in `pinnedSlugs` are excluded so they are not shown twice.
@@ -40,9 +40,9 @@ export function groupCanvases(
   const groups = new Map<string, CanvasInfo[]>()
   const UNGROUPED = ''
   for (const c of canvases) {
-    if (pinnedSlugs.has(c.slug)) continue
-    const ix = c.slug.indexOf('/')
-    const key = ix === -1 ? UNGROUPED : c.slug.slice(0, ix)
+    if (pinnedSlugs.has(c.path)) continue
+    const ix = c.path.indexOf('/')
+    const key = ix === -1 ? UNGROUPED : c.path.slice(0, ix)
     const arr = groups.get(key)
     if (arr) arr.push(c)
     else groups.set(key, [c])

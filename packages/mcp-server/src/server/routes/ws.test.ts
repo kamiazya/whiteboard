@@ -106,7 +106,7 @@ describe('handleWsUpgrade workspace existence', () => {
     expect(ws.sent).toEqual([])
   })
 
-  it('still serves an unknown slug inside a registered workspace', async () => {
+  it('still serves an unknown path inside a registered workspace', async () => {
     // Workspace-level honesty only: a missing SLUG in a real workspace keeps
     // the lazy empty-doc behavior, which is how opening a just-deleted canvas
     // degrades. Refusing that too would be a behavior change this fix does
@@ -197,7 +197,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
     const doc = new LoroDoc()
     const entry = {
       id: 'v1',
-      slug: 'canvas-a',
+      path: 'canvas-a',
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 1,
       auto: true,
@@ -724,7 +724,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
       const warnRecord = logs.records.find((r) => r.level === 'warning' && r.scope === 'ws')
       expect(warnRecord).toBeDefined()
       expect(warnRecord?.data?.workspaceId).toBe('session1')
-      expect(warnRecord?.data?.slug).toBe('canvas-malformed-2')
+      expect(warnRecord?.data?.path).toBe('canvas-malformed-2')
       expect(typeof warnRecord?.data?.updateBytes).toBe('number')
       const serialized = JSON.stringify(warnRecord)
       expect(serialized).not.toContain(canary)
@@ -854,7 +854,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
       const errorRecord = logs.records.find((r) => r.level === 'error' && r.scope === 'ws')
       expect(errorRecord).toBeDefined()
       expect(errorRecord?.data?.workspaceId).toBe('session1')
-      expect(errorRecord?.data?.slug).toBe('canvas-persist-fail')
+      expect(errorRecord?.data?.path).toBe('canvas-persist-fail')
       const serialized = JSON.stringify(errorRecord)
       expect(serialized).not.toContain('ws-elem')
       expect(serialized.toLowerCase()).not.toContain('token')
@@ -902,7 +902,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
       )
       expect(warningRecord).toBeDefined()
       expect(warningRecord?.data?.workspaceId).toBe('session1')
-      expect(warningRecord?.data?.slug).toBe('canvas-hook-throws')
+      expect(warningRecord?.data?.path).toBe('canvas-hook-throws')
     } finally {
       setOnPersistedForTests(undefined)
       logs.restore()

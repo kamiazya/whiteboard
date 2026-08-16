@@ -4,7 +4,7 @@ import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
 
 interface VersionThumbnailProps {
   workspaceId: string
-  slug: string
+  path: string
   versionId: string
   hasThumbnail: boolean
   className?: string
@@ -31,7 +31,7 @@ function Placeholder({ className }: { className?: string }) {
  */
 export function VersionThumbnail({
   workspaceId,
-  slug,
+  path,
   versionId,
   hasThumbnail,
   className,
@@ -41,9 +41,9 @@ export function VersionThumbnail({
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
-  const path = canvasesApiUrl(
+  const src = canvasesApiUrl(
     workspaceId,
-    slug,
+    path,
     `versions/${encodeURIComponent(versionId)}/thumbnail`,
   )
 
@@ -57,7 +57,7 @@ export function VersionThumbnail({
 
     async function load(): Promise<void> {
       try {
-        const res = await fetchFn(path)
+        const res = await fetchFn(src)
         if (!res.ok) {
           if (!cancelled) setFailed(true)
           return
@@ -83,17 +83,17 @@ export function VersionThumbnail({
       cancelled = true
       if (createdUrl) URL.revokeObjectURL(createdUrl)
     }
-    // path is derived purely from these identity fields; fetchFn is the
+    // `src` is derived purely from these identity fields; fetchFn is the
     // context-provided function and is not expected to change identity
     // across a poll-driven re-render of the same canvas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, slug, versionId, hasThumbnail, hasDaemonApi])
+  }, [workspaceId, path, versionId, hasThumbnail, hasDaemonApi])
 
   if (!hasThumbnail) return <Placeholder className={className} />
   if (!hasDaemonApi) {
     return (
       <img
-        src={path}
+        src={src}
         alt="Version thumbnail"
         className={className ?? 'w-full h-20 object-contain'}
         loading="lazy"

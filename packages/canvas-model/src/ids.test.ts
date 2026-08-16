@@ -36,7 +36,7 @@ describe('nodeIdSchema', () => {
 })
 
 describe('workspaceIdSchema', () => {
-  it('accepts existing path-safe-slug workspace ids used across the codebase', () => {
+  it('accepts existing path-safe-path workspace ids used across the codebase', () => {
     for (const id of ['workspace-a', 'ws_main', 'session-1', 'sid', 'M7lgM0WguBnkfP_1iOFtY']) {
       expect(workspaceIdSchema.safeParse(id).success).toBe(true)
     }

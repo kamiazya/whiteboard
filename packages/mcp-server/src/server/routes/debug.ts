@@ -5,7 +5,7 @@ import { countAliveNodes, countLegacyTombstones } from '../store/count-alive-nod
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 
 type CanvasInfo = {
-  slug: string
+  path: string
   totalElements: number
   visibleElements: number
   tombstones: number
@@ -17,13 +17,13 @@ type WorkspaceInfo = {
   canvases: CanvasInfo[]
 }
 
-async function summarizeCanvas(workspaceId: string, slug: string): Promise<CanvasInfo> {
-  const cached = peekDoc(workspaceId, slug)
-  const doc = cached ?? (await loadCanvas(workspaceId, slug))
+async function summarizeCanvas(workspaceId: string, path: string): Promise<CanvasInfo> {
+  const cached = peekDoc(workspaceId, path)
+  const doc = cached ?? (await loadCanvas(workspaceId, path))
   const visibleElements = countAliveNodes(doc)
   const tombstones = countLegacyTombstones(doc)
   return {
-    slug,
+    path,
     totalElements: visibleElements + tombstones,
     visibleElements,
     tombstones,
@@ -58,7 +58,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
       workspaces.map(async ({ workspaceId }) => {
         const canvases = await listCanvases(workspaceId)
         const canvasInfos = await Promise.all(
-          canvases.map(({ slug }) => summarizeCanvas(workspaceId, slug)),
+          canvases.map(({ path }) => summarizeCanvas(workspaceId, path)),
         )
         return { workspaceId, canvases: canvasInfos }
       }),

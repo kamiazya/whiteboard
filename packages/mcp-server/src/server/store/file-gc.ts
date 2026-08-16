@@ -81,7 +81,7 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 // represented here: that failure means the persisted tipFrontiers bytes are
 // corrupt (no retry repairs it), so it throws corruptStoredData directly
 // instead of being collected as a skipped, retryable target.
-type SkippedScanTarget = { kind: 'version'; slug: string; versionId: string; cause: unknown }
+type SkippedScanTarget = { kind: 'version'; path: string; versionId: string; cause: unknown }
 
 // Walk every canvas in the workspace (live state, plus past versions and
 // every branch tip) and collect referenced fileIds.
@@ -131,11 +131,11 @@ async function collectReferencedFileIds(
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
   const canvases = await listCanvases(workspaceId)
-  for (const { slug } of canvases) {
-    const live = await loadCanvas(workspaceId, slug)
+  for (const { path } of canvases) {
+    const live = await loadCanvas(workspaceId, path)
     collectFromDoc(live, referenced)
 
-    const { branches } = await loadCanvasBranches(workspaceId, slug)
+    const { branches } = await loadCanvasBranches(workspaceId, path)
     for (const branch of branches) {
       // Every branch tip (including HEAD's, which is redundant with the
       // live scan above but harmless) is a live reference set — a file
@@ -152,18 +152,18 @@ async function collectReferencedFileIds(
         // as corrupt_stored_data (500) instead of folding it into the
         // retryable incomplete-scan (503) path.
         log.error(
-          { workspaceId, slug, branch: branch.name, err },
+          { workspaceId, path, branch: branch.name, err },
           'corrupt branch tipFrontiers; refusing to purge',
         )
         throw corruptStoredData(
-          `${workspaceId}/${slug} branch "${branch.name}"`,
+          `${workspaceId}/${path} branch "${branch.name}"`,
           `tipFrontiers could not be decoded or checked out (${err instanceof Error ? err.message : String(err)})`,
         )
       }
     }
 
     if (!versionStore) continue
-    const versions = await versionStore.list(workspaceId, slug)
+    const versions = await versionStore.list(workspaceId, path)
     for (const v of versions) {
       // load() forks the live doc internally and checks out the version's
       // frontiers. If a version cannot be inspected (missing frontier
@@ -181,8 +181,8 @@ async function collectReferencedFileIds(
         }
         collectFromDoc(past, referenced)
       } catch (err) {
-        log.warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
-        skipped.push({ kind: 'version', slug, versionId: v.id, cause: err })
+        log.warning({ workspaceId, path, versionId: v.id, err }, 'skipped version')
+        skipped.push({ kind: 'version', path, versionId: v.id, cause: err })
       }
     }
   }

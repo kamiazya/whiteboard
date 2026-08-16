@@ -138,30 +138,30 @@ function connectAndCaptureSnapshot(
 
 // How long to wait for the WS persistence path to signal completion before
 // failing with a clear diagnostic instead of hanging until Vitest's global
-// test timeout (which reports no information about which (workspaceId, slug)
+// test timeout (which reports no information about which (workspaceId, path)
 // never arrived).
 const PERSISTED_SIGNAL_TIMEOUT_MS = 5_000
 
 // Resolves once the WS persistence path signals it has finished saving for
-// this exact (workspaceId, slug) — a deterministic completion event instead
+// this exact (workspaceId, path) — a deterministic completion event instead
 // of polling loadCanvas() until an expectation happens to pass. Rejects if
 // that signal never arrives within PERSISTED_SIGNAL_TIMEOUT_MS (e.g.
 // saveCanvas throws, or a regression changes/drops the callback args), so a
 // broken persistence path fails fast with a clear message instead of hanging.
-function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
+function waitForPersisted(workspaceId: string, path: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       setOnPersistedForTests(undefined)
       reject(
         new Error(
           `waitForPersisted timed out after ${PERSISTED_SIGNAL_TIMEOUT_MS}ms waiting for ` +
-            `(workspaceId=${workspaceId}, slug=${slug}) to persist`,
+            `(workspaceId=${workspaceId}, path=${path}) to persist`,
         ),
       )
     }, PERSISTED_SIGNAL_TIMEOUT_MS)
 
     setOnPersistedForTests((persistedWorkspaceId, persistedSlug) => {
-      if (persistedWorkspaceId === workspaceId && persistedSlug === slug) {
+      if (persistedWorkspaceId === workspaceId && persistedSlug === path) {
         clearTimeout(timer)
         setOnPersistedForTests(undefined)
         resolve()

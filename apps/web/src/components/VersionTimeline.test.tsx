@@ -54,7 +54,7 @@ function mkVersionsResponse(): Response {
       versions: [
         {
           id: 'v-new',
-          slug: 'canvas-a',
+          path: 'canvas-a',
           createdAt: '2026-04-23T02:00:00Z',
           elementCount: 5,
           auto: true,
@@ -68,7 +68,7 @@ function mkVersionsResponse(): Response {
         },
         {
           id: 'v-mid',
-          slug: 'canvas-a',
+          path: 'canvas-a',
           createdAt: '2026-04-23T01:00:00Z',
           elementCount: 3,
           auto: true,
@@ -82,7 +82,7 @@ function mkVersionsResponse(): Response {
         },
         {
           id: 'v-feat',
-          slug: 'canvas-a',
+          path: 'canvas-a',
           createdAt: '2026-04-23T01:30:00Z',
           elementCount: 4,
           auto: true,
@@ -130,7 +130,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     // Give the versions fetch time to land.
     await waitFor(() => {
@@ -147,7 +147,7 @@ describe('VersionTimeline', () => {
     // Switching canvases with the dialog open must not leave the previous
     // canvas's version staged — confirming would POST that version id to the
     // NEW canvas's restore endpoint.
-    const { rerender } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -155,7 +155,7 @@ describe('VersionTimeline', () => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
     })
 
-    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-b" />)
+    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-b" />)
     await waitFor(() => {
       expect(screen.queryByText('Restore this version?')).toBeNull()
     })
@@ -163,7 +163,7 @@ describe('VersionTimeline', () => {
 
   it('refetches versions when refreshSignal changes (e.g. after a manual save)', async () => {
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+      <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
     await screen.findByText('🤖 Assistant')
 
@@ -172,7 +172,7 @@ describe('VersionTimeline', () => {
       String(reqInput).includes('/versions'),
     ).length
 
-    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={1} />)
+    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={1} />)
 
     await waitFor(() => {
       const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -184,7 +184,7 @@ describe('VersionTimeline', () => {
 
   it('does not refetch when re-rendered with an unchanged refreshSignal', async () => {
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+      <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
     await screen.findByText('🤖 Assistant')
 
@@ -193,7 +193,7 @@ describe('VersionTimeline', () => {
       String(reqInput).includes('/versions'),
     ).length
 
-    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />)
+    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />)
 
     const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
       String(reqInput).includes('/versions'),
@@ -215,7 +215,7 @@ describe('VersionTimeline', () => {
               versions: [
                 {
                   id: 'v-skew',
-                  slug: 'canvas-a',
+                  path: 'canvas-a',
                   createdAt: future,
                   elementCount: 1,
                   auto: true,
@@ -232,7 +232,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/0s ago/)).toBeTruthy()
     })
@@ -240,7 +240,7 @@ describe('VersionTimeline', () => {
   })
 
   it('filters cards and mini-graph rows to the active branch', async () => {
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     // Only v-new and v-mid should render; v-feat is filtered out with the feature branch.
     await waitFor(() => {
@@ -259,7 +259,7 @@ describe('VersionTimeline', () => {
   })
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     // "variation -> feature" should appear on the v-mid row.
     await waitFor(() => {
       expect(screen.getByText(/variation → feature/)).toBeTruthy()
@@ -267,7 +267,7 @@ describe('VersionTimeline', () => {
   })
 
   it('renders operator affordances and keeps the lane color on the branch color', async () => {
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
       expect(screen.getByText('🤖 Assistant')).toBeTruthy()
@@ -300,7 +300,7 @@ describe('VersionTimeline', () => {
               versions: [
                 {
                   id: 'v-legacy',
-                  slug: 'canvas-a',
+                  path: 'canvas-a',
                   createdAt: '2026-04-23T02:00:00Z',
                   elementCount: 2,
                   auto: true,
@@ -317,7 +317,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText('⚙ System')).toBeTruthy()
     })
@@ -359,14 +359,14 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/No versions on «feature» yet/i)).toBeTruthy()
     })
   })
 
   it('scroll container can shrink inside the fixed-height history popover', async () => {
-    const { container } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
       expect(screen.getByText('🤖 Assistant')).toBeTruthy()
@@ -395,7 +395,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -434,7 +434,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -465,7 +465,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -505,7 +505,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -553,7 +553,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
     const row = await screen.findByText('🤖 Assistant')
     fireEvent.click(row.closest('button')!)
@@ -625,7 +625,7 @@ describe('VersionTimeline HEAD polling', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/5 els/)).toBeTruthy()
     })
@@ -659,7 +659,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
         versions: [
           {
             id: 'v-1',
-            slug: 'canvas-a',
+            path: 'canvas-a',
             createdAt,
             elementCount: 1,
             auto: true,
@@ -689,7 +689,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 30_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/30s ago/)).toBeTruthy()
     })
@@ -701,7 +701,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 5 * 60_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/5m ago/)).toBeTruthy()
     })
@@ -713,7 +713,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 3 * 3600_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/3h ago/)).toBeTruthy()
     })
@@ -725,7 +725,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 2 * 86_400_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       // 2026-04-21 00:00 local time rendered as M/D HH:MM.
       expect(screen.getByText(/4\/21 \d{2}:\d{2}/)).toBeTruthy()
@@ -735,7 +735,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
   it('falls back to the raw ISO string for an invalid createdAt', async () => {
     stubFetchWithVersionAt('not-a-real-date')
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/not-a-real-date/)).toBeTruthy()
     })
@@ -756,7 +756,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
         versions: [
           {
             id: 'v-thumb',
-            slug: 'canvas-a',
+            path: 'canvas-a',
             createdAt: '2026-04-23T02:00:00Z',
             elementCount: 5,
             auto: true,
@@ -783,7 +783,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </DaemonApiContext.Provider>,
     )
 
@@ -822,7 +822,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </DaemonApiContext.Provider>,
     )
 
@@ -861,7 +861,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </DaemonApiContext.Provider>,
     )
 
@@ -891,7 +891,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </DaemonApiContext.Provider>,
     )
 
@@ -912,7 +912,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
     })
     vi.stubGlobal('fetch', underlyingFetch)
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await screen.findByText('🤖 Assistant')
     expect(document.querySelector('img')).not.toBeNull()
@@ -930,7 +930,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
               versions: [
                 {
                   id: 'v-manual',
-                  slug: 'canvas-a',
+                  path: 'canvas-a',
                   createdAt: '2026-04-23T02:00:00Z',
                   elementCount: 5,
                   auto: false,
@@ -951,7 +951,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </DaemonApiContext.Provider>,
     )
 
@@ -978,7 +978,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith('versions request threw', expect.any(TypeError))
@@ -1001,7 +1001,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith(
@@ -1012,7 +1012,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     expect(screen.getByText(/No versions on/)).toBeTruthy()
   })
 
-  it('clears the previous canvas versions immediately when workspaceId/slug changes', async () => {
+  it('clears the previous canvas versions immediately when workspaceId/path changes', async () => {
     // canvas-new's /versions request hangs for the rest of the test, so any
     // row rendered after the switch can only be the stale canvas-old data —
     // unless the reset-on-change effect cleared it.
@@ -1032,7 +1032,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { rerender } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-old" />)
+    const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-old" />)
 
     // Load canvas-old's versions first so there is stale data to leak.
     await waitFor(() => {
@@ -1042,7 +1042,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     // Switching to canvas-new (same component instance, no remount key) must
     // clear that stale data immediately, even though canvas-new's own
     // /versions request never resolves here.
-    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-new" />)
+    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-new" />)
     await waitFor(() => {
       expect(screen.queryByText('🤖 Assistant')).toBeNull()
     })

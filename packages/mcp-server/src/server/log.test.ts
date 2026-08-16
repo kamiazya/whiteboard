@@ -72,14 +72,14 @@ describe('getLogger (pino-backed)', () => {
 
   it('emits a structured record via captureLogsForTests with scope, level, msg, and bindings as data', () => {
     const log = getLogger('canvas-store')
-    log.warning({ workspaceId: 'ws_1', slug: 'a' }, 'skipped corrupt row')
+    log.warning({ workspaceId: 'ws_1', path: 'a' }, 'skipped corrupt row')
 
     expect(cap.records).toHaveLength(1)
     const record = cap.records[0]
     expect(record.level).toBe('warning')
     expect(record.scope).toBe('canvas-store')
     expect(record.msg).toBe('skipped corrupt row')
-    expect(record.data).toMatchObject({ workspaceId: 'ws_1', slug: 'a' })
+    expect(record.data).toMatchObject({ workspaceId: 'ws_1', path: 'a' })
     expect(typeof record.time).toBe('string')
   })
 
@@ -201,10 +201,10 @@ describe('redaction', () => {
 
   it('leaves ordinary diagnostic fields untouched so redaction does not silently eat normal logs', () => {
     const log = getLogger('redact-test')
-    log.warning({ workspaceId: 'ws_1', slug: 'a', durationMs: 12 }, 'normal diagnostic record')
+    log.warning({ workspaceId: 'ws_1', path: 'a', durationMs: 12 }, 'normal diagnostic record')
 
     const record = cap.records[0]
-    expect(record.data).toMatchObject({ workspaceId: 'ws_1', slug: 'a', durationMs: 12 })
+    expect(record.data).toMatchObject({ workspaceId: 'ws_1', path: 'a', durationMs: 12 })
   })
 })
 
@@ -223,7 +223,7 @@ describe('default destination', () => {
 
   it('writes one JSON line per record to process.stderr (safe for stdio MCP)', () => {
     const log = getLogger('canvas')
-    log.info({ slug: 'a' }, 'hello')
+    log.info({ path: 'a' }, 'hello')
 
     expect(writeSpy).toHaveBeenCalled()
     const written = String(writeSpy!.mock.calls[0][0])
@@ -233,7 +233,7 @@ describe('default destination', () => {
       level: 'info',
       scope: 'canvas',
       msg: 'hello',
-      slug: 'a',
+      path: 'a',
     })
   })
 

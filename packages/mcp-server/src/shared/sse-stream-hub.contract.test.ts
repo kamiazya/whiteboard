@@ -48,17 +48,17 @@ function createHarness(): SseStreamSourceHarness {
     // JSON parse below: its body is raw update bytes, not JSON.
     const canvasSnapshot = /\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/.exec(url)
     if (canvasSnapshot) {
-      const [, workspaceId, slug] = canvasSnapshot
-      const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(slug as string)}`
+      const [, workspaceId, path] = canvasSnapshot
+      const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`
       const bytes = daemonState.get(doc)
       if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
       return new Response(bytes.slice().buffer as ArrayBuffer, { status: 200 })
     }
     const canvasUpdate = /\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
-      const [, workspaceId, slug] = canvasUpdate
+      const [, workspaceId, path] = canvasUpdate
       daemonWrites.push({
-        doc: `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(slug as string)}`,
+        doc: `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`,
         body: new Uint8Array(init?.body as ArrayBuffer),
       })
       return new Response('{}', { status: 200 })

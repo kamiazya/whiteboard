@@ -46,16 +46,16 @@ afterEach(() => {
 })
 
 describe('createDaemonFileAdapter', () => {
-  it('treats an asset: reference as an image and anything else as a canvas slug', () => {
+  it('treats an asset: reference as an image and anything else as a canvas path', () => {
     const adapter = createDaemonFileAdapter({
       daemonFetch: vi.fn(),
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     // The SAME convention browser-local uses, so a canvas keeps meaning the
-    // same thing in both modes. A daemon slug can never collide: slugs match
+    // same thing in both modes. A daemon path can never collide: paths match
     // /^[a-zA-Z0-9_-]+$/ and so cannot contain a colon.
     expect(adapter.isImageRef('asset:abc')).toBe(true)
     expect(adapter.isImageRef('sibling-canvas')).toBe(false)
@@ -69,7 +69,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     const url = await adapter.loadImageUrl('asset:file-abc')
@@ -84,7 +84,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     // Totality: a broken reference keeps the card, it never takes the page down.
@@ -97,7 +97,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     const file = new File(['xy'], 'x.png', { type: 'image/png' })
@@ -118,7 +118,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     // Returning the ref anyway would put a node on the canvas pointing at
@@ -134,7 +134,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     const loaded = await adapter.loadDocument('sibling')
@@ -152,7 +152,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     const loaded = await adapter.loadDocument('notes')
@@ -166,7 +166,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
@@ -180,19 +180,19 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
   })
 
-  it('percent-encodes a slug on its way into the path', async () => {
+  it('percent-encodes a path on its way into the path', async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
     })
 
     await adapter.loadDocument('a b')
@@ -202,13 +202,13 @@ describe('createDaemonFileAdapter', () => {
 })
 
 describe('createDaemonFileAdapter — id references', () => {
-  it('resolves an id reference to its CURRENT slug through the injected lookup', async () => {
+  it('resolves an id reference to its CURRENT path through the injected lookup', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('hello') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
       resolveRefSlug: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
     })
     const loaded = await adapter.loadDocument('nanoid-123')
@@ -218,19 +218,19 @@ describe('createDaemonFileAdapter — id references', () => {
     )
   })
 
-  it('falls back to treating an unknown reference as a legacy slug', async () => {
+  it('falls back to treating an unknown reference as a legacy path', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('legacy') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      slug: SLUG,
+      path: SLUG,
       resolveRefSlug: () => undefined,
     })
-    const loaded = await adapter.loadDocument('old-slug-ref')
+    const loaded = await adapter.loadDocument('old-path-ref')
     expect(loaded).toBeDefined()
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/canvas/old-slug-ref/snapshot',
+      '/api/w/ws-1/canvas/old-path-ref/snapshot',
     )
   })
 })

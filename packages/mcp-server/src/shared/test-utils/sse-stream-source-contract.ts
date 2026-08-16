@@ -195,7 +195,7 @@ export function sseStreamSourceContract(
     h.cleanup()
   })
 
-  it('gets a pushed update to the daemon, addressed by workspace and slug', async () => {
+  it('gets a pushed update to the daemon, addressed by workspace and path', async () => {
     // Both implementations reach the daemon, by different routes — the hub
     // posts, the worker-backed source hands the bytes to a replica that posts
     // — and a caller cannot tell which it has. If either stopped arriving, an

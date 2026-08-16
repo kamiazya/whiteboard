@@ -62,7 +62,7 @@ describe('exportCanvasHeadless', () => {
 
     await exportCanvasHeadless({
       workspaceId: 'ws_a',
-      slug: 'design',
+      path: 'design',
       options: { padding: 20, scale: 2, theme: 'dark', frameId: 'ignored', minFontPx: 99 },
     })
 
@@ -79,12 +79,12 @@ describe('exportCanvasHeadless', () => {
     const doc = spatialTextDoc('n1', 'hello')
     await saveCanvas('ws_ignored', 'design', doc)
 
-    await exportCanvasHeadless({ workspaceId: 'ws_ignored', slug: 'design' })
+    await exportCanvasHeadless({ workspaceId: 'ws_ignored', path: 'design' })
     const withoutIgnored = renderSpy.mock.calls[0][1]
 
     await exportCanvasHeadless({
       workspaceId: 'ws_ignored',
-      slug: 'design',
+      path: 'design',
       options: { frameId: 'frame-1', minFontPx: 42 },
     })
     const withIgnored = renderSpy.mock.calls[1][1]
@@ -104,7 +104,7 @@ describe('exportCanvasHeadless', () => {
 
     const capture = captureLogsForTests('debug')
     try {
-      const result = await exportCanvasHeadless({ workspaceId: 'ws_legacy', slug: 'design' })
+      const result = await exportCanvasHeadless({ workspaceId: 'ws_legacy', path: 'design' })
       expect(result.png.length).toBeGreaterThan(0)
       expect(renderSpy).toHaveBeenCalledTimes(1)
       const [canvas] = renderSpy.mock.calls[0] as [{ nodes: unknown[] }]
@@ -115,7 +115,7 @@ describe('exportCanvasHeadless', () => {
           r.level === 'warning' &&
           r.msg.includes('legacy Excalidraw elements') &&
           r.data?.workspaceId === 'ws_legacy' &&
-          r.data?.slug === 'design',
+          r.data?.path === 'design',
       )
       expect(warnings).toHaveLength(1)
     } finally {
@@ -160,7 +160,7 @@ describe('exportCanvasHeadlessSvg', () => {
     const doc = spatialTextDoc('n1', 'hello')
     await saveCanvas('ws_svg', 'design', doc)
 
-    const result = await exportCanvasHeadlessSvg({ workspaceId: 'ws_svg', slug: 'design' })
+    const result = await exportCanvasHeadlessSvg({ workspaceId: 'ws_svg', path: 'design' })
 
     expect(renderSvgSpy).toHaveBeenCalledTimes(1)
     expect(result.svg).toBe('<svg><rect/></svg>')

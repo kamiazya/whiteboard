@@ -13,7 +13,7 @@ import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import {
-  validateSlug,
+  validateDocumentPath,
   validateVersionId,
   validateWorkspaceId,
   validationErrorBody,
@@ -68,7 +68,7 @@ async function reconcileCommitSaveBroadcast(
   }
 }
 
-// POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
+// POST /api/workspaces/:workspaceId/canvases/:path/versions/:id/restore
 //
 // Two modes share this endpoint:
 //
@@ -85,7 +85,7 @@ async function reconcileCommitSaveBroadcast(
 //      already exists, `overwrite: true` is required, and the restore goes
 //      through the SAME reconcile-onto-the-live-doc path as mode 1, applied
 //      to the target's live doc instead of the source's — never a straight
-//      file replacement. `targetSlug === slug` collapses into mode 1.
+//      file replacement. `targetSlug === path` collapses into mode 1.
 //      Without `overwrite`, an existing target returns 409 `output_exists`.
 //      Replaces the deleted `checkpoint_restore` flow.
 export function createRestoreRouter(options: RestoreRouterOptions) {
@@ -96,7 +96,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
     app,
     'post',
     ['versions', ':id', 'restore'],
-    async (c, workspaceId, slug, params) => {
+    async (c, workspaceId, path, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -127,26 +127,26 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         // Every doc read + save below runs inside one workspace-lock hold.
         // getDoc() alone is unlocked, so a concurrent delete/rename that runs
         // its whole lock-protected section between an unlocked read here and
-        // the eventual saveCanvas() would find no row left at that slug and
+        // the eventual saveCanvas() would find no row left at that path and
         // silently insert a brand-new phantom canvas (or resurrect content
-        // onto a slug the delete just cleared). Both the in-place branch and
-        // the targetSlug-overwrite branch have that getDoc(slug)->saveCanvas(slug)
+        // onto a path the delete just cleared). Both the in-place branch and
+        // the targetSlug-overwrite branch have that getDoc(path)->saveCanvas(path)
         // shape, so one lock around the whole handler body closes it for both
         // — mirrors live-doc.ts's POST /update handler.
         return await withWorkspaceWriteLock(workspaceId, async () => {
-          const doc = await getDoc(workspaceId, slug)
+          const doc = await getDoc(workspaceId, path)
           const past = await versionStore.load(workspaceId, id, doc)
           if (!past) {
             return c.json({ error: 'not_found' }, 404)
           }
 
           // Restore-as-new-canvas / overwrite-existing-canvas branch.
-          // targetSlug === slug is the same document as the in-place restore
+          // targetSlug === path is the same document as the in-place restore
           // below, so route it there directly instead of forcing callers to
           // pass overwrite:true against their own canvas.
-          if (targetSlug !== undefined && targetSlug !== slug) {
+          if (targetSlug !== undefined && targetSlug !== path) {
             try {
-              validateSlug(targetSlug)
+              validateDocumentPath(targetSlug)
             } catch (err) {
               const body = validationErrorBody(err)
               if (body) return c.json(body, 400)
@@ -168,7 +168,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               // The version id belongs to the SOURCE canvas's history, so its
               // label lives in the source's version list even though we are
               // about to reconcile it onto the target.
-              const all = await versionStore.list(workspaceId, slug)
+              const all = await versionStore.list(workspaceId, path)
               const label = all.find((v) => v.id === id)?.label
               const targetDoc = await getDoc(workspaceId, targetSlug)
               // The merged content is the source's own shape (spatial nodes/edges
@@ -176,7 +176,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               // below — the target's stored kind must follow it or a kind-aware
               // consumer (editor routing) opens the overwritten canvas with the
               // wrong editor.
-              const sourceKind = await getDocumentKind(workspaceId, slug)
+              const sourceKind = await getDocumentKind(workspaceId, path)
               await reconcileCommitSaveBroadcast(
                 workspaceId,
                 targetSlug,
@@ -198,7 +198,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
             // carry the source's own kind rather than falling back to the
             // saveCanvas default.
             try {
-              const sourceKind = await getDocumentKind(workspaceId, slug)
+              const sourceKind = await getDocumentKind(workspaceId, path)
               await saveCanvas(workspaceId, targetSlug, past, {
                 overwrite: false,
                 ...(sourceKind !== null ? { kind: sourceKind } : {}),
@@ -216,7 +216,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               throw err
             }
             // Guard against a stale cache entry from a since-deleted canvas at
-            // this slug being served instead of the just-written snapshot.
+            // this path being served instead of the just-written snapshot.
             evictDoc(workspaceId, targetSlug)
             return c.json({
               documentId: `${workspaceId}/${targetSlug}`,
@@ -225,9 +225,9 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           }
 
           // In-place reconcile branch (default).
-          const all = await versionStore.list(workspaceId, slug)
+          const all = await versionStore.list(workspaceId, path)
           const label = all.find((v) => v.id === id)?.label
-          await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
+          await reconcileCommitSaveBroadcast(workspaceId, path, doc, past, label)
           return c.json({ ok: true })
         })
       } catch (err) {

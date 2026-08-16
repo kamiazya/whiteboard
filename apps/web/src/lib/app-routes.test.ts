@@ -26,8 +26,8 @@ describe('app-routes', () => {
     expect(canvasPath('w1', 'main')).toBe('/w/w1/canvas/main')
   })
 
-  it('percent-encodes the workspace, and the slug per segment', () => {
-    expect(canvasPath('w 1', 'my/slug')).toBe('/w/w%201/canvas/my/slug')
+  it('percent-encodes the workspace, and the path per segment', () => {
+    expect(canvasPath('w 1', 'my/path')).toBe('/w/w%201/canvas/my/path')
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
@@ -50,7 +50,7 @@ describe('parseDaemonRoute', () => {
     expect(parseDaemonRoute('/w/w1/canvas/main')).toEqual({
       kind: 'canvas',
       workspaceId: 'w1',
-      slug: 'main',
+      path: 'main',
     })
   })
 
@@ -62,12 +62,12 @@ describe('parseDaemonRoute', () => {
     expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toEqual({
       kind: 'canvas',
       workspaceId: 'w1',
-      slug: 'notes/2026/plan',
+      path: 'notes/2026/plan',
     })
   })
 
   it('round-trips a nested path through daemonRoutePath', () => {
-    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', slug: 'notes/2026/plan' })).toEqual(
+    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', path: 'notes/2026/plan' })).toEqual(
       '/w/w1/canvas/notes/2026/plan',
     )
   })
@@ -76,7 +76,7 @@ describe('parseDaemonRoute', () => {
     expect(parseDaemonRoute('/w/w1/canvas/a%20b/c%20d')).toEqual({
       kind: 'canvas',
       workspaceId: 'w1',
-      slug: 'a b/c d',
+      path: 'a b/c d',
     })
     expect(canvasPath('w1', 'a b/c d')).toBe('/w/w1/canvas/a%20b/c%20d')
   })
@@ -116,7 +116,7 @@ describe('daemonRoutePath', () => {
   })
 
   it('builds a canvas path', () => {
-    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', slug: 'main' })).toBe(
+    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', path: 'main' })).toBe(
       '/w/w1/canvas/main',
     )
   })

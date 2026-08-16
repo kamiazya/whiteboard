@@ -1,7 +1,7 @@
 import { Loro } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
-import { importOneCanvas, mergeToSnapshot, slugifyCanvasName } from './import-browser-local.js'
+import { importOneCanvas, mergeToSnapshot, toPathSegment } from './import-browser-local.js'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -10,29 +10,29 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-describe('slugifyCanvasName', () => {
+describe('toPathSegment', () => {
   it('lowercases and hyphenates', () => {
-    expect(slugifyCanvasName('My Canvas!')).toBe('my-canvas')
+    expect(toPathSegment('My Canvas!')).toBe('my-canvas')
   })
 
   it('strips leading and trailing hyphens', () => {
-    expect(slugifyCanvasName('--hello--')).toBe('hello')
+    expect(toPathSegment('--hello--')).toBe('hello')
   })
 
   it('collapses runs of invalid characters into a single hyphen', () => {
-    expect(slugifyCanvasName('a!!!b   c')).toBe('a-b-c')
+    expect(toPathSegment('a!!!b   c')).toBe('a-b-c')
   })
 
   it('falls back to "canvas" for empty/all-invalid input', () => {
-    expect(slugifyCanvasName('')).toBe('canvas')
-    expect(slugifyCanvasName('!!!')).toBe('canvas')
+    expect(toPathSegment('')).toBe('canvas')
+    expect(toPathSegment('!!!')).toBe('canvas')
   })
 
-  it('always produces output matching the server slug charset (letters/digits/hyphen, non-empty, no leading/trailing hyphen)', () => {
+  it('always produces output matching the server path charset (letters/digits/hyphen, non-empty, no leading/trailing hyphen)', () => {
     const samples = ['日本語', '  spaced  ', 'a.b.c', 'UPPER_case-1', '---', '123']
     for (const sample of samples) {
-      const slug = slugifyCanvasName(sample)
-      expect(slug).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
+      const path = toPathSegment(sample)
+      expect(path).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
     }
   })
 })
@@ -80,7 +80,7 @@ describe('importOneCanvas', () => {
   it('creates the canvas and pushes the merged snapshot via the injected fetch', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'my-canvas' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
     // workspaceId deliberately needs percent-encoding: the shared api-contracts
@@ -95,7 +95,7 @@ describe('importOneCanvas', () => {
       loroLoad: loroOkResult(),
     })
 
-    expect(result).toEqual({ kind: 'ok', slug: 'my-canvas' })
+    expect(result).toEqual({ kind: 'ok', path: 'my-canvas' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     const encodedWs = encodeURIComponent('ws 1#x')
@@ -105,7 +105,7 @@ describe('importOneCanvas', () => {
     // snapshot's kind — a markdown canvas migrated with a defaulted
     // 'spatial' kind opens in the wrong editor with no way to correct it.
     expect(JSON.parse(createInit.body as string)).toEqual({
-      slug: 'my-canvas',
+      path: 'my-canvas',
       kind: 'markdown',
     })
 
@@ -139,7 +139,7 @@ describe('importOneCanvas', () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse({ title: 'exists' }, 409))
       .mockResolvedValueOnce(jsonResponse({ title: 'exists' }, 409))
-      .mockResolvedValueOnce(jsonResponse({ slug: 'my-canvas-3' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas-3' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
     const result = await importOneCanvas({
@@ -151,13 +151,13 @@ describe('importOneCanvas', () => {
       loroLoad: loroOkResult(),
     })
 
-    expect(result).toEqual({ kind: 'ok', slug: 'my-canvas-3' })
+    expect(result).toEqual({ kind: 'ok', path: 'my-canvas-3' })
     expect(fetchMock).toHaveBeenCalledTimes(4)
-    const slugs = [0, 1, 2].map((i) => {
+    const paths = [0, 1, 2].map((i) => {
       const [, init] = fetchMock.mock.calls[i] as [string, RequestInit]
-      return (JSON.parse(init.body as string) as { slug: string }).slug
+      return (JSON.parse(init.body as string) as { path: string }).path
     })
-    expect(slugs).toEqual(['my-canvas', 'my-canvas-2', 'my-canvas-3'])
+    expect(paths).toEqual(['my-canvas', 'my-canvas-2', 'my-canvas-3'])
   })
 
   it('reports a clean failure with zero update calls when all 3 create attempts 409', async () => {
@@ -179,7 +179,7 @@ describe('importOneCanvas', () => {
   it('reports failure without throwing on a network error/500 during update', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'my-canvas' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas' }))
       .mockResolvedValueOnce(new Response('boom', { status: 500 }))
 
     const result = await importOneCanvas({
@@ -197,7 +197,7 @@ describe('importOneCanvas', () => {
   it('reports failure when the update response does not parse under updateCanvasResponseSchema', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ slug: 'my-canvas' }))
+      .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas' }))
       .mockResolvedValueOnce(jsonResponse({ ok: false }))
 
     const result = await importOneCanvas({

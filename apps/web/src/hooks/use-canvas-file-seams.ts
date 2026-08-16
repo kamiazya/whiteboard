@@ -264,13 +264,13 @@ export function toFacetCard(
   // The heading falls back to the REFERENCE, not to `type`. A document's name
   // lives in the workspace now (ADR-0009 decision 2), so one written through
   // wb_document_set stores no `title` facet at all — and `type` as a heading
-  // made every such card read "note", identifying nothing. `ref` is the slug,
+  // made every such card read "note", identifying nothing. `ref` is the path,
   // which is the fallback this model uses wherever a name is absent.
   //
   // A stored `title` still wins: browser-local canvases keep writing one, and
   // both paths come through this function.
   //
-  // ponytail: the slug, because the daemon's canvas summary carries no
+  // ponytail: the path, because the daemon's canvas summary carries no
   // display name yet (see DaemonCanvasPage's note). Once it does, the real
   // name goes here and this fallback moves behind it.
   return { title: facets.title ?? ref, rows }

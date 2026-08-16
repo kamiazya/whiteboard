@@ -13,13 +13,13 @@ export const workspaceNamesSchema = z.object({
 })
 
 export const createCanvasRequestSchema = z.object({
-  slug: z.string().trim().min(1),
-  // Defaulted so every existing caller (which posts { slug } alone) keeps
+  path: z.string().trim().min(1),
+  // Defaulted so every existing caller (which posts { path } alone) keeps
   // creating a spatial canvas byte-identically to before this field existed.
   kind: documentKindSchema.default('spatial'),
 })
 
-// `name: ''` deletes the stored name and falls back to the slug/workspaceId.
+// `name: ''` deletes the stored name and falls back to the path/workspaceId.
 export const setNameRequestSchema = z.object({
   name: z.string(),
 })
@@ -43,11 +43,11 @@ export const saveVersionRequestSchema = z.object({
   operator: operatorInfoSchema.optional(),
 })
 
-// POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
+// POST /api/workspaces/:workspaceId/canvases/:path/versions/:id/restore
 // Body is optional. Two restore modes share the same endpoint:
 //   • body absent or `targetSlug` absent — in-place reconcile against the
 //     current canvas (default; what the History panel uses).
-//   • `targetSlug` set — restore into that slug in the same workspace. If it
+//   • `targetSlug` set — restore into that path in the same workspace. If it
 //     does not exist yet, this creates it. If it already exists, `overwrite:
 //     true` is required, and the restore reconciles onto the target's live
 //     doc (same semantics as the default mode, not a persistence swap) so
@@ -69,7 +69,7 @@ export const exportCanvasJsonRequestSchema = z.object({
 // on the wire.
 export const versionEntrySchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  path: z.string(),
   createdAt: z.string(),
   elementCount: z.number().finite(),
   label: z.string().optional(),
@@ -95,7 +95,7 @@ export const problemDetailsErrorSchema = z.object({
 
 // POST /api/workspaces/:workspaceId/canvases — success body.
 export const createCanvasResponseSchema = z.object({
-  slug: z.string(),
+  path: z.string(),
 })
 
 // POST /api/w/:workspaceId/canvas/<path>/update — success body.
@@ -103,19 +103,19 @@ export const updateCanvasResponseSchema = z.object({
   ok: z.literal(true),
 })
 
-// DELETE /api/workspaces/:workspaceId/canvases/:slug — success body.
+// DELETE /api/workspaces/:workspaceId/canvases/:path — success body.
 export const deleteCanvasResponseSchema = z.object({
   ok: z.literal(true),
 })
 
-// PUT /api/workspaces/:workspaceId/canvases/:slug/slug — request body.
+// PUT /api/workspaces/:workspaceId/canvases/:path/path — request body.
 export const renameCanvasSlugRequestSchema = z.object({
-  slug: z.string().trim().min(1),
+  path: z.string().trim().min(1),
 })
 
-// PUT /api/workspaces/:workspaceId/canvases/:slug/slug — success body.
+// PUT /api/workspaces/:workspaceId/canvases/:path/path — success body.
 export const renameCanvasSlugResponseSchema = z.object({
-  slug: z.string(),
+  path: z.string(),
 })
 
 // GET /api/w/:workspaceId/canvas/<path>/exists — success body. Read-only lookup
@@ -136,16 +136,16 @@ export const listWorkspacesResponseSchema = z.object({
 })
 
 export const canvasSummarySchema = z.object({
-  slug: z.string(),
-  // The immutable id behind the slug (the canvases row's nanoid PK).
-  // Stored references (file nodes) key on this so a slug rename cannot
-  // dangle them (ADR-0008: stored links key on ids); the slug stays the
+  path: z.string(),
+  // The immutable id behind the path (the canvases row's nanoid PK).
+  // Stored references (file nodes) key on this so a path rename cannot
+  // dangle them (ADR-0008: stored links key on ids); the path stays the
   // user-facing, URL-addressed identity. Deliberately not pattern-bound:
   // clients must treat it as opaque and resolve refs by LOOKUP, never by
-  // format — the nanoid alphabet overlaps the slug charset.
+  // format — the nanoid alphabet overlaps the path charset.
   // Optional so a new client can still parse an older daemon's id-less list
   // (the web app and the locally installed daemon version independently);
-  // clients fall back to the slug when the id is absent.
+  // clients fall back to the path when the id is absent.
   id: z.string().min(1).optional(),
   updatedAt: z.string(),
   // Rows stored before this field existed have no recorded kind and read

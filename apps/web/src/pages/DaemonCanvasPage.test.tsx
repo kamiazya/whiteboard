@@ -56,7 +56,7 @@ class FakeBackend implements CanvasBackend {
   disconnectCount = 0
   constructor(
     public workspaceId: string,
-    public slug: string,
+    public path: string,
   ) {
     createdBackends.push(this)
   }
@@ -82,7 +82,7 @@ class FakeBackend implements CanvasBackend {
 }
 
 function makeCreateBackend() {
-  return (workspaceId: string, slug: string) => new FakeBackend(workspaceId, slug)
+  return (workspaceId: string, path: string) => new FakeBackend(workspaceId, path)
 }
 
 // WorkspaceTopBar's canvas switcher dropdown is real Radix — open on
@@ -90,7 +90,7 @@ function makeCreateBackend() {
 // same pattern). Rendering into document.body (per every render() call in
 // this file) keeps the portal content inside React's event-delegation root.
 // Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
-// also contains the canvas slug as a substring, so a loose regex match is
+// also contains the canvas path as a substring, so a loose regex match is
 // ambiguous now that WorkspaceTopBar renders both in the same header.
 // The trigger names the WORKSPACE, not the open canvas — the canvas's own
 // name moved to the canvas row. Callers no longer pass a canvas label.
@@ -127,8 +127,8 @@ describe('DaemonCanvasPage', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
-        { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
   })
@@ -185,7 +185,7 @@ describe('DaemonCanvasPage', () => {
     fireEvent.click(await screen.findByTestId('select-tool-button'))
     // The switcher's trigger names the workspace; the canvas entries appear
     // in its list. What this pins is still the CanvasSummary
-    // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping, end to end.
+    // {path, updatedAt} -> WorkspaceTopBar CanvasInfo mapping, end to end.
     expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
     await openCanvasSwitcher()
     expect(screen.getByText('second')).toBeTruthy()
@@ -196,7 +196,7 @@ describe('DaemonCanvasPage', () => {
   it('keeps one live connection when the parent re-renders with a fresh createBackend', async () => {
     // A parent that writes `createBackend={(w, s) => …}` inline — the
     // natural thing to write — hands this page a new function identity on
-    // every render. The connection is defined by (workspace, slug, daemon),
+    // every render. The connection is defined by (workspace, path, daemon),
     // not by that function's identity, so the session must survive it:
     // rebuilding tears down the WebSocket, re-hydrates, and drops the undo
     // history for a canvas the user never left.
@@ -251,7 +251,7 @@ describe('DaemonCanvasPage', () => {
           <DaemonCanvasPage
             daemonBaseUrl={DAEMON_BASE_URL}
             workspaceId="w1"
-            slug="main"
+            path="main"
             createBackend={makeCreateBackend()}
           />,
           { container: document.body },
@@ -280,14 +280,14 @@ describe('DaemonCanvasPage', () => {
         if (workspaceId === 'w2') {
           return Promise.resolve({
             canvases: [
-              { slug: 'w2-main', id: 'id-w2-main', updatedAt: '2026-02-01', kind: 'spatial' },
+              { path: 'w2-main', id: 'id-w2-main', updatedAt: '2026-02-01', kind: 'spatial' },
             ],
           })
         }
         return Promise.resolve({
           canvases: [
-            { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-            { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+            { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+            { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
         })
       })
@@ -326,8 +326,8 @@ describe('DaemonCanvasPage', () => {
         if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
         return Promise.resolve({
           canvases: [
-            { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-            { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+            { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+            { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
         })
       })
@@ -371,8 +371,8 @@ describe('DaemonCanvasPage', () => {
       })
       mockListCanvases.mockResolvedValueOnce({
         canvases: [
-          { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-          { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+          { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+          { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
       })
 
@@ -655,8 +655,8 @@ describe('DaemonCanvasPage', () => {
       if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
       return Promise.resolve({
         canvases: [
-          { slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-          { slug: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+          { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+          { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
       })
     })
@@ -817,11 +817,11 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByRole('button', { name: 'Create a canvas' })).toBeTruthy()
   })
 
-  it('clicking Create a canvas derives a slug and mounts the editor once the canvas exists', async () => {
+  it('clicking Create a canvas derives a path and mounts the editor once the canvas exists', async () => {
     mockListCanvases.mockResolvedValueOnce({ canvases: [] })
-    mockCreateCanvas.mockResolvedValue({ slug: 'untitled' })
+    mockCreateCanvas.mockResolvedValue({ path: 'untitled' })
     mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ slug: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' }],
+      canvases: [{ path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' }],
     })
 
     await act(async () => {
@@ -839,7 +839,7 @@ describe('DaemonCanvasPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     })
 
-    // No name typed by the user — the slug is derived, same as the daemon
+    // No name typed by the user — the path is derived, same as the daemon
     // index page's own empty-state control.
     expect(mockCreateCanvas).toHaveBeenCalledWith(
       expect.anything(),
@@ -855,7 +855,7 @@ describe('DaemonCanvasPage', () => {
 
   it('disables Create a canvas while a create is in flight, and a same-tick second click is a no-op', async () => {
     mockListCanvases.mockResolvedValue({ canvases: [] })
-    let resolveCreate: (value: { slug: string }) => void = () => {}
+    let resolveCreate: (value: { path: string }) => void = () => {}
     mockCreateCanvas.mockReturnValue(
       new Promise((resolve) => {
         resolveCreate = resolve
@@ -887,13 +887,13 @@ describe('DaemonCanvasPage', () => {
     expect(mockCreateCanvas).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      resolveCreate({ slug: 'untitled' })
+      resolveCreate({ path: 'untitled' })
     })
   })
 
   it('shows the createError alert in the empty-canvases state when creation fails', async () => {
     mockListCanvases.mockResolvedValue({ canvases: [] })
-    mockCreateCanvas.mockRejectedValue(new Error('slug already exists'))
+    mockCreateCanvas.mockRejectedValue(new Error('path already exists'))
 
     await act(async () => {
       render(
@@ -911,7 +911,7 @@ describe('DaemonCanvasPage', () => {
     })
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
-    expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
+    expect(screen.getByRole('alert').textContent).toMatch(/path already exists/i)
     // The control recovers (not left permanently disabled) so the user can retry.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Create a canvas' }).hasAttribute('disabled')).toBe(
@@ -939,7 +939,7 @@ describe('DaemonCanvasPage', () => {
                 JSON.stringify({
                   version: {
                     id: 'v-manual',
-                    slug: 'main',
+                    path: 'main',
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: false,
@@ -1006,7 +1006,7 @@ describe('DaemonCanvasPage', () => {
                 JSON.stringify({
                   version: {
                     id: 'v-manual',
-                    slug: 'main',
+                    path: 'main',
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: false,
@@ -1205,7 +1205,7 @@ describe('DaemonCanvasPage', () => {
   })
 
   describe('version history panel', () => {
-    it('opens the panel and lists versions for the current (workspaceId, slug) via the daemon fetch', async () => {
+    it('opens the panel and lists versions for the current (workspaceId, path) via the daemon fetch', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -1224,7 +1224,7 @@ describe('DaemonCanvasPage', () => {
                   versions: [
                     {
                       id: 'v-1',
-                      slug: 'main',
+                      path: 'main',
                       createdAt: '2026-01-01T00:00:00Z',
                       elementCount: 3,
                       auto: true,
@@ -1376,7 +1376,7 @@ describe('DaemonCanvasPage', () => {
                   versions: [
                     {
                       id: 'v-1',
-                      slug: 'main',
+                      path: 'main',
                       createdAt: '2026-01-01T00:00:00Z',
                       elementCount: 3,
                       auto: true,
@@ -1718,7 +1718,7 @@ describe('DaemonCanvasPage', () => {
         new CustomEvent('excalidraw:merge_committed', {
           detail: {
             workspaceId: 'w1',
-            slug: 'main',
+            path: 'main',
             sourceName: 'feature-x',
             targetName: 'main',
             newCount: 1,
@@ -1909,7 +1909,7 @@ describe('DaemonCanvasPage', () => {
                 JSON.stringify({
                   version: {
                     id: 'v-cmd-s',
-                    slug: 'main',
+                    path: 'main',
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 0,
                     auto: false,
@@ -2007,7 +2007,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         backend.handlers?.onVersionCreated?.({
           id: 'v-remote',
-          slug: 'main',
+          path: 'main',
           createdAt: '2026-01-01T00:00:00Z',
           elementCount: 1,
           auto: false,

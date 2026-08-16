@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
-/** Workspace slug used for every canvas the smoke creates. */
+/** Workspace path used for every canvas the smoke creates. */
 const WORKSPACE_ID = 'e2e'
 
 interface RunOptions {

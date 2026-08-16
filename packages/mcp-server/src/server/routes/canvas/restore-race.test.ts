@@ -86,13 +86,13 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       '../../store/doc-cache.js',
     )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, slug) => {
-      if (gateArmed && slug === 'canvas-b') {
+    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
+      if (gateArmed && path === 'canvas-b') {
         gateArmed = false
         signalGetDocCalled()
         await getDocGate
       }
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const restorePromise = app.request(
@@ -122,8 +122,8 @@ describe('restore targetSlug-overwrite vs delete race', () => {
     // after the delete removed it -- the delete serializes after the
     // restore's write under the workspace lock, so canvas-b must be gone.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual(['canvas-a'])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual(['canvas-a'])
   })
 })
 
@@ -158,7 +158,7 @@ describe('restore in-place vs delete race', () => {
     })
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
-    // Stall the restore route's getDoc(slug) call so a DELETE of the same
+    // Stall the restore route's getDoc(path) call so a DELETE of the same
     // canvas can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
@@ -168,13 +168,13 @@ describe('restore in-place vs delete race', () => {
       '../../store/doc-cache.js',
     )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, slug) => {
-      if (gateArmed && slug === 'canvas-a') {
+    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
+      if (gateArmed && path === 'canvas-a') {
         gateArmed = false
         signalGetDocCalled()
         await getDocGate
       }
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const restorePromise = app.request(
@@ -203,7 +203,7 @@ describe('restore in-place vs delete race', () => {
     // lock, so canvas-a must be gone -- the restore must not have won a
     // race that resurrects it after the delete.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual([])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual([])
   })
 })

@@ -11,7 +11,7 @@ export const MERGE_COMMITTED_EVENT = 'excalidraw:merge_committed'
 // dispatcher can grow the detail shape without a lockstep parser change.
 export const mergeCommittedDetailSchema = z.object({
   workspaceId: z.string().min(1),
-  slug: z.string().min(1),
+  path: z.string().min(1),
   sourceName: z.string(),
   targetName: z.string(),
   newCount: z.number().int().nonnegative(),

@@ -12,20 +12,20 @@ export function createAutoVersionTrigger(
   intervalMs: number,
   // Resolve the current HEAD branch name at save time and write it into VersionMeta.branchName.
   // If omitted or null, keep the previous behavior and let VersionStore.save fall back to "main".
-  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>,
-): (workspaceId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
+  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>,
+): (workspaceId: string, path: string, doc: LoroDoc) => Promise<VersionEntry | null> {
   // Per-canvas last-save timestamps. In-place Map mutation is intentional: this is
   // closure-private throttle state, never shared or observed, so the immutability
   // rule (which guards shared/observable data) does not apply.
   const lastAt = new Map<string, number>()
-  return async function triggerAutoVersion(workspaceId, slug, doc) {
-    const key = `${workspaceId}/${slug}`
+  return async function triggerAutoVersion(workspaceId, path, doc) {
+    const key = `${workspaceId}/${path}`
     const now = Date.now()
     if (now - (lastAt.get(key) ?? 0) < intervalMs) return null
     let branchName: string | null = null
     if (getHeadBranch) {
       try {
-        branchName = await getHeadBranch(workspaceId, slug)
+        branchName = await getHeadBranch(workspaceId, path)
       } catch (err) {
         if (isCorruptStoredDataError(err)) {
           throw err
@@ -45,7 +45,7 @@ export function createAutoVersionTrigger(
       if (typeof branchName === 'string' && branchName.length > 0) {
         opts.branchName = branchName
       }
-      const entry = await versionStore.save(workspaceId, slug, doc, opts)
+      const entry = await versionStore.save(workspaceId, path, doc, opts)
       lastAt.set(key, now)
       return entry
     } catch (err) {

@@ -14,11 +14,11 @@ interface WorkspacesTable {
 }
 
 interface DocumentsTable {
-  // Stable nanoid that survives slug renames. PK so child tables can FK on it.
+  // Stable nanoid that survives path renames. PK so child tables can FK on it.
   id: string
   workspaceId: string
-  // Mutable display path; UNIQUE within (workspaceId, slug).
-  slug: string
+  // Mutable display path; UNIQUE within (workspaceId, path).
+  path: string
   displayName: string | null
   isPinned: Bool
   pinOrder: number | null

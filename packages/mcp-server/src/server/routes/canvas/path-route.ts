@@ -4,7 +4,7 @@ import {
   canvasPathForFile,
   parseCanvasApiPath,
 } from '../../../shared/api-contracts/canvas-url.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 
 export const CANVAS_WILDCARD = '/api/w/:workspaceId/canvas/*'
 
@@ -24,7 +24,7 @@ function validated(
 ): Response | null {
   try {
     validateWorkspaceId(workspaceId)
-    validateSlug(path)
+    validateDocumentPath(path)
   } catch (err) {
     const body = validationErrorBody(err)
     // Two 400 shapes coexist on this surface: the older { error, message }

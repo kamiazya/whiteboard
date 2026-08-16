@@ -270,7 +270,7 @@ export function BrowserLocalCanvasPage({
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
-  // /canvas/:workspaceId/:slug contract). This page only mounts on
+  // /canvas/:workspaceId/:path contract). This page only mounts on
   // /local/:documentId (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
   // exists for the stale-deep-link case: a bookmarked id that no longer
@@ -721,9 +721,9 @@ export function BrowserLocalCanvasPage({
               }
               dataMode="local"
               workspaceId="local"
-              slug={pageState.snapshot.id}
+              path={pageState.snapshot.id}
               canvases={switcherOptions.map((c) => ({
-                slug: c.id,
+                path: c.id,
                 name: c.name,
                 updatedAt: c.updatedAt,
               }))}

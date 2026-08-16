@@ -107,7 +107,7 @@ describe('getDb / closeDb', () => {
       .values({
         id: 'cv-fk',
         workspaceId: 'ws-fk',
-        slug: 'main',
+        path: 'main',
         displayName: null,
         isPinned: 0,
         pinOrder: null,

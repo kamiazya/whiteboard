@@ -130,9 +130,9 @@ async function renderHeadless(
 ): Promise<Buffer> {
   const result = await exportCanvasHeadless({
     workspaceId,
-    // The store layer still speaks `slug`; renaming it through canvas-store
+    // The store layer still speaks `path`; renaming it through canvas-store
     // is its own sweep.
-    slug: path,
+    path: path,
     options: {
       padding: body.padding,
       scale: body.scale,

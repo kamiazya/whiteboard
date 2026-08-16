@@ -91,7 +91,7 @@ describe('token redaction: sentinel never reaches a log record', () => {
     const capture = captureLogsForTests()
     try {
       const { DaemonBackend } = await import('./daemon-backend.js')
-      const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
+      const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/')
       backend.connect({
         onSnapshot: () => {},
         onRemoteUpdate: () => {},

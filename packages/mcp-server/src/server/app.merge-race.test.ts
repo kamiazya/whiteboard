@@ -86,7 +86,7 @@ describe('performMerge vs rename race', () => {
     clearCache()
   })
 
-  it('does not fork a phantom duplicate canvas when a slug rename races an in-flight merge that already resolved the live doc through the old slug', async () => {
+  it('does not fork a phantom duplicate canvas when a path rename races an in-flight merge that already resolved the live doc through the old path', async () => {
     const app = createApp(createRuntimeOptions())
 
     // Base canvas: rect-1 only.
@@ -119,7 +119,7 @@ describe('performMerge vs rename race', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
 
-    // Stall performMerge's getDoc() call so a slug rename can be fired
+    // Stall performMerge's getDoc() call so a path rename can be fired
     // while the merge request is paused mid-flight, matching the real
     // race: the read resolves before the rename runs, the write happens
     // after.
@@ -127,10 +127,10 @@ describe('performMerge vs rename race', () => {
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
     const actual =
       await vi.importActual<typeof import('./store/doc-cache.js')>('./store/doc-cache.js')
-    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, slug) => {
+    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
       signalGetDocCalled()
       await getDocGate
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const mergePromise = app.request(
@@ -145,10 +145,10 @@ describe('performMerge vs rename race', () => {
     await getDocCalled
 
     // Fire the rename while the merge is stalled mid-flight.
-    const renamePromise = app.request('/api/workspaces/session1/canvases/canvas-a/slug', {
+    const renamePromise = app.request('/api/workspaces/session1/canvases/canvas-a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: 'canvas-b' }),
+      body: JSON.stringify({ path: 'canvas-b' }),
     })
     // Give the rename a chance to run before letting the stalled read continue.
     await new Promise((r) => setTimeout(r, 20))
@@ -158,11 +158,11 @@ describe('performMerge vs rename race', () => {
     expect(renameRes.status).toBe(200)
     expect(mergeRes.status).toBe(200)
 
-    // Exactly one canvas must survive -- at the post-rename slug. The merge
+    // Exactly one canvas must survive -- at the post-rename path. The merge
     // must not have silently inserted a phantom duplicate back at the old
-    // slug.
+    // path.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual(['canvas-b'])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual(['canvas-b'])
   })
 })

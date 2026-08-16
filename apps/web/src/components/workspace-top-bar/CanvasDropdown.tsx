@@ -22,14 +22,14 @@ import type { CanvasInfo } from './types'
 
 interface CanvasDropdownProps {
   workspaceId: string
-  slug: string
+  path: string
   canvases: CanvasInfo[]
   effectiveNames: WorkspaceNames
   isLocalMode: boolean
   canvasSearch: string
   onCanvasSearchChange: (value: string) => void
-  onNavigateToCanvas: (slug: string) => void
-  onTogglePin: (slug: string, nextPinned: boolean) => void
+  onNavigateToCanvas: (path: string) => void
+  onTogglePin: (path: string, nextPinned: boolean) => void
   onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind canvases (local mode). */
   onCreateMarkdown?: () => void
   // Both present (and >1 entry) render a "Workspaces" section above the
@@ -44,7 +44,7 @@ interface CanvasDropdownProps {
 // shown here is the canvas, not the workspace.
 export function CanvasDropdown({
   workspaceId,
-  slug,
+  path,
   canvases,
   effectiveNames,
   isLocalMode,
@@ -71,7 +71,7 @@ export function CanvasDropdown({
     [filteredCanvases, effectiveNames.pinned],
   )
 
-  // Group by slug prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
+  // Group by path prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
   // Preserve recency order within each group and exclude anything already shown in the pinned section.
   const groupedCanvases = useMemo(
     () => groupCanvases(filteredCanvases, pinnedSet),
@@ -200,16 +200,16 @@ export function CanvasDropdown({
                     </DropdownMenuLabel>
                     {pinnedCanvases.map((c) => (
                       <CanvasItem
-                        key={c.slug}
+                        key={c.path}
                         canvas={c}
                         workspaceId={workspaceId}
-                        customName={effectiveNames.canvases[c.slug]}
-                        // Keep the full slug in the pinned section so the original group context stays visible.
-                        leafLabel={effectiveNames.canvases[c.slug] ?? c.slug}
-                        active={c.slug === slug}
+                        customName={effectiveNames.canvases[c.path]}
+                        // Keep the full path in the pinned section so the original group context stays visible.
+                        leafLabel={effectiveNames.canvases[c.path] ?? c.path}
+                        active={c.path === path}
                         pinned={true}
                         isLocalMode={isLocalMode}
-                        onNavigate={() => navigate(c.slug)}
+                        onNavigate={() => navigate(c.path)}
                         onTogglePin={onTogglePin}
                       />
                     ))}
@@ -226,18 +226,18 @@ export function CanvasDropdown({
                       </DropdownMenuLabel>
                     )}
                     {items.map((c) => {
-                      const leafSlug = group === '' ? c.slug : c.slug.slice(group.length + 1)
+                      const leafSlug = group === '' ? c.path : c.path.slice(group.length + 1)
                       return (
                         <CanvasItem
-                          key={c.slug}
+                          key={c.path}
                           canvas={c}
                           workspaceId={workspaceId}
-                          customName={effectiveNames.canvases[c.slug]}
-                          leafLabel={effectiveNames.canvases[c.slug] ?? leafSlug}
-                          active={c.slug === slug}
+                          customName={effectiveNames.canvases[c.path]}
+                          leafLabel={effectiveNames.canvases[c.path] ?? leafSlug}
+                          active={c.path === path}
                           pinned={false}
                           isLocalMode={isLocalMode}
-                          onNavigate={() => navigate(c.slug)}
+                          onNavigate={() => navigate(c.path)}
                           onTogglePin={onTogglePin}
                         />
                       )

@@ -173,9 +173,9 @@ export function toBase64(bytes: Uint8Array): string {
 /**
  * The daemon's update route for a document.
  *
- * A document key IS `${workspaceId}/${slug}`, which is the only reason
+ * A document key IS `${workspaceId}/${path}`, which is the only reason
  * anything holding just the key can address this route. First slash only: a
- * slug may contain more, a workspace id never does.
+ * path may contain more, a workspace id never does.
  */
 export function canvasUpdateUrl(baseUrl: string, doc: string): string | null {
   return canvasDocUrl(baseUrl, doc, 'update')

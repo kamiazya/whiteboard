@@ -28,7 +28,7 @@ import { VersionPanel } from '../workspace-top-bar/VersionPanel.js'
 
 export interface HistoryClusterVersionsProps {
   readonly workspaceId: string
-  readonly slug: string
+  readonly path: string
   readonly onRestored?: () => void
   readonly refreshSignal?: number
   readonly versionPanelExtra?: ReactNode
@@ -172,7 +172,7 @@ export function HistoryCluster({
               <VersionPanel
                 panelRef={versionPanelRef}
                 workspaceId={versions.workspaceId}
-                slug={versions.slug}
+                path={versions.path}
                 onRestored={versions.onRestored}
                 refreshSignal={versions.refreshSignal}
                 versionPanelExtra={versions.versionPanelExtra}

@@ -14,7 +14,7 @@ import type {
 // dispatchIdentityEvent below; consumed by hooks/useDirtyState.ts.
 export interface DirtyEventDetail {
   workspaceId: string
-  slug: string
+  path: string
 }
 
 /**
@@ -59,10 +59,10 @@ export interface UseCanvasSyncOptions {
   // when both fields are present — a browser-local caller that never sets
   // this option (or a daemon caller whose identity is still resolving)
   // dispatches nothing, leaving its dirty-state behavior unchanged.
-  identity?: { workspaceId: string; slug: string }
+  identity?: { workspaceId: string; path: string }
 }
 
-// Dispatches a window event carrying { workspaceId, slug } as detail, but only
+// Dispatches a window event carrying { workspaceId, path } as detail, but only
 // when identity is fully resolved — a partial or absent identity means the
 // caller (browser-local, or a daemon page whose identity is still loading)
 // never wired the dirty-state contract and must see no events at all.
@@ -71,7 +71,7 @@ export function dispatchIdentityEvent(
   identity: UseCanvasSyncOptions['identity'],
 ): void {
   if (typeof window === 'undefined') return
-  if (!identity?.workspaceId || !identity.slug) return
-  const detail: DirtyEventDetail = { workspaceId: identity.workspaceId, slug: identity.slug }
+  if (!identity?.workspaceId || !identity.path) return
+  const detail: DirtyEventDetail = { workspaceId: identity.workspaceId, path: identity.path }
   window.dispatchEvent(new CustomEvent(eventName, { detail }))
 }

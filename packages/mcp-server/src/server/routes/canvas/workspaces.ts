@@ -20,25 +20,25 @@ import {
   saveCanvas,
   workspaceExists,
 } from '../../store/canvas-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 
 // Names the specific field createCanvasRequestSchema rejected, instead of a
-// single message covering the whole request — a valid slug with an invalid
-// kind must not be told "slug is required", which names the wrong field and
+// single message covering the whole request — a valid path with an invalid
+// kind must not be told "path is required", which names the wrong field and
 // gives the caller no path to recovery.
 function createCanvasRequestErrorTitle(error: z.ZodError): string {
   const issue = error.issues[0]
   const field = issue?.path[0]
   if (field === 'kind') return 'kind must be "spatial" or "markdown"'
-  if (field === 'slug') return 'slug is required'
+  if (field === 'path') return 'path is required'
   return issue?.message ?? 'invalid request body'
 }
 
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/canvases
-// POST /api/workspaces/:workspaceId/canvases  body: { slug: string }
+// POST /api/workspaces/:workspaceId/canvases  body: { path: string }
 export function createWorkspacesRouter() {
   const app = new Hono()
 
@@ -82,8 +82,8 @@ export function createWorkspacesRouter() {
     }
   })
 
-  // Save a new empty LoroDoc under slug. Return 409 for conflicts and 400 for invalid slugs.
-  // On success, return { slug } for client-side navigation.
+  // Save a new empty LoroDoc under path. Return 409 for conflicts and 400 for invalid paths.
+  // On success, return { path } for client-side navigation.
   app.post('/api/workspaces/:workspaceId/canvases', async (c) => {
     const { workspaceId } = c.req.param()
     try {
@@ -101,9 +101,9 @@ export function createWorkspacesRouter() {
     if (!parsed.success) {
       return c.json({ title: createCanvasRequestErrorTitle(parsed.error) }, 400)
     }
-    const slug = parsed.data.slug
+    const path = parsed.data.path
     try {
-      validateSlug(slug)
+      validateDocumentPath(path)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json({ title: body.message }, 400)
@@ -111,12 +111,12 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(workspaceId, slug, doc, { overwrite: false, kind: parsed.data.kind })
-      const response: CreateCanvasResponse = { slug }
+      await saveCanvas(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
+      const response: CreateCanvasResponse = { path }
       return c.json(response)
     } catch (err) {
       if (err instanceof ConflictError) {
-        return c.json({ title: `Canvas "${slug}" already exists` }, 409)
+        return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
       getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' }, 500)
@@ -130,11 +130,11 @@ export function createWorkspacesRouter() {
     app,
     'delete',
     [],
-    async (c, workspaceId, slug) => {
+    async (c, workspaceId, path) => {
       try {
-        const deleted = await deleteCanvas(workspaceId, slug)
+        const deleted = await deleteCanvas(workspaceId, path)
         if (!deleted) {
-          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
         const response: DeleteCanvasResponse = { ok: true }
         return c.json(response)
@@ -148,40 +148,40 @@ export function createWorkspacesRouter() {
     { badRequest: 'problem-details' },
   )
 
-  // Rename a canvas's slug in place: same documentId, same branches/versions/blob,
-  // just a new slug column. Old URLs carrying the old slug 404 by design — no
+  // Rename a canvas's path in place: same documentId, same branches/versions/blob,
+  // just a new path column. Old URLs carrying the old path 404 by design — no
   // redirect, no alias history (0.0.x).
   //
   // Server-side foundation only: no MCP tool, CLI command, or apps/web
-  // affordance calls this route yet. The apps/web slug-edit UI is a planned
+  // affordance calls this route yet. The apps/web path-edit UI is a planned
   // follow-up, not dead code.
   onCanvasesRoute(
     app,
     'put',
-    ['slug'],
-    async (c, workspaceId, slug) => {
+    ['path'],
+    async (c, workspaceId, path) => {
       const raw = await c.req.json().catch(() => null)
       if (raw === null) {
         return c.json({ title: 'JSON body required' }, 400)
       }
       const parsed = renameCanvasSlugRequestSchema.safeParse(raw)
       if (!parsed.success) {
-        return c.json({ title: 'slug is required' }, 400)
+        return c.json({ title: 'path is required' }, 400)
       }
-      const newSlug = parsed.data.slug
+      const newSlug = parsed.data.path
       try {
-        validateSlug(newSlug)
+        validateDocumentPath(newSlug)
       } catch (err) {
         const body = validationErrorBody(err)
         if (body) return c.json({ title: body.message }, 400)
         throw err
       }
       try {
-        const result = await renameCanvasSlug(workspaceId, slug, newSlug)
+        const result = await renameCanvasSlug(workspaceId, path, newSlug)
         if (!result) {
-          return c.json({ title: `Canvas "${slug}" not found` }, 404)
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
-        const response: RenameCanvasSlugResponse = { slug: newSlug }
+        const response: RenameCanvasSlugResponse = { path: newSlug }
         return c.json(response)
       } catch (err) {
         if (err instanceof ConflictError) {

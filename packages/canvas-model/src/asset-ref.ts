@@ -8,7 +8,7 @@
  * value, or moving content between them (or garbage-collecting it) would
  * silently reinterpret every image node as a canvas reference.
  *
- * The colon is what makes this unambiguous — a daemon slug and a browser-local
+ * The colon is what makes this unambiguous — a daemon path and a browser-local
  * canvas id both match /^[a-zA-Z0-9_-]+$/, so neither can ever collide with a
  * prefixed reference.
  */

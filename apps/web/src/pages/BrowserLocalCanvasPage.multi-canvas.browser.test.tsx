@@ -136,7 +136,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // Switch back to A via the switcher control. Both A and B default to the
     // "untitled" display name, so disambiguate by the raw id shown in each
     // menu item's subtitle line (only rendered when the name differs from
-    // the slug/id, which it always does for a browser-local canvas).
+    // the path/id, which it always does for a browser-local canvas).
     const switcherB = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
     const idALabel = await screen.findByText(idA)

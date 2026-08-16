@@ -26,7 +26,7 @@ interface ImportBrowserLocalPanelProps {
 
 type RowResult =
   | { status: 'pending' }
-  | { status: 'success'; slug: string }
+  | { status: 'success'; path: string }
   | { status: 'error'; reason: string }
 
 /**
@@ -91,7 +91,7 @@ export function ImportBrowserLocalPanel({
             lastSuccessCanvasId = canvas.id
             setResults((prev) => ({
               ...prev,
-              [canvas.id]: { status: 'success', slug: result.slug },
+              [canvas.id]: { status: 'success', path: result.path },
             }))
           } else {
             setResults((prev) => ({
@@ -153,7 +153,7 @@ export function ImportBrowserLocalPanel({
             <li key={canvas.id} className="flex items-center justify-between gap-2 text-sm">
               <span>{canvas.name}</span>
               {result?.status === 'success' && (
-                <span className="text-xs text-muted-foreground">{`Imported as ${result.slug}`}</span>
+                <span className="text-xs text-muted-foreground">{`Imported as ${result.path}`}</span>
               )}
               {result?.status === 'error' && (
                 <span className="text-xs text-destructive">{result.reason}</span>

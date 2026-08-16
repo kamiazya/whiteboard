@@ -403,9 +403,9 @@ export function createApp(options: AppOptions) {
     '/',
     createCanvasRouter({
       // Attach the current HEAD branch name to saved versions when available.
-      getHeadBranch: async (sid, slug) => {
+      getHeadBranch: async (sid, path) => {
         try {
-          const state = await loadCanvasBranches(sid, slug)
+          const state = await loadCanvasBranches(sid, path)
           return state.head
         } catch (error) {
           if (isCorruptStoredDataError(error)) {
@@ -466,47 +466,47 @@ export function createApp(options: AppOptions) {
         resolveFromVersionFrontiers: (sid, vid) => versionStore.getFrontiersBase64(sid, vid),
         // Return the live document frontiers as base64 so the previous HEAD can keep
         // its current position before a branch switch.
-        getCurrentFrontiers: async (sid, slug) => {
-          const cached = peekDoc(sid, slug)
-          if (!cached && !(await canvasExists(sid, slug))) {
+        getCurrentFrontiers: async (sid, path) => {
+          const cached = peekDoc(sid, path)
+          if (!cached && !(await canvasExists(sid, path))) {
             return null
           }
-          const doc = cached ?? (await getDoc(sid, slug))
+          const doc = cached ?? (await getDoc(sid, path))
           const bytes = encodeFrontiers(doc.frontiers())
           return Buffer.from(bytes).toString('base64')
         },
         // Reconcile the live document to the new HEAD tipFrontiers, then commit, save, and broadcast.
-        checkoutTo: async (sid, slug, tipFrontiersBase64) => {
-          const doc = await getDoc(sid, slug)
+        checkoutTo: async (sid, path, tipFrontiersBase64) => {
+          const doc = await getDoc(sid, path)
           const targetFrontiers = decodeBranchTipOrThrow(
             sid,
-            slug,
+            path,
             'checkout-target',
             tipFrontiersBase64,
           )
           const clone = checkoutCloneOrThrow(
             doc,
             targetFrontiers,
-            `${sid}/branches/${slug}.json#checkout-target.tipFrontiers`,
+            `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
             'tipFrontiers could not be checked out against the live document',
           )
           const prevVV = doc.version()
           doc.import(clone.export({ mode: 'snapshot' }))
           doc.commit()
-          await saveCanvas(sid, slug, doc, { overwrite: true })
+          await saveCanvas(sid, path, doc, { overwrite: true })
           const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
           if (update.byteLength > 0) {
-            broadcastLoroUpdate(sid, slug, update)
+            broadcastLoroUpdate(sid, path, update)
           }
         },
         // Notify all peers when the HEAD switch is complete.
-        notifyHeadChanged: (sid, slug, head) => sendHeadChanged(sid, slug, head),
+        notifyHeadChanged: (sid, path, head) => sendHeadChanged(sid, path, head),
         // Keep version metadata branchName values in sync during branch rename.
-        renameInVersions: (sid, slug, oldName, newName) =>
-          versionStore.renameBranchInVersions(sid, slug, oldName, newName),
+        renameInVersions: (sid, path, oldName, newName) =>
+          versionStore.renameBranchInVersions(sid, path, oldName, newName),
         // Count the actual unmerged commits returned by DELETE /branches/:name.
-        countVersionsOnBranch: async (sid, slug, branchName) => {
-          const list = await versionStore.list(sid, slug)
+        countVersionsOnBranch: async (sid, path, branchName) => {
+          const list = await versionStore.list(sid, path)
           return list.filter((v) => (v.branchName ?? 'main') === branchName).length
         },
         // Merge source into target.
@@ -518,40 +518,40 @@ export function createApp(options: AppOptions) {
         // The whole read-modify-write (branch lookup, live-doc read, the
         // pre-merge snapshot, the tip/HEAD writes, and their doc
         // reconcile+save) runs inside one workspace-lock hold. getDoc(sid,
-        // slug) alone is unlocked, so a concurrent rename/delete that runs
+        // path) alone is unlocked, so a concurrent rename/delete that runs
         // its whole lock-protected section between this unlocked read and
         // the later saveCanvas() calls below would find no row left at
-        // this slug and silently insert a phantom canvas (or resurrect
+        // this path and silently insert a phantom canvas (or resurrect
         // deleted content) instead of erroring or landing on the renamed
         // row. updateBranchTip/setHeadPersist/deleteBranch already acquire
         // this same per-workspace lock internally (branches-store.ts), so
         // they re-enter via the AsyncLocalStorage chain rather than
         // deadlocking — mirrors live-doc.ts's POST /update handler.
-        performMerge: async (sid, slug, { source, into, dryRun }) =>
+        performMerge: async (sid, path, { source, into, dryRun }) =>
           withWorkspaceWriteLock(sid, async () => {
-            const state = await loadCanvasBranches(sid, slug)
+            const state = await loadCanvasBranches(sid, path)
             const sourceBranch = state.branches.find((b) => b.name === source)
             const intoBranch = state.branches.find((b) => b.name === into)
             if (!sourceBranch) {
-              throw new BranchNotFoundError(`Branch "${source}" not found on ${sid}/${slug}`)
+              throw new BranchNotFoundError(`Branch "${source}" not found on ${sid}/${path}`)
             }
             if (!intoBranch) {
-              throw new BranchNotFoundError(`Branch "${into}" not found on ${sid}/${slug}`)
+              throw new BranchNotFoundError(`Branch "${into}" not found on ${sid}/${path}`)
             }
 
             const sourceTip = sourceBranch.tipFrontiers
             const intoTip = intoBranch.tipFrontiers
-            const liveDoc = await getDoc(sid, slug)
+            const liveDoc = await getDoc(sid, path)
 
             const cloneAt = (branchName: string, tipBase64: string): LoroDoc => {
               if (tipBase64.length === 0) {
                 return LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
               }
-              const frontiers = decodeBranchTipOrThrow(sid, slug, branchName, tipBase64)
+              const frontiers = decodeBranchTipOrThrow(sid, path, branchName, tipBase64)
               return checkoutCloneOrThrow(
                 liveDoc,
                 frontiers,
-                `${sid}/branches/${slug}.json#${branchName}.tipFrontiers`,
+                `${sid}/branches/${path}.json#${branchName}.tipFrontiers`,
                 `branch "${branchName}" tipFrontiers could not be checked out against the live document`,
               )
             }
@@ -576,7 +576,7 @@ export function createApp(options: AppOptions) {
             const baseDoc = checkoutCloneOrThrow(
               liveDoc,
               baseFrontiers,
-              `${sid}/branches/${slug}.json#merge-base`,
+              `${sid}/branches/${path}.json#merge-base`,
               'merge base could not be checked out against the live document',
             )
 
@@ -637,7 +637,7 @@ export function createApp(options: AppOptions) {
             // keeps the UI behavior consistent.
             let preMergeVersionId: string | undefined
             try {
-              const beforeVersion = await versionStore.save(sid, slug, liveDoc, {
+              const beforeVersion = await versionStore.save(sid, path, liveDoc, {
                 auto: true,
                 label: `before merge: ${source} → ${into}`,
                 branchName: into,
@@ -651,7 +651,7 @@ export function createApp(options: AppOptions) {
             } catch (err) {
               // Snapshot failure should not block the merge itself.
               getLogger('merge').warning(
-                { workspaceId: sid, slug, err: err as Error },
+                { workspaceId: sid, path, err: err as Error },
                 'pre-merge snapshot failed',
               )
             }
@@ -659,22 +659,22 @@ export function createApp(options: AppOptions) {
             // Commit by moving the target tipFrontiers to the source tip, unless the source
             // branch is still uninitialized.
             if (typeof sourceTip === 'string' && sourceTip.length > 0) {
-              await updateBranchTip(sid, slug, into, sourceTip)
+              await updateBranchTip(sid, path, into, sourceTip)
             }
 
             // If the target is HEAD, reconcile and broadcast the live doc. Otherwise only
             // rewrite the stored tip.
-            const latest = await loadCanvasBranches(sid, slug)
+            const latest = await loadCanvasBranches(sid, path)
             if (latest.head === into && sourceTip && sourceTip.length > 0) {
               const prevVV = liveDoc.version()
               liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
               liveDoc.commit()
-              await saveCanvas(sid, slug, liveDoc, { overwrite: true })
+              await saveCanvas(sid, path, liveDoc, { overwrite: true })
               const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
               if (update.byteLength > 0) {
-                broadcastLoroUpdate(sid, slug, update)
+                broadcastLoroUpdate(sid, path, update)
               }
-              sendHeadChanged(sid, slug, into)
+              sendHeadChanged(sid, path, into)
             }
 
             // Post-merge cleanup:
@@ -684,36 +684,36 @@ export function createApp(options: AppOptions) {
             let switchedHead: { from: string; to: string } | undefined
             let deletedSource: string | undefined
             try {
-              const afterCommit = await loadCanvasBranches(sid, slug)
+              const afterCommit = await loadCanvasBranches(sid, path)
               if (afterCommit.head === source && source !== into) {
-                await setHeadPersist(sid, slug, into)
+                await setHeadPersist(sid, path, into)
                 switchedHead = { from: source, to: into }
-                sendHeadChanged(sid, slug, into)
+                sendHeadChanged(sid, path, into)
                 // Reconcile and broadcast the live doc to match the target preview.
                 // This is already done when HEAD===target, but HEAD===source needs it here.
                 const prevVV = liveDoc.version()
                 liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
                 liveDoc.commit()
-                await saveCanvas(sid, slug, liveDoc, { overwrite: true })
+                await saveCanvas(sid, path, liveDoc, { overwrite: true })
                 const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
                 if (update.byteLength > 0) {
-                  broadcastLoroUpdate(sid, slug, update)
+                  broadcastLoroUpdate(sid, path, update)
                 }
               }
             } catch (err) {
               getLogger('merge').warning(
-                { workspaceId: sid, slug, err: err as Error },
+                { workspaceId: sid, path, err: err as Error },
                 'post-merge head switch failed',
               )
             }
             if (source !== 'main' && source !== into) {
               try {
-                await deleteBranch(sid, slug, source)
+                await deleteBranch(sid, path, source)
                 deletedSource = source
               } catch (err) {
                 // For example: still HEAD, already deleted, and similar cleanup races.
                 getLogger('merge').warning(
-                  { workspaceId: sid, slug, err: err as Error },
+                  { workspaceId: sid, path, err: err as Error },
                   'post-merge delete source failed',
                 )
               }

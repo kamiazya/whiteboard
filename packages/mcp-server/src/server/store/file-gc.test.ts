@@ -185,7 +185,7 @@ describe('purgeDanglingFiles', () => {
     // Precision: a 'file' node's `file` value can also be a canvas
     // reference (wikilink-style embed) rather than an upload — only the
     // 'asset:' prefix means "this points at an uploaded blob". A same-named
-    // orphan upload must not be spared by a canvas-slug collision.
+    // orphan upload must not be spared by a canvas-path collision.
     await saveCanvas(
       'ws_precision',
       'page',
@@ -258,7 +258,7 @@ describe('purgeDanglingFiles', () => {
       list: async () => [
         {
           id: 'v-broken',
-          slug: 'broken',
+          path: 'broken',
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
@@ -297,7 +297,7 @@ describe('purgeDanglingFiles', () => {
       expect(fileGcWarnings).toHaveLength(1)
       expect(fileGcWarnings[0].data).toMatchObject({
         workspaceId: 'ws_brk',
-        slug: 'broken',
+        path: 'broken',
         versionId: 'v-broken',
       })
     } finally {
@@ -450,7 +450,7 @@ describe('purgeDanglingFiles', () => {
       list: async () => [
         {
           id: 'v-missing',
-          slug: 'page',
+          path: 'page',
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
@@ -583,18 +583,18 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_head_race', 'about-to-be-captured-on-head-switch', '.png', 90)
 
     const app = createBranchesRouter({
-      getCurrentFrontiers: async (sid, slug) => {
-        const live = await loadCanvas(sid, slug)
+      getCurrentFrontiers: async (sid, path) => {
+        const live = await loadCanvas(sid, path)
         return Buffer.from(encodeFrontiers(live.frontiers())).toString('base64')
       },
-      checkoutTo: async (sid, slug, tipFrontiersBase64) => {
-        const live = await loadCanvas(sid, slug)
+      checkoutTo: async (sid, path, tipFrontiersBase64) => {
+        const live = await loadCanvas(sid, path)
         const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
         const targetFrontiers = decodeFrontiers(
           new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')),
         )
         clone.checkout(targetFrontiers)
-        await saveCanvas(sid, slug, clone, { overwrite: true })
+        await saveCanvas(sid, path, clone, { overwrite: true })
       },
     })
 

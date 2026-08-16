@@ -52,7 +52,7 @@ describe('HistoryCluster', () => {
         onRedo={vi.fn()}
         canUndo
         canRedo
-        versions={{ workspaceId: 'ws-1', slug: 'doc-a' }}
+        versions={{ workspaceId: 'ws-1', path: 'doc-a' }}
       />,
     )
     // VersionTimeline fetches on mount — jsdom has no fetch mock here, so
@@ -74,7 +74,7 @@ describe('HistoryCluster', () => {
         canRedo
         versions={{
           workspaceId: 'ws-1',
-          slug: 'doc-a',
+          path: 'doc-a',
           versionPanelExtra: <div data-testid="version-panel-extra-slot">extra</div>,
         }}
       />,

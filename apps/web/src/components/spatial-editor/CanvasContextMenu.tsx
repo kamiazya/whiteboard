@@ -488,7 +488,7 @@ export function CanvasContextMenu({
         }
         if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
           // A missing target makes Open a dead end (worse: the daemon's
-          // slug routes lazily create, so following would mint an empty
+          // path routes lazily create, so following would mint an empty
           // canvas under the dangling ref). Change target stays — it is
           // the repair affordance.
           if (onOpenFileRef !== undefined && missingFileRef?.(node.file) !== true) {

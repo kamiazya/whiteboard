@@ -21,7 +21,7 @@ export interface CanvasRouterOptions {
   autoVersionIntervalMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
-  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>
+  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -51,8 +51,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   // runs in the background. Tests can override the trigger via
   // setAutoCompactTrigger(null) before assertions if they want to isolate
   // the save path from the compact path.
-  setAutoCompactTrigger((workspaceId, slug) => {
-    scheduleAutoCompact(workspaceId, slug, versionStore)
+  setAutoCompactTrigger((workspaceId, path) => {
+    scheduleAutoCompact(workspaceId, path, versionStore)
   })
 
   app.route('/', createWorkspacesRouter())

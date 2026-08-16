@@ -127,20 +127,20 @@ export function validateWorkspaceId(workspaceId: string): string {
   return workspaceId
 }
 
-export function validateSlug(slug: string): string {
-  if (slug === '') {
-    throw new ValidationError('invalid_slug', 'Invalid slug: slug is empty')
+export function validateDocumentPath(path: string): string {
+  if (path === '') {
+    throw new ValidationError('invalid_document_path', 'Invalid path: path is empty')
   }
-  for (const segment of slug.split('/')) {
+  for (const segment of path.split('/')) {
     const reason = diagnoseSlugSegment(segment)
     if (reason !== null) {
       throw new ValidationError(
-        'invalid_slug',
-        `Invalid slug "${slug}": segment "${segment}" ${reason}`,
+        'invalid_document_path',
+        `Invalid path "${path}": segment "${segment}" ${reason}`,
       )
     }
   }
-  return slug
+  return path
 }
 
 export function validateBranchName(name: string): string {

@@ -31,7 +31,7 @@ const WORKSPACE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
 export const workspaceIdSchema = z
   .string()
   .min(1)
-  .regex(WORKSPACE_ID_PATTERN, 'workspace id must be a path-safe slug ([a-zA-Z0-9_-]+)')
+  .regex(WORKSPACE_ID_PATTERN, 'workspace id must be a path-safe path ([a-zA-Z0-9_-]+)')
 
 /**
  * One segment of a document path. Codifies the rule mcp-server enforces at

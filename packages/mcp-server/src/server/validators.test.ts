@@ -3,17 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {
   validateBranchName,
+  validateDocumentPath,
   validateExternalUrl,
   validateFileId,
-  validateSlug,
   validateVersionId,
   validateWorkspaceId,
 } from './validators.js'
 
 describe('shared validators', () => {
-  it('accepts valid session ids, slugs, and ids', async () => {
+  it('accepts valid session ids, paths, and ids', async () => {
     expect(validateWorkspaceId('sess_1-abc')).toBe('sess_1-abc')
-    expect(validateSlug('621/header-v2')).toBe('621/header-v2')
+    expect(validateDocumentPath('621/header-v2')).toBe('621/header-v2')
     expect(validateVersionId('ver-1')).toBe('ver-1')
     expect(validateFileId('file_1-abc')).toBe('file_1-abc')
 
@@ -26,7 +26,7 @@ describe('shared validators', () => {
 
   it('rejects invalid route/store identifiers', () => {
     expect(() => validateWorkspaceId('../escape')).toThrow(/Invalid workspaceId/)
-    expect(() => validateSlug('../escape')).toThrow(/Invalid slug/)
+    expect(() => validateDocumentPath('../escape')).toThrow(/Invalid path/)
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)
     expect(() => validateFileId('bad/id')).toThrow(/Invalid file id/)
   })
@@ -75,15 +75,15 @@ describe('shared validators', () => {
   })
 })
 
-describe('validateSlug / documentPathSchema conformance', () => {
+describe('validateDocumentPath / documentPathSchema conformance', () => {
   // Two expressions of one rule: the schema is what the shared layer parses
-  // with, validateSlug is what explains a rejection per cause. They are
+  // with, validateDocumentPath is what explains a rejection per cause. They are
   // single-sourced on DOCUMENT_PATH_SEGMENT_PATTERN, and this is what keeps
   // the composition around it — the split on '/', the empty-segment case —
   // from drifting away from the schema's own refine.
-  const accepts = (slug: string): boolean => {
+  const accepts = (path: string): boolean => {
     try {
-      validateSlug(slug)
+      validateDocumentPath(path)
       return true
     } catch {
       return false
@@ -103,7 +103,7 @@ describe('validateSlug / documentPathSchema conformance', () => {
         .array(fc.stringMatching(/^[a-zA-Z0-9-]{0,4}$/), { minLength: 1, maxLength: 3 })
         .map((parts) => `/${parts.join('//')}/`),
     ),
-  ])('accept exactly the same strings', (slug) => {
-    expect(documentPathSchema.safeParse(slug).success).toBe(accepts(slug))
+  ])('accept exactly the same strings', (path) => {
+    expect(documentPathSchema.safeParse(path).success).toBe(accepts(path))
   })
 })

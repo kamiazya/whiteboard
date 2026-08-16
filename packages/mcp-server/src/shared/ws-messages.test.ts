@@ -5,7 +5,7 @@ const VALID_VERSION_CREATED = {
   type: 'version_created' as const,
   version: {
     id: 'ver-1',
-    slug: 'my-canvas',
+    path: 'my-canvas',
     createdAt: '2026-07-30T00:00:00.000Z',
     elementCount: 42,
     auto: false,

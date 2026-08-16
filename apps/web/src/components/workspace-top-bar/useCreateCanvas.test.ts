@@ -6,13 +6,13 @@ import { useCreateCanvas } from './useCreateCanvas'
 function options(overrides: Partial<Parameters<typeof useCreateCanvas>[0]> = {}) {
   return {
     workspaceId: 'ws_1',
-    slug: 'canvas-a',
-    canvases: [{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }],
+    path: 'canvas-a',
+    canvases: [{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }],
     isLocalMode: false,
     onCreateCanvas: undefined,
     onNavigateToCanvas: vi.fn(),
     daemonFetch: vi.fn(
-      async () => new Response(JSON.stringify({ slug: 'untitled' }), { status: 200 }),
+      async () => new Response(JSON.stringify({ path: 'untitled' }), { status: 200 }),
     ) as unknown as typeof globalThis.fetch,
     mountedRef: { current: true },
     ...overrides,
@@ -34,7 +34,7 @@ describe('useCreateCanvas — immediate create', () => {
     act(() => result.current.openNewCanvas())
     expect(result.current.newCanvasBusy).toBe(true)
     await act(async () =>
-      resolveFetch?.(new Response(JSON.stringify({ slug: 'untitled' }), { status: 200 })),
+      resolveFetch?.(new Response(JSON.stringify({ path: 'untitled' }), { status: 200 })),
     )
     expect(result.current.newCanvasBusy).toBe(false)
   })
@@ -75,17 +75,17 @@ describe('useCreateCanvas — immediate create', () => {
   it('daemon mode derives within the current group and POSTs it', async () => {
     const daemonFetch = vi.fn(
       async (_url: string, _init?: RequestInit) =>
-        new Response(JSON.stringify({ slug: 'x' }), { status: 200 }),
+        new Response(JSON.stringify({ path: 'x' }), { status: 200 }),
     )
     const onNavigateToCanvas = vi.fn()
     const { result } = renderHook(() =>
       useCreateCanvas(
         options({
-          slug: 'design/foo',
+          path: 'design/foo',
           canvases: [
-            { slug: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' },
-            { slug: 'design/untitled', updatedAt: '2026-04-23T00:00:00Z' },
-            { slug: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
+            { path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' },
+            { path: 'design/untitled', updatedAt: '2026-04-23T00:00:00Z' },
+            { path: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
           ],
           daemonFetch: daemonFetch as unknown as typeof globalThis.fetch,
           onNavigateToCanvas,
@@ -95,7 +95,7 @@ describe('useCreateCanvas — immediate create', () => {
     await act(async () => result.current.openNewCanvas())
     // design/untitled is taken INSIDE the group; the bare untitled outside it must not collide.
     expect(JSON.parse(String(daemonFetch.mock.calls[0]?.[1]?.body))).toEqual({
-      slug: 'design/untitled-2',
+      path: 'design/untitled-2',
     })
     expect(onNavigateToCanvas).toHaveBeenCalledWith('design/untitled-2')
   })
@@ -119,7 +119,7 @@ describe('useCreateCanvas — immediate create', () => {
     })
     expect(daemonFetch).toHaveBeenCalledTimes(1)
     await act(async () =>
-      resolveFetch?.(new Response(JSON.stringify({ slug: 'untitled' }), { status: 200 })),
+      resolveFetch?.(new Response(JSON.stringify({ path: 'untitled' }), { status: 200 })),
     )
   })
 

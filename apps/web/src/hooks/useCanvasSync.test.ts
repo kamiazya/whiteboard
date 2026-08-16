@@ -89,7 +89,7 @@ function versionCreatedPayload(
 ): VersionCreatedPayload {
   return {
     id: 'v1',
-    slug: 'canvas-a',
+    path: 'canvas-a',
     createdAt: '2026-01-01T00:00:00.000Z',
     elementCount: 3,
     auto: false,
@@ -522,7 +522,7 @@ describe('useCanvasSync', () => {
   })
 
   describe('identity events', () => {
-    const identity = { workspaceId: 'ws-1', slug: 'canvas-a' }
+    const identity = { workspaceId: 'ws-1', path: 'canvas-a' }
 
     function listenFor(eventName: string): { calls: CustomEvent[] } {
       const state = { calls: [] as CustomEvent[] }
@@ -593,8 +593,8 @@ describe('useCanvasSync', () => {
         initialProps: { id: identity },
       })
 
-      rerender({ id: { workspaceId: 'ws-1', slug: 'canvas-b' } })
-      rerender({ id: { workspaceId: 'ws-2', slug: 'canvas-c' } })
+      rerender({ id: { workspaceId: 'ws-1', path: 'canvas-b' } })
+      rerender({ id: { workspaceId: 'ws-2', path: 'canvas-c' } })
 
       expect(connectSpy).toHaveBeenCalledTimes(1)
     })

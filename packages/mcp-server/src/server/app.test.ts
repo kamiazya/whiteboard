@@ -127,7 +127,7 @@ describe('createApp daemon mutation auth', () => {
     const createRes = await app.request('/api/workspaces/session1/canvases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: 'demo' }),
+      body: JSON.stringify({ path: 'demo' }),
     })
     expect(createRes.status).toBe(401)
 
@@ -137,10 +137,10 @@ describe('createApp daemon mutation auth', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer secret',
       },
-      body: JSON.stringify({ slug: 'demo' }),
+      body: JSON.stringify({ path: 'demo' }),
     })
     expect(authedCreateRes.status).toBe(200)
-    await expect(authedCreateRes.json()).resolves.toEqual({ slug: 'demo' })
+    await expect(authedCreateRes.json()).resolves.toEqual({ path: 'demo' })
 
     const authedDebugRes = await app.request('/api/debug', {
       headers: {
@@ -1298,7 +1298,7 @@ describe('createApp daemon mutation auth', () => {
           'Content-Type': 'application/json',
           Origin: 'http://localhost:5173',
         },
-        body: JSON.stringify({ slug: 'demo' }),
+        body: JSON.stringify({ path: 'demo' }),
       })
       expect(res.status).toBe(401)
     })
@@ -1406,7 +1406,7 @@ describe('createApp daemon mutation auth', () => {
           'Content-Type': 'application/json',
           Origin: 'https://kamiazya-whiteboard.pages.dev',
         },
-        body: JSON.stringify({ slug: 'demo' }),
+        body: JSON.stringify({ path: 'demo' }),
       })
       expect(res.status).toBe(401)
     })

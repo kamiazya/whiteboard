@@ -20,7 +20,7 @@ export const documentEntrySchema = z
      * What a human reads, as opposed to `path`, which is an address. Absent
      * rather than defaulted to the last path segment: a reader that wants
      * that fallback can choose it, while a listing that invents one reads as
-     * though somebody typed the slug in as a title.
+     * though somebody typed the path in as a title.
      */
     name: z.string().min(1).optional(),
   })

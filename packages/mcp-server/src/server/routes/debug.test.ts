@@ -69,7 +69,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -81,11 +81,11 @@ describe('GET /api/debug', () => {
 
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-a')
     expect(session).toBeDefined()
-    const c1 = session!.canvases.find((c) => c.slug === 'canvas-1')
-    const c2 = session!.canvases.find((c) => c.slug === 'canvas-2')
+    const c1 = session!.canvases.find((c) => c.path === 'canvas-1')
+    const c2 = session!.canvases.find((c) => c.path === 'canvas-2')
     expect(c1).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 5,
         visibleElements: 3,
         tombstones: 2,
@@ -93,7 +93,7 @@ describe('GET /api/debug', () => {
     )
     expect(c2).toEqual(
       expect.objectContaining({
-        slug: 'canvas-2',
+        path: 'canvas-2',
         totalElements: 1,
         visibleElements: 1,
         tombstones: 0,
@@ -118,7 +118,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -126,10 +126,10 @@ describe('GET /api/debug', () => {
       }>
     }
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-nodes')
-    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    const canvas = session?.canvases.find((c) => c.path === 'canvas-1')
     expect(canvas).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 2,
         visibleElements: 2,
         tombstones: 0,
@@ -157,7 +157,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -165,10 +165,10 @@ describe('GET /api/debug', () => {
       }>
     }
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-mixed')
-    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    const canvas = session?.canvases.find((c) => c.path === 'canvas-1')
     expect(canvas).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 1,
         visibleElements: 1,
         tombstones: 0,
@@ -187,7 +187,7 @@ describe('GET /api/debug', () => {
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; canvases: Array<{ slug: string; cached: boolean }> }>
+      workspaces: Array<{ workspaceId: string; canvases: Array<{ path: string; cached: boolean }> }>
       cache: { size: number; keys: string[] }
     }
 
@@ -195,8 +195,8 @@ describe('GET /api/debug', () => {
     expect(json.cache.keys).not.toContain('sess-cache/untouched')
 
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-cache')!
-    expect(session.canvases.find((c) => c.slug === 'touched')?.cached).toBe(true)
-    expect(session.canvases.find((c) => c.slug === 'untouched')?.cached).toBe(false)
+    expect(session.canvases.find((c) => c.path === 'touched')?.cached).toBe(true)
+    expect(session.canvases.find((c) => c.path === 'untouched')?.cached).toBe(false)
   })
 
   it('returns workspaces: [] when no sessions exist', async () => {

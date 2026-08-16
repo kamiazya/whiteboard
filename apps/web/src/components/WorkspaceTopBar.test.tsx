@@ -26,7 +26,7 @@ function mkNamesOk() {
 
 function renderBar(overrides?: {
   onNavigateBack?: () => void
-  onNavigateToCanvas?: (slug: string) => void
+  onNavigateToCanvas?: (path: string) => void
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
 }) {
@@ -36,8 +36,8 @@ function renderBar(overrides?: {
   return render(
     <WorkspaceTopBar
       workspaceId="ws_1"
-      slug="canvas-a"
-      canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+      path="canvas-a"
+      canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
       onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
       onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
@@ -63,7 +63,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-// ADR-0006 point 3: creation is not gated on a name. Selecting "New canvas…" derives a slug from
+// ADR-0006 point 3: creation is not gated on a name. Selecting "New canvas…" derives a path from
 // the loaded list (preserving the current group prefix) and POSTs immediately — no dialog.
 // These are the red tests for that convergence; the dialog-era suites below are updated with it.
 async function selectNewCanvasItem(switcherName: RegExp = /^Workspace:/i) {
@@ -80,7 +80,7 @@ function capturePosts() {
     if (init?.method === 'POST') {
       posts.push({ url: String(url), body: JSON.parse(String(init.body)) })
       return new Response(
-        JSON.stringify({ slug: (JSON.parse(String(init.body)) as { slug: string }).slug }),
+        JSON.stringify({ path: (JSON.parse(String(init.body)) as { path: string }).path }),
         {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -93,13 +93,13 @@ function capturePosts() {
 }
 
 describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
-  it('POSTs a derived slug on select and navigates — no dialog', async () => {
+  it('POSTs a derived path on select and navigates — no dialog', async () => {
     const posts = capturePosts()
     const onNavigateToCanvas = vi.fn()
     renderBar({ onNavigateToCanvas })
     await selectNewCanvasItem()
     await waitFor(() => expect(onNavigateToCanvas).toHaveBeenCalledWith('untitled'))
-    expect(posts).toEqual([expect.objectContaining({ body: { slug: 'untitled' } })])
+    expect(posts).toEqual([expect.objectContaining({ body: { path: 'untitled' } })])
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -109,8 +109,8 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="design/foo"
-        canvases={[{ slug: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="design/foo"
+        canvases={[{ path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={onNavigateToCanvas}
@@ -119,18 +119,18 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
     )
     await selectNewCanvasItem()
     await waitFor(() => expect(onNavigateToCanvas).toHaveBeenCalledWith('design/untitled'))
-    expect(posts[0]?.body).toEqual({ slug: 'design/untitled' })
+    expect(posts[0]?.body).toEqual({ path: 'design/untitled' })
   })
 
-  it('skips slugs already in the list: untitled taken -> untitled-2', async () => {
+  it('skips paths already in the list: untitled taken -> untitled-2', async () => {
     const posts = capturePosts()
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
+        path="canvas-a"
         canvases={[
-          { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' },
-          { slug: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
+          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' },
+          { path: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
         ]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
@@ -140,7 +140,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
     )
     await selectNewCanvasItem()
     await waitFor(() => expect(posts.length).toBe(1))
-    expect(posts[0]?.body).toEqual({ slug: 'untitled-2' })
+    expect(posts[0]?.body).toEqual({ path: 'untitled-2' })
   })
 
   it('a failed create surfaces the Problem Details title in an alert — still no dialog', async () => {
@@ -193,8 +193,8 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
     })
 
     const baseProps = {
-      slug: 'shared-slug',
-      canvases: [{ slug: 'shared-slug', updatedAt: '2026-04-23T00:00:00Z' }],
+      path: 'shared-path',
+      canvases: [{ path: 'shared-path', updatedAt: '2026-04-23T00:00:00Z' }],
       onToggleFullscreen: () => {},
       onNavigateBack: () => {},
       onNavigateToCanvas: () => {},
@@ -207,7 +207,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
     // arrives later and must not clobber it.
     resolveB(
       new Response(
-        JSON.stringify({ workspace: 'B', canvases: { 'shared-slug': 'Fresh B' }, pinned: [] }),
+        JSON.stringify({ workspace: 'B', canvases: { 'shared-path': 'Fresh B' }, pinned: [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
@@ -223,7 +223,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     resolveA(
       new Response(
-        JSON.stringify({ workspace: 'A', canvases: { 'shared-slug': 'Stale A' }, pinned: [] }),
+        JSON.stringify({ workspace: 'A', canvases: { 'shared-path': 'Stale A' }, pinned: [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
@@ -238,7 +238,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
   it('wraps the canvas list section in a scrollable max-height container so many canvases remain reachable', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
-      slug: `canvas-${i}`,
+      path: `canvas-${i}`,
       updatedAt: '2026-04-23T00:00:00Z',
     }))
     renderBar()
@@ -246,7 +246,7 @@ describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-0"
+        path="canvas-0"
         canvases={many}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
@@ -319,7 +319,7 @@ describe('WorkspaceTopBar — new-canvas double activation', () => {
     fireEvent.pointerUp(item)
     fireEvent.pointerUp(item)
     await waitFor(() => expect(postCount).toBe(1))
-    resolvePost(new Response(JSON.stringify({ slug: 'untitled' }), { status: 200 }))
+    resolvePost(new Response(JSON.stringify({ path: 'untitled' }), { status: 200 }))
     await waitFor(() => expect(postCount).toBe(1))
   })
 })
@@ -345,8 +345,8 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
       <DaemonApiContext.Provider value={daemonFetch}>
         <WorkspaceTopBar
           workspaceId="ws_1"
-          slug="canvas-a"
-          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          path="canvas-a"
+          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={() => {}}
@@ -371,7 +371,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
 describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (RED-first)', () => {
   function renderBarWithDaemonFetch(overrides?: {
     getThumbnailBlob?: () => Promise<Blob | null>
-    onNavigateToCanvas?: (slug: string) => void
+    onNavigateToCanvas?: (path: string) => void
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
       if (String(url).includes('/names')) return mkNamesOk()
@@ -382,8 +382,8 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
       <DaemonApiContext.Provider value={daemonFetch}>
         <WorkspaceTopBar
           workspaceId="ws_1"
-          slug="canvas-a"
-          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          path="canvas-a"
+          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
@@ -401,7 +401,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
       JSON.stringify({
         version: {
           id,
-          slug: 'canvas-a',
+          path: 'canvas-a',
           createdAt: '2026-04-23T00:00:00Z',
           elementCount: 0,
           auto: false,
@@ -536,8 +536,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -569,8 +569,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -597,8 +597,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -619,8 +619,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -642,8 +642,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -666,8 +666,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -717,8 +717,8 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -759,8 +759,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateToCanvas={() => {}}
       />,
       { container: document.body },
@@ -772,8 +772,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
       />,
@@ -786,8 +786,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
@@ -815,8 +815,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
@@ -836,8 +836,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
@@ -846,7 +846,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       { container: document.body },
     )
     // HeaderBranchChip is stubbed to render null, so absence is confirmed by
-    // the fact mounting never throws when the chip's props (workspaceId/slug)
+    // the fact mounting never throws when the chip's props (workspaceId/path)
     // would otherwise be required — the real assertion lives in the
     // conditional render below via a spy-friendly mock override.
     expect(screen.queryByTestId('header-branch-chip')).toBeNull()
@@ -858,8 +858,8 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws 1#x"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
@@ -975,10 +975,10 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
+        path="canvas-a"
         canvases={[
-          { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
-          { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
+          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
+          { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
@@ -1001,8 +1001,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1021,14 +1021,14 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
-  it('routes "New canvas…" to onCreateCanvas instead of opening the slug dialog / POSTing', async () => {
+  it('routes "New canvas…" to onCreateCanvas instead of opening the path dialog / POSTing', async () => {
     const onCreateCanvas = vi.fn().mockResolvedValue(undefined)
     render(
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1053,8 +1053,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={onRenameCanvas}
@@ -1087,8 +1087,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={onRenameCanvas}
@@ -1114,14 +1114,14 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(screen.queryByPlaceholderText('canvas-a')).not.toBeNull()
   })
 
-  it('surfaces a rejected onCreateCanvas as a visible error since local mode has no slug dialog', async () => {
+  it('surfaces a rejected onCreateCanvas as a visible error since local mode has no path dialog', async () => {
     const onCreateCanvas = vi.fn().mockRejectedValue(new Error('boom'))
     render(
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1146,8 +1146,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1191,8 +1191,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1234,8 +1234,8 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
         onRenameCanvas={() => {}}
@@ -1267,10 +1267,10 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
-        slug="canvas-a"
+        path="canvas-a"
         canvases={[
-          { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
-          { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
+          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
+          { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
         onToggleFullscreen={() => {}}
         onNavigateToCanvas={() => {}}
@@ -1306,8 +1306,8 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
       <StrictMode>
         <WorkspaceTopBar
           workspaceId="ws_1"
-          slug="canvas-a"
-          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          path="canvas-a"
+          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToCanvas={() => {}}
@@ -1425,8 +1425,8 @@ describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
-        slug="canvas-a"
-        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        path="canvas-a"
+        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
