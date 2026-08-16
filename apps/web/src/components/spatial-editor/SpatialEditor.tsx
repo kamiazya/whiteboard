@@ -800,7 +800,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const lockEnabled = onToggleNodeLock !== undefined
     const isLocked = (nodeId: string): boolean =>
-      lockEnabled && lockedNodeIds !== undefined && lockedNodeIds.has(nodeId)
+      lockEnabled && (lockedNodeIds?.has(nodeId) ?? false)
     /** Boxes a pointer or marquee may target: locked nodes are invisible to both. */
     const selectableBoxes = useMemo(
       () => (lockEnabled ? boxes.filter((entry) => !isLocked(entry.id)) : boxes),
@@ -810,7 +810,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /** Same seam rule as the node lock: no callback, no enforcement. */
     const edgeLockEnabled = onToggleEdgeLock !== undefined
     const isEdgeLocked = (edgeId: string): boolean =>
-      edgeLockEnabled && lockedEdgeIds !== undefined && lockedEdgeIds.has(edgeId)
+      edgeLockEnabled && (lockedEdgeIds?.has(edgeId) ?? false)
 
     /**
      * A lock can arrive from a peer or an agent while the node is ALREADY

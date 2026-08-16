@@ -186,7 +186,6 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     >
       {items.map((item, index) =>
         item.kind === 'separator' ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: separators are positional by nature and the items list is rebuilt per open
           <hr key={`separator-${index}`} className="my-1 border-border" />
         ) : item.kind === 'options' ? (
           <Fragment key={item.label}>

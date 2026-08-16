@@ -5,11 +5,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
-import {
-  writeSpatialCanvas as _w,
-  readSpatialCanvas,
-  WorkspaceTree,
-} from '@kamiazya/whiteboard-canvas-workspace'
+import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { createNodePatchTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

@@ -74,9 +74,7 @@ it('hides Fullscreen on the real iPhone shape: no element API at all', async () 
     await openKebab(container)
     expect(document.body.textContent).not.toContain('Fullscreen')
   } finally {
-    // biome-ignore lint/performance/noDelete: restoring an own-property shadow is exactly what delete is for
     delete (root as { requestFullscreen?: unknown }).requestFullscreen
-    // biome-ignore lint/performance/noDelete: same
     delete (root as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen
     expect(original).toBeDefined()
   }
