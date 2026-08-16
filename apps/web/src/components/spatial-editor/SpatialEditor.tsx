@@ -176,13 +176,13 @@ import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
+  canvasToScreen,
   fitViewportToBoxes,
   frameViewport,
   IDENTITY_VIEWPORT,
   type Point,
   panBy,
   panToShowTarget,
-  canvasToScreen,
   screenToCanvas,
   contentBounds as unionContentBounds,
   type Viewport,
@@ -2216,7 +2216,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
-        applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+        // Escape is the PERSON's cancel, not the platform's: it routes to
+        // cancel-text-edit, whose empty-note branch keeps a freshly placed
+        // box. pointercancel is reserved for genuine gesture teardown (see
+        // the lost-capture handling), where the half-made node is debris.
+        // For every non-editing gesture the two arms behave identically.
+        applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
         return
       }
       // Delete/Backspace deletes the current selection — but never while the

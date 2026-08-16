@@ -485,6 +485,22 @@ describe('cancel-text-edit on a freshly created node', () => {
     expect(result.selectedId).toBe('fresh')
   })
 
+  it('a real pointercancel still discards the untouched new node — OS-broken is not "done here"', () => {
+    // The keep-the-box rule is for the EXPLICIT cancel (Escape): a person
+    // saying "done here". pointercancel is the platform tearing the gesture
+    // down mid-flight; the half-made node it strands is debris, and #821's
+    // capture fix relies on this staying a discard.
+    const c = canvas()
+    const created = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 100, y: 100 } },
+      { createId: () => 'fresh' },
+    )
+    const result = reduceGesture(created.state, c, { type: 'pointercancel' })
+    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
+  })
+
   it('still takes the node with it when text was typed and then discarded', () => {
     const c = canvas()
     const created = reduceGesture(
