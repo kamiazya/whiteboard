@@ -55,7 +55,7 @@ writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig))
 const prompt = [
   'Use the whiteboard MCP server.',
   'Do exactly these three steps in order, no extra work:',
-  '1. call wb_document_create with slug="claude-smoke".',
+  '1. call wb_document_create with path="claude-smoke".',
   '2. call wb_node_patch with type=rectangle at {x:10,y:10}, width=40, height=20 on the document id returned above.',
   '3. call wb_version_save for that canvas id with label "claude-smoke".',
   'Return only the versionId on the last line, nothing else.',

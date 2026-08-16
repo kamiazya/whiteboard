@@ -59,7 +59,7 @@ const SEED_TOKEN = 'smoke-cli-seed-token-x7z9q'
 const SMOKE_ISSUER = 'https://auth.server-cli-smoke.example'
 const SMOKE_AUDIENCE = 'https://whiteboard.server-cli-smoke.example'
 const WORKSPACE_ID = 'sess-cli-smoke'
-const CANVAS_SLUG = 'canvas-cli-smoke'
+const CANVAS_PATH = 'canvas-cli-smoke'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -309,7 +309,7 @@ try {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
-        body: JSON.stringify({ slug: CANVAS_SLUG }),
+        body: JSON.stringify({ path: CANVAS_PATH }),
       },
     )
     if (!createRes.ok) fail('scenario 2: canvas create failed', { status: createRes.status })
@@ -425,7 +425,7 @@ try {
     )
     if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
-    if (!(list?.canvases ?? []).some((c) => c.slug === CANVAS_SLUG)) {
+    if (!(list?.canvases ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 5: seeded canvas not found on restored server', {
         canvasCount: (list?.canvases ?? []).length,
       })

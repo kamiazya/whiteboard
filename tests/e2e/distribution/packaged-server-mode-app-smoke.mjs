@@ -310,7 +310,7 @@ try {
   }
   console.log('[server-mode-smoke] scenario 5a (workspaces auth): PASS')
 
-  // --- Scenario 5b: POST /api/w/:wid/canvas/:slug/export — canvas:write ---
+  // --- Scenario 5b: POST /api/w/:wid/canvas/:path/export — canvas:write ---
   {
     const appEmpty = makeApp([])
     const res401 = await req(appEmpty, 'POST', '/api/w/w1/canvas/s1/export')

@@ -18,10 +18,18 @@ import { describe, expect, it } from 'vitest'
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /**
- * Every directory whose source this rule governs: both composition roots and
- * every shared-layer package. Deliberately the whole tree rather than
- * arch-lint's narrower boundary scan — a name is wrong wherever it is read,
- * and a composition root is where most of them live.
+ * Every directory whose source this rule governs: both composition roots,
+ * every shared-layer package, and the scripts and E2E smokes. Deliberately
+ * the whole tree rather than arch-lint's narrower boundary scan — a name is
+ * wrong wherever it is read, and a composition root is where most of them
+ * live.
+ *
+ * `scripts` and `tests` are here because leaving them out is what let a real
+ * break ship: the E2E smokes kept POSTing `{ slug }` to a route whose schema
+ * had become `{ path }`, so `packaged-smoke` failed with
+ * `400 path is required` — the one CI job that runs them, and the only thing
+ * that noticed. Nothing typechecks a `.mjs` smoke against the contract it
+ * calls, which is exactly why a scan has to reach them.
  */
 const SCAN_DIRS = [
   'apps/web/src',
@@ -31,8 +39,12 @@ const SCAN_DIRS = [
   'packages/canvas-render/src',
   'packages/canvas-viewer/src',
   'packages/crdt/src',
+  'apps/web/scripts',
+  'packages/canvas-viewer/scripts',
+  'packages/mcp-server/scripts',
   'packages/mcp-server/src',
   'packages/server-core/src',
+  'tests',
 ]
 
 /**
@@ -63,6 +75,11 @@ const BANNED = [
   },
 ] as const
 
+/**
+ * Throws rather than skipping when a scan root is gone: a silently-missing
+ * directory turns this guard into one that passes by scanning nothing, which
+ * is the failure mode a rename is most likely to cause.
+ */
 function listSourceFiles(dir: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -73,7 +90,7 @@ function listSourceFiles(dir: string): string[] {
       files.push(...listSourceFiles(full))
       continue
     }
-    if (/\.(ts|tsx|json)$/.test(entry.name)) files.push(full)
+    if (/\.(ts|tsx|mts|js|mjs|cjs|json)$/.test(entry.name)) files.push(full)
   }
   return files
 }

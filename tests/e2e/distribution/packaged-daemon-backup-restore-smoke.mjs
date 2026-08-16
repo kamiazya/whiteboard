@@ -45,7 +45,7 @@ const TOKEN_B = 'whiteboard-backup-restore-smoke-token-b'
 const READINESS_TIMEOUT_MS = 15_000
 const READINESS_INTERVAL_MS = 200
 const SHUTDOWN_TIMEOUT_MS = 5_000
-const SEED_CANVAS_SLUG = 'canvas-backup-restore-smoke'
+const SEED_CANVAS_PATH = 'canvas-backup-restore-smoke'
 // Fixed workspace id seeded by this smoke. `sess-...` follows the
 // project's `[A-Za-z0-9_-]+` rule. Creating a canvas under this id
 // inserts both the workspace row and the canvas row through the
@@ -228,7 +228,7 @@ try {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: SEED_CANVAS_SLUG }),
+      body: JSON.stringify({ path: SEED_CANVAS_PATH }),
     },
   )
   if (!createRes.ok) {
@@ -250,15 +250,15 @@ try {
   const seededList = await (
     await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
-  const seededSlugs = (seededList?.canvases ?? []).map((c) => c.slug)
-  if (!seededSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededSlugs)}`)
+  const seededPaths = (seededList?.canvases ?? []).map((c) => c.path)
+  if (!seededPaths.includes(SEED_CANVAS_PATH)) {
+    throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededPaths)}`)
   }
   console.log(`[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${WORKSPACE_ID}`)
 
   // Capture the canvas Loro snapshot through daemon A's HTTP route
   // BEFORE stopping it. The route reads from
-  // `blobs/<wsId>/canvas/<canvasId>.loro` via the canvas-store —
+  // `blobs/<wsId>/canvas/<documentId>.loro` via the document-store —
   // that's exactly the file path the backup helper has to round-trip
   // through restore. Comparing daemon B's snapshot bytes to this
   // baseline catches a regression that drops `blobs/` from the
@@ -267,7 +267,7 @@ try {
   // would no longer match.
   const snapshotARes = await authedFetch(
     daemonA,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )
   if (!snapshotARes.ok) {
     throw new Error(`daemon A snapshot fetch failed: ${snapshotARes.status}`)
@@ -383,12 +383,12 @@ try {
   const restoredCanvases = await (
     await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
-  const restoredSlugs = (restoredCanvases?.canvases ?? []).map((c) => c.slug)
-  if (!restoredSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredSlugs)}`)
+  const restoredPaths = (restoredCanvases?.canvases ?? []).map((c) => c.path)
+  if (!restoredPaths.includes(SEED_CANVAS_PATH)) {
+    throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredPaths)}`)
   }
   console.log(
-    `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_SLUG})`,
+    `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_PATH})`,
   )
 
   // Loro snapshot byte-equality. Without this assertion a regression
@@ -399,7 +399,7 @@ try {
   // daemon B to actually `loadCanvas` the restored file.
   const snapshotBRes = await authedFetch(
     daemonB,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_SLUG)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )
   if (!snapshotBRes.ok) {
     throw new Error(`daemon B snapshot fetch failed: ${snapshotBRes.status}`)
@@ -420,11 +420,11 @@ try {
   }
   // Byte equality through `loadCanvas → doc.export({ mode: 'snapshot' })`
   // means daemon B successfully read the restored
-  // `blobs/<wsId>/canvas/<canvasId>.loro` file. The Loro runtime
-  // itself is exercised by the existing canvas-store integration
+  // `blobs/<wsId>/canvas/<documentId>.loro` file. The Loro runtime
+  // itself is exercised by the existing document-store integration
   // tests; here byte equality is sufficient to catch a regression
   // that drops `blobs/` from the backup or restore copy or that
-  // points the restored DB row at a different canvasId.
+  // points the restored DB row at a different documentId.
   console.log(
     `[packaged-daemon-backup-restore-smoke] snapshot round-trip ok (${seededSnapshot.byteLength} bytes)`,
   )
