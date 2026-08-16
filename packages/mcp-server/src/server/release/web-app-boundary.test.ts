@@ -8,12 +8,17 @@
 //     it actually uses for every shared/daemon-client module — are resolved
 //     through packages/mcp-server/package.json's `exports` map back to their
 //     src/ source file (resolveMcpSubpathEntry), and that file's transitive
-//     closure of relative imports is walked with the SAME bans
-//     (collectTransitiveViolations). A subpath absent from the exports map,
-//     or from the small TEST_ONLY_SUBPATHS alias list mirroring
-//     apps/web/vitest.config.ts, is itself a violation — nothing is silently
-//     skipped. forbiddenResolvedPath alone is blind to this whole import
-//     style, since it bails out on any specifier not starting with '.'.
+//     closure of imports is walked with the SAME bans (collectTransitiveViolations).
+//     The walk recurses through BOTH relative ('./...') imports AND a nested
+//     bare '@kamiazya/whiteboard-mcp/<subpath>' re-import found mid-chain
+//     (e.g. one allowlisted src/shared module re-importing another subpath by
+//     its published specifier instead of a relative path) — only a bare
+//     specifier for a genuinely different third-party package is out of scope.
+//     A subpath absent from the exports map, or from the small
+//     TEST_ONLY_SUBPATHS alias list mirroring apps/web/vitest.config.ts, is
+//     itself a violation — nothing is silently skipped. forbiddenResolvedPath
+//     alone is blind to this whole import style, since it bails out on any
+//     specifier not starting with '.'.
 //   - @kamiazya/whiteboard-mcp package.json files must not include apps/ or src/
 //   - pnpm-workspace.yaml must declare apps/* so apps/web participates in workspace builds
 //   - apps/web skeleton must exist at the intended deploy-target location
@@ -494,6 +499,25 @@ describe('collectTransitiveViolations', () => {
     expect(violations.some((v) => v.includes('b.ts'))).toBe(true)
   })
 
+  it('a bare self-package subpath re-import found mid-chain is resolved and its closure scanned too, not just the top-level entry', () => {
+    // Mirrors a real shape: an allowlisted src/shared module re-imports another
+    // @kamiazya/whiteboard-mcp/<subpath> by its published bare specifier instead
+    // of a relative path. Before this test, collectTransitiveViolations's BFS
+    // only recursed into relative imports, so this second subpath's own reach
+    // into src/server passed unscanned one level deep in the closure.
+    mkdirSync(join(dir, 'src/server'), { recursive: true })
+    writeFileSync(join(dir, 'src/entry.ts'), "export * from './a.js'\n")
+    writeFileSync(
+      join(dir, 'src/a.ts'),
+      `import '${MCP_PACKAGE_SPECIFIER}/fixture-subpath'\nexport const x = 1\n`,
+    )
+    writeFileSync(join(dir, 'src/leak-entry.ts'), "export * from './server/leak.js'\n")
+    writeFileSync(join(dir, 'src/server/leak.ts'), 'export const leaked = true\n')
+    const exportsMap = { './fixture-subpath': { types: './src/leak-entry.ts' } }
+    const violations = collectTransitiveViolations(join(dir, 'src/entry.ts'), dir, exportsMap)
+    expect(violations.some((v) => v.includes('leak'))).toBe(true)
+  })
+
   it('a cyclic import graph terminates and reports the same violation set', () => {
     writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
     writeFileSync(join(dir, 'a.ts'), "export * from './b.js'\nimport 'node:fs'\n")
@@ -593,6 +617,32 @@ describe('checkSubpathImportViolations', () => {
       `${MCP_PACKAGE_SPECIFIER}/canvas-backend-contract-suite`,
     )
     expect(violations).toEqual([])
+  })
+
+  // Isolated fixture tests for the sibling branch (entry === 'unknown' ||
+  // entry === 'root-forbidden'), mirroring the TEST_ONLY_SUBPATHS branch's own
+  // isolated tests above rather than relying on no real apps/web file
+  // happening to import an unresolvable/root specifier today.
+  it('a subpath absent from the exports map is a violation naming the "unknown" resolution', () => {
+    const violations = checkSubpathImportViolations(
+      resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.tsx'),
+      `${MCP_PACKAGE_SPECIFIER}/does-not-exist`,
+    )
+    expect(
+      violations.some((v) => v.includes('does not resolve through the exports map (unknown)')),
+    ).toBe(true)
+  })
+
+  it('a bare package-root import is a violation naming the "root-forbidden" resolution', () => {
+    const violations = checkSubpathImportViolations(
+      resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.tsx'),
+      MCP_PACKAGE_SPECIFIER,
+    )
+    expect(
+      violations.some((v) =>
+        v.includes('does not resolve through the exports map (root-forbidden)'),
+      ),
+    ).toBe(true)
   })
 })
 
@@ -701,17 +751,26 @@ function resolveRelativeSourceFile(fromFile: string, specifier: string): string 
   return candidates.find(existsSync) ?? null
 }
 
-// BFS over an entry file's transitive closure of relative value imports,
-// applying the same bans forbiddenResolvedPath applies to the browser app's own
-// relative imports: Node-only builtins, reach into src/server, src/cli, or
-// src/daemon, and an unlisted src/shared/* import (resolved against
-// packageRoot's own src/ dir, not PACKAGE_SRC_DIR — the fixture-based unit
-// tests below pass a synthetic packageRoot with no server/cli/daemon/shared
-// dirs of its own). A visited set makes this terminate on a cyclic import
-// graph and gives an order-independent result. An unresolvable relative
-// import is a violation, not a skip — the property whose absence was this
-// guard's bug in the first place.
-function collectTransitiveViolations(entryFile: string, packageRoot: string): string[] {
+// BFS over an entry file's transitive closure of imports, applying the same
+// bans forbiddenResolvedPath applies to the browser app's own relative
+// imports: Node-only builtins, reach into src/server, src/cli, or src/daemon,
+// and an unlisted src/shared/* import (resolved against packageRoot's own
+// src/ dir, not PACKAGE_SRC_DIR — the fixture-based unit tests below pass a
+// synthetic packageRoot with no server/cli/daemon/shared dirs of its own).
+// A visited set makes this terminate on a cyclic import graph and gives an
+// order-independent result. An unresolvable relative import is a violation,
+// not a skip — the property whose absence was this guard's bug in the first
+// place. The walk is not limited to relative imports: a bare
+// '@kamiazya/whiteboard-mcp/<subpath>' specifier found mid-chain (a src/shared
+// module re-importing another subpath by its published name rather than a
+// relative path) is resolved through `exportsMap` the same way the top-level
+// entry point is, and its resolved file is queued too — otherwise this exact
+// bypass class re-opens one BFS level deeper than the entry point.
+function collectTransitiveViolations(
+  entryFile: string,
+  packageRoot: string,
+  exportsMap: Record<string, { types?: string } | string> = MCP_EXPORTS_MAP,
+): string[] {
   const packageSrcDir = resolve(packageRoot, 'src')
   const violations: string[] = []
   const visited = new Set<string>()
@@ -724,6 +783,20 @@ function collectTransitiveViolations(entryFile: string, packageRoot: string): st
     for (const specifier of extractImportSpecifiers(source)) {
       if (isForbiddenNodeBuiltin(specifier)) {
         violations.push(`${relative(REPO_ROOT, file)}: import "${specifier}" (Node builtin)`)
+        continue
+      }
+      if (
+        specifier === MCP_PACKAGE_SPECIFIER ||
+        specifier.startsWith(`${MCP_PACKAGE_SPECIFIER}/`)
+      ) {
+        const resolvedSubpath = resolveMcpSubpathEntry(exportsMap, specifier, packageRoot)
+        if (resolvedSubpath === 'unknown' || resolvedSubpath === 'root-forbidden') {
+          violations.push(
+            `${relative(REPO_ROOT, file)}: import "${specifier}" does not resolve through the exports map (${resolvedSubpath})`,
+          )
+          continue
+        }
+        if (!visited.has(resolvedSubpath)) queue.push(resolvedSubpath)
         continue
       }
       if (!specifier.startsWith('.')) continue // bare third-party specifiers are outside this scan's scope
