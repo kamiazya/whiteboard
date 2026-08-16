@@ -540,6 +540,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * used to blur the just-mounted textarea when we opened at the press.
      */
     const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
+    /**
+     * Every pointer currently down on the root, by id. Read by
+     * `handleLostPointerCapture` to tell a capture handed back with its own
+     * release from one lost out from under a pointer that is still down.
+     * A set, not a single slot: a pinch holds two at once and they end
+     * independently.
+     */
+    const downPointersRef = useRef<Set<number>>(new Set())
     /** In-flight marquee selection rect, in canvas space (Excalidraw
      * semantics: plain drag on empty space selects; pan is Space+drag,
      * middle-button drag, or wheel). */
@@ -1345,7 +1353,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const beginOverlayGesture = (e: React.PointerEvent): HTMLDivElement | null => {
       const root = rootRef.current
-      if (root !== null) capturePointer(root, e.pointerId)
+      if (root !== null) {
+        // These presses never reach handlePointerDown, so this is where the
+        // pointer joins the down set. Without it a capture lost mid-resize
+        // would be read as an ordinary handback and never recovered. Their
+        // release does reach handlePointerUp, because capture redirects the
+        // rest of the sequence to the root.
+        downPointersRef.current.add(e.pointerId)
+        capturePointer(root, e.pointerId)
+      }
       return root
     }
 
@@ -1392,6 +1408,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
+      // Before every early return below: what is down has to be recorded even
+      // for presses this handler goes on to ignore, or their handback is read
+      // as a capture loss.
+      downPointersRef.current.add(e.pointerId)
       if (e.pointerType === 'touch') {
         touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
         if (pinchActiveRef.current) return
@@ -1745,6 +1765,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
+      // Ahead of the gather/pinch early returns: this pointer is up whatever
+      // the rest of the handler decides to do about it.
+      downPointersRef.current.delete(e.pointerId)
       const root = rootRef.current
       // Gathering fingers act on the press, so their release carries no
       // meaning — running the click/marquee logic here would re-collapse the
@@ -1912,6 +1935,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
       if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
+      downPointersRef.current.delete(e.pointerId)
       // Pointer ids are reused, so a gathering finger left in these refs by a
       // cancel would silently deaden whichever later touch inherits its id.
       gatherPointersRef.current.delete(e.pointerId)
@@ -1929,17 +1953,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * `lostpointercapture` is NOT a synonym for "the gesture broke". It also
      * fires on the ordinary release of a captured pointer — and the browser
      * captures touch pointers IMPLICITLY, so on a touch device it arrives
-     * after every single tap.
+     * after every single tap. Cancelling there deleted the node the
+     * empty-canvas double-TAP had just created for editing: it appeared and
+     * vanished. (The same double-CLICK was fine — capture is taken at the
+     * first MOVE, so a stationary mouse press holds none to lose.)
      *
-     * `activePointerIdRef` is what tells the two apart: `handlePointerUp`
-     * clears it, so a null ref means the interaction already ended normally
-     * and there is nothing to recover. Cancelling there deleted the node the
-     * empty-canvas double-TAP had just created for editing — it appeared and
-     * vanished, while the same double-CLICK was fine because a stationary
-     * mouse press takes no capture to lose.
+     * The question is per-POINTER, not per-editor: is THIS pointer still
+     * down? A pinch captures both fingers, so lifting one leaves the other
+     * held. Deciding from any editor-wide "is something active" flag lets
+     * the lifted finger's ordinary handback answer for the finger still
+     * down — which then leaves the pinch bookkeeping holding a pointer id
+     * nothing will ever release, silently deadening whichever later touch
+     * inherits it.
      */
     const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (activePointerIdRef.current === null) return
+      if (!downPointersRef.current.has(e.pointerId)) return
       handlePointerCancel(e)
     }
 
