@@ -14,7 +14,7 @@ import { createNodePatchTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerOpenCanvasTools } from '../mcp/opencanvas-tools.js'
-import { InMemoryCanvasDocStore } from './inmemory/in-memory-canvas-doc-store.js'
+import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import { _resetWorkspaceLocksForTests, withCanvasDocWriteLock } from './workspace-lock.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -34,7 +34,7 @@ const CANVAS: SpatialCanvas = {
  * left to the scheduler. Without this the race the test means to create
  * might simply not happen, and the test would pass for the wrong reason.
  */
-function barrierOnCanvasLoads(store: InMemoryCanvasDocStore, participants: number): void {
+function barrierOnCanvasLoads(store: InMemoryDocumentStore, participants: number): void {
   let arrived = 0
   let open!: () => void
   const gate = new Promise<void>((resolve) => {
@@ -54,7 +54,7 @@ function barrierOnCanvasLoads(store: InMemoryCanvasDocStore, participants: numbe
 }
 
 async function makeDeps() {
-  const canvasDocStore = new InMemoryCanvasDocStore()
+  const documentStore = new InMemoryDocumentStore()
 
   // The patch tools assert the canvas belongs to the workspace, so the
   // index has to name it before any of them will run.
@@ -69,14 +69,14 @@ async function makeDeps() {
   const seedDoc = new LoroDoc()
   _w(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-  await canvasDocStore.saveSnapshot({
+  await documentStore.saveSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
   })
   return {
-    canvasDocStore,
+    documentStore,
     blobStore: {} as never,
     documentIndex,
   }
@@ -84,7 +84,7 @@ async function makeDeps() {
 
 /** Positions of both nodes as actually stored, after everything settles. */
 async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
-  const stored = await deps.canvasDocStore.loadSnapshot({
+  const stored = await deps.documentStore.loadSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
   })
   if (stored === null) throw new Error('no snapshot')
@@ -101,7 +101,7 @@ beforeEach(() => {
 describe('withCanvasDocWriteLock', () => {
   it('THE RED CASE: two unserialized patches to one canvas lose an update', async () => {
     const deps = await makeDeps()
-    barrierOnCanvasLoads(deps.canvasDocStore, 2)
+    barrierOnCanvasLoads(deps.documentStore, 2)
     const tool = createNodePatchTool(deps)
 
     // Both are held at the barrier until each has loaded, so they provably
@@ -204,13 +204,13 @@ describe('registered MCP handlers', () => {
     // shape directly — interleaved load/load/save/save is the lost update,
     // load/save/load/save is the fix.
     const events: string[] = []
-    const load = deps.canvasDocStore.loadSnapshot.bind(deps.canvasDocStore)
-    const save = deps.canvasDocStore.saveSnapshot.bind(deps.canvasDocStore)
-    deps.canvasDocStore.loadSnapshot = async (input) => {
+    const load = deps.documentStore.loadSnapshot.bind(deps.documentStore)
+    const save = deps.documentStore.saveSnapshot.bind(deps.documentStore)
+    deps.documentStore.loadSnapshot = async (input) => {
       if (input.docRef.kind === 'canvas') events.push('load')
       return load(input)
     }
-    deps.canvasDocStore.saveSnapshot = async (input) => {
+    deps.documentStore.saveSnapshot = async (input) => {
       if (input.docRef.kind === 'canvas') events.push('save')
       return save(input)
     }
@@ -248,8 +248,8 @@ describe('registered MCP handlers', () => {
     const writeHeld = new Promise<void>((resolve) => {
       releaseWrite = resolve
     })
-    const save = deps.canvasDocStore.saveSnapshot.bind(deps.canvasDocStore)
-    deps.canvasDocStore.saveSnapshot = async (input) => {
+    const save = deps.documentStore.saveSnapshot.bind(deps.documentStore)
+    deps.documentStore.saveSnapshot = async (input) => {
       if (input.docRef.kind === 'canvas') await writeHeld
       return save(input)
     }

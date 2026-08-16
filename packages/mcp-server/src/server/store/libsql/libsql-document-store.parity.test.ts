@@ -2,9 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
-  CanvasDocStore,
   DeltaBatch,
   DocRef,
+  DocumentStore,
   LoadDeltasResult,
   LoadSnapshotResult,
   ReadFrontierResult,
@@ -14,8 +14,8 @@ import type {
 import { describe, expect } from 'vitest'
 import { fc, fcTest } from '../../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../db/test-helpers.js'
-import { InMemoryCanvasDocStore } from '../inmemory/in-memory-canvas-doc-store.js'
-import { LibsqlCanvasDocStore } from './libsql-canvas-doc-store.js'
+import { InMemoryDocumentStore } from '../inmemory/in-memory-document-store.js'
+import { LibsqlDocumentStore } from './libsql-document-store.js'
 
 // Fixed pool of docRefs, including a canvas/workspace-tree pair that share an
 // id string, so the model exercises the isolation boundary in addition to
@@ -62,7 +62,7 @@ function buildSnapshotArgs(chunkByteArrays: Uint8Array[]): {
   return { manifest: { chunkCount, totalBytes, maxChunkBytes }, chunks }
 }
 
-async function applyOp(store: CanvasDocStore, op: Op): Promise<void> {
+async function applyOp(store: DocumentStore, op: Op): Promise<void> {
   const docRef = DOC_REFS[op.docRefIndex] as DocRef
   if (op.type === 'saveSnapshot') {
     const { manifest, chunks } = buildSnapshotArgs(op.chunkByteArrays)
@@ -81,7 +81,7 @@ interface Observation {
   frontier: ReadFrontierResult
 }
 
-async function observe(store: CanvasDocStore, docRef: DocRef): Promise<Observation> {
+async function observe(store: DocumentStore, docRef: DocRef): Promise<Observation> {
   return {
     snapshot: await store.loadSnapshot({ docRef }),
     deltas: await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() }),
@@ -89,7 +89,7 @@ async function observe(store: CanvasDocStore, docRef: DocRef): Promise<Observati
   }
 }
 
-async function observeAll(store: CanvasDocStore): Promise<Observation[]> {
+async function observeAll(store: DocumentStore): Promise<Observation[]> {
   return Promise.all(DOC_REFS.map((docRef) => observe(store, docRef)))
 }
 
@@ -116,7 +116,7 @@ const opArbitrary: fc.Arbitrary<Op> = fc.oneof(
   }),
 )
 
-describe('LibsqlCanvasDocStore / InMemoryCanvasDocStore observational parity', () => {
+describe('LibsqlDocumentStore / InMemoryDocumentStore observational parity', () => {
   // Each property run gets its own fresh isolated DB (created/disposed inside
   // the property body, not in beforeEach/afterEach) so state from one
   // generated op sequence never leaks into the next run's docKey rows.
@@ -126,8 +126,8 @@ describe('LibsqlCanvasDocStore / InMemoryCanvasDocStore observational parity', (
       const tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-libsql-doc-store-parity-'))
       const handle = await createIsolatedDb({ dataDir: tempDir })
       try {
-        const inMemory = new InMemoryCanvasDocStore()
-        const libsql = new LibsqlCanvasDocStore(handle.db)
+        const inMemory = new InMemoryDocumentStore()
+        const libsql = new LibsqlDocumentStore(handle.db)
 
         for (const op of ops) {
           await applyOp(inMemory, op)

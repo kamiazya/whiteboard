@@ -3,7 +3,7 @@ import { setNodeLock } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { NodeNotFoundError } from './errors.js'
 
 /**
@@ -43,7 +43,7 @@ export function createNodeLockTool(deps: ServerDeps) {
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       // Reject a ghost id rather than storing a lock nothing can ever
       // clear from the UI (the editor only offers unlock on a real node).
@@ -52,7 +52,7 @@ export function createNodeLockTool(deps: ServerDeps) {
       }
 
       setNodeLock(doc, input.nodeId, input.locked)
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return { canvasId: input.canvasId, nodeId: input.nodeId, locked: input.locked }
     },

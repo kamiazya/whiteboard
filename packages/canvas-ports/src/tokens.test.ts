@@ -10,13 +10,13 @@ describe('TOKENS', () => {
 
   it('has exactly the port interface names as keys', () => {
     expect(Object.keys(TOKENS).sort()).toEqual(
-      ['BlobStore', 'CanvasDocStore', 'DocumentIndex', 'PresenceChannel'].sort(),
+      ['BlobStore', 'DocumentStore', 'DocumentIndex', 'PresenceChannel'].sort(),
     )
   })
 
   it('defineToken produces a global-registry symbol identical across calls (module double-install safety)', () => {
-    expect(defineToken('CanvasDocStore')).toBe(defineToken('CanvasDocStore'))
-    expect(defineToken('CanvasDocStore')).toBe(TOKENS.CanvasDocStore)
+    expect(defineToken('DocumentStore')).toBe(defineToken('DocumentStore'))
+    expect(defineToken('DocumentStore')).toBe(TOKENS.DocumentStore)
   })
 
   it('each token is a genuine symbol', () => {

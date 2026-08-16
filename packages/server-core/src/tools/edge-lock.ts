@@ -3,7 +3,7 @@ import { setEdgeLock } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { EdgeNotFoundError } from './errors.js'
 
 /**
@@ -45,7 +45,7 @@ export function createEdgeLockTool(deps: ServerDeps) {
     outputSchema: edgeLockOutputSchema,
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       // Reject a ghost id rather than storing a lock nothing can ever
       // clear from the UI (the editor only offers unlock on a real edge).
@@ -54,7 +54,7 @@ export function createEdgeLockTool(deps: ServerDeps) {
       }
 
       setEdgeLock(doc, input.edgeId, input.locked)
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return { canvasId: input.canvasId, edgeId: input.edgeId, locked: input.locked }
     },

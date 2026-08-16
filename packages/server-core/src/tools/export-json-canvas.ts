@@ -5,7 +5,7 @@ import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
- * `CanvasDocStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
+ * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */

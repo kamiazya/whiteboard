@@ -67,7 +67,8 @@ here buys nobody anything and doubles the surface that has to be read.
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
 - `canvasId` throughout, for what is a document id
-- `CanvasDocStore`, `canvas-store.ts`, `canvas-doc-io.ts`
+- `canvas-store.ts` (mcp-server's daemon-side file/db store) — `CanvasDocStore`
+  and `canvas-doc-io.ts` are done
 - The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not

@@ -2,19 +2,19 @@ import { sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasDigestTool } from './canvas-digest.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('wb_scene_digest tool', () => {
   test('digests an overlapping two-node canvas to a pinned literal', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const canvas = {
       nodes: [
         { id: 'n1', type: 'group' as const, x: 0, y: 0, width: 100, height: 100 },
@@ -58,7 +58,7 @@ describe('wb_scene_digest tool', () => {
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
-    const tool = createCanvasDigestTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createCanvasDigestTool(makeDeps(new FakeDocumentStore()))
 
     await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow(
       CanvasNotFoundError,

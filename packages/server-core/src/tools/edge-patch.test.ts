@@ -3,12 +3,9 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import {
-  FakeCanvasDocStore,
-  registerCanvasInWorkspace,
-} from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
-import { loadCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument } from './document-io.js'
 import { createEdgeLockTool } from './edge-lock.js'
 import { createEdgePatchTool, edgePatchFieldsSchema } from './edge-patch.js'
 import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './errors.js'
@@ -16,15 +13,12 @@ import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './erro
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-async function seedCanvas(
-  canvasDocStore: FakeCanvasDocStore,
-  canvas: SpatialCanvas,
-): Promise<void> {
-  await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
+async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
+  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-  await canvasDocStore.saveSnapshot({
+  await documentStore.saveSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
     manifest,
     chunks,
@@ -32,8 +26,8 @@ async function seedCanvas(
   })
 }
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 const BASE_CANVAS: SpatialCanvas = {
@@ -46,9 +40,9 @@ const BASE_CANVAS: SpatialCanvas = {
 
 describe('wb_edge_patch tool', () => {
   test('patches color/label/fromSide/toSide on an existing edge', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(documentStore))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -77,9 +71,9 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('patches fromEnd/toEnd so an agent can restyle arrowheads', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(documentStore))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -98,9 +92,9 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('throws EdgeNotFoundError for an unknown edgeId', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -113,9 +107,9 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('retargeting toNode to a nonexistent node id throws PatchValidationError', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -128,9 +122,9 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -143,10 +137,10 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('refuses to patch a LOCKED edge — the lock binds agents too, not just the pointer', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
     // Lock it the way the editor does: through the sidecar map.
-    const lockTool = createEdgeLockTool(makeDeps(canvasDocStore))
+    const lockTool = createEdgeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
@@ -154,7 +148,7 @@ describe('wb_edge_patch tool', () => {
       locked: true,
     })
 
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const tool = createEdgePatchTool(makeDeps(documentStore))
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
@@ -164,14 +158,14 @@ describe('wb_edge_patch tool', () => {
       }),
     ).rejects.toBeInstanceOf(EdgeLockedError)
 
-    const { canvas } = await loadCanvasDoc(makeDeps(canvasDocStore), CANVAS_ID)
+    const { canvas } = await loadDocument(makeDeps(documentStore), CANVAS_ID)
     expect(canvas.edges[0].label).toBeUndefined()
   })
 
   test('patches normally once the edge is unlocked', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
-    const lockTool = createEdgeLockTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
+    const lockTool = createEdgeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
@@ -185,7 +179,7 @@ describe('wb_edge_patch tool', () => {
       locked: false,
     })
 
-    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+    const tool = createEdgePatchTool(makeDeps(documentStore))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
@@ -196,10 +190,10 @@ describe('wb_edge_patch tool', () => {
   })
 
   test('a locked NODE does not block patching an edge that touches it', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, BASE_CANVAS)
     const { createNodeLockTool } = await import('./node-lock.js')
-    await createNodeLockTool(makeDeps(canvasDocStore)).execute({
+    await createNodeLockTool(makeDeps(documentStore)).execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 'n1',
@@ -208,7 +202,7 @@ describe('wb_edge_patch tool', () => {
 
     // Edge locks are their own set: locking a hub node must not silently
     // freeze every line touching it.
-    const result = await createEdgePatchTool(makeDeps(canvasDocStore)).execute({
+    const result = await createEdgePatchTool(makeDeps(documentStore)).execute({
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       edgeId: 'e1',

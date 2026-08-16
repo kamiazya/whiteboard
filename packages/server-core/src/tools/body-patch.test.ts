@@ -3,10 +3,7 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import {
-  FakeCanvasDocStore,
-  registerCanvasInWorkspace,
-} from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
@@ -14,15 +11,12 @@ import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './er
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-async function seedCanvas(
-  canvasDocStore: FakeCanvasDocStore,
-  canvas: SpatialCanvas,
-): Promise<void> {
-  await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
+async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
+  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-  await canvasDocStore.saveSnapshot({
+  await documentStore.saveSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
     manifest,
     chunks,
@@ -30,18 +24,18 @@ async function seedCanvas(
   })
 }
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('wb_body_patch tool', () => {
   test('mode "full" replaces the entire text body', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'line1\nline2' }],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     const result = await tool.execute({
       mode: 'full',
@@ -55,8 +49,8 @@ describe('wb_body_patch tool', () => {
   })
 
   test('mode "range" splices a subset of lines, preserving lines outside the range', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [
         {
           id: 't1',
@@ -70,7 +64,7 @@ describe('wb_body_patch tool', () => {
       ],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     const result = await tool.execute({
       mode: 'range',
@@ -84,12 +78,12 @@ describe('wb_body_patch tool', () => {
   })
 
   test('throws NotATextNodeError when targeting a non-text node', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 100, height: 50 }],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -103,14 +97,14 @@ describe('wb_body_patch tool', () => {
   })
 
   test('throws PatchValidationError for an out-of-range line splice', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [
         { id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'only-one-line' },
       ],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -124,12 +118,12 @@ describe('wb_body_patch tool', () => {
   })
 
   test('throws NodeNotFoundError for an unknown nodeId', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'x' }],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -143,12 +137,12 @@ describe('wb_body_patch tool', () => {
   })
 
   test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore, {
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore, {
       nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'x' }],
       edges: [],
     })
-    const tool = createBodyPatchTool(makeDeps(canvasDocStore))
+    const tool = createBodyPatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({

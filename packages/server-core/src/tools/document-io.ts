@@ -3,7 +3,7 @@ import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-p
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
-import { CanvasDocNotFoundError } from './errors.js'
+import { DocumentNotFoundError } from './errors.js'
 
 /**
  * A single chunk always fits Loro's snapshot output for the geometry/text
@@ -13,7 +13,7 @@ import { CanvasDocNotFoundError } from './errors.js'
  */
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
-export interface LoadedCanvasDoc {
+export interface LoadedDocument {
   doc: LoroDoc
   canvas: SpatialCanvas
 }
@@ -25,13 +25,10 @@ export interface LoadedCanvasDoc {
  * doc that has never been saved. This deliberately throws instead of
  * falling back to an empty `LoroDoc`.
  */
-export async function loadCanvasDoc(
-  deps: ServerDeps,
-  canvasId: CanvasId,
-): Promise<LoadedCanvasDoc> {
+export async function loadDocument(deps: ServerDeps, canvasId: CanvasId): Promise<LoadedDocument> {
   const docRef = { kind: 'canvas' as const, canvasId }
-  const existing = await deps.canvasDocStore.loadSnapshot({ docRef })
-  if (existing === null) throw new CanvasDocNotFoundError(canvasId)
+  const existing = await deps.documentStore.loadSnapshot({ docRef })
+  if (existing === null) throw new DocumentNotFoundError(canvasId)
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
@@ -44,12 +41,9 @@ export async function loadCanvasDoc(
  * canvas is valid (unlike spatial patch tools, which require an existing
  * element to target).
  */
-export async function loadOrCreateCanvasDoc(
-  deps: ServerDeps,
-  canvasId: CanvasId,
-): Promise<LoroDoc> {
+export async function loadOrCreateDocument(deps: ServerDeps, canvasId: CanvasId): Promise<LoroDoc> {
   const docRef = { kind: 'canvas' as const, canvasId }
-  const existing = await deps.canvasDocStore.loadSnapshot({ docRef })
+  const existing = await deps.documentStore.loadSnapshot({ docRef })
   const doc = new LoroDoc()
   if (existing !== null) {
     doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
@@ -62,7 +56,7 @@ export async function loadOrCreateCanvasDoc(
  * `saveCanvasDoc` (spatial patch tools) and `wb_facet_set` (facet-only
  * mutations) so the chunk+save logic lives in one place.
  */
-export async function saveDocSnapshot(
+export async function saveDocumentSnapshot(
   deps: ServerDeps,
   canvasId: CanvasId,
   doc: LoroDoc,
@@ -71,7 +65,7 @@ export async function saveDocSnapshot(
     doc.export({ mode: 'snapshot' }),
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
-  await deps.canvasDocStore.saveSnapshot({
+  await deps.documentStore.saveSnapshot({
     docRef: { kind: 'canvas', canvasId },
     manifest,
     chunks,
@@ -98,5 +92,5 @@ export async function saveCanvasDoc(
   canvas: SpatialCanvas,
 ): Promise<void> {
   writeSpatialCanvas(doc, canvas)
-  await saveDocSnapshot(deps, canvasId, doc)
+  await saveDocumentSnapshot(deps, canvasId, doc)
 }

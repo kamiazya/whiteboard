@@ -169,7 +169,7 @@ export class DocumentMoveIntoSelfError extends Error {
  * The workspace's index of the documents it holds: which paths exist, what
  * each one is, and which stored document each names.
  *
- * It is deliberately separate from `CanvasDocStore`, which owns a single
+ * It is deliberately separate from `DocumentStore`, which owns a single
  * document's bytes and knows nothing about where that document sits. This
  * one owns placement and is the only thing that assigns a `canvasId`.
  *

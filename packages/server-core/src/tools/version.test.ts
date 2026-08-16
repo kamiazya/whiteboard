@@ -3,10 +3,10 @@ import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canv
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
-  FakeCanvasDocStore,
+  FakeDocumentStore,
   registerCanvasInWorkspace,
   seedDoc,
-} from '../test-utils/fake-canvas-doc-store.js'
+} from '../test-utils/fake-document-store.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
@@ -15,11 +15,11 @@ import { createVersionSaveTool } from './version-save.js'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
+async function loadDoc(store: FakeDocumentStore, canvasId: string): Promise<LoroDoc> {
   const snapshot = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
   const doc = new LoroDoc()
   if (snapshot !== null) {
@@ -30,7 +30,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
 
 describe('wb_version_save tool', () => {
   test('saves a version and returns metadata', async () => {
-    const tool = createVersionSaveTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
     const result = await tool.execute({ canvasId: CANVAS_ID, label: 'v1' })
 
@@ -42,7 +42,7 @@ describe('wb_version_save tool', () => {
   })
 
   test('each save produces a unique versionId', async () => {
-    const tool = createVersionSaveTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
     const r1 = await tool.execute({ canvasId: CANVAS_ID, label: 'v1' })
     const r2 = await tool.execute({ canvasId: CANVAS_ID, label: 'v2' })
@@ -61,7 +61,7 @@ describe('wb_version_list tool', () => {
   })
 
   test('returns empty list for a canvas with no versions', async () => {
-    const tool = createVersionListTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionListTool(makeDeps(new FakeDocumentStore()))
 
     const result = await tool.execute({ canvasId: CANVAS_ID })
 
@@ -69,7 +69,7 @@ describe('wb_version_list tool', () => {
   })
 
   test('lists saved versions newest-first', async () => {
-    const deps = makeDeps(new FakeCanvasDocStore())
+    const deps = makeDeps(new FakeDocumentStore())
     const saveTool = createVersionSaveTool(deps)
     const listTool = createVersionListTool(deps)
 
@@ -87,7 +87,7 @@ describe('wb_version_list tool', () => {
   })
 
   test('skips a stored record that fails schema validation', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const listTool = createVersionListTool(deps)
@@ -115,7 +115,7 @@ describe('wb_version_list tool', () => {
 
 describe('wb_version_restore tool', () => {
   test('restores spatial canvas content from a saved version', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
@@ -168,7 +168,7 @@ describe('wb_version_restore tool', () => {
   })
 
   test('throws VersionNotFoundError for unknown versionId', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
@@ -183,7 +183,7 @@ describe('wb_version_restore tool', () => {
   })
 
   test('throws VersionNotFoundError for a stored record that fails schema validation', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
@@ -204,7 +204,7 @@ describe('wb_version_restore tool', () => {
   })
 
   test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)

@@ -7,10 +7,10 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
-  FakeCanvasDocStore,
+  FakeDocumentStore,
   registerCanvasInWorkspace,
   seedDoc,
-} from '../test-utils/fake-canvas-doc-store.js'
+} from '../test-utils/fake-document-store.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
@@ -18,15 +18,15 @@ import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('wb_facet_set tool', () => {
   test('sets a facet on a canvas with no prior snapshot', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
-    const tool = createFacetSetTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    const tool = createFacetSetTool(makeDeps(documentStore))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -41,7 +41,7 @@ describe('wb_facet_set tool', () => {
   })
 
   test('persists the facet so a later load reflects it', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(store))
 
@@ -63,9 +63,9 @@ describe('wb_facet_set tool', () => {
   })
 
   test('merges a new facet domain with an existing one instead of replacing it', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
-    const tool = createFacetSetTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    const tool = createFacetSetTool(makeDeps(documentStore))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -85,9 +85,9 @@ describe('wb_facet_set tool', () => {
   })
 
   test('overwrites an existing facet domain when the same key is set again', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
-    const tool = createFacetSetTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    const tool = createFacetSetTool(makeDeps(documentStore))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -104,9 +104,9 @@ describe('wb_facet_set tool', () => {
   })
 
   test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
-    const tool = createFacetSetTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    const tool = createFacetSetTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -133,7 +133,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     // A facet is OKF frontmatter. A JSON Canvas document has nodes and edges
     // and no frontmatter to put one in, so a facet stored on one is metadata
     // no reader of that format can ever surface.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
@@ -153,7 +153,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
   })
 
   test('a refused write stores nothing', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'spatial'))
 
@@ -172,7 +172,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
   })
 
   test('a markdown document still takes facets', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'markdown'))
 

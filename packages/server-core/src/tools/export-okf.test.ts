@@ -1,19 +1,19 @@
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { exportOkf } from './export-okf.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('exportOkf', () => {
   test('exports the first text node body with facets from the doc', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
@@ -32,7 +32,7 @@ describe('exportOkf', () => {
   })
 
   test('falls back to an empty body when the canvas has no text node', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 50 }],
@@ -49,7 +49,7 @@ describe('exportOkf', () => {
 
   test('rejects when the canvas has no stored snapshot', async () => {
     await expect(
-      exportOkf(makeDeps(new FakeCanvasDocStore()), {
+      exportOkf(makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
         canvasId: CANVAS_ID,
       }),

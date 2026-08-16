@@ -1,14 +1,14 @@
 import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
 import { describe, expect, it } from 'vitest'
-import { InMemoryCanvasDocStore } from './in-memory-canvas-doc-store.js'
+import { InMemoryDocumentStore } from './in-memory-document-store.js'
 
 function canvasRef(canvasId: string): DocRef {
   return { kind: 'canvas', canvasId }
 }
 
-describe('InMemoryCanvasDocStore', () => {
+describe('InMemoryDocumentStore', () => {
   it('returns null from loadSnapshot and readFrontier before any save', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const docRef = canvasRef('canvas-a')
 
     expect(await store.loadSnapshot({ docRef })).toBeNull()
@@ -16,7 +16,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('round-trips a saved snapshot byte-identically', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const docRef = canvasRef('canvas-a')
     const bytes = new Uint8Array([1, 2, 3])
     const frontier = new Uint8Array([9, 9])
@@ -37,7 +37,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('appends deltas and reflects the latest frontier', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const docRef = canvasRef('canvas-b')
     const updateA = new Uint8Array([1])
     const updateB = new Uint8Array([2])
@@ -59,7 +59,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('ignores a non-empty sinceFrontier and returns the full accumulated delta log', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const docRef = canvasRef('canvas-b')
     const updateA = new Uint8Array([1])
     const updateB = new Uint8Array([2])
@@ -81,7 +81,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('isolates deltas between distinct docRefs', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const refA = canvasRef('canvas-a')
     const refB = canvasRef('canvas-b')
 
@@ -96,7 +96,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('isolates docRef kind (canvas vs workspace-tree with the same id shape)', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const canvasDocRef: DocRef = { kind: 'canvas', canvasId: 'shared-id' }
     const workspaceDocRef: DocRef = { kind: 'workspace-tree', workspaceId: 'shared-id' }
 
@@ -109,7 +109,7 @@ describe('InMemoryCanvasDocStore', () => {
   })
 
   it('does not let a caller mutate stored bytes after the fact', async () => {
-    const store = new InMemoryCanvasDocStore()
+    const store = new InMemoryDocumentStore()
     const docRef = canvasRef('canvas-c')
     const bytes = new Uint8Array([1, 2, 3])
 

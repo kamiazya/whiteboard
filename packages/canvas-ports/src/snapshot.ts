@@ -28,7 +28,7 @@ export type SnapshotChunk = z.infer<typeof snapshotChunkSchema>
  * Describes how a snapshot's bytes were chunked. Deliberately does NOT
  * carry a `docRef` — the manifest only describes the chunking, and which
  * document it belongs to is always supplied separately as a store-operation
- * argument (see CanvasDocStore.saveSnapshot). `maxChunkBytes` is the
+ * argument (see DocumentStore.saveSnapshot). `maxChunkBytes` is the
  * caller-supplied cap that produced this manifest; canvas-ports does not
  * hardcode any implementation's specific limit (e.g. Cloudflare Durable
  * Objects' ~2MB message cap) here.

@@ -9,10 +9,10 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import {
-  FakeCanvasDocStore,
+  FakeDocumentStore,
   registerCanvasInWorkspace,
   seedDoc,
-} from '../test-utils/fake-canvas-doc-store.js'
+} from '../test-utils/fake-document-store.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
@@ -20,11 +20,11 @@ import { exportOkf } from './export-okf.js'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
+async function loadDoc(store: FakeDocumentStore, canvasId: string): Promise<LoroDoc> {
   const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -33,7 +33,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
 }
 
 async function setupTools() {
-  const store = new FakeCanvasDocStore()
+  const store = new FakeDocumentStore()
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   const deps = makeDeps(store)
   return {
@@ -273,7 +273,7 @@ describe('error paths do not silently produce corrupt output', () => {
   })
 
   test('export_okf on a canvas with no stored snapshot surfaces a clean error', async () => {
-    const deps = makeDeps(new FakeCanvasDocStore())
+    const deps = makeDeps(new FakeDocumentStore())
 
     await expect(
       exportOkf(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
@@ -281,7 +281,7 @@ describe('error paths do not silently produce corrupt output', () => {
   })
 
   test('export_json_canvas on a canvas with no stored snapshot surfaces a clean error', async () => {
-    const deps = makeDeps(new FakeCanvasDocStore())
+    const deps = makeDeps(new FakeDocumentStore())
 
     await expect(
       exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),

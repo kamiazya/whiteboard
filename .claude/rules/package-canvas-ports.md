@@ -13,7 +13,7 @@ paths:
   (`hello`/`welcome`/`resume`/`catchUp`/`update`), `PresenceState`,
   `BlobRef`, plus every port method's input and result DTO.
 - Hand-written TS port interfaces wired to those DTOs via `z.infer`:
-  `CanvasDocStore`, `BlobStore`, `PresenceChannel`.
+  `DocumentStore`, `BlobStore`, `PresenceChannel`.
 - The Symbol `TOKENS` aggregate (`defineToken`, `Token<T>`) for DI wiring.
 - Three canonical pure helpers, a **deliberate exception** to the
   contracts-only rule because they are model-only and loro-independent:
@@ -45,7 +45,7 @@ paths:
 - Every DTO is a `.strict()` Zod object (extra keys reject) unless
   explicitly documented otherwise (`workspaceMetaSchema`-style open records
   do not appear in this package).
-- `CanvasDocStore` and `BlobStore` are not workspace-scoped per-instance —
+- `DocumentStore` and `BlobStore` are not workspace-scoped per-instance —
   a document's scope travels inside its `DocRef`, and blobs are
   deliberately global/content-addressed.
 - `workspaceIdSchema` (added to `canvas-model`) is a path-safe **slug**

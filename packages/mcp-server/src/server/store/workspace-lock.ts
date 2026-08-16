@@ -85,7 +85,7 @@ export async function withWorkspaceWriteLock<T>(
  * Serializes mutations to ONE canvas document, on the same queue machinery
  * as the workspace lock above (and with the same single-process caveat).
  *
- * Every mutating MCP tool is a load-modify-save against `canvasDocStore`,
+ * Every mutating MCP tool is a load-modify-save against `documentStore`,
  * and `saveSnapshot` writes unconditionally — it carries the new frontier
  * but nothing compares it against the stored one. So two tool calls that
  * load the same base before either saves silently drop one of the two
@@ -99,7 +99,7 @@ export async function withWorkspaceWriteLock<T>(
  *
  * A per-process queue is the right size for today's single daemon. A
  * multi-instance deployment (the Cloudflare direction) cannot rely on it
- * and needs a compare-and-swap in the CanvasDocStore contract instead —
+ * and needs a compare-and-swap in the DocumentStore contract instead —
  * `saveSnapshot` would take the frontier the caller loaded and reject a
  * stale write, with the shared tool path retrying.
  */

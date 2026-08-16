@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
-  CanvasDocNotFoundError,
+  DocumentNotFoundError,
   EdgeNotFoundError,
   NodeNotFoundError,
   NotATextNodeError,
@@ -8,10 +8,10 @@ import {
 } from './errors.js'
 
 describe('server-core tool errors', () => {
-  test('CanvasDocNotFoundError carries the canvasId and a descriptive message', () => {
-    const err = new CanvasDocNotFoundError('canvas-1')
+  test('DocumentNotFoundError carries the canvasId and a descriptive message', () => {
+    const err = new DocumentNotFoundError('canvas-1')
     expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('CanvasDocNotFoundError')
+    expect(err.name).toBe('DocumentNotFoundError')
     expect(err.canvasId).toBe('canvas-1')
     expect(err.message).toContain('canvas-1')
   })

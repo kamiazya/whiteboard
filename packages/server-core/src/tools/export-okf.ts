@@ -14,7 +14,7 @@ import type { ServerDeps } from '../server-deps.js'
  * canvas is deferred to a future slice once the OKF-vs-spatial duality is
  * resolved in canvas-workspace.
  *
- * `CanvasDocStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
+ * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with the workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */

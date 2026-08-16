@@ -4,7 +4,7 @@ import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { parseVersionRecord } from './version-record.js'
 
 export const versionRestoreInputSchema = z
@@ -47,7 +47,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
 
       const versions = doc.getMap('versions')
       const raw = versions.get(input.versionId)
@@ -73,7 +73,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
       writeSpatialCanvas(doc, oldCanvas)
       doc.commit()
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return {
         canvasId: input.canvasId,

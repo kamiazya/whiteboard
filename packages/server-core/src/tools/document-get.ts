@@ -7,7 +7,7 @@ import {
 import { readDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
+import { loadOrCreateDocument } from './document-io.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
@@ -72,7 +72,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
         throw new DocumentKindUnknownError(input.canvasId)

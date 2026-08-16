@@ -76,7 +76,7 @@ export async function resolveFileReferences(
         const entry = await resolveEntry(deps, workspaceId, ref)
         if (entry === null) return
 
-        const snapshot = await deps.canvasDocStore.loadSnapshot({
+        const snapshot = await deps.documentStore.loadSnapshot({
           docRef: { kind: 'canvas', canvasId: entry.canvasId },
         })
         if (snapshot === null) {

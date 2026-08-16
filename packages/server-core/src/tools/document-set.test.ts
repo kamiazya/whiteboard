@@ -11,10 +11,10 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
-  FakeCanvasDocStore,
+  FakeDocumentStore,
   registerCanvasInWorkspace,
   seedDoc,
-} from '../test-utils/fake-canvas-doc-store.js'
+} from '../test-utils/fake-document-store.js'
 import { createDocumentSetTool } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
@@ -22,11 +22,11 @@ import { exportOkf } from './export-okf.js'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
+async function loadDoc(store: FakeDocumentStore, canvasId: string): Promise<LoroDoc> {
   const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -36,7 +36,7 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
 
 describe('wb_document_set tool', () => {
   test('imports markdown with facets and body into a new LoroDoc', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
@@ -70,7 +70,7 @@ describe('wb_document_set tool', () => {
   })
 
   test('imports markdown with empty body (facets only)', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
@@ -86,7 +86,7 @@ describe('wb_document_set tool', () => {
   })
 
   test('overwrites existing doc on re-import', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
@@ -107,7 +107,7 @@ describe('wb_document_set tool', () => {
   })
 
   test('rejects invalid OKF markdown', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
@@ -117,7 +117,7 @@ describe('wb_document_set tool', () => {
   })
 
   test('rejects when canvas is not in workspace', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const tool = createDocumentSetTool(makeDeps(store))
 
     const markdown = '---\ntype: note\n---\nBody.'
@@ -131,7 +131,7 @@ describe('wb_document_set tool', () => {
     // This write replaces the whole spatial canvas. Run unguarded against a
     // diagram and the nodes and edges are gone, which is not a rejected write
     // but a silently destroyed document (ADR-0009 decision 4).
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
@@ -156,7 +156,7 @@ describe('wb_document_set tool', () => {
   })
 
   test('writes a markdown document, and leaves it recorded as markdown', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'markdown'))
     const tool = createDocumentSetTool(makeDeps(store))
@@ -174,7 +174,7 @@ describe('wb_document_set tool', () => {
     // The only way an existing document gets a kind. Refusing here would
     // leave every pre-kind document unreadable through wb_document_get and
     // unwritable through this tool, with no path out.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
@@ -193,7 +193,7 @@ describe('wb_document_set tool', () => {
     // pre-kind markdown documents the OKF import path produced, and send
     // them to wb_node_add, which would declare them spatial — the wrong
     // kind, and the "no way back" the healing exists to prevent.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
@@ -225,7 +225,7 @@ describe('wb_document_set tool', () => {
     // replaces a spatial canvas outright, and the mismatch guard that
     // normally refuses that is skipped for exactly this document, because
     // its kind is absent rather than wrong.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
@@ -256,7 +256,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
   // an OKF is projecting it INTO that model, exactly as serialising projects
   // back out — `title` lands on the workspace, never in the content.
   test('a title in the written OKF renames the document, and is not stored as a facet', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
 
@@ -277,7 +277,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
   test('writing OKF without a title leaves the existing name alone', async () => {
     // Absent is not the same as cleared. An OKF with no `title` says nothing
     // about the name, so a write that omits it must not erase one.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
@@ -300,7 +300,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
   })
 
   test('the exported OKF carries the workspace name as its title', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
@@ -320,7 +320,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     // regression guard: {"frontmatter":{"type":" ","title":""},"body":""}.
     // A blank name IS no name — the two are deliberately one state — so the
     // round trip normalises here rather than preserving '' verbatim.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({
@@ -335,7 +335,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
   })
 
   test('an unnamed document exports no title at all, rather than its slug', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     await createDocumentSetTool(deps).execute({

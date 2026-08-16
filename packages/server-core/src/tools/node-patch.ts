@@ -10,7 +10,7 @@ import { readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { NodeLockedError, NodeNotFoundError, PatchValidationError } from './errors.js'
 
 /**
@@ -62,7 +62,7 @@ export function createNodePatchTool(deps: ServerDeps) {
     outputSchema: nodePatchOutputSchema,
     execute: async (input: NodePatchInput): Promise<NodePatchOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
       if (node === undefined) throw new NodeNotFoundError(input.canvasId, input.nodeId)

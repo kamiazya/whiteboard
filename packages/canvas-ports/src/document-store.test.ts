@@ -9,13 +9,13 @@ import {
   readFrontierInputSchema,
   readFrontierResultSchema,
   saveSnapshotInputSchema,
-} from './canvas-doc-store.js'
+} from './document-store.js'
 
 const docRef = { kind: 'canvas' as const, canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
 const frontier = new Uint8Array([1])
 const manifest = { chunkCount: 0, totalBytes: 0, maxChunkBytes: 4 }
 
-describe('CanvasDocStore method DTOs', () => {
+describe('DocumentStore method DTOs', () => {
   it('loadSnapshot: accepts a docRef input; result accepts null and a populated payload', () => {
     expect(loadSnapshotInputSchema.safeParse({ docRef }).success).toBe(true)
     expect(loadSnapshotInputSchema.safeParse({}).success).toBe(false)

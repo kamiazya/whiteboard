@@ -1,8 +1,8 @@
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CanvasDocStore,
   DeleteDocInput,
+  DocumentStore,
   Frontier,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -19,7 +19,7 @@ import type { DatabaseSchema } from '../db/schema.js'
 import { docRefKey } from '../doc-ref-key.js'
 import { cloneBytes } from '../inmemory/clone-bytes.js'
 
-const log = getLogger('libsql-canvas-doc-store')
+const log = getLogger('libsql-document-store')
 
 // The libsql/better-sqlite3-shaped drivers behind Kysely's two dialects
 // return BLOB columns as `Buffer` (Node SqliteDialect) or `Uint8Array`
@@ -51,18 +51,18 @@ async function upsertFrontier(trx: Trx, docKey: string, frontier: Frontier): Pro
 }
 
 /**
- * libSQL-backed `CanvasDocStore`. Snapshot replace (saveSnapshot) and delta
+ * libSQL-backed `DocumentStore`. Snapshot replace (saveSnapshot) and delta
  * append (appendDeltas) each run inside a single Kysely transaction so a
  * mid-write failure never leaves a header without chunks, a stale chunk
  * mixed with a new set, or a gap/duplicate in per-docKey delta `seq`.
  */
-export class LibsqlCanvasDocStore implements CanvasDocStore {
+export class LibsqlDocumentStore implements DocumentStore {
   constructor(private readonly db: Db) {}
 
   /**
    * The returned `frontier` is the doc's *current* frontier (from
    * canvasDocFrontiers) rather than the frontier the snapshot itself was
-   * saved with — this mirrors InMemoryCanvasDocStore, whose single per-doc
+   * saved with — this mirrors InMemoryDocumentStore, whose single per-doc
    * `frontier` field is shared and overwritten by both saveSnapshot and
    * appendDeltas, so a later appendDeltas call also changes what a
    * subsequent loadSnapshot reports.
@@ -205,7 +205,7 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
   }
 
   /**
-   * `sinceFrontier` is intentionally ignored, matching `InMemoryCanvasDocStore`
+   * `sinceFrontier` is intentionally ignored, matching `InMemoryDocumentStore`
    * — comparing frontiers is a loro-crdt runtime concern that this DocRef-keyed
    * SQL store has no access to. It always returns the full append-ordered
    * delta log, a superset of "everything since `sinceFrontier`" for every
@@ -214,7 +214,7 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
    * The returned `frontier` is the doc's *current* frontier (from
    * canvasDocFrontiers), not the frontier of the last delta row — a
    * saveSnapshot that runs after the last appendDeltas call still advances
-   * what this method reports, matching InMemoryCanvasDocStore's single
+   * what this method reports, matching InMemoryDocumentStore's single
    * per-doc `frontier` field that both write paths update.
    */
   async loadDeltas({ docRef }: LoadDeltasInput): Promise<LoadDeltasResult> {

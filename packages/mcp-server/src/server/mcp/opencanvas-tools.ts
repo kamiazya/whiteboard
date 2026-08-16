@@ -49,7 +49,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   // Every MUTATING tool below runs inside withCanvasDocWriteLock, keyed on
   // the canvas it targets. Each is a load-modify-save against
-  // canvasDocStore, whose saveSnapshot writes unconditionally, so two calls
+  // documentStore, whose saveSnapshot writes unconditionally, so two calls
   // that load the same base before either saves silently drop one of the
   // changes (see canvas-doc-write-lock.test.ts, which demonstrates the loss
   // on the real tools). Read-only tools are deliberately NOT wrapped:

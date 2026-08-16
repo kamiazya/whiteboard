@@ -20,7 +20,7 @@ import { createDocumentSetTool } from './tools/document-set.js'
 import { createEdgeAddTool } from './tools/edge-add.js'
 import { createEdgeLockTool } from './tools/edge-lock.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
-import { CanvasDocNotFoundError } from './tools/errors.js'
+import { DocumentNotFoundError } from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodeAddTool } from './tools/node-add.js'
@@ -116,7 +116,7 @@ export function createServer(deps: ServerDeps) {
       // imported/edited) has no OKF projection — a read miss, not a 500.
       // Note: loadSpatialCanvas throws its own CanvasNotFoundError class,
       // distinct from canvas-crud's; mapCanvasError only knows the latter.
-      if (err instanceof SnapshotNotFoundError || err instanceof CanvasDocNotFoundError) {
+      if (err instanceof SnapshotNotFoundError || err instanceof DocumentNotFoundError) {
         return c.json({ error: err.message }, 404)
       }
       return mapCanvasError(c, err)

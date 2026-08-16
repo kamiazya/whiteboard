@@ -8,18 +8,18 @@
 // the payload.
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function seedWorkspace(store: FakeCanvasDocStore) {
+async function seedWorkspace(store: FakeDocumentStore) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
@@ -64,7 +64,7 @@ async function seedWorkspace(store: FakeCanvasDocStore) {
 
 describe('canvas_view tool', () => {
   test('returns the scene the widget lays out, plus the id it refreshes with', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
@@ -78,7 +78,7 @@ describe('canvas_view tool', () => {
   })
 
   test('carries the referenced markdown document body, parsed', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
@@ -111,7 +111,7 @@ describe('canvas_view tool', () => {
   })
 
   test('returns an empty reference map for a canvas with no file nodes', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
       path: 'board',

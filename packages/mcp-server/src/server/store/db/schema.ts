@@ -69,7 +69,7 @@ interface RuntimeTable {
   updatedAt: Timestamp
 }
 
-// Header row for a chunked CanvasDocStore snapshot. `docKey` is the
+// Header row for a chunked DocumentStore snapshot. `docKey` is the
 // DocRef-derived string from ../doc-ref-key.ts. Chunk bytes themselves live
 // in CanvasDocSnapshotChunksTable; this row carries only the manifest
 // scalars plus the frontier the snapshot was taken at.

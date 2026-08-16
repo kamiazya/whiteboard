@@ -1,29 +1,29 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, test } from 'vitest'
-import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
-import { CanvasDocNotFoundError } from './errors.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { DocumentNotFoundError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
-const canvasDeps = (canvasDocStore: FakeCanvasDocStore) => ({
-  canvasDocStore,
+const canvasDeps = (documentStore: FakeDocumentStore) => ({
+  documentStore,
   blobStore: {} as never,
   documentIndex: unusedDocumentIndex(),
 })
 
-describe('canvas-doc-io', () => {
-  test('loadCanvasDoc throws CanvasDocNotFoundError when no snapshot exists', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await expect(loadCanvasDoc(canvasDeps(canvasDocStore), CANVAS_ID)).rejects.toThrow(
-      CanvasDocNotFoundError,
+describe('document-io', () => {
+  test('loadDocument throws DocumentNotFoundError when no snapshot exists', async () => {
+    const documentStore = new FakeDocumentStore()
+    await expect(loadDocument(canvasDeps(documentStore), CANVAS_ID)).rejects.toThrow(
+      DocumentNotFoundError,
     )
   })
 
   test('save then load round trip preserves nodes untouched by the patch', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    const deps = canvasDeps(canvasDocStore)
+    const documentStore = new FakeDocumentStore()
+    const deps = canvasDeps(documentStore)
 
     const canvas: SpatialCanvas = {
       nodes: [
@@ -40,14 +40,14 @@ describe('canvas-doc-io', () => {
     const seedDoc = new LoroDoc()
     writeSpatialCanvas(seedDoc, canvas)
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-    await canvasDocStore.saveSnapshot({
+    await documentStore.saveSnapshot({
       docRef: { kind: 'canvas', canvasId: CANVAS_ID },
       manifest,
       chunks,
       frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
     })
 
-    const loaded = await loadCanvasDoc(deps, CANVAS_ID)
+    const loaded = await loadDocument(deps, CANVAS_ID)
     expect(loaded.canvas.nodes).toHaveLength(2)
 
     // Simulate a patch that only touches n1, passing the FULL node array back.
@@ -57,7 +57,7 @@ describe('canvas-doc-io', () => {
     }
     await saveCanvasDoc(deps, CANVAS_ID, loaded.doc, patched)
 
-    const reloaded = await loadCanvasDoc(deps, CANVAS_ID)
+    const reloaded = await loadDocument(deps, CANVAS_ID)
     expect(reloaded.canvas.nodes).toHaveLength(2)
     const n2 = reloaded.canvas.nodes.find((node) => node.id === 'n2')
     expect(n2).toEqual(canvas.nodes[1])

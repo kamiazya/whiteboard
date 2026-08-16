@@ -1,7 +1,7 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -21,13 +21,13 @@ const NODE_WITH_EXTENSION = {
   },
 }
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('exportJsonCanvas', () => {
   test('strict mode drops the x-whiteboard extension key', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
@@ -42,7 +42,7 @@ describe('exportJsonCanvas', () => {
   })
 
   test('extended mode (default) round-trips the x-whiteboard extension losslessly', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
@@ -60,7 +60,7 @@ describe('exportJsonCanvas', () => {
 
   test('rejects when the canvas has no stored snapshot', async () => {
     await expect(
-      exportJsonCanvas(makeDeps(new FakeCanvasDocStore()), {
+      exportJsonCanvas(makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
         canvasId: CANVAS_ID,
       }),

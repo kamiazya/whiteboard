@@ -4,10 +4,7 @@ import {
   extensionFacetsArbitrary,
 } from '@kamiazya/whiteboard-canvas-model/test-utils'
 import { describe, expect } from 'vitest'
-import {
-  FakeCanvasDocStore,
-  registerCanvasInWorkspace,
-} from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createDocumentSetTool } from './document-set.js'
 import { exportOkf } from './export-okf.js'
@@ -74,10 +71,10 @@ const okfDocumentArbitrary = fc
   }))
 
 async function setupTools() {
-  const store = new FakeCanvasDocStore()
+  const store = new FakeDocumentStore()
   await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   const deps = {
-    canvasDocStore: store,
+    documentStore: store,
     blobStore: {} as never,
     documentIndex: store.documentIndex,
   }

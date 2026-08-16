@@ -6,13 +6,13 @@ import {
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { CanvasNotFoundError, WorkspaceNotFoundError } from './canvas-crud.errors.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './canvas-crud.js'
 
 function makeDeps(): ServerDeps {
   return {
-    canvasDocStore: createInMemoryCanvasDocStore(),
+    documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
   }
@@ -235,11 +235,11 @@ describe('wbCanvasDelete', () => {
       createWorkspace: true,
     })
     const docRef = { kind: 'canvas', canvasId: created.canvasId } as const
-    expect(await deps.canvasDocStore.loadSnapshot({ docRef })).not.toBeNull()
+    expect(await deps.documentStore.loadSnapshot({ docRef })).not.toBeNull()
 
     await wbCanvasDelete(deps, { workspaceId: 'ws-1', canvasId: created.canvasId })
 
-    expect(await deps.canvasDocStore.loadSnapshot({ docRef })).toBeNull()
+    expect(await deps.documentStore.loadSnapshot({ docRef })).toBeNull()
   })
 
   it('throws CanvasNotFoundError when deleting a canvasId that does not exist', async () => {

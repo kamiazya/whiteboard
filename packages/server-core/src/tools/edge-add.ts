@@ -8,7 +8,7 @@ import { readDocumentKind, writeDocumentKind } from '@kamiazya/whiteboard-canvas
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const edgeAddInputSchema = z
@@ -57,7 +57,7 @@ export function createEdgeAddTool(deps: ServerDeps) {
     outputSchema: edgeAddOutputSchema,
     execute: async (input: EdgeAddInput): Promise<EdgeAddOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       const kind = readDocumentKind(doc)
       if (kind === undefined) {

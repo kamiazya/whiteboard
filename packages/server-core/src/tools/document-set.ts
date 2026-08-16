@@ -12,7 +12,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 
 /**
@@ -76,7 +76,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       }
 
       const { frontmatter, body } = parsed.value
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
 
       // The write below replaces the whole spatial canvas, so on a spatial
       // document it is a destruction rather than an edit. A document with no
@@ -140,7 +140,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // rewritten.
       writeMarkdownBody(doc, body)
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return { canvasId: input.canvasId, imported: true }
     },

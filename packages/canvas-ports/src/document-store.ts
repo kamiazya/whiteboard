@@ -89,7 +89,7 @@ export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
  * no separate workspace-scoping field because the document itself is the
  * unit of storage.
  */
-export interface CanvasDocStore {
+export interface DocumentStore {
   loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult>
   saveSnapshot(input: SaveSnapshotInput): Promise<void>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>

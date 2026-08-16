@@ -17,7 +17,7 @@ export function createContainer(storeModule: ContainerModule = storeMemoryModule
  */
 export function resolveServerDeps(container: Container): ServerDeps {
   return {
-    canvasDocStore: container.get(TOKENS.CanvasDocStore),
+    documentStore: container.get(TOKENS.DocumentStore),
     blobStore: container.get(TOKENS.BlobStore),
     documentIndex: container.get(TOKENS.DocumentIndex),
   }

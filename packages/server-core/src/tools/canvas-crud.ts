@@ -14,7 +14,7 @@ import type {
   listCanvasesInputSchema,
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
-import { saveDocSnapshot } from './canvas-doc-io.js'
+import { saveDocumentSnapshot } from './document-io.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -63,7 +63,7 @@ export async function wbCanvasCreate(
   // document yet to ask. The kind is written once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
-  await saveDocSnapshot(deps, entry.canvasId, doc)
+  await saveDocumentSnapshot(deps, entry.canvasId, doc)
 
   return { canvasId: entry.canvasId, path: entry.path }
 }
@@ -122,6 +122,6 @@ export async function wbCanvasDelete(
     workspaceId: input.workspaceId,
     path: entry.path,
   })
-  await deps.canvasDocStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: entry.canvasId } })
+  await deps.documentStore.deleteDoc({ docRef: { kind: 'canvas', canvasId: entry.canvasId } })
   return { deleted: true }
 }

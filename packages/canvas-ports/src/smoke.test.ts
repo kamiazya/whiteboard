@@ -39,7 +39,7 @@ describe('canvas-ports package smoke', () => {
     })
     expect(docRef.kind).toBe('canvas')
 
-    expect(pkg.TOKENS.CanvasDocStore).toBe(Symbol.for('whiteboard.ports.CanvasDocStore'))
+    expect(pkg.TOKENS.DocumentStore).toBe(Symbol.for('whiteboard.ports.DocumentStore'))
     expect(pkg.negotiateProtocolVersion([1, 2], [2, 3])).toBe(2)
   }, 30_000)
 })

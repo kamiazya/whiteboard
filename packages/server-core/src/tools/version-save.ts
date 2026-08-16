@@ -2,7 +2,7 @@ import { canvasIdSchema, generateCanvasId } from '@kamiazya/whiteboard-canvas-mo
 import { encodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { versionRecordSchema } from './version-record.js'
 
 export const versionSaveInputSchema = z
@@ -31,7 +31,7 @@ export function createVersionSaveTool(deps: ServerDeps) {
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
     async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
 
       const versionId = generateCanvasId()
       const timestamp = new Date().toISOString()
@@ -43,7 +43,7 @@ export function createVersionSaveTool(deps: ServerDeps) {
       versions.set(versionId, JSON.stringify(record))
       doc.commit()
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return {
         canvasId: input.canvasId,

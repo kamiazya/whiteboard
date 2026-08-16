@@ -2,9 +2,9 @@ import type { CanvasId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CanvasDocStore,
   DeleteDocInput,
   DocRef,
+  DocumentStore,
   LoadDeltasInput,
   LoadDeltasResult,
   LoadSnapshotInput,
@@ -26,13 +26,13 @@ function docRefKey(docRef: DocRef): string {
 }
 
 /**
- * An in-memory CanvasDocStore fake shared across server-core tool tests.
+ * An in-memory DocumentStore fake shared across server-core tool tests.
  * Keyed by `docRef` (canvas OR workspace-tree) so a single fake instance
  * backs both a mutation tool's canvas doc and the workspace-tree reindex
  * reads that a mutation now triggers, matching how a real store scopes
  * storage by DocRef rather than by store instance.
  */
-export class FakeCanvasDocStore implements CanvasDocStore {
+export class FakeDocumentStore implements DocumentStore {
   private readonly saved = new Map<string, SaveSnapshotInput>()
 
   /**
@@ -72,10 +72,10 @@ export class FakeCanvasDocStore implements CanvasDocStore {
 
 /**
  * Configures a `LoroDoc` via `configure`, then snapshots it into the
- * given `FakeCanvasDocStore` under the provided `canvasId`.
+ * given `FakeDocumentStore` under the provided `canvasId`.
  */
 export async function seedDoc(
-  store: FakeCanvasDocStore,
+  store: FakeDocumentStore,
   canvasId: CanvasId,
   configure: (doc: LoroDoc) => void,
 ): Promise<void> {
@@ -102,7 +102,7 @@ export async function seedDoc(
  * path rather than tripping the ownership guard by accident.
  */
 export async function registerCanvasInWorkspace(
-  store: FakeCanvasDocStore,
+  store: FakeDocumentStore,
   workspaceId: WorkspaceId,
   canvasId: CanvasId,
   path = 'doc',

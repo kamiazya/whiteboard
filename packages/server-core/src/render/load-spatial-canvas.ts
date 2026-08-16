@@ -27,7 +27,7 @@ export async function loadSpatialCanvas(
   canvasId: CanvasId,
 ): Promise<{ doc: LoroDoc; canvas: SpatialCanvas }> {
   const docRef = { kind: 'canvas' as const, canvasId }
-  const existing = await deps.canvasDocStore.loadSnapshot({ docRef })
+  const existing = await deps.documentStore.loadSnapshot({ docRef })
   if (existing === null) throw new CanvasNotFoundError(canvasId)
 
   const doc = new LoroDoc()

@@ -1,9 +1,9 @@
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CanvasDocStore,
   DeleteDocInput,
   DocRef,
+  DocumentStore,
   LoadDeltasInput,
   LoadDeltasResult,
   LoadSnapshotInput,
@@ -20,12 +20,12 @@ function docRefKey(docRef: DocRef): string {
 }
 
 /**
- * Minimal in-memory `CanvasDocStore` test double: snapshot-only, keyed by
+ * Minimal in-memory `DocumentStore` test double: snapshot-only, keyed by
  * `DocRef`. Delta append/load are unimplemented (unused by the canvas-CRUD
  * tools under test) and throw if called, so a test that accidentally
  * exercises them fails loudly instead of silently no-oping.
  */
-export function createInMemoryCanvasDocStore(): CanvasDocStore {
+export function createInMemoryDocumentStore(): DocumentStore {
   const snapshots = new Map<string, { manifest: unknown; chunks: unknown[]; frontier: unknown }>()
 
   return {
@@ -39,10 +39,10 @@ export function createInMemoryCanvasDocStore(): CanvasDocStore {
       snapshots.set(docRefKey(docRef), structuredClone({ manifest, chunks, frontier }))
     },
     async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
-      throw new Error('appendDeltas is not supported by createInMemoryCanvasDocStore')
+      throw new Error('appendDeltas is not supported by createInMemoryDocumentStore')
     },
     async loadDeltas(_input: LoadDeltasInput): Promise<LoadDeltasResult> {
-      throw new Error('loadDeltas is not supported by createInMemoryCanvasDocStore')
+      throw new Error('loadDeltas is not supported by createInMemoryDocumentStore')
     },
     async readFrontier(_input: ReadFrontierInput): Promise<ReadFrontierResult> {
       const stored = snapshots.get(docRefKey(_input.docRef))

@@ -45,7 +45,7 @@ vi.mock('../../di/store-local.module.js', () => ({
 vi.mock('../../di/container.js', () => ({
   createContainer: vi.fn(() => 'fake-container'),
   resolveServerDeps: vi.fn(() => ({
-    canvasDocStore: {},
+    documentStore: {},
     blobStore: {},
   })),
 }))

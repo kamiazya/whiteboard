@@ -1,6 +1,6 @@
 import type { BlobStore } from './blob-store.js'
-import type { CanvasDocStore } from './canvas-doc-store.js'
 import type { DocumentIndex } from './document-index.js'
+import type { DocumentStore } from './document-store.js'
 import type { PresenceChannel } from './presence.js'
 
 /**
@@ -23,7 +23,7 @@ export function defineToken<T>(name: string): Token<T> {
 
 /** Aggregate token registry; each key is exactly its port interface's name. */
 export const TOKENS = {
-  CanvasDocStore: defineToken<CanvasDocStore>('CanvasDocStore'),
+  DocumentStore: defineToken<DocumentStore>('DocumentStore'),
   BlobStore: defineToken<BlobStore>('BlobStore'),
   DocumentIndex: defineToken<DocumentIndex>('DocumentIndex'),
   PresenceChannel: defineToken<PresenceChannel>('PresenceChannel'),

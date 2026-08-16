@@ -114,7 +114,7 @@ describe('saveCanvas / loadCanvas', () => {
   })
 
   // Daemon mode persists a canvas through THIS path, not through
-  // canvasDocStore — a separate implementation, so the sidecar-map contract
+  // documentStore — a separate implementation, so the sidecar-map contract
   // node/edge lock relies on has to be pinned here too. It holds because
   // saveCanvas writes doc.export({ mode: 'snapshot' }) verbatim rather than
   // re-serializing through readSpatialCanvas, which would drop everything

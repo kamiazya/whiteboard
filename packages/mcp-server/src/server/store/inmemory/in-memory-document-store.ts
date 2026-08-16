@@ -1,8 +1,8 @@
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CanvasDocStore,
   DeleteDocInput,
+  DocumentStore,
   Frontier,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -35,13 +35,13 @@ function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {
 }
 
 /**
- * In-memory `CanvasDocStore` test double. Every stored/returned byte buffer
+ * In-memory `DocumentStore` test double. Every stored/returned byte buffer
  * is defensively copied so a caller mutating its own input/output array can
  * never corrupt or observe the store's internal state — this is the
  * canonical double the later libSQL-backed implementation's tests reuse for
  * behavioral parity checks.
  */
-export class InMemoryCanvasDocStore implements CanvasDocStore {
+export class InMemoryDocumentStore implements DocumentStore {
   private readonly docs = new Map<string, DocRecord>()
 
   private getRecord(key: string): DocRecord {

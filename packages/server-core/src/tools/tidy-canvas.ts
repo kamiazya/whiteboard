@@ -9,7 +9,7 @@ import { readDocumentKind, readNodeLocks } from '@kamiazya/whiteboard-canvas-wor
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const tidyCanvasInputSchema = z
@@ -42,7 +42,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       // A markdown document stores its OKF body in a text node, so its
       // content parses as a perfectly valid spatial canvas and the schema

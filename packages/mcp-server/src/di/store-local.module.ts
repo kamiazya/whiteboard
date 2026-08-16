@@ -3,7 +3,7 @@ import { ContainerModule } from 'inversify'
 import type { Kysely } from 'kysely'
 import type { DatabaseSchema } from '../server/store/db/schema.js'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
-import { LibsqlCanvasDocStore } from '../server/store/libsql/libsql-canvas-doc-store.js'
+import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
 import { SqliteDocumentIndex } from '../server/store/sqlite-document-index.js'
 
 export interface StoreLocalModuleOptions {
@@ -13,8 +13,8 @@ export interface StoreLocalModuleOptions {
 
 export function createStoreLocalModule(opts: StoreLocalModuleOptions): ContainerModule {
   return new ContainerModule(({ bind }) => {
-    bind(TOKENS.CanvasDocStore)
-      .toDynamicValue(() => new LibsqlCanvasDocStore(opts.db))
+    bind(TOKENS.DocumentStore)
+      .toDynamicValue(() => new LibsqlDocumentStore(opts.db))
       .inSingletonScope()
     bind(TOKENS.BlobStore)
       .toDynamicValue(() => new FsBlobStore(opts.blobDir))

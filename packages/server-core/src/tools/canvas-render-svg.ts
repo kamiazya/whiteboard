@@ -8,7 +8,7 @@ import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
- * `CanvasDocStore.loadSnapshot`'s `DocRef` (`{ kind: 'canvas', canvasId }`)
+ * `DocumentStore.loadSnapshot`'s `DocRef` (`{ kind: 'canvas', canvasId }`)
  * carries no `workspaceId` — this field is accepted for API symmetry with
  * workspace-scoped tools and as a future authorization-scoping hook, not
  * passed to the store.

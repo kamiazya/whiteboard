@@ -7,7 +7,7 @@
 // the digest usable as a change signal at all.
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { describe, expect, test } from 'vitest'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasDigestTool } from './canvas-digest.js'
 import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
 
@@ -16,8 +16,8 @@ const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const DIAGRAM_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 /**
@@ -26,7 +26,7 @@ function makeDeps(canvasDocStore: FakeCanvasDocStore) {
  * `wb_document_set` writes one — a single `okf-body` text node — because
  * that IS a markdown document's stored shape on this side.
  */
-async function seedWorkspace(store: FakeCanvasDocStore, ref: string) {
+async function seedWorkspace(store: FakeDocumentStore, ref: string) {
   // `seed`, not `createDocument`: the index ASSIGNS an id, and these tests
   // need the reference in the file node to name the document they seeded.
   store.documentIndex.seed({
@@ -71,7 +71,7 @@ async function seedWorkspace(store: FakeCanvasDocStore, ref: string) {
 
 describe('wb_scene_render reference resolution', () => {
   test('renders the referenced markdown body when embedReferences is set', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
@@ -86,7 +86,7 @@ describe('wb_scene_render reference resolution', () => {
   })
 
   test('resolves a reference written as a document path, not only as an id', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, 'notes')
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
@@ -100,7 +100,7 @@ describe('wb_scene_render reference resolution', () => {
   })
 
   test('leaves the default render untouched', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
@@ -124,7 +124,7 @@ describe('wb_scene_render reference resolution', () => {
     // The markdown seam answers for markdown documents only. A spatial
     // document is not prose, and rendering its first text node as if it
     // were would misreport what the reference points at.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, DIAGRAM_ID)
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
@@ -151,7 +151,7 @@ describe('wb_scene_render reference resolution', () => {
   })
 
   test('renders a dangling reference as the plain card rather than failing', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, 'nowhere')
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
@@ -167,7 +167,7 @@ describe('reference resolution edge cases', () => {
     // snapshot (an interrupted delete, a restored index). The reference is
     // still nameable even though its content is not readable, and the
     // label is strictly better than showing a raw id.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
     await store.deleteDoc({ docRef: { kind: 'canvas', canvasId: NOTE_ID } })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
@@ -186,7 +186,7 @@ describe('reference resolution edge cases', () => {
     // The label seam is wired from the same `references` map as the body,
     // so it needs its own assertion — a body-only test passes while the
     // label wiring is missing entirely.
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
@@ -235,7 +235,7 @@ describe('wb_scene_digest', () => {
   // goes red at that moment. The opt-in itself is guarded by
   // 'leaves the default render untouched' above, which IS mutation-checked.
   test('does not move when only the referenced document changes', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
     const digest = createCanvasDigestTool(makeDeps(store))
 

@@ -2,14 +2,14 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-ut
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { wbCanvasCreate } from './canvas-crud.js'
-import { saveDocSnapshot } from './canvas-doc-io.js'
 import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
+import { saveDocumentSnapshot } from './document-io.js'
 
 function makeDeps(): ServerDeps {
   return {
-    canvasDocStore: createInMemoryCanvasDocStore(),
+    documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
   }
@@ -71,7 +71,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // made the missing format invisible.
     const deps = makeDeps()
     const canvasId = await createDoc(deps, 'spatial')
-    await saveDocSnapshot(deps, canvasId, new LoroDoc()) // overwrite: no kind
+    await saveDocumentSnapshot(deps, canvasId, new LoroDoc()) // overwrite: no kind
 
     await expect(
       createDocumentGetTool(deps).execute({ workspaceId: 'ws', canvasId }),

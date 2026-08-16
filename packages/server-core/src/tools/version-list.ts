@@ -1,7 +1,7 @@
 import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
+import { loadOrCreateDocument } from './document-io.js'
 import { parseVersionRecord, versionRecordSchema } from './version-record.js'
 
 const versionEntrySchema = versionRecordSchema.extend({
@@ -30,7 +30,7 @@ export function createVersionListTool(deps: ServerDeps) {
     inputSchema: versionListInputSchema,
     outputSchema: versionListOutputSchema,
     async execute(input: VersionListInput): Promise<VersionListOutput> {
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
 
       const versions = doc.getMap('versions')
       const entries: z.infer<typeof versionEntrySchema>[] = []

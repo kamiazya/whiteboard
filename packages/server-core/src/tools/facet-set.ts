@@ -8,7 +8,7 @@ import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 
 /**
@@ -44,7 +44,7 @@ export function createFacetSetTool(deps: ServerDeps) {
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.canvasId)
 
       // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
       // document has nodes and edges and no frontmatter to put one in, so a
@@ -66,7 +66,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...input.facets }
       writeFacets(doc, mergedFacets)
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.canvasId, doc)
 
       return { canvasId: input.canvasId, facets: mergedFacets }
     },

@@ -1,12 +1,12 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-canvas-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
-import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
+import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
 
 function makeServer() {
   return createServer({
-    canvasDocStore: createInMemoryCanvasDocStore(),
+    documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
   })
@@ -160,9 +160,9 @@ describe('canvas OKF read route', () => {
     // alone. It is still worth guarding: a document whose bytes were deleted,
     // or one written by an older build that created placements lazily, lands
     // here.
-    const store = createInMemoryCanvasDocStore()
+    const store = createInMemoryDocumentStore()
     const documentIndex = new InMemoryDocumentIndex()
-    const { app } = createServer({ canvasDocStore: store, blobStore: {} as never, documentIndex })
+    const { app } = createServer({ documentStore: store, blobStore: {} as never, documentIndex })
     await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
     const { canvasId } = await documentIndex.createDocument({
       workspaceId: 'ws-1',

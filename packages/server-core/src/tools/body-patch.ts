@@ -8,7 +8,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
 
 export const bodyPatchRangeSchema = z
@@ -84,7 +84,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
       if (node === undefined) throw new NodeNotFoundError(input.canvasId, input.nodeId)

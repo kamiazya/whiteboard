@@ -3,10 +3,7 @@ import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-p
 import { readNodeLocks, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import {
-  FakeCanvasDocStore,
-  registerCanvasInWorkspace,
-} from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
 import { NodeNotFoundError } from './errors.js'
 import { createNodeLockTool } from './node-lock.js'
 
@@ -21,12 +18,12 @@ const CANVAS: SpatialCanvas = {
   edges: [],
 }
 
-async function seedCanvas(canvasDocStore: FakeCanvasDocStore): Promise<void> {
-  await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
+async function seedCanvas(documentStore: FakeDocumentStore): Promise<void> {
+  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-  await canvasDocStore.saveSnapshot({
+  await documentStore.saveSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
     manifest,
     chunks,
@@ -34,12 +31,12 @@ async function seedCanvas(canvasDocStore: FakeCanvasDocStore): Promise<void> {
   })
 }
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySet<string>> {
-  const stored = await canvasDocStore.loadSnapshot({
+async function loadLocks(documentStore: FakeDocumentStore): Promise<ReadonlySet<string>> {
+  const stored = await documentStore.loadSnapshot({
     docRef: { kind: 'canvas', canvasId: CANVAS_ID },
   })
   if (stored === null) throw new Error('no snapshot')
@@ -50,9 +47,9 @@ async function loadLocks(canvasDocStore: FakeCanvasDocStore): Promise<ReadonlySe
 
 describe('wb_node_lock tool', () => {
   test('locks a node and persists it, then unlocks it again', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore)
-    const tool = createNodeLockTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore)
+    const tool = createNodeLockTool(makeDeps(documentStore))
 
     const locked = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -61,7 +58,7 @@ describe('wb_node_lock tool', () => {
       locked: true,
     })
     expect(locked).toEqual({ canvasId: CANVAS_ID, nodeId: 'n1', locked: true })
-    expect(await loadLocks(canvasDocStore)).toEqual(new Set(['n1']))
+    expect(await loadLocks(documentStore)).toEqual(new Set(['n1']))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -69,13 +66,13 @@ describe('wb_node_lock tool', () => {
       nodeId: 'n1',
       locked: false,
     })
-    expect(await loadLocks(canvasDocStore)).toEqual(new Set())
+    expect(await loadLocks(documentStore)).toEqual(new Set())
   })
 
   test('rejects an unknown node id rather than creating a lock for a ghost', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore)
-    const tool = createNodeLockTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore)
+    const tool = createNodeLockTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
@@ -85,13 +82,13 @@ describe('wb_node_lock tool', () => {
         locked: true,
       }),
     ).rejects.toBeInstanceOf(NodeNotFoundError)
-    expect(await loadLocks(canvasDocStore)).toEqual(new Set())
+    expect(await loadLocks(documentStore)).toEqual(new Set())
   })
 
   test('locking an already-locked node is idempotent', async () => {
-    const canvasDocStore = new FakeCanvasDocStore()
-    await seedCanvas(canvasDocStore)
-    const tool = createNodeLockTool(makeDeps(canvasDocStore))
+    const documentStore = new FakeDocumentStore()
+    await seedCanvas(documentStore)
+    const tool = createNodeLockTool(makeDeps(documentStore))
     const input = {
       workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
@@ -101,6 +98,6 @@ describe('wb_node_lock tool', () => {
 
     await tool.execute(input)
     await tool.execute(input)
-    expect(await loadLocks(canvasDocStore)).toEqual(new Set(['n2']))
+    expect(await loadLocks(documentStore)).toEqual(new Set(['n2']))
   })
 })

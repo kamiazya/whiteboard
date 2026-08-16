@@ -12,7 +12,7 @@ import type {
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CanvasDocStore,
+  DocumentStore,
   LoadDeltasInput,
   LoadDeltasResult,
   LoadSnapshotInput,
@@ -20,7 +20,7 @@ import type {
   ReadFrontierInput,
   ReadFrontierResult,
   SaveSnapshotInput,
-} from './canvas-doc-store.js'
+} from './document-store.js'
 import type { PresenceChannel, PresenceState } from './presence.js'
 
 // Compile-time only: proves each port method's Parameters/Awaited-ReturnType
@@ -28,28 +28,26 @@ import type { PresenceChannel, PresenceState } from './presence.js'
 // from its schema (the class of bug the create_frame assignedMembers
 // number-vs-string[] mismatch shipped as).
 
-it('CanvasDocStore: every method param/return is exactly its named DTO', () => {
-  expectTypeOf<Parameters<CanvasDocStore['loadSnapshot']>[0]>().toEqualTypeOf<LoadSnapshotInput>()
+it('DocumentStore: every method param/return is exactly its named DTO', () => {
+  expectTypeOf<Parameters<DocumentStore['loadSnapshot']>[0]>().toEqualTypeOf<LoadSnapshotInput>()
   expectTypeOf<
-    Awaited<ReturnType<CanvasDocStore['loadSnapshot']>>
+    Awaited<ReturnType<DocumentStore['loadSnapshot']>>
   >().toEqualTypeOf<LoadSnapshotResult>()
 
-  expectTypeOf<Parameters<CanvasDocStore['saveSnapshot']>[0]>().toEqualTypeOf<SaveSnapshotInput>()
-  expectTypeOf<Awaited<ReturnType<CanvasDocStore['saveSnapshot']>>>().toEqualTypeOf<void>()
+  expectTypeOf<Parameters<DocumentStore['saveSnapshot']>[0]>().toEqualTypeOf<SaveSnapshotInput>()
+  expectTypeOf<Awaited<ReturnType<DocumentStore['saveSnapshot']>>>().toEqualTypeOf<void>()
 
-  expectTypeOf<Parameters<CanvasDocStore['appendDeltas']>[0]>().toEqualTypeOf<AppendDeltasInput>()
+  expectTypeOf<Parameters<DocumentStore['appendDeltas']>[0]>().toEqualTypeOf<AppendDeltasInput>()
   expectTypeOf<
-    Awaited<ReturnType<CanvasDocStore['appendDeltas']>>
+    Awaited<ReturnType<DocumentStore['appendDeltas']>>
   >().toEqualTypeOf<AppendDeltasResult>()
 
-  expectTypeOf<Parameters<CanvasDocStore['loadDeltas']>[0]>().toEqualTypeOf<LoadDeltasInput>()
-  expectTypeOf<
-    Awaited<ReturnType<CanvasDocStore['loadDeltas']>>
-  >().toEqualTypeOf<LoadDeltasResult>()
+  expectTypeOf<Parameters<DocumentStore['loadDeltas']>[0]>().toEqualTypeOf<LoadDeltasInput>()
+  expectTypeOf<Awaited<ReturnType<DocumentStore['loadDeltas']>>>().toEqualTypeOf<LoadDeltasResult>()
 
-  expectTypeOf<Parameters<CanvasDocStore['readFrontier']>[0]>().toEqualTypeOf<ReadFrontierInput>()
+  expectTypeOf<Parameters<DocumentStore['readFrontier']>[0]>().toEqualTypeOf<ReadFrontierInput>()
   expectTypeOf<
-    Awaited<ReturnType<CanvasDocStore['readFrontier']>>
+    Awaited<ReturnType<DocumentStore['readFrontier']>>
   >().toEqualTypeOf<ReadFrontierResult>()
 })
 

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../db/test-helpers.js'
-import { LibsqlCanvasDocStore } from './libsql-canvas-doc-store.js'
+import { LibsqlDocumentStore } from './libsql-document-store.js'
 
 function canvasRef(canvasId: string): DocRef {
   return { kind: 'canvas', canvasId }
@@ -12,12 +12,12 @@ function canvasRef(canvasId: string): DocRef {
 
 let tempDir: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
-let store: LibsqlCanvasDocStore
+let store: LibsqlDocumentStore
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-libsql-doc-store-test-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  store = new LibsqlCanvasDocStore(handle.db)
+  store = new LibsqlDocumentStore(handle.db)
 })
 
 afterEach(async () => {
@@ -25,7 +25,7 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-describe('LibsqlCanvasDocStore', () => {
+describe('LibsqlDocumentStore', () => {
   it('returns null from loadSnapshot and readFrontier before any save', async () => {
     const docRef = canvasRef('canvas-a')
 
@@ -108,7 +108,7 @@ describe('LibsqlCanvasDocStore', () => {
   })
 
   // Regression for a parity counterexample the model-based property test
-  // found: InMemoryCanvasDocStore's loadSnapshot reports the doc's *current*
+  // found: InMemoryDocumentStore's loadSnapshot reports the doc's *current*
   // frontier (shared with appendDeltas), not the frontier the snapshot was
   // originally saved with. A later appendDeltas call must be visible through
   // a subsequent loadSnapshot's `frontier` field.

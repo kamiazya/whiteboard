@@ -10,7 +10,7 @@ import { readEdgeLocks } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './errors.js'
 
 export const edgePatchFieldsSchema = z
@@ -58,7 +58,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
     outputSchema: edgePatchOutputSchema,
     execute: async (input: EdgePatchInput): Promise<EdgePatchOutput> => {
       await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      const { doc, canvas } = await loadDocument(deps, input.canvasId)
 
       const edge = canvas.edges.find((candidate) => candidate.id === input.edgeId)
       if (edge === undefined) throw new EdgeNotFoundError(input.canvasId, input.edgeId)
