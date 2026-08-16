@@ -49,6 +49,15 @@ const APPS_WEB_SRC_DIR = resolve(REPO_ROOT, 'apps/web/src')
 // outside any real browser app dir so those tests must pass browserAppDir
 // explicitly rather than relying on collectBrowserAppFiles's real scan roots.
 const FIXTURE_BROWSER_APP_DIR = resolve(PACKAGE_SRC_DIR, '__fixture-browser-app__')
+// Bare-specifier prefix for the daemon package, and its real `exports` map
+// (each subpath's `types` target points at ./src/*.ts) — shared by every
+// subpath-boundary scan below.
+const MCP_PACKAGE_SPECIFIER = '@kamiazya/whiteboard-mcp'
+const MCP_EXPORTS_MAP = (
+  JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
+    exports: Record<string, { types?: string } | string>
+  }
+).exports
 
 /**
  * Check whether a GitHub Actions job body declares `environment: production-web`,
@@ -393,15 +402,9 @@ describe('hole pin: bare-specifier subpath imports bypass forbiddenResolvedPath'
 })
 
 describe('resolveMcpSubpathEntry', () => {
-  const realExportsMap = (
-    JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
-      exports: Record<string, { types?: string } | string>
-    }
-  ).exports
-
   it('resolves a real subpath against the real exports map to its src/ file', () => {
     const resolved = resolveMcpSubpathEntry(
-      realExportsMap,
+      MCP_EXPORTS_MAP,
       '@kamiazya/whiteboard-mcp/api-client',
       PACKAGE_ROOT,
     )
@@ -410,7 +413,7 @@ describe('resolveMcpSubpathEntry', () => {
 
   it('every real exports subpath whose types target points into ./src exists on disk', () => {
     const missing: string[] = []
-    for (const [subpath, entry] of Object.entries(realExportsMap)) {
+    for (const [subpath, entry] of Object.entries(MCP_EXPORTS_MAP)) {
       if (typeof entry === 'string') continue // e.g. "./package.json": "./package.json"
       const typesPath = entry.types
       if (!typesPath?.startsWith('./src/')) continue
@@ -427,7 +430,7 @@ describe('resolveMcpSubpathEntry', () => {
   })
 
   it('the bare package root is reported as forbidden (its types target is compiled dist, not src)', () => {
-    expect(resolveMcpSubpathEntry(realExportsMap, '@kamiazya/whiteboard-mcp', PACKAGE_ROOT)).toBe(
+    expect(resolveMcpSubpathEntry(MCP_EXPORTS_MAP, '@kamiazya/whiteboard-mcp', PACKAGE_ROOT)).toBe(
       'root-forbidden',
     )
   })
@@ -513,13 +516,6 @@ describe('TEST_ONLY_SUBPATHS', () => {
 })
 
 describe('apps/web bare package-subpath import boundary (exports-map driven)', () => {
-  const realExportsMap = (
-    JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
-      exports: Record<string, { types?: string } | string>
-    }
-  ).exports
-  const PACKAGE_SPECIFIER_PREFIX = '@kamiazya/whiteboard-mcp'
-
   it('every bare @kamiazya/whiteboard-mcp/* import in apps/web/src resolves and its transitive closure is clean', () => {
     const browserAppFiles = collectBrowserAppFiles()
     const violations: string[] = []
@@ -527,12 +523,12 @@ describe('apps/web bare package-subpath import boundary (exports-map driven)', (
       const source = readFileSync(file, 'utf-8')
       for (const specifier of extractImportSpecifiers(source)) {
         if (
-          specifier !== PACKAGE_SPECIFIER_PREFIX &&
-          !specifier.startsWith(`${PACKAGE_SPECIFIER_PREFIX}/`)
+          specifier !== MCP_PACKAGE_SPECIFIER &&
+          !specifier.startsWith(`${MCP_PACKAGE_SPECIFIER}/`)
         ) {
           continue
         }
-        const testOnlySubpath = specifier.slice(`${PACKAGE_SPECIFIER_PREFIX}/`.length)
+        const testOnlySubpath = specifier.slice(`${MCP_PACKAGE_SPECIFIER}/`.length)
         let entry: string | 'unknown' | 'root-forbidden'
         if (Object.hasOwn(TEST_ONLY_SUBPATHS, testOnlySubpath)) {
           if (!isTestFile(file)) {
@@ -543,7 +539,7 @@ describe('apps/web bare package-subpath import boundary (exports-map driven)', (
           }
           entry = TEST_ONLY_SUBPATHS[testOnlySubpath]
         } else {
-          entry = resolveMcpSubpathEntry(realExportsMap, specifier, PACKAGE_ROOT)
+          entry = resolveMcpSubpathEntry(MCP_EXPORTS_MAP, specifier, PACKAGE_ROOT)
         }
         if (entry === 'unknown' || entry === 'root-forbidden') {
           violations.push(
@@ -572,8 +568,6 @@ describe('apps/web bare package-subpath import boundary (exports-map driven)', (
 // on its face regardless. An entry absent from the map, or whose `types` target
 // does not point into ./src, resolves to 'unknown': a subpath the mapper cannot
 // vouch for is a violation, never a silent pass.
-const MCP_PACKAGE_SPECIFIER = '@kamiazya/whiteboard-mcp'
-
 function resolveMcpSubpathEntry(
   exportsMap: Record<string, { types?: string } | string>,
   specifier: string,
