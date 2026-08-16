@@ -1,4 +1,4 @@
-import { problemDetailsErrorSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { apiErrorReason } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { MutableRefObject } from 'react'
 import { useRef, useState } from 'react'
 import { deriveNewCanvasPath } from '../../lib/derive-new-canvas-path.js'
@@ -75,12 +75,12 @@ export function useCreateCanvas({
           onNavigateToCanvas(target)
           return
         }
-        const parsed = problemDetailsErrorSchema.safeParse(await res.json().catch(() => ({})))
-        // Use the Problem Details title when present; otherwise show a safe
-        // generic message. Never expose body.message or Error.message — those
-        // can contain server-side paths or credentials (P-HTTP-005).
-        const title = parsed.success ? parsed.data.title : undefined
-        if (mountedRef.current) setNewCanvasError(title ? title : 'Failed to create canvas.')
+        // The shared reader returns the daemon-authored reason (Problem
+        // Details title, or a message beside an error code) and nothing
+        // else. Never expose bare body.message or Error.message — those can
+        // contain server-side paths or credentials (P-HTTP-005).
+        const reason = apiErrorReason(await res.json().catch(() => ({})))
+        if (mountedRef.current) setNewCanvasError(reason ?? 'Failed to create canvas.')
       } catch {
         if (mountedRef.current) setNewCanvasError('Failed to create canvas.')
       } finally {

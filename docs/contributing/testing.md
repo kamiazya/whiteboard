@@ -85,19 +85,6 @@ Use PBT when the behavior is better described as an invariant over many inputs t
 
 **Replayability:** Avoid `Math.random()`, wall-clock timing, real network, and unseeded global state inside generated runs.
 
-### Property catalog
-
-The canonical catalog of property IDs lives in `tmp/notes/2026-05-06-property-catalog.md` (`P-<DOMAIN>-NNN` format).
-
-Operational rules:
-
-- When you add a PBT, leave the matching property ID in a test name or comment so `property-catalog-coverage.test.ts` can pair them up. New IDs that are neither covered nor explicitly deferred fail CI.
-- Deferred properties must declare a concrete `reason` (e.g. "no contract yet", "requires HTTPS") and an `unblock` condition in `DEFERRED_PROPERTIES`. "Not implemented yet" alone is not a valid reason — always point at the blocker.
-- The default `pnpm test` keeps `numRuns` low for CI speed. Run `pnpm test:pbt:stress` (sets `PBT_STRESS=1`) for deeper exploration before a release. Race / model tests can request an extra multiplier via `withDefaults(overrides, { stressMultiplier: N })`.
-- Property IDs cited in tests, comments, or smoke must exist in the catalog. The phantom-reference check fails on typos and on stale references to removed catalog entries.
-- When fast-check reports a counterexample, paste the seed / path output into the PR body or `tmp/issues/` note so the failure can be replayed deterministically.
-- The deferred-property table has a hard ceiling (`MAX_DEFERRED_PROPERTIES`). Bumping it is a deliberate review decision — every increase ships with the new entry's `reason`/`unblock` and a brief justification in the PR body.
-
 ---
 
 ## Mutation Testing

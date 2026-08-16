@@ -1,8 +1,8 @@
 import {
+  apiErrorReason,
   canvasApiUrl,
   createCanvasRequestSchema,
   createCanvasResponseSchema,
-  problemDetailsErrorSchema,
   updateCanvasResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -64,9 +64,8 @@ function loroLoadFailureReason(kind: Exclude<LoroLoadResult['kind'], 'ok'>): str
 
 async function parseErrorTitle(res: Response): Promise<string> {
   try {
-    const json: unknown = await res.json()
-    const parsed = problemDetailsErrorSchema.safeParse(json)
-    if (parsed.success && parsed.data.title) return parsed.data.title
+    const reason = apiErrorReason(await res.json())
+    if (reason !== undefined) return reason
   } catch {
     // fall through to the generic message below
   }

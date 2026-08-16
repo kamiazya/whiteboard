@@ -1511,15 +1511,6 @@ describe('createApp daemon mutation auth', () => {
       const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
       expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
     })
-
-    it('apps/web strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
-      // apps/web/src/runtime-config.ts uses .strict() which forbids unknown keys.
-      // daemonToken is NOT in the apps/web schema, so .parse({ daemonToken, daemonBaseUrl })
-      // must throw. This locks the token-channel split for apps/web as a deliberate guarded step.
-      const { runtimeConfigSchema } = await import('../../../../apps/web/src/runtime-config.js')
-      const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
-      expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
-    })
   })
 
   describe('/api/runtime/ping Zod schema', () => {

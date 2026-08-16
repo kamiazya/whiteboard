@@ -10,6 +10,7 @@ import {
   type RenameDocumentPathResponse,
   renameDocumentPathRequestSchema,
 } from '../../../shared/api-contracts/canvas.js'
+import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import {
   ConflictError,
@@ -90,23 +91,26 @@ export function createWorkspacesRouter() {
       validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
+      if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
       throw err
     }
     const raw = await c.req.json().catch(() => null)
     if (raw === null) {
-      return c.json({ title: 'JSON body required' }, 400)
+      return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)
     }
     const parsed = createCanvasRequestSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ title: createCanvasRequestErrorTitle(parsed.error) }, 400)
+      return c.json(
+        { title: createCanvasRequestErrorTitle(parsed.error) } satisfies ApiErrorBody,
+        400,
+      )
     }
     const path = parsed.data.path
     try {
       validateDocumentPath(path)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
+      if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
       throw err
     }
     try {
@@ -119,7 +123,7 @@ export function createWorkspacesRouter() {
         return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
       getLogger('canvas').error({ err: err as Error }, 'saveDocument failed unexpectedly')
-      return c.json({ title: 'Failed to create canvas.' }, 500)
+      return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
   })
 
@@ -142,7 +146,7 @@ export function createWorkspacesRouter() {
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
         getLogger('canvas').error({ err: err as Error }, 'deleteDocument failed unexpectedly')
-        return c.json({ title: 'Failed to delete canvas.' }, 500)
+        return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
       }
     },
     { badRequest: 'problem-details' },
@@ -162,18 +166,18 @@ export function createWorkspacesRouter() {
     async (c, workspaceId, path) => {
       const raw = await c.req.json().catch(() => null)
       if (raw === null) {
-        return c.json({ title: 'JSON body required' }, 400)
+        return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)
       }
       const parsed = renameDocumentPathRequestSchema.safeParse(raw)
       if (!parsed.success) {
-        return c.json({ title: 'path is required' }, 400)
+        return c.json({ title: 'path is required' } satisfies ApiErrorBody, 400)
       }
       const newPath = parsed.data.path
       try {
         validateDocumentPath(newPath)
       } catch (err) {
         const body = validationErrorBody(err)
-        if (body) return c.json({ title: body.message }, 400)
+        if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
         throw err
       }
       try {
@@ -190,7 +194,7 @@ export function createWorkspacesRouter() {
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
         getLogger('canvas').error({ err: err as Error }, 'renameDocumentPath failed unexpectedly')
-        return c.json({ title: 'Failed to rename canvas.' }, 500)
+        return c.json({ title: 'Failed to rename canvas.' } satisfies ApiErrorBody, 500)
       }
     },
     { badRequest: 'problem-details' },

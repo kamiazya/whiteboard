@@ -19,9 +19,23 @@ describe('safeErrorCopy — deterministic cases', () => {
     expect(safeErrorCopy(new Error('internal: token=secret-abc'), 'fallback')).toBe('fallback')
   })
 
-  it('returns fallback when body.title is absent (even if body.message is present)', () => {
+  it('returns fallback for a bare body.message with no error code', () => {
+    // Without a code the message is out of contract — it could be anything,
+    // so it stays unforwarded.
     const err = { status: 400, body: { message: 'Name too long' } }
     expect(safeErrorCopy(err, 'fallback')).toBe('fallback')
+  })
+
+  it('forwards body.message when it accompanies an error code (the branch routes)', () => {
+    // Red-first for the audited defect: the daemon's real reason was
+    // discarded and users saw only the generic fallback.
+    const err = {
+      status: 409,
+      body: { error: 'branch_conflict', message: 'A variation named "x" already exists' },
+    }
+    expect(safeErrorCopy(err, 'Failed to create variation')).toBe(
+      'A variation named "x" already exists',
+    )
   })
 
   it('returns fallback when body has neither title nor message', () => {

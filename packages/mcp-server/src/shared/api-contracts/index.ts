@@ -21,6 +21,7 @@ export {
 export * from './branches.js'
 export * from './canvas.js'
 export * from './canvas-url.js'
+export * from './errors.js'
 export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
   listGrantsResponseSchema,

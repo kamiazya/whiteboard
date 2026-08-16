@@ -12,6 +12,7 @@ import {
   type SetHeadResponse,
   setHeadRequestSchema,
 } from '../../shared/api-contracts/branches.js'
+import type { ApiErrorBody } from '../../shared/api-contracts/errors.js'
 import {
   BranchConflictError,
   BranchNotFoundError,
@@ -90,26 +91,20 @@ export interface CreateBranchesRouterOptions {
 
 // Helper that turns ValidationError into a structured 400 response.
 // Re-throw everything else so the caller can handle it as a 500.
-function handleValidation(
-  err: unknown,
-): { status: 400; body: { error: string; message: string } } | null {
+function handleValidation(err: unknown): { status: 400; body: ApiErrorBody } | null {
   const body = validationErrorBody(err)
   if (body) return { status: 400, body }
   return null
 }
 
-function handleCorruption(
-  err: unknown,
-): { status: 500; body: { error: 'corrupt_stored_data'; message: string } } | null {
+function handleCorruption(err: unknown): { status: 500; body: ApiErrorBody } | null {
   const body = corruptStoredDataBody(err)
   if (body) return { status: 500, body }
   return null
 }
 
 // Helper that runs validators.validateBranchName and returns a structured 400 on ValidationError.
-function validateBranchNameOrRespond(
-  name: string,
-): { status: 400; body: { error: string; message: string } } | null {
+function validateBranchNameOrRespond(name: string): { status: 400; body: ApiErrorBody } | null {
   try {
     validateBranchName(name)
     return null
