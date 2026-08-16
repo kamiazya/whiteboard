@@ -125,4 +125,23 @@ describe('canvasWithMarkdownBody', () => {
     const { canvas } = canvasWithMarkdownBody({ nodes: [], edges: [] }, BODY)
     expect(markdownBodyFromCanvas(canvas)).toBe(BODY)
   })
+
+  it('replaces a non-text node squatting on the reserved id instead of duplicating it', () => {
+    // Mirrors the read path's 'ignores a non-text node' case: a file node
+    // holding okf-body is unreadable as a body, and the write must not
+    // produce two nodes with one id (keyed persistence would drop one).
+    const squatter = {
+      id: 'okf-body',
+      type: 'file',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      file: 'x',
+    } as const
+    const { canvas, node, created } = canvasWithMarkdownBody({ nodes: [squatter], edges: [] }, BODY)
+    expect(created).toBe(true)
+    expect(canvas.nodes).toEqual([node])
+    expect(markdownBodyFromCanvas(canvas)).toBe(BODY)
+  })
 })

@@ -567,7 +567,12 @@ export function canvasWithMarkdownBody(
     ...MARKDOWN_BODY_NODE_FRAME,
     text: body,
   }
-  return { canvas: { ...canvas, nodes: [...canvas.nodes, node] }, node, created: true }
+  // The reserved id belongs to the body. A NON-text node squatting on it is
+  // already unreadable as a body (the read path ignores it), so it is
+  // replaced rather than duplicated — two nodes sharing an id would make
+  // the keyed-by-id persistence layer silently drop one of them.
+  const withoutSquatter = canvas.nodes.filter((candidate) => candidate.id !== node.id)
+  return { canvas: { ...canvas, nodes: [...withoutSquatter, node] }, node, created: true }
 }
 
 /**
