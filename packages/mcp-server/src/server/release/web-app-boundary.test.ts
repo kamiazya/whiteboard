@@ -193,6 +193,8 @@ const ALLOWED_SHARED_EXACT = new Set([
   'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
   'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
+  'sse-stream-hub.js', // shared SSE stream + per-document refcounting, no Node APIs
+  'sync-sse-contract.js', // SSE event Zod schemas, no Node APIs
   'token-store.js', // in-memory daemon-token holder, no Node APIs
   'upload-files.js', // file upload transport, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
@@ -476,11 +478,19 @@ describe('collectTransitiveViolations', () => {
     expect(violations.some((v) => v.includes('b.ts'))).toBe(true)
   })
 
-  it('a reach into ../server/* deep in the closure is caught', () => {
-    writeFileSync(join(dir, 'entry.ts'), "export * from './a.js'\n")
-    writeFileSync(join(dir, 'a.ts'), "export * from './b.js'\n")
-    writeFileSync(join(dir, 'b.ts'), "export * from '../server/leak.js'\n")
-    const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
+  it('a reach into src/server/* deep in the closure is caught', () => {
+    // Fixture must live under dir/src (collectTransitiveViolations resolves
+    // `relToSrc` against `resolve(packageRoot, 'src')`) with `dir` passed as
+    // packageRoot, mirroring the hole-pin fixture above — files written
+    // directly under `dir` never resolve into a `server/`-prefixed relToSrc,
+    // so the assertion would pass through the "unresolvable" violation branch
+    // instead of the server/cli/daemon-reach branch this test claims to pin.
+    mkdirSync(join(dir, 'src/server'), { recursive: true })
+    writeFileSync(join(dir, 'src/entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'src/a.ts'), "export * from './b.js'\n")
+    writeFileSync(join(dir, 'src/b.ts'), "export * from './server/leak.js'\n")
+    writeFileSync(join(dir, 'src/server/leak.ts'), 'export const leaked = true\n')
+    const violations = collectTransitiveViolations(join(dir, 'src/entry.ts'), dir)
     expect(violations.some((v) => v.includes('b.ts'))).toBe(true)
   })
 
@@ -497,6 +507,24 @@ describe('collectTransitiveViolations', () => {
     writeFileSync(join(dir, 'entry.ts'), "export * from './missing.js'\n")
     const violations = collectTransitiveViolations(join(dir, 'entry.ts'), dir)
     expect(violations.length).toBeGreaterThan(0)
+  })
+
+  it("an unlisted src/shared/* import deep in the closure is caught (mirrors forbiddenResolvedPath's allowlist)", () => {
+    mkdirSync(join(dir, 'src/shared'), { recursive: true })
+    writeFileSync(join(dir, 'src/entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'src/a.ts'), "export * from './shared/not-allowlisted.js'\n")
+    writeFileSync(join(dir, 'src/shared/not-allowlisted.ts'), 'export const x = 1\n')
+    const violations = collectTransitiveViolations(join(dir, 'src/entry.ts'), dir)
+    expect(violations.some((v) => v.includes('not-allowlisted'))).toBe(true)
+  })
+
+  it('an allowlisted src/shared/* import is not flagged', () => {
+    mkdirSync(join(dir, 'src/shared'), { recursive: true })
+    writeFileSync(join(dir, 'src/entry.ts'), "export * from './a.js'\n")
+    writeFileSync(join(dir, 'src/a.ts'), "export * from './shared/api-client.js'\n")
+    writeFileSync(join(dir, 'src/shared/api-client.ts'), 'export const x = 1\n')
+    const violations = collectTransitiveViolations(join(dir, 'src/entry.ts'), dir)
+    expect(violations).toEqual([])
   })
 })
 
@@ -515,6 +543,26 @@ describe('TEST_ONLY_SUBPATHS', () => {
   })
 })
 
+describe('checkSubpathImportViolations', () => {
+  it('a TEST_ONLY_SUBPATHS import from a non-test file is a violation', () => {
+    const violations = checkSubpathImportViolations(
+      resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.tsx'),
+      `${MCP_PACKAGE_SPECIFIER}/canvas-backend-contract-suite`,
+    )
+    expect(
+      violations.some((v) => v.includes('is test-only, forbidden from a production source file')),
+    ).toBe(true)
+  })
+
+  it('the same TEST_ONLY_SUBPATHS import from a test file is not a violation', () => {
+    const violations = checkSubpathImportViolations(
+      resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.test.tsx'),
+      `${MCP_PACKAGE_SPECIFIER}/canvas-backend-contract-suite`,
+    )
+    expect(violations).toEqual([])
+  })
+})
+
 describe('apps/web bare package-subpath import boundary (exports-map driven)', () => {
   it('every bare @kamiazya/whiteboard-mcp/* import in apps/web/src resolves and its transitive closure is clean', () => {
     const browserAppFiles = collectBrowserAppFiles()
@@ -528,28 +576,7 @@ describe('apps/web bare package-subpath import boundary (exports-map driven)', (
         ) {
           continue
         }
-        const testOnlySubpath = specifier.slice(`${MCP_PACKAGE_SPECIFIER}/`.length)
-        let entry: string | 'unknown' | 'root-forbidden'
-        if (Object.hasOwn(TEST_ONLY_SUBPATHS, testOnlySubpath)) {
-          if (!isTestFile(file)) {
-            violations.push(
-              `${relative(REPO_ROOT, file)}: import "${specifier}" is test-only, forbidden from a production source file`,
-            )
-            continue
-          }
-          entry = TEST_ONLY_SUBPATHS[testOnlySubpath]
-        } else {
-          entry = resolveMcpSubpathEntry(MCP_EXPORTS_MAP, specifier, PACKAGE_ROOT)
-        }
-        if (entry === 'unknown' || entry === 'root-forbidden') {
-          violations.push(
-            `${relative(REPO_ROOT, file)}: import "${specifier}" does not resolve through the exports map (${entry})`,
-          )
-          continue
-        }
-        for (const v of collectTransitiveViolations(entry, PACKAGE_ROOT)) {
-          violations.push(`${relative(REPO_ROOT, file)}: import "${specifier}" -> ${v}`)
-        }
+        violations.push(...checkSubpathImportViolations(file, specifier))
       }
     }
     expect(
@@ -558,6 +585,34 @@ describe('apps/web bare package-subpath import boundary (exports-map driven)', (
     ).toEqual([])
   })
 })
+
+// Checks one '@kamiazya/whiteboard-mcp[/<subpath>]' import specifier found in `file` against the
+// TEST_ONLY_SUBPATHS-from-a-production-file rule and the exports-map resolution + transitive scan,
+// returning zero or more violation messages. Factored out of the aggregate real-repo scan above so
+// the TEST_ONLY_SUBPATHS-from-a-production-file branch has an isolated fixture test instead of
+// relying on no production file in the real tree happening to import a test-only alias today.
+function checkSubpathImportViolations(file: string, specifier: string): string[] {
+  const testOnlySubpath = specifier.slice(`${MCP_PACKAGE_SPECIFIER}/`.length)
+  let entry: string | 'unknown' | 'root-forbidden'
+  if (Object.hasOwn(TEST_ONLY_SUBPATHS, testOnlySubpath)) {
+    if (!isTestFile(file)) {
+      return [
+        `${relative(REPO_ROOT, file)}: import "${specifier}" is test-only, forbidden from a production source file`,
+      ]
+    }
+    entry = TEST_ONLY_SUBPATHS[testOnlySubpath]
+  } else {
+    entry = resolveMcpSubpathEntry(MCP_EXPORTS_MAP, specifier, PACKAGE_ROOT)
+  }
+  if (entry === 'unknown' || entry === 'root-forbidden') {
+    return [
+      `${relative(REPO_ROOT, file)}: import "${specifier}" does not resolve through the exports map (${entry})`,
+    ]
+  }
+  return collectTransitiveViolations(entry, PACKAGE_ROOT).map(
+    (v) => `${relative(REPO_ROOT, file)}: import "${specifier}" -> ${v}`,
+  )
+}
 
 // Maps a bare '@kamiazya/whiteboard-mcp/<subpath>' (or bare-root) specifier back
 // to its source file via packages/mcp-server/package.json's `exports` map, using
@@ -615,13 +670,14 @@ function resolveRelativeSourceFile(fromFile: string, specifier: string): string 
 
 // BFS over an entry file's transitive closure of relative value imports,
 // applying the same bans forbiddenResolvedPath applies to the browser app's own
-// relative imports: Node-only builtins, and reach into src/server, src/cli, or
-// src/daemon (resolved against packageRoot's own src/ dir, not PACKAGE_SRC_DIR —
-// the fixture-based unit tests below pass a synthetic packageRoot with no
-// server/cli/daemon dirs of its own). A visited set makes this terminate on a
-// cyclic import graph and gives an order-independent result. An unresolvable
-// relative import is a violation, not a skip — the property whose absence was
-// this guard's bug in the first place.
+// relative imports: Node-only builtins, reach into src/server, src/cli, or
+// src/daemon, and an unlisted src/shared/* import (resolved against
+// packageRoot's own src/ dir, not PACKAGE_SRC_DIR — the fixture-based unit
+// tests below pass a synthetic packageRoot with no server/cli/daemon/shared
+// dirs of its own). A visited set makes this terminate on a cyclic import
+// graph and gives an order-independent result. An unresolvable relative
+// import is a violation, not a skip — the property whose absence was this
+// guard's bug in the first place.
 function collectTransitiveViolations(entryFile: string, packageRoot: string): string[] {
   const packageSrcDir = resolve(packageRoot, 'src')
   const violations: string[] = []
@@ -655,6 +711,18 @@ function collectTransitiveViolations(entryFile: string, packageRoot: string): st
           `${relative(REPO_ROOT, file)}: import "${specifier}" (resolves to src/${relToSrc})`,
         )
         continue
+      }
+      if (relToSrc.startsWith('shared/')) {
+        // resolvedFile is the on-disk .ts/.tsx file (resolveRelativeSourceFile guessed the
+        // extension), but ALLOWED_SHARED_EXACT is keyed by the .js specifier convention
+        // (matching import specifiers, e.g. 'api-client.js') — normalize before comparing.
+        const relToShared = relToSrc.slice('shared/'.length).replace(/\.tsx?$/, '.js')
+        if (!isAllowedSharedImport(relToShared, file)) {
+          violations.push(
+            `${relative(REPO_ROOT, file)}: import "${specifier}" (resolves to src/${relToSrc}, not in shared allowlist)`,
+          )
+          continue
+        }
       }
       queue.push(resolvedFile)
     }
