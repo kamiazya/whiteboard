@@ -81,15 +81,39 @@ knowing before doing it:
 
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
+- `Canvas` as the CONTAINER noun, across apps/web and mcp-server's HTTP side
+  — `CanvasSnapshot` (a document row), `listCanvases`/`createCanvas`/
+  `renameCanvas`/`switchCanvas`, `useCanvasSync`, `CanvasBackend`,
+  `BrowserLocalCanvasPage`, and the IndexedDB stores `canvases`/
+  `loroCanvases`/`canvasFiles`. The biggest by count and the one the standing
+  rule below is actually for: fix it where you already are, never as a sweep.
+  `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
 - `canvas-store.ts` (mcp-server's daemon-side file/db store) — `CanvasDocStore`
-  and `canvas-doc-io.ts` are done
-- The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`
-  package names — `render` and `viewer` are arguably correct (they are about
-  the spatial scene); `model`, `codec`, `ports` and `workspace` are not
-- MCP tool names — ADR-0009 point 5, its own increment
+  and `canvas-doc-io.ts` are done. The file itself, its `saveCanvas`/
+  `loadCanvas`/`canvasExists`/`deleteCanvas`/`compactCanvas`/`listCanvases`
+  exports and its `'canvas-store'` log scope are not; ~29 files import it.
+- The `slug` tail the `slug` → `path` rename left behind. The column, the
+  storage layer and the URLs moved; identifiers did not, so `derive-new-canvas-
+  path.ts` still exports `deriveNewCanvasSlug`. Two of these are STORED or
+  PUBLISHED shapes and cost more than a rename: `targetSlug` (a restore
+  request field, so apps/web moves in the same increment) and
+  `lastConnectedSlug` (a persisted user-settings field — renaming drops the
+  hint for existing users, which is acceptable for a UI hint).
+- The `@kamiazya/whiteboard-canvas-{model,codec,ports,workspace}` package
+  names — all four `private`, so nothing outside the repo breaks; `render`
+  and `viewer` are arguably correct (they are about the spatial scene) and
+  stay. What makes this one bigger than its refs suggest is everything that
+  names a package by string: tsconfig paths, the vitest project list,
+  `tools/arch-lint`'s `architecture-map.ts`, `.claude/rules/package-*.md`,
+  and `architecture-map.md`'s own table.
 
-Two are done and worth knowing HOW, because both were fixed by removing the
-place the wrong state could live rather than by correcting a call site:
+MCP tool names (ADR-0009 point 5) are DONE, along with point 4's collapse of
+the two exporters into a kind-branching `wb_document_get`. The registered
+surface is `wb_<entity>_<action>` throughout, plus the MCP Apps UI tools
+`canvas_open`/`canvas_view` that point 7 deliberately keeps.
+
+Two more are done and worth knowing HOW, because both were fixed by removing
+the place the wrong state could live rather than by correcting a call site:
 
 - **A document's name stored twice.** `storedCoreFacetsSchema` omits `title`,
   so `writeCoreFacets` cannot be handed one and `readCoreFacets` does not
