@@ -64,6 +64,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   EdgeSides,
   FacetCardData,
@@ -141,6 +142,8 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
+  DOCUMENT_NODE_HEIGHT,
+  DOCUMENT_NODE_WIDTH,
   fileNodeDefaults,
   GROUP_FRAME_HEIGHT,
   GROUP_FRAME_WIDTH,
@@ -334,6 +337,13 @@ export interface SpatialEditorProps {
    * returns undefined and the card renders. Absent → embeds never expand.
    */
   readonly resolveFileCanvas?: (file: string) => SpatialCanvas | undefined
+  /**
+   * A referenced MARKDOWN document's parsed body, rendered inline in the
+   * node. Same contract as the seams around it: synchronous, host-cached,
+   * undefined falls through to the facet card. Parsed rather than raw so
+   * layout never runs a markdown parse per file node per frame.
+   */
+  readonly resolveFileMarkdown?: (file: string) => MdastRoot | undefined
   readonly resolveFileFacets?: (file: string) => FacetCardData | undefined
   /** Image content for media file nodes (data:/blob: href). Sync, cached by the host. */
   readonly resolveFileImage?: (
@@ -455,6 +465,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       missingFileRef,
       paletteLeading,
       resolveFileCanvas,
+      resolveFileMarkdown,
       resolveFileFacets,
       resolveFileImage,
       onAddImage,
@@ -708,6 +719,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         resolveFileMissing: missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
@@ -716,6 +728,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         resolveFileLabel,
         missingFileRef,
         resolveFileCanvas,
+        resolveFileMarkdown,
         expandFileNode,
         resolveFileImage,
         resolveFileFacets,
@@ -2620,6 +2633,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** File nodes are reference cards like links — same shorter default box. */
     const createFileRefAtViewportCenter = (file: string, at?: Point) => {
+      // The picked option's kind decides the box: a markdown document
+      // renders its prose inside the node and needs room a one-line
+      // reference card does not have.
+      const kind = fileRefOptions?.find((option) => option.file === file)?.kind
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
@@ -2628,12 +2645,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const point = resolveSpawnPoint(
         at,
         preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        kind === 'markdown'
+          ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
+          : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
         occupied,
         visibleCanvasRect(),
       )
       const id = newId()
-      const node = fileNodeDefaults(id, point, file)
+      const node = fileNodeDefaults(id, point, file, kind)
       applyResult({
         state: { kind: 'idle' },
         commands: [{ kind: 'create-node', node }],

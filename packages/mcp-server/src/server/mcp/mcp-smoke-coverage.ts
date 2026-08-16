@@ -55,6 +55,7 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',
+  'canvas_view',
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
@@ -70,6 +71,7 @@ export const COVERED_TOOLS = [
   'wb_version_restore',
   'wb_version_list',
   'wb_document_create',
+  'canvas_view',
 ] as const
 
 // Empty since wb_edge_add gave wb_edge_lock an edge to lock: every tool
@@ -78,7 +80,15 @@ export const ERROR_PATH_ONLY_TOOLS = [] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).
-export const UI_LINKED_TOOLS = [] as const
+//
+// This is not a cross-cutting category like the ones above — it is a
+// SEPARATE axis, so an entry here also belongs to exactly one coverage
+// category. Two guards read it: the ADR-0009 naming check exempts these
+// from `wb_<entity>_<action>` (point 7 keeps them outside the data plane),
+// and opencanvas-tools.test.ts asserts each one's real registration
+// actually carries the linkage — without that second guard this list would
+// be a claim nobody checks.
+export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
 export const UNIT_ONLY_TOOLS = [
   'wb_body_patch',

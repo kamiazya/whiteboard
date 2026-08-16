@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
+import { ALL_REGISTERED_TOOLS, UI_LINKED_TOOLS } from './mcp-smoke-coverage.js'
 import { TOOL_PROFILES } from './tool-profiles.js'
 
 /**
@@ -34,6 +34,14 @@ const ENTITIES = [
  */
 const PENDING_FORMAT_MERGE = [] as const
 
+/**
+ * MCP Apps UI tools are exempt from the `wb_` scheme by ADR-0009 point 7:
+ * `canvas_open` and `canvas_view` are a UI contract with the MCP Apps host,
+ * not part of this data plane. Read from UI_LINKED_TOOLS rather than
+ * restated here, so the exemption and the linkage guard cannot disagree
+ * about which tools are UI tools.
+ */
+
 describe('ADR-0009 tool naming', () => {
   it('the pending list names tools that are actually registered', () => {
     // Otherwise a rename could empty this list by accident and the
@@ -43,8 +51,18 @@ describe('ADR-0009 tool naming', () => {
     }
   })
 
+  it('the UI-linked exemption names tools that are actually registered', () => {
+    // Same reason as the pending list above: an exemption must not outlive
+    // the tool it excuses.
+    for (const name of UI_LINKED_TOOLS) {
+      expect(ALL_REGISTERED_TOOLS, `${name} is exempted but not registered`).toContain(name)
+    }
+  })
+
   it.each(
-    ALL_REGISTERED_TOOLS.filter((n) => !PENDING_FORMAT_MERGE.includes(n as never)),
+    ALL_REGISTERED_TOOLS.filter(
+      (n) => !PENDING_FORMAT_MERGE.includes(n as never) && !UI_LINKED_TOOLS.includes(n as never),
+    ),
   )('%s is wb_<entity>_<action>', (name) => {
     const match = /^wb_([a-z]+)_([a-z_]+)$/.exec(name)
     expect(match, `${name} is not wb_<entity>_<action>`).not.toBeNull()

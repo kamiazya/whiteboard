@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -13,7 +14,16 @@ import type { ServerDeps } from '../server-deps.js'
  * passed to the store.
  */
 export const canvasRenderSvgInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, canvasId: canvasIdSchema })
+  .object({
+    workspaceId: workspaceIdSchema,
+    canvasId: canvasIdSchema,
+    embedReferences: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Resolve this canvas's file-node references against the workspace. Today that means a reference to a markdown document renders that document's body inside the node, and every reference gets its readable name instead of its raw id; other reference kinds keep the plain card. Off by default so the render stays a pure function of this canvas alone.",
+      ),
+  })
   .strict()
 export type CanvasRenderSvgInput = z.infer<typeof canvasRenderSvgInputSchema>
 
@@ -31,7 +41,12 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
       const { canvas } = await loadSpatialCanvas(deps, input.canvasId)
-      const scene = composeCanvasScene(canvas, fallbackMeasureText)
+      const references = input.embedReferences
+        ? await resolveFileReferences(deps, input.workspaceId, canvas)
+        : undefined
+      const scene = composeCanvasScene(canvas, fallbackMeasureText, {
+        ...(references === undefined ? {} : { references }),
+      })
       const { width, height } = computeSceneDimensions(scene)
       return { svg: renderSceneToSvg(scene), width, height }
     },
