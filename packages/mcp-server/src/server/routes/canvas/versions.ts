@@ -7,7 +7,6 @@ import {
 import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/doc-cache.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { defaultHumanDisplayName, handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 

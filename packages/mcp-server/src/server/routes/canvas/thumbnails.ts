@@ -1,12 +1,7 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { VersionStore } from '../../store/version-store.js'
-import {
-  validateSlug,
-  validateVersionId,
-  validateWorkspaceId,
-  validationErrorBody,
-} from '../../validators.js'
+import { validateVersionId, validationErrorBody } from '../../validators.js'
 import { isValidPngSignature } from '../canvas-thumbnail.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
@@ -31,7 +26,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'put',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, slug, params) => {
+    async (c, workspaceId, _slug, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -71,7 +66,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'get',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, slug, params) => {
+    async (c, workspaceId, _slug, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)

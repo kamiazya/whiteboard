@@ -7,12 +7,7 @@ import { countAliveNodes } from '../../store/count-alive-nodes.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
-import {
-  validateSlug,
-  validateVersionId,
-  validateWorkspaceId,
-  validationErrorBody,
-} from '../../validators.js'
+import { validateSlug, validateVersionId, validationErrorBody } from '../../validators.js'
 import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 

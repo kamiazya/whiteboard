@@ -28,7 +28,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   setFullscreenElement(null)
-  // biome-ignore lint/performance/noDelete: restore jsdom's real (absent) shape rather than leaving a stub for other files
   delete (Element.prototype as { requestFullscreen?: unknown }).requestFullscreen
   vi.restoreAllMocks()
 })
@@ -130,7 +129,6 @@ it('starts OUT of fullscreen under jsdom, where fullscreenElement is undefined',
   // is UNDEFINED, and `undefined !== null` read as "in fullscreen" — so every
   // first mount hid the top bar. Delete the test override to expose the real
   // jsdom default rather than the null this file installs elsewhere.
-  // biome-ignore lint/performance/noDelete: restoring the prototype default IS the scenario
   delete (document as { fullscreenElement?: Element | null }).fullscreenElement
   await renderLoaded()
 })
