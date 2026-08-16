@@ -526,6 +526,26 @@ describe('collectTransitiveViolations', () => {
     const violations = collectTransitiveViolations(join(dir, 'src/entry.ts'), dir)
     expect(violations).toEqual([])
   })
+
+  it('resolves a .tsx source file (second extension candidate)', () => {
+    writeFileSync(join(dir, 'entry.ts'), "export * from './Component.js'\n")
+    writeFileSync(join(dir, 'Component.tsx'), 'export const x = 1\n')
+    expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
+  })
+
+  it('resolves a directory-style import via its index.ts (third candidate)', () => {
+    mkdirSync(join(dir, 'feature'))
+    writeFileSync(join(dir, 'entry.ts'), "export * from './feature.js'\n")
+    writeFileSync(join(dir, 'feature/index.ts'), 'export const x = 1\n')
+    expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
+  })
+
+  it('resolves a directory-style import via its index.tsx (fourth candidate)', () => {
+    mkdirSync(join(dir, 'widget'))
+    writeFileSync(join(dir, 'entry.ts'), "export * from './widget.js'\n")
+    writeFileSync(join(dir, 'widget/index.tsx'), 'export const x = 1\n')
+    expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
+  })
 })
 
 describe('TEST_ONLY_SUBPATHS', () => {
@@ -536,10 +556,23 @@ describe('TEST_ONLY_SUBPATHS', () => {
     )
   })
 
-  it('mirrors the two test-only aliases declared in apps/web/vitest.config.ts', () => {
-    expect(Object.keys(TEST_ONLY_SUBPATHS).sort()).toEqual(
-      ['canvas-backend-contract-suite', 'sse-stream-source-contract'].sort(),
-    )
+  it('mirrors the test-only aliases declared in apps/web/vitest.config.ts', () => {
+    // Read the alias keys straight out of vitest.config.ts (like the
+    // pnpm-workspace.yaml check below parses that file directly) instead of
+    // comparing against a second hand-written literal — two literals can only
+    // ever agree with themselves, never catch a real drift. Only the two
+    // aliases resolved inline with `resolve(...)` are test-only; the
+    // `...mcpSourceAlias` spread's entries resolve through the real exports
+    // map (mcp-source-alias-coverage.test.ts covers those) and this regex
+    // does not match a spread, so it can't double-count them.
+    const vitestConfigText = readFileSync(resolve(APPS_WEB_DIR, 'vitest.config.ts'), 'utf-8')
+    const declaredTestOnlyAliases = [
+      ...vitestConfigText.matchAll(/['"]@kamiazya\/whiteboard-mcp\/([\w-]+)['"]\s*:\s*resolve\(/g),
+    ].map((m) => m[1])
+    expect(
+      declaredTestOnlyAliases.sort(),
+      'apps/web/vitest.config.ts declares a @kamiazya/whiteboard-mcp/* test-only alias not mirrored in TEST_ONLY_SUBPATHS (or vice versa)',
+    ).toEqual(Object.keys(TEST_ONLY_SUBPATHS).sort())
   })
 })
 
