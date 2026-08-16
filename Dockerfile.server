@@ -46,6 +46,12 @@ WORKDIR /workspace
 FROM base AS fetched
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# patches/ travels WITH the lockfile, not with the sources copied later:
+# pnpm-workspace.yaml's patchedDependencies makes the patch part of what
+# `pnpm fetch` resolves, so a missing file here fails the fetch outright
+# (ERR_PNPM_PATCH_NOT_FOUND) rather than silently shipping an unpatched
+# dependency.
+COPY patches ./patches
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm fetch --store-dir /pnpm/store

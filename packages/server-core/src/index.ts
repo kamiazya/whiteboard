@@ -36,6 +36,13 @@ export {
   canvasRenderSvgOutputSchema,
   createCanvasRenderSvgTool,
 } from './tools/canvas-render-svg.js'
+export type { CanvasViewInput, CanvasViewOutput } from './tools/canvas-view.js'
+export {
+  canvasViewInputSchema,
+  canvasViewOutputSchema,
+  canvasViewReferenceSchema,
+  createCanvasViewTool,
+} from './tools/canvas-view.js'
 export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
 export {
   createDocumentSetTool,

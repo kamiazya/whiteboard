@@ -4,14 +4,17 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
+import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
-import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
+import {
+  type CanvasViewerHandle,
+  type MountCanvasViewerOptions,
+  mountCanvasViewer,
+} from './mount.js'
 import { parseViewerScene, type ViewerScene } from './scene.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
-import { createStickyNoteControl } from './widget/sticky-note-control.js'
-import { computeStickyPlacement } from './widget/sticky-placement.js'
 
 declare global {
   interface Window {
@@ -77,18 +80,20 @@ function registerFonts(): void {
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
-// annotate's execute() (mcp-server tools/annotate.ts) throws for
-// type:'box_with_label' when spec.width is undefined — a fixed width keeps
-// this append-only affordance from depending on any DOM measurement the
-// widget has no reliable way to take inside a sandboxed iframe. `height` is
-// deliberately omitted: autoFit defaults to true, so annotate auto-grows the
-// box instead of requiring an explicit height.
-const STICKY_WIDTH = 260
-// Fixed sticky-note fill; `color` (text ink) is deliberately left unset so
-// annotate's own readable-ink contrast logic picks a legible ink against
-// this fill instead of the widget hardcoding one.
-const STICKY_BACKGROUND_COLOR = '#ffec99'
-
+// TODO(annotate): the add-a-sticky-note affordance is UNWIRED.
+//
+// It called an `annotate` MCP tool that the OpenCanvas migration removed;
+// nothing replaced it, so every submission failed at the host with an
+// unknown-tool error while the control still looked live. Showing a control
+// that cannot work is worse than not showing one, so the wiring is gone and
+// `widget/sticky-note-control.ts` + `widget/sticky-placement.ts` are kept
+// unmounted for whoever restores it.
+//
+// Restoring it needs a decision first, not just re-wiring: OpenCanvas has no
+// annotate equivalent, and a sticky note is a `wb_node_add` of a text node —
+// so the question is whether this widget should mutate a document at all
+// (it is otherwise strictly read-only), and if so under what placement
+// rule. `computeStickyPlacement` is the old rule, still tested.
 // Both `ui/notifications/tool-result` and the CallToolResult that
 // `app.callServerTool` resolves with wrap canvas_view's payload the same
 // way: `{structuredContent: {canvasId, scene}}`. Sharing one extraction +
@@ -98,21 +103,65 @@ const STICKY_BACKGROUND_COLOR = '#ffec99'
 // in exactly one place. The envelope crosses the host↔widget process
 // boundary, so it gets a Zod schema instead of a cast; `scene` stays
 // deliberately unknown here — parseViewerScene is its real validator.
+// `references` is validated HERE rather than trusted: it arrives from the
+// host, and a malformed entry reaches canvas-render's layout seams as
+// whatever the host sent.
+//
+// Validated against the CANONICAL, fully-recursive `mdastRootSchema` — the
+// same schema `canvas_view` declares its payload with server-side — not a
+// looser shape check. A root-shaped body with an unrecognised child is not
+// something layout shrugs off: `layoutBlock`'s switch has no default case,
+// so one bad child throws out of `layoutSpatialCanvas` and takes the whole
+// canvas with it. Checking only `{type:'root', children: unknown[]}` here
+// and casting past the rest let exactly that through.
+//
+// Applied PER REFERENCE, so strictness costs only the reference that fails.
+const referenceSchema = z.object({
+  label: z.string().optional(),
+  body: mdastRootSchema.optional(),
+})
+
+/** Keeps the references that parse, drops the ones that do not. */
+function parseReferences(raw: Record<string, unknown> | undefined) {
+  if (raw === undefined) return undefined
+  const kept: Record<string, z.infer<typeof referenceSchema>> = {}
+  for (const [ref, value] of Object.entries(raw)) {
+    const parsed = referenceSchema.safeParse(value)
+    if (parsed.success) kept[ref] = parsed.data
+    else console.error('[whiteboard-widget] dropping unparseable reference:', ref, parsed.error)
+  }
+  return Object.keys(kept).length > 0 ? kept : undefined
+}
+
 const toolResultEnvelopeSchema = z.object({
   structuredContent: z
     .object({
       canvasId: z.string().optional(),
       scene: z.unknown().optional(),
+      // Deliberately `unknown` HERE, then parsed per entry below. Putting
+      // the strict schema inline would make one bad reference fail the
+      // whole envelope, discarding a perfectly good scene along with it —
+      // the widget would go blank because a document it merely POINTS AT
+      // was malformed.
+      references: z.record(z.string(), z.unknown()).optional(),
     })
     .catchall(z.unknown())
     .optional(),
 })
 
-function extractCanvasIdAndScene(payload: unknown): { canvasId?: string; scene?: unknown } {
+function extractCanvasIdAndScene(payload: unknown): {
+  canvasId?: string
+  scene?: unknown
+  references?: MountCanvasViewerOptions['references']
+} {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
   const structuredContent = parsed.data.structuredContent
-  return { canvasId: structuredContent?.canvasId, scene: structuredContent?.scene }
+  return {
+    canvasId: structuredContent?.canvasId,
+    scene: structuredContent?.scene,
+    references: parseReferences(structuredContent?.references),
+  }
 }
 
 // Validates BEFORE remount: remount disposes the live viewer first, so a
@@ -144,7 +193,7 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { canvasId, scene } = extractCanvasIdAndScene(payload)
+  const { canvasId, scene, references } = extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -153,7 +202,15 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', result.error)
     return
   }
-  remount(() => mountCanvasViewer(container, { scene }))
+  // References ride along with the scene: a file node pointing at a
+  // markdown document renders that document's prose only if the server put
+  // it in the payload, since this widget has no store to read it from.
+  remount(() =>
+    mountCanvasViewer(container, {
+      scene,
+      ...(references === undefined ? {} : { references }),
+    }),
+  )
   onValidResult(canvasId, result.value)
 }
 
@@ -183,19 +240,17 @@ async function mountFromHost(
   // affordance (either would call back into the daemon with an ID nobody
   // confirmed is real).
   let committedCanvasId: string | undefined
-  // Retained so the sticky-note affordance can place a new note relative to
-  // the last scene this widget actually rendered, without ever reaching
-  // into Excalidraw's own viewport internals (mount.ts stays read-only).
-  let lastValidScene: ViewerScene | undefined
   let refreshControl: ReturnType<typeof createRefreshControl> | undefined
-  let stickyControl: ReturnType<typeof createStickyNoteControl> | undefined
 
-  const commitResult = (canvasId: string | undefined, scene: ViewerScene): void => {
-    lastValidScene = scene
+  // `scene` is unused now that the sticky-note affordance is unwired (see
+  // the TODO(annotate) note above — it placed a new note relative to the
+  // last rendered scene). The parameter stays because `applyToolResult`
+  // hands it over as part of the "only commit from a VALIDATED result"
+  // contract, which is what this callback exists to enforce.
+  const commitResult = (canvasId: string | undefined, _scene: ViewerScene): void => {
     if (canvasId === undefined) return
     committedCanvasId = canvasId
     refreshControl?.show()
-    stickyControl?.show()
   }
 
   app.ontoolresult = (result) => {
@@ -272,65 +327,13 @@ async function mountFromHost(
       }
     }
 
-    let annotateInFlight = false
-    const performAnnotate = async (text: string): Promise<void> => {
-      if (annotateInFlight || committedCanvasId === undefined) return
-      annotateInFlight = true
-      stickyControl?.setBusy(true)
-      const target = computeStickyPlacement(lastValidScene?.nodes ?? [])
-      try {
-        const result = await app.callServerTool({
-          name: 'annotate',
-          arguments: {
-            canvasId: committedCanvasId,
-            type: 'box_with_label',
-            target,
-            text,
-            width: STICKY_WIDTH,
-            backgroundColor: STICKY_BACKGROUND_COLOR,
-          },
-        })
-        if (isErrorResult(result)) {
-          console.error(
-            '[whiteboard-widget] annotate via host callServerTool returned an error result:',
-            result,
-          )
-          return
-        }
-        // Required, not optional: append-only means the new note is only
-        // visible once canvas_view re-fetches. Routed through the same
-        // coalescing performRefresh a concurrent manual Refresh uses, so
-        // neither call can silently skip the other's refresh. Awaited
-        // (rather than fire-and-forget) so the sticky control — and the
-        // placement math a rapid next submission would read from
-        // lastValidScene — only re-enable once this refresh has actually
-        // updated lastValidScene; otherwise a second quick submission could
-        // compute its target from the stale pre-annotation scene and land on
-        // the same coordinates as the first note.
-        await performRefresh()
-        // Only after full success — a failed annotate keeps the text so the
-        // user can retry without retyping.
-        stickyControl?.clear()
-      } catch (err) {
-        console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
-      } finally {
-        annotateInFlight = false
-        stickyControl?.setBusy(false)
-      }
-    }
-
     refreshControl = createRefreshControl(() => {
       void performRefresh()
     })
-    stickyControl = createStickyNoteControl((text) => {
-      void performAnnotate(text)
-    })
-
-    // A tool-result can commit an ID during connect() above, before either
-    // control existed to be shown — reveal both if that already happened.
+    // A tool-result can commit an ID during connect() above, before the
+    // control existed to be shown — reveal it if that already happened.
     if (committedCanvasId !== undefined) {
       refreshControl.show()
-      stickyControl.show()
     }
   }
 

@@ -157,16 +157,24 @@ describe('createFileGcSweeper scheduling', () => {
     ] as const
     let passIndex = 0
     const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
+    const listWorkspaces = vi.fn(async () => [{ workspaceId: 'ws_a' }])
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces,
       discoverFsWorkspaces: async () => [],
       purge,
     })
     sweeper.start()
     await advanceTimersAndFlush(1000)
     await advanceUntilCalls(purge, 1)
-    expect(purge).toHaveBeenCalledTimes(1)
+    // The message discriminates the two ways this has flaked: listWs=0
+    // means the timer never fired; listWs>0 with purge=0 means the timer
+    // fired and the pass stalled between listWorkspaces and purge — i.e. in
+    // the real-fs containment check, the one unmocked dependency here.
+    expect(
+      purge,
+      `listWs=${listWorkspaces.mock.calls.length} purge=${purge.mock.calls.length}`,
+    ).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
     // Releasing gate 1 lets the pass settle, which is what arms the next
@@ -196,13 +204,27 @@ describe('createFileGcSweeper scheduling', () => {
 })
 
 describe('createFileGcSweeper single-flight', () => {
-  it('never starts a second pass via timer advancement while one is in flight (mutation-checked)', async () => {
-    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+  // What this pins is the BEHAVIOUR — no second pass while one is in flight,
+  // however many intervals elapse — not either mechanism that upholds it.
+  // Two do: the timer is one-shot and rearmed only from the completed pass's
+  // `finally` (so no timer even exists mid-pass), and tick() returns the
+  // in-flight promise. Breaking either alone leaves this green; it reddens
+  // only when both go. The `inFlight` guard on its own is isolated by the
+  // tick() concurrency-seam test below, which is where a mutation check of
+  // that guard belongs.
+  it('never starts a second pass while one is in flight, however many intervals elapse', async () => {
+    // One gate PER PASS, never a shared one. A single deferred leaves the
+    // sweeper permanently unblocked once it resolves, so pass 2 completes
+    // instantly and arms pass 3 — and advanceUntilCalls, whose whole job is
+    // to nudge the clock forward until a count lands, can then overshoot to
+    // 3. Holding pass 2's gate means no pass 3 can exist to be counted, so
+    // the exact counts below hold under any amount of clock advancement.
+    const gates = [
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+      deferred<{ purgedCount: number; purgedBytes: number }>(),
+    ] as const
     let purgeCalls = 0
-    const purge = vi.fn(async () => {
-      purgeCalls += 1
-      return d.promise
-    })
+    const purge = vi.fn(() => gates[Math.min(purgeCalls++, 1)].promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
       listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
@@ -222,7 +244,7 @@ describe('createFileGcSweeper single-flight', () => {
     await advanceTimersAndFlush(1000)
     expect(purgeCalls).toBe(1)
 
-    d.resolve({ purgedCount: 0, purgedBytes: 0 })
+    gates[0].resolve({ purgedCount: 0, purgedBytes: 0 })
     // Let the pass's .finally() run and reschedule.
     await Promise.resolve()
     await Promise.resolve()
@@ -231,6 +253,7 @@ describe('createFileGcSweeper single-flight', () => {
     await advanceUntilCalls(purge, 2)
     expect(purgeCalls).toBe(2)
 
+    gates[1].resolve({ purgedCount: 0, purgedBytes: 0 })
     await sweeper.stop()
   })
 

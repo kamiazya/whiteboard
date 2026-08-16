@@ -21,6 +21,14 @@ function snapshotOf(text: string): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
+/** A markdown document as the browser-local editor stores one. */
+function markdownSnapshot(): Uint8Array {
+  const doc = new Loro()
+  doc.getText('body').insert(0, '# Weekly notes')
+  doc.commit()
+  return doc.export({ mode: 'snapshot' })
+}
+
 const FAKE_UUID = '11111111-2222-3333-4444-555555555555'
 const FAKE_OBJECT_URL = 'blob:stubbed'
 
@@ -133,6 +141,35 @@ describe('createDaemonFileAdapter', () => {
 
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/sibling/snapshot`)
     expect(loaded?.canvas?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
+  })
+
+  it('carries a referenced markdown document body, read from the same snapshot', async () => {
+    // The body seam's real wiring: the hook parses whatever this returns, so
+    // a test that only mocks `loadDocument` proves nothing about the
+    // LoroDoc-to-body read that happens here.
+    const daemonFetch = vi.fn(async () => new Response(markdownSnapshot() as BodyInit))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      slug: SLUG,
+    })
+
+    const loaded = await adapter.loadDocument('notes')
+
+    expect(loaded?.body).toBe('# Weekly notes')
+  })
+
+  it('omits the body for a document that has none, so the seam falls through', async () => {
+    const daemonFetch = vi.fn(async () => new Response(snapshotOf('') as BodyInit))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      slug: SLUG,
+    })
+
+    expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
   })
 
   it('resolves an unreachable referenced canvas to undefined', async () => {

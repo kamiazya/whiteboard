@@ -105,7 +105,13 @@ export function CanvasDropdown({
   }
 
   return (
-    <DropdownMenu>
+    // modal={false}: Radix's modal menus TRAP focus for their whole
+    // lifetime, exit animation included. A selection that swaps in a fresh
+    // editor races that animation — the editor autofocuses on mount, the
+    // still-animating menu content yanks focus back into itself, then
+    // unmounts and drops it on <body>. Nothing recovers from there, because
+    // the editor's focus is one-shot on mount.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -131,8 +137,9 @@ export function CanvasDropdown({
         // ASYNCHRONOUSLY. When a menu item switches to a fresh editor that
         // takes focus itself (New markdown note…), that late focus return
         // steals the keyboard mid-word — keystrokes silently land on the
-        // trigger, and a Space reopens the menu. Selecting from this menu
-        // always moves the user somewhere else, so never yank focus back.
+        // trigger, and a Space reopens the menu. The selections that matter
+        // here mount a surface that takes focus itself, so the trigger is
+        // never where focus should end up.
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <div className="sticky top-0 z-10 border-b bg-popover p-2">
