@@ -13,9 +13,10 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-canvas-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { loadMarkdownEmbedSource } from '../lib/canvas-embed-content.js'
+import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 const log = getAppLogger('markdown-embed-content')
 
@@ -60,66 +61,51 @@ export function useMarkdownEmbedContent({
   /** Injection seam for tests; defaults to the browser-local Loro loader. */
   load?: MarkdownEmbedLoader
 }): (canvasId: string) => MarkdownEmbedEntry | undefined {
-  // `null` = load failed or target missing: a terminal answer that keeps the
-  // resolver returning undefined without re-fetching the same id forever.
-  const [cache, setCache] = useState<ReadonlyMap<string, MarkdownEmbedEntry | null>>(new Map())
-  const inflight = useRef<Set<string>>(new Set())
-  // Unmount-scoped, NOT effect-scoped: a keystroke re-runs the effect while
-  // a load is in flight, and the new pass skips that id as inflight — so if
-  // the old pass's completion were cancelled per-effect, the result would
-  // be dropped with nothing left to ever re-fire it (the stuck-placeholder
-  // bug). A completed load is valid whenever the component still lives.
-  const unmounted = useRef(false)
-  useEffect(() => {
-    // Reset on the effect BODY, not just initialization: StrictMode's dev
-    // double-mount runs this cleanup once before the real session, and a
-    // flag that only ever goes true would silently drop every completion
-    // for the component's whole life (dev-only, invisible in prod builds).
-    unmounted.current = false
-    return () => {
-      unmounted.current = true
-    }
-  }, [])
+  /**
+   * One id, loaded and parsed. References resolve inside embedded bodies
+   * too, so their own nested embeds become typed nodes the layout can
+   * recurse into — and that `collect` below can discover on a later pass.
+   *
+   * Both failures answer `undefined`, which the cache records as terminal:
+   * an id that does not load and one whose body does not parse are the same
+   * answer to the seam, and neither is worth retrying on every keystroke.
+   */
+  const loadEntry = useCallback(
+    async (canvasId: string): Promise<MarkdownEmbedEntry | undefined> => {
+      const source = await load(canvasId).catch((err: unknown) => {
+        log.warn('embed source load failed', { canvasId, err })
+        return undefined
+      })
+      if (source === undefined) return undefined
+      try {
+        return {
+          ...(source.title !== undefined ? { title: source.title } : {}),
+          root: resolveReferences(parseMarkdownBody(source.body), resolveAlias),
+        }
+      } catch (err) {
+        log.warn('embed source parse failed', { canvasId, err })
+        return undefined
+      }
+    },
+    [load, resolveAlias],
+  )
 
-  useEffect(() => {
-    // The wanted set is the closure over what has already loaded: each
-    // loaded body may reference further documents. The layout's depth cap
-    // bounds what can ever be DRAWN, so over-fetching one level past it is
-    // the acceptable cost of keeping this loop simple.
-    const wanted = new Set(parseEmbeds(body, resolveAlias))
-    for (const entry of cache.values()) {
-      if (entry === null) continue
-      for (const id of collectEmbedIds(entry.root)) wanted.add(id)
-    }
-    for (const id of wanted) {
-      if (cache.has(id) || inflight.current.has(id)) continue
-      inflight.current.add(id)
-      void load(id)
-        .catch((err: unknown) => {
-          log.warn('embed source load failed', { canvasId: id, err })
-          return undefined
-        })
-        .then((source) => {
-          inflight.current.delete(id)
-          if (unmounted.current) return
-          let entry: MarkdownEmbedEntry | null = null
-          if (source !== undefined) {
-            try {
-              // References resolve inside embedded bodies too, so their own
-              // nested embeds become typed nodes the layout can recurse into
-              // (and this loop can discover on the next pass).
-              entry = {
-                ...(source.title !== undefined ? { title: source.title } : {}),
-                root: resolveReferences(parseMarkdownBody(source.body), resolveAlias),
-              }
-            } catch (err) {
-              log.warn('embed source parse failed', { canvasId: id, err })
-            }
-          }
-          setCache((prev) => new Map(prev).set(id, entry))
-        })
-    }
-  }, [body, resolveAlias, cache, load])
-
-  return useCallback((canvasId: string) => cache.get(canvasId) ?? undefined, [cache])
+  return usePrefetchedCache<MarkdownEmbedEntry>(
+    useCallback(
+      (loaded) => {
+        // The wanted set is the CLOSURE over what has already loaded: each
+        // loaded body may reference further documents. The layout's depth
+        // cap bounds what can ever be DRAWN, so over-fetching one level past
+        // it is the acceptable cost of keeping this simple.
+        const wanted = new Set(parseEmbeds(body, resolveAlias))
+        for (const entry of loaded) {
+          for (const id of collectEmbedIds(entry.root)) wanted.add(id)
+        }
+        return [...wanted].map(
+          (id): PrefetchRequest<MarkdownEmbedEntry> => ({ key: id, load: () => loadEntry(id) }),
+        )
+      },
+      [body, resolveAlias, loadEntry],
+    ),
+  )
 }
