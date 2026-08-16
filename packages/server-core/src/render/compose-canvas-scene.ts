@@ -11,6 +11,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { getLogger } from '../log.js'
+import type { ResolvedFileReference } from './resolve-file-references.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
 // decision #8): a user's ambient UI theme must never change what wb_scene_render
@@ -34,20 +35,47 @@ function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
 }
 
 /**
+ * What a caller has already resolved for this canvas's file references.
+ * Absent — the default — keeps the scene a pure function of the canvas
+ * snapshot.
+ */
+export interface ComposeCanvasSceneOptions {
+  readonly references?: ReadonlyMap<string, ResolvedFileReference>
+}
+
+/**
  * Composes a full-canvas scene from a `SpatialCanvas`. Delegates to
  * canvas-render's `layoutSpatialCanvas` — the single SpatialCanvas -> Scene
  * builder shared by every consumer (package-canvas-render.md decision #7).
- * No `resolveFileCanvas`/`resolveFileImage`/`resolveFileLabel`/`expandFileNode`
- * are passed, which keeps the MCP surface a pure function of the canvas
- * snapshot (decision #10's opt-in rule) — a file node renders as chrome +
- * label regardless of whether the reference resolves to anything.
+ *
+ * With no `references`, no file seam is passed at all, which keeps the scene
+ * a pure function of the canvas snapshot (decision #10's opt-in rule) — a
+ * file node renders as chrome + label regardless of whether the reference
+ * resolves to anything. `wb_scene_digest` depends on exactly that: a digest
+ * that moved whenever a DIFFERENT document was edited would stop being
+ * usable as a change signal for the canvas it names.
+ *
+ * `wb_scene_render` opts in per call, which is why this is a parameter
+ * rather than a dependency read in here. Resolution is the caller's, also
+ * because it is asynchronous while the seams are synchronous by contract.
  */
-export function composeCanvasScene(canvas: SpatialCanvas, measure: MeasureText): Scene {
+export function composeCanvasScene(
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  options?: ComposeCanvasSceneOptions,
+): Scene {
+  const references = options?.references
   return layoutSpatialCanvas(canvas, {
     measure,
     parseBody: parseMarkdownBody,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
+    ...(references === undefined
+      ? {}
+      : {
+          resolveFileLabel: (file: string) => references.get(file)?.label,
+          resolveFileMarkdown: (file: string) => references.get(file)?.body,
+        }),
   })
 }
 

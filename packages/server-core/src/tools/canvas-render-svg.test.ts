@@ -22,7 +22,11 @@ describe('wb_scene_render tool', () => {
     })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: false,
+    })
 
     expect(result.svg).toContain('<svg xmlns="http://www.w3.org/2000/svg">')
     expect(result.svg).toContain('hi')
@@ -37,8 +41,12 @@ describe('wb_scene_render tool', () => {
   test('rejects when the canvas has no stored snapshot', async () => {
     const tool = createCanvasRenderSvgTool(makeDeps(new FakeCanvasDocStore()))
 
-    await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow(
-      CanvasNotFoundError,
-    )
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        embedReferences: false,
+      }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 })

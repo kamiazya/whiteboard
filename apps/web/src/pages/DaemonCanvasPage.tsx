@@ -698,7 +698,11 @@ export function DaemonCanvasPage({
               // back to slug refs (same behavior as before ids existed).
               fileRefOptions={controller.canvases
                 .filter((entry) => entry.slug !== canvas?.slug)
-                .map((entry) => ({ file: entry.id ?? entry.slug, label: entry.slug }))}
+                .map((entry) => ({
+                  file: entry.id ?? entry.slug,
+                  label: entry.slug,
+                  kind: entry.kind,
+                }))}
               onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
               missingFileRef={missingFileRef}
               {...fileSeams}

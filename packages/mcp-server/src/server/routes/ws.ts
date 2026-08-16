@@ -15,7 +15,14 @@ import { saveCanvas, workspaceExists } from '../store/canvas-store.js'
 import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
-import { setBroadcastFn } from './canvas.js'
+// From _shared, not from canvas.js which merely re-exports it: importing the
+// router barrel pulls its whole graph — including restore.ts and live-doc.ts,
+// which close the loop back here with `await import('../ws.js')`. That cycle
+// let a request reach `sendRestoreEvent` while this module's own body had not
+// run, so `connections` was still in its TDZ and the restore 500'd with a bare
+// ReferenceError. Taking the setter from the 42-line module that defines it
+// keeps the seam and drops the edge.
+import { setBroadcastFn } from './canvas/_shared.js'
 import {
   setSyncSseHooks,
   sseBroadcastText,
