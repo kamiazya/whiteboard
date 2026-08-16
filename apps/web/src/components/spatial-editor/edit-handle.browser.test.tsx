@@ -121,6 +121,65 @@ it('a multi-selection gets the same doorway, opening align/distribute', async ()
   )
 })
 
+it('both vessels draw the same catalog in the same band order: properties, verbs, Delete last', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await userEvent.click(root, { position: { x: 200, y: 150 } })
+
+  const namesInDomOrder = () => {
+    const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+    return Array.from(
+      menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], fieldset'),
+    ).map((el) => el.getAttribute('aria-label') ?? el.textContent)
+  }
+
+  // Vessel 2: the ⋯ popover.
+  await userEvent.click(page.getByTestId('more-actions-handle'))
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const fromMore = namesInDomOrder()
+
+  // Band order: the Color property row precedes every verb, and Delete is
+  // physically last — the destructive entry keeps its distance.
+  expect(fromMore.indexOf('Color')).toBeGreaterThanOrEqual(0)
+  expect(fromMore.indexOf('Color')).toBeLessThan(fromMore.indexOf('Copy'))
+  expect(fromMore.indexOf('Order')).toBeLessThan(fromMore.indexOf('Edit text'))
+  expect(fromMore[fromMore.length - 1]).toBe('Delete')
+
+  // Close, reopen as vessel 1 (right-click): same catalog, same order.
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 200, clientY: r.top + 150 })
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  expect(namesInDomOrder()).toEqual(fromMore)
+})
+
+it('the ⋯ vessel is an icon grid: verbs are icon-only with accessible names intact', async () => {
+  const { container } = render(<Host />)
+  await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
+  await userEvent.click(page.getByTestId('more-actions-handle'))
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  expect(menu.dataset.variant).toBe('grid')
+  // Icon discipline: the verb carries its name for assistive tech (and the
+  // hover tooltip), while showing no visible text.
+  const copy = menu.querySelector('[role="menuitem"][aria-label="Copy"]') as HTMLElement
+  expect(copy).not.toBeNull()
+  expect(copy.textContent).toBe('')
+  expect(copy.title).toBe('Copy')
+  // The right-click vessel keeps its reading-surface labels.
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 200, clientY: r.top + 150 })
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const listMenu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  expect(listMenu.dataset.variant).not.toBe('grid')
+  expect(listMenu.textContent).toContain('Copy')
+})
+
 it('arrow keys nudge the selected node; Shift enlarges the step', async () => {
   const { container } = render(<Host />)
   const root = rootOf(container)

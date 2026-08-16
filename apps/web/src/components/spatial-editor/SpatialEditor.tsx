@@ -3408,6 +3408,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   nodeId: selection.id,
                   edgeId: undefined,
                   point: anchor,
+                  variant: 'grid',
                 })
               }}
             />

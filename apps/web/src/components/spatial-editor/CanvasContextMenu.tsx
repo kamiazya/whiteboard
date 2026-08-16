@@ -26,6 +26,7 @@ import {
   ChevronUp,
   ClipboardPaste,
   Copy as CopyIcon,
+  CopyPlus,
   ExternalLink,
   FileBox,
   Frame,
@@ -66,6 +67,8 @@ export interface ContextMenuTarget {
   readonly nodeId: string | undefined
   readonly edgeId: string | undefined
   readonly point: Point
+  /** The ⋯ control opens the same catalog in the icon-grid vessel. */
+  readonly variant?: 'list' | 'grid'
 }
 
 /**
@@ -171,6 +174,7 @@ export function CanvasContextMenu({
     <ContextMenu
       x={contextMenu.x}
       y={contextMenu.y}
+      variant={contextMenu.variant}
       onClose={() => setContextMenu(null)}
       items={(() => {
         const node =
@@ -303,12 +307,6 @@ export function CanvasContextMenu({
           }
           return [
             {
-              label: 'Edit label',
-              icon: <Tag />,
-              onSelect: () => setEdgeLabelEditId(edge.id),
-            },
-            { kind: 'separator' as const },
-            {
               kind: 'options' as const,
               label: 'Arrows',
               options: arrowStates.map((state) => ({
@@ -329,6 +327,12 @@ export function CanvasContextMenu({
             colorRow(edge.color, (color) =>
               applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
             ),
+            { kind: 'separator' as const },
+            {
+              label: 'Edit label',
+              icon: <Tag />,
+              onSelect: () => setEdgeLabelEditId(edge.id),
+            },
             ...(edgeLockEnabled
               ? [
                   {
@@ -419,15 +423,20 @@ export function CanvasContextMenu({
           }
           return emptyItems
         }
-        const items: ContextMenuItem[] = []
+        // The catalog's band order, shared by both vessels (list and grid):
+        // 1. properties (state pickers — the menu stays open),
+        // 2. verbs (one-shot — the menu closes),
+        // 3. the destructive entry, alone at the bottom.
+        const properties: ContextMenuItem[] = []
+        const verbs: ContextMenuItem[] = []
         if (node.type === 'group') {
-          items.push({
+          verbs.push({
             label: 'Edit label',
             icon: <Tag />,
             onSelect: () => setGroupLabelEditId(node.id),
           })
           if (onAddImage !== undefined) {
-            items.push({
+            verbs.push({
               label: 'Set background image',
               icon: <ImageIcon />,
               onSelect: () => {
@@ -445,7 +454,7 @@ export function CanvasContextMenu({
                   { kind: 'set-group-background', id: node.id, background, backgroundStyle },
                 ],
               })
-            items.push({
+            properties.push({
               kind: 'options',
               label: 'Background',
               options: [
@@ -463,7 +472,7 @@ export function CanvasContextMenu({
                 },
               ],
             })
-            items.push({
+            verbs.push({
               label: 'Remove background',
               icon: <ImageOff />,
               onSelect: () =>
@@ -473,19 +482,17 @@ export function CanvasContextMenu({
                 }),
             })
           }
-          items.push({ kind: 'separator' })
         }
         // Framing an existing multi-selection is reached from any of
         // its members — the frame encloses every selected node,
         // including group frames: nesting is geometric in JSON Canvas,
         // and containment moves already handle nested frames.
         if (extraIds.size > 0) {
-          items.push({
+          verbs.push({
             label: 'Group selection',
             icon: <Frame />,
             onSelect: () => groupSelection([node.id, ...extraIds]),
           })
-          items.push({ kind: 'separator' })
         }
         if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
           // A missing target makes Open a dead end (worse: the daemon's
@@ -493,38 +500,34 @@ export function CanvasContextMenu({
           // canvas under the dangling ref). Change target stays — it is
           // the repair affordance.
           if (onOpenFileRef !== undefined && missingFileRef?.(node.file) !== true) {
-            items.push({
+            verbs.push({
               label: 'Open canvas',
               icon: <ExternalLink />,
               onSelect: () => onOpenFileRef(node.file, node.subpath),
             })
           }
           if (fileRefOptions !== undefined) {
-            items.push({
+            verbs.push({
               label: 'Change target',
               icon: <FileBox />,
               onSelect: () => setCanvasPicker({ mode: 'retarget', nodeId: node.id }),
             })
           }
-          if (onOpenFileRef !== undefined || fileRefOptions !== undefined) {
-            items.push({ kind: 'separator' })
-          }
         }
         if (node.type === 'link') {
-          items.push({
+          verbs.push({
             label: 'Open link',
             icon: <ExternalLink />,
             onSelect: () => openLinkNode(node),
           })
-          items.push({
+          verbs.push({
             label: 'Edit URL',
             icon: <Pencil />,
             onSelect: () => setLinkDialog({ mode: 'edit', nodeId: node.id }),
           })
-          items.push({ kind: 'separator' })
         }
         if (node.type === 'text') {
-          items.push({
+          verbs.push({
             label: 'Edit text',
             icon: <Pencil />,
             onSelect: () => {
@@ -537,9 +540,6 @@ export function CanvasContextMenu({
               )
             },
           })
-          // Same grouping rule as the edge menu: the destructive
-          // entry sits in its own section.
-          items.push({ kind: 'separator' })
         }
         // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
         // right-click already made this node the primary selection,
@@ -556,14 +556,14 @@ export function CanvasContextMenu({
             },
           ]
         }
-        items.push({
+        verbs.push({
           label: 'Copy',
           icon: <CopyIcon />,
           onSelect: () => {
             copySelection()
           },
         })
-        items.push({
+        verbs.push({
           label: 'Cut',
           icon: <Scissors />,
           onSelect: () => {
@@ -571,14 +571,16 @@ export function CanvasContextMenu({
             if (copySelection() !== null) deleteSelectionAsBatch()
           },
         })
-        items.push({
+        verbs.push({
           label: 'Duplicate',
-          icon: <CopyIcon />,
+          // Not CopyIcon: in the icon-only grid vessel, Copy and Duplicate
+          // with one glyph would be indistinguishable side by side.
+          icon: <CopyPlus />,
           onSelect: () => {
             duplicateSelection()
           },
         })
-        items.push(
+        properties.push(
           colorRow(node.color, (color) => {
             // Recoloring FROM a multi-selection styles the whole
             // selected AREA: every member, and every edge that runs
@@ -613,7 +615,7 @@ export function CanvasContextMenu({
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no
         // option is ever "selected", each tap applies a move.
-        items.push({
+        properties.push({
           kind: 'options',
           label: 'Order',
           options: [
@@ -652,7 +654,7 @@ export function CanvasContextMenu({
         // action means something, rather than sitting there inert.
         const alignableCount = extraIds.size + 1
         if (alignableCount >= 2) {
-          items.push({
+          properties.push({
             kind: 'options',
             label: 'Align',
             options: (
@@ -674,7 +676,7 @@ export function CanvasContextMenu({
           })
         }
         if (alignableCount >= 3) {
-          items.push({
+          properties.push({
             kind: 'options',
             label: 'Distribute',
             options: (
@@ -696,7 +698,7 @@ export function CanvasContextMenu({
           })
         }
         if (alignableCount >= 2) {
-          items.push({
+          verbs.push({
             label: 'Tidy',
             icon: <Sparkles />,
             onSelect: () =>
@@ -709,27 +711,31 @@ export function CanvasContextMenu({
           })
         }
         if (lockEnabled) {
-          items.push({
+          verbs.push({
             label: 'Lock',
             icon: <LockIcon />,
             onSelect: () => onToggleNodeLock?.(node.id, true),
           })
         }
-        items.push({ kind: 'separator' })
-        items.push({
-          label: 'Delete',
-          icon: <Trash2 />,
-          danger: true,
-          onSelect: () => {
-            applyResult(
-              reduceGesture(gestureState, canvas, {
-                type: 'delete-selection',
-                nodeId: node.id,
-              }),
-            )
+        return [
+          ...properties,
+          { kind: 'separator' as const },
+          ...verbs,
+          { kind: 'separator' as const },
+          {
+            label: 'Delete',
+            icon: <Trash2 />,
+            danger: true,
+            onSelect: () => {
+              applyResult(
+                reduceGesture(gestureState, canvas, {
+                  type: 'delete-selection',
+                  nodeId: node.id,
+                }),
+              )
+            },
           },
-        })
-        return items
+        ]
       })()}
     />
   )

@@ -78,6 +78,36 @@ export interface ContextMenuProps {
   readonly y: number
   readonly items: readonly ContextMenuItem[]
   readonly onClose: () => void
+  /**
+   * One catalog, two vessels: 'list' is the right-click reading surface
+   * (icon + label rows); 'grid' is the ⋯ object-action surface, which
+   * renders runs of verbs as icon-only buttons (aria-label + tooltip carry
+   * the name). Property option rows and separators render identically in
+   * both, so what is learned in one vessel transfers to the other.
+   */
+  readonly variant?: 'list' | 'grid'
+}
+
+/** Consecutive action items collapse into one icon row in the grid vessel. */
+type GridChunk =
+  | { readonly kind: 'grid'; readonly actions: readonly ContextMenuActionItem[] }
+  | { readonly kind: 'item'; readonly item: ContextMenuItem }
+
+function chunkForGrid(items: readonly ContextMenuItem[]): readonly GridChunk[] {
+  const chunks: GridChunk[] = []
+  for (const item of items) {
+    if (item.kind === undefined || item.kind === 'action') {
+      const last = chunks[chunks.length - 1]
+      if (last !== undefined && last.kind === 'grid') {
+        chunks[chunks.length - 1] = { kind: 'grid', actions: [...last.actions, item] }
+      } else {
+        chunks.push({ kind: 'grid', actions: [item] })
+      }
+    } else {
+      chunks.push({ kind: 'item', item })
+    }
+  }
+  return chunks
 }
 
 /**
@@ -118,7 +148,7 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so the requested position is nudged back inside once the real menu size
@@ -164,6 +194,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       data-editor-overlay
       data-context-menu
       data-testid="context-menu"
+      data-variant={variant}
       role="menu"
       aria-label="Canvas actions"
       tabIndex={-1}
@@ -184,102 +215,142 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         }
       }}
     >
-      {items.map((item, index) =>
-        item.kind === 'separator' ? (
-          <hr key={`separator-${index}`} className="my-1 border-border" />
-        ) : item.kind === 'options' ? (
-          <Fragment key={item.label}>
-            <fieldset
-              aria-label={item.label}
-              className="m-0 flex items-center justify-between gap-2 border-0 p-0 px-3 py-1"
-            >
-              <span className="text-xs text-muted-foreground">{item.label}</span>
-              <span className="flex items-center gap-0.5">
-                {item.options.map((option) => (
+      {(() => {
+        if (variant === 'grid') {
+          return chunkForGrid(items).map((chunk, index) =>
+            chunk.kind === 'grid' ? (
+              <div
+                key={`grid-${chunk.actions[0]?.label ?? index}`}
+                className="flex max-w-56 flex-wrap gap-0.5 px-1.5 py-1"
+              >
+                {chunk.actions.map((action) => (
                   <button
-                    key={option.label}
+                    key={action.label}
                     type="button"
-                    role="menuitemradio"
-                    aria-checked={option.selected}
-                    aria-label={option.ariaLabel ?? option.label}
+                    role="menuitem"
+                    aria-label={action.label}
+                    // The visible name is gone in this vessel; the tooltip is
+                    // the desktop fallback for the icon a reader misreads.
+                    title={action.label}
                     className={cn(
-                      'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                      option.selected
-                        ? 'bg-accent font-medium text-foreground'
-                        : 'text-muted-foreground',
+                      'flex size-11 items-center justify-center rounded transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      action.danger ? 'text-red-600' : 'text-foreground',
                     )}
-                    // Applies immediately and keeps the menu open: option rows
-                    // are property pickers, and closing per pick would force a
-                    // reopen for every adjustment.
-                    onClick={option.onSelect}
+                    onClick={() => {
+                      onClose()
+                      action.onSelect()
+                    }}
                   >
-                    {option.icon !== undefined ? (
-                      <span aria-hidden="true" className="[&>svg]:size-3.5">
-                        {option.icon}
-                      </span>
-                    ) : (
-                      option.label
-                    )}
+                    <span aria-hidden="true" className="[&>svg]:size-4.5">
+                      {action.icon}
+                    </span>
                   </button>
                 ))}
-                {item.customColor !== undefined && (
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={item.customColor.selected}
-                    aria-expanded={openCustomColor === item.label}
-                    aria-label={item.customColor.ariaLabel}
-                    className={cn(
-                      'flex h-7 min-w-7 items-center justify-center rounded px-1 transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                      item.customColor.selected && 'bg-accent',
-                    )}
-                    onClick={() =>
-                      setOpenCustomColor((prev) => (prev === item.label ? null : item.label))
-                    }
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="size-3.5 rounded-full border border-border"
-                      style={{
-                        background: item.customColor.selected
-                          ? item.customColor.value
-                          : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
-                      }}
-                    />
-                  </button>
-                )}
-              </span>
-            </fieldset>
-            {item.customColor !== undefined && openCustomColor === item.label && (
-              <CustomColorPanel value={item.customColor.value} onPick={item.customColor.onPick} />
-            )}
-          </Fragment>
-        ) : (
-          <button
-            key={item.label}
-            type="button"
-            role="menuitem"
-            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
-              item.danger ? 'text-red-600' : ''
-            }`}
-            onClick={() => {
-              onClose()
-              item.onSelect()
-            }}
-          >
-            {item.icon !== undefined && (
-              // Danger rows keep the destructive color on the icon too.
-              <span
-                aria-hidden="true"
-                className={cn('[&>svg]:size-3.5', !item.danger && 'text-muted-foreground')}
-              >
-                {item.icon}
-              </span>
-            )}
-            {item.label}
-          </button>
-        ),
-      )}
+              </div>
+            ) : (
+              renderCatalogItem(chunk.item, index)
+            ),
+          )
+        }
+        return items.map(renderCatalogItem)
+      })()}
     </div>
   )
+
+  function renderCatalogItem(item: ContextMenuItem, index: number) {
+    return item.kind === 'separator' ? (
+      <hr key={`separator-${index}`} className="my-1 border-border" />
+    ) : item.kind === 'options' ? (
+      <Fragment key={item.label}>
+        <fieldset
+          aria-label={item.label}
+          className="m-0 flex items-center justify-between gap-2 border-0 p-0 px-3 py-1"
+        >
+          <span className="text-xs text-muted-foreground">{item.label}</span>
+          <span className="flex items-center gap-0.5">
+            {item.options.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                role="menuitemradio"
+                aria-checked={option.selected}
+                aria-label={option.ariaLabel ?? option.label}
+                className={cn(
+                  'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                  option.selected
+                    ? 'bg-accent font-medium text-foreground'
+                    : 'text-muted-foreground',
+                )}
+                // Applies immediately and keeps the menu open: option rows
+                // are property pickers, and closing per pick would force a
+                // reopen for every adjustment.
+                onClick={option.onSelect}
+              >
+                {option.icon !== undefined ? (
+                  <span aria-hidden="true" className="[&>svg]:size-3.5">
+                    {option.icon}
+                  </span>
+                ) : (
+                  option.label
+                )}
+              </button>
+            ))}
+            {item.customColor !== undefined && (
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={item.customColor.selected}
+                aria-expanded={openCustomColor === item.label}
+                aria-label={item.customColor.ariaLabel}
+                className={cn(
+                  'flex h-7 min-w-7 items-center justify-center rounded px-1 transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                  item.customColor.selected && 'bg-accent',
+                )}
+                onClick={() =>
+                  setOpenCustomColor((prev) => (prev === item.label ? null : item.label))
+                }
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-3.5 rounded-full border border-border"
+                  style={{
+                    background: item.customColor.selected
+                      ? item.customColor.value
+                      : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                  }}
+                />
+              </button>
+            )}
+          </span>
+        </fieldset>
+        {item.customColor !== undefined && openCustomColor === item.label && (
+          <CustomColorPanel value={item.customColor.value} onPick={item.customColor.onPick} />
+        )}
+      </Fragment>
+    ) : (
+      <button
+        key={item.label}
+        type="button"
+        role="menuitem"
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
+          item.danger ? 'text-red-600' : ''
+        }`}
+        onClick={() => {
+          onClose()
+          item.onSelect()
+        }}
+      >
+        {item.icon !== undefined && (
+          // Danger rows keep the destructive color on the icon too.
+          <span
+            aria-hidden="true"
+            className={cn('[&>svg]:size-3.5', !item.danger && 'text-muted-foreground')}
+          >
+            {item.icon}
+          </span>
+        )}
+        {item.label}
+      </button>
+    )
+  }
 }

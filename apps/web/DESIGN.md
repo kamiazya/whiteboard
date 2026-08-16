@@ -75,6 +75,29 @@ Tailwind palette colors in chrome.
   globally by the base-layer guard in `src/index.css` — component code
   must not assume an animation ran (never gate logic on motion).
 
+## Object-action surfaces are icon-first
+
+The palette's "+" menu keeps icon AND label on every entry: a creation
+menu is a first-contact reading surface, and ToolPalette says so in its
+header comment. That principle is deliberately NOT extended to
+object-action surfaces (the selection's ⋯ popover, and by extension any
+future action sheet): there the verbs render icon-only, in a grid of
+44px targets, with the name carried by `aria-label` (non-negotiable —
+"no visible text" is a visual statement only) and a `title` tooltip on
+desktop. Rationale: object verbs are conventional symbols (edit, delete,
+lock, open) recovered in one hover/press, misfires inside the menu are
+one Undo away, and the grid keeps every verb visible at once instead of
+scrolling a list. The Copy/Cut/Duplicate trio ships icon-only first; if
+dogfooding observes misfires, labels return by observation, not by
+guess.
+
+Both vessels — the right-click list menu and the ⋯ grid — draw the SAME
+catalog in the SAME band order: property rows (color, z-order, arrows;
+the menu stays open), then verbs (one-shot; the menu closes), then the
+destructive entry alone at the bottom. What is learned in one vessel
+must transfer to the other, so a new action is added to the catalog,
+never to a single vessel.
+
 ## Bottom chrome: one dock, fixed width
 
 All bottom-anchored canvas chrome lives in ONE flex container (the tool
