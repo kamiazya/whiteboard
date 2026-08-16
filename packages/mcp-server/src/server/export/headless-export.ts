@@ -51,7 +51,7 @@ function hasLegacyElements(doc: LoroDoc): boolean {
 }
 
 // Test-only: exercises the non-mutating probe directly against a bare
-// LoroDoc, isolated from canvas-store's own (separate, pre-existing)
+// LoroDoc, isolated from document-store's own (separate, pre-existing)
 // legacy-list-migration probe on the load path.
 export const _hasLegacyElementsForTests = hasLegacyElements
 

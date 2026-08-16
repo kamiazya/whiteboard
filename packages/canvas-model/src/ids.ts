@@ -19,7 +19,7 @@ export const documentIdSchema = z.string().regex(ULID_PATTERN, 'must be a canoni
 export const nodeIdSchema = z.string().min(1, 'node id must not be empty')
 
 /**
- * Workspace identifiers are a path-safe SLUG, not a ULID — deliberately
+ * Workspace identifiers are a path-safe name, not a ULID — deliberately
  * different from `documentIdSchema`. This codifies the workspace-ID contract
  * already enforced at runtime by mcp-server's `SAFE_WORKSPACE_ID`
  * (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
@@ -35,7 +35,7 @@ export const workspaceIdSchema = z
 
 /**
  * One segment of a document path. Codifies the rule mcp-server enforces at
- * runtime as `SAFE_SLUG_SEGMENT`: ASCII letters and digits, hyphens only in
+ * runtime as `DOCUMENT_PATH_SEGMENT_PATTERN`: ASCII letters and digits, hyphens only in
  * the interior. `.` is absent from the character class rather than merely
  * unmatched, which is what forecloses `..` traversal once segments are
  * joined into a filesystem-shaped path.

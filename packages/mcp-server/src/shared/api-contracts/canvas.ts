@@ -45,16 +45,16 @@ export const saveVersionRequestSchema = z.object({
 
 // POST /api/workspaces/:workspaceId/canvases/:path/versions/:id/restore
 // Body is optional. Two restore modes share the same endpoint:
-//   • body absent or `targetSlug` absent — in-place reconcile against the
+//   • body absent or `targetPath` absent — in-place reconcile against the
 //     current canvas (default; what the History panel uses).
-//   • `targetSlug` set — restore into that path in the same workspace. If it
+//   • `targetPath` set — restore into that path in the same workspace. If it
 //     does not exist yet, this creates it. If it already exists, `overwrite:
 //     true` is required, and the restore reconciles onto the target's live
 //     doc (same semantics as the default mode, not a persistence swap) so
 //     any client connected to that canvas stays on the same CRDT lineage.
 //     Replaces what the now-removed `checkpoint_restore` flow did.
 export const restoreVersionRequestSchema = z.object({
-  targetSlug: z.string().trim().min(1).optional(),
+  targetPath: z.string().trim().min(1).optional(),
   overwrite: z.boolean().optional(),
 })
 
@@ -109,12 +109,12 @@ export const deleteCanvasResponseSchema = z.object({
 })
 
 // PUT /api/workspaces/:workspaceId/canvases/:path/path — request body.
-export const renameCanvasSlugRequestSchema = z.object({
+export const renameDocumentPathRequestSchema = z.object({
   path: z.string().trim().min(1),
 })
 
 // PUT /api/workspaces/:workspaceId/canvases/:path/path — success body.
-export const renameCanvasSlugResponseSchema = z.object({
+export const renameDocumentPathResponseSchema = z.object({
   path: z.string(),
 })
 
@@ -175,8 +175,8 @@ export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
 export type UpdateCanvasResponse = z.infer<typeof updateCanvasResponseSchema>
 export type DeleteCanvasResponse = z.infer<typeof deleteCanvasResponseSchema>
-export type RenameCanvasSlugRequest = z.infer<typeof renameCanvasSlugRequestSchema>
-export type RenameCanvasSlugResponse = z.infer<typeof renameCanvasSlugResponseSchema>
+export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
+export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
 export type CanvasExistsResponse = z.infer<typeof canvasExistsResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
 
@@ -199,7 +199,7 @@ export type StorageReportPayload = z.infer<typeof storageReportPayloadSchema>
 // POST /api/workspaces/:workspaceId/canvases/optimize-all — response body.
 // The route also returns a per-canvas `results` array; the Storage tab only
 // needs the aggregated totals, so that detail is left unvalidated here
-// rather than duplicating compactCanvas's result shape.
+// rather than duplicating compactDocument's result shape.
 export const optimizeAllCanvasesResponseSchema = z.object({
   totalBeforeBytes: z.number().int().nonnegative(),
   totalAfterBytes: z.number().int().nonnegative(),

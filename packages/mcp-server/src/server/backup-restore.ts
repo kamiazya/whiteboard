@@ -3,7 +3,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
-// Layout the data dir is expected to carry (see store/db, canvas-store,
+// Layout the data dir is expected to carry (see store/db, document-store,
 // version-store, routes/files):
 //   <data>/whiteboard.db                                   libsql DB
 //                                                          (workspaces, canvases, versions

@@ -102,11 +102,11 @@ async function importOneCanvasUnsafe(
   }
 
   const baseSegment = toPathSegment(canvasName)
-  let createdSlug: string | null = null
+  let createdPath: string | null = null
 
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
-    const candidateSlug = attempt === 0 ? baseSegment : `${baseSegment}-${attempt + 1}`
-    const body = createCanvasRequestSchema.parse({ path: candidateSlug, kind: documentKind })
+    const candidatePath = attempt === 0 ? baseSegment : `${baseSegment}-${attempt + 1}`
+    const body = createCanvasRequestSchema.parse({ path: candidatePath, kind: documentKind })
     const res = await fetch(
       `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
       {
@@ -127,11 +127,11 @@ async function importOneCanvasUnsafe(
     if (!parsed.success) {
       return { kind: 'failed', reason: 'Create response failed schema validation.' }
     }
-    createdSlug = parsed.data.path
+    createdPath = parsed.data.path
     break
   }
 
-  if (createdSlug === null) {
+  if (createdPath === null) {
     return {
       kind: 'failed',
       reason: `Could not find an available name after ${MAX_CREATE_ATTEMPTS} attempts.`,
@@ -141,7 +141,7 @@ async function importOneCanvasUnsafe(
   const mergedSnapshot = mergeToSnapshot(loroLoad.snapshot, loroLoad.deltas ?? [])
 
   const updateRes = await fetch(
-    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdSlug, 'update')}`,
+    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdPath, 'update')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -159,5 +159,5 @@ async function importOneCanvasUnsafe(
     return { kind: 'failed', reason: 'Update response failed schema validation.' }
   }
 
-  return { kind: 'ok', path: createdSlug }
+  return { kind: 'ok', path: createdPath }
 }

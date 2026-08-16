@@ -53,7 +53,7 @@ export function useDaemonCanvasController(
 ): DaemonCanvasController {
   const { daemonBaseUrl, daemonFetch } = options
   const [workspaceId, setWorkspaceId] = useState<string | null>(options.workspaceId ?? null)
-  const [path, setSlug] = useState<string | null>(options.path ?? null)
+  const [path, setPath] = useState<string | null>(options.path ?? null)
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [canvases, setCanvases] = useState<CanvasSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,7 +91,7 @@ export function useDaemonCanvasController(
         const { canvases: canvasList } = await listCanvasesApi(daemonFetch, daemonBaseUrl, wid)
         if (cancelled || seq !== switchSeqRef.current) return
         setCanvases(canvasList)
-        setSlug(options.path ?? canvasList[0]?.path ?? null)
+        setPath(options.path ?? canvasList[0]?.path ?? null)
       } catch (err) {
         if (!cancelled && seq === switchSeqRef.current) setLoadError(errorMessage(err))
       } finally {
@@ -109,8 +109,8 @@ export function useDaemonCanvasController(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const switchCanvas = useCallback((nextSlug: string) => {
-    setSlug(nextSlug)
+  const switchCanvas = useCallback((nextPath: string) => {
+    setPath(nextPath)
   }, [])
 
   const switchWorkspace = useCallback(
@@ -128,7 +128,7 @@ export function useDaemonCanvasController(
         if (seq !== switchSeqRef.current) return
         setWorkspaceId(nextWorkspaceId)
         setCanvases(list)
-        setSlug(list[0]?.path ?? null)
+        setPath(list[0]?.path ?? null)
       } catch (err) {
         // Deliberately setSwitchError, not setLoadError: the previous
         // workspace/canvas selection (and its live editor connection) is
@@ -140,18 +140,18 @@ export function useDaemonCanvasController(
   )
 
   const createCanvas = useCallback(
-    async (newSlug: string): Promise<void> => {
+    async (newPath: string): Promise<void> => {
       if (workspaceId === null) return
       setCreateError(null)
       try {
-        const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newSlug)
+        const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newPath)
         const { canvases: refreshed } = await listCanvasesApi(
           daemonFetch,
           daemonBaseUrl,
           workspaceId,
         )
         setCanvases(refreshed)
-        setSlug(created.path)
+        setPath(created.path)
       } catch (err) {
         setCreateError(errorMessage(err))
         // The caller derives its next path from `canvases`. A failure often means that list is

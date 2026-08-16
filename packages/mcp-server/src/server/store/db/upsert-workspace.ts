@@ -23,7 +23,7 @@ export async function upsertWorkspaceRow(db: Database, workspaceId: string): Pro
 // Look up the stable canvas id for (workspaceId, path). Returns null when
 // the canvas does not exist; callers that want to create it should use
 // upsertCanvasRow.
-export async function getCanvasIdBySlug(
+export async function getDocumentIdByPath(
   db: Database,
   workspaceId: string,
   path: string,
@@ -47,7 +47,7 @@ export async function upsertCanvasRow(
   path: string,
 ): Promise<string> {
   await upsertWorkspaceRow(db, workspaceId)
-  const existing = await getCanvasIdBySlug(db, workspaceId, path)
+  const existing = await getDocumentIdByPath(db, workspaceId, path)
   if (existing) return existing
   const id = nanoid(12)
   const now = Date.now()
@@ -68,6 +68,6 @@ export async function upsertCanvasRow(
     .execute()
   // Re-read in case a concurrent insert won the race; otherwise our generated
   // id is the canonical one.
-  const resolved = await getCanvasIdBySlug(db, workspaceId, path)
+  const resolved = await getDocumentIdByPath(db, workspaceId, path)
   return resolved ?? id
 }

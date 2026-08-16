@@ -22,7 +22,9 @@ vi.mock('../store/doc-cache.js', async () => {
 })
 
 const { clearCache, getDoc } = await import('../store/doc-cache.js')
-const { saveCanvas, renameCanvasSlug, listCanvases } = await import('../store/canvas-store.js')
+const { saveDocument, renameDocumentPath, listDocuments } = await import(
+  '../store/document-store.js'
+)
 const { handleWsUpgrade } = await import('./ws.js')
 
 class FakeWebSocket {
@@ -68,7 +70,7 @@ describe('handleWsUpgrade binary update vs rename race', () => {
     const baseDoc = new LoroDoc()
     baseDoc.getText('content').insert(0, 'original')
     baseDoc.commit()
-    await saveCanvas('session1', 'a', baseDoc)
+    await saveDocument('session1', 'a', baseDoc)
 
     // A client update built against the pre-rename base.
     const clientDoc = LoroDoc.fromSnapshot(baseDoc.export({ mode: 'snapshot' }))
@@ -106,7 +108,7 @@ describe('handleWsUpgrade binary update vs rename race', () => {
     await getDocCalled
 
     // Fire the rename while the binary frame is stalled mid-flight.
-    const renamePromise = renameCanvasSlug('session1', 'a', 'b')
+    const renamePromise = renameDocumentPath('session1', 'a', 'b')
     // Give the rename a chance to run before letting the stalled read continue.
     await new Promise((r) => setTimeout(r, 20))
     releaseGetDoc()
@@ -115,7 +117,7 @@ describe('handleWsUpgrade binary update vs rename race', () => {
 
     // Exactly one canvas must survive -- the update must not have silently
     // inserted a phantom duplicate back at the old path.
-    const canvases = await listCanvases('session1')
+    const canvases = await listDocuments('session1')
     expect(canvases.map((c) => c.path)).toEqual(['b'])
   })
 })

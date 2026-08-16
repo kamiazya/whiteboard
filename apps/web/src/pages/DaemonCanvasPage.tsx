@@ -27,7 +27,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
-import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-path.js'
+import { deriveNewCanvasPath } from '../lib/derive-new-canvas-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
@@ -249,7 +249,7 @@ export function DaemonCanvasPage({
   // through unchanged.
   const canvasesRef = useRef(controller.canvases)
   canvasesRef.current = controller.canvases
-  const resolveRefSlug = useCallback(
+  const resolveRefPath = useCallback(
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
     [],
   )
@@ -279,9 +279,9 @@ export function DaemonCanvasPage({
           daemonBaseUrl,
           workspaceId: canvas?.workspaceId ?? '',
           path: canvas?.path ?? '',
-          resolveRefSlug,
+          resolveRefPath,
         }),
-      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefSlug],
+      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
     ),
     // Keyed by BOTH id and path so id refs and legacy path refs each find
     // their staleness stamp.
@@ -349,7 +349,7 @@ export function DaemonCanvasPage({
   const handleCreateCanvas = async (): Promise<void> => {
     setCreating(true)
     try {
-      await controller.createCanvas(deriveNewCanvasSlug(controller.canvases.map((c) => c.path)))
+      await controller.createCanvas(deriveNewCanvasPath(controller.canvases.map((c) => c.path)))
     } finally {
       setCreating(false)
     }
@@ -693,7 +693,7 @@ export function DaemonCanvasPage({
               // File-node reference = the target's immutable id (rename-
               // safe); the label shows its current path and the current
               // canvas is excluded. Legacy documents still carry path refs,
-              // which resolveRefSlug misses and switchCanvas takes as-is.
+              // which resolveRefPath misses and switchCanvas takes as-is.
               // An older daemon's list has no ids yet; those entries fall
               // back to path refs (same behavior as before ids existed).
               fileRefOptions={controller.canvases
@@ -703,7 +703,7 @@ export function DaemonCanvasPage({
                   label: entry.path,
                   kind: entry.kind,
                 }))}
-              onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
+              onOpenFileRef={(file) => controller.switchCanvas(resolveRefPath(file) ?? file)}
               missingFileRef={missingFileRef}
               {...fileSeams}
               lockedNodeIds={lockedNodeIds}

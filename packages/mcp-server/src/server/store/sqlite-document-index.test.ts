@@ -21,7 +21,7 @@ describe('SqliteDocumentIndex', () => {
   })
 
   it('lists past a legacy nanoid row instead of letting it poison the whole listing', async () => {
-    // `saveCanvas` minted nanoid row ids before the id spaces converged, and
+    // `saveDocument` minted nanoid row ids before the id spaces converged, and
     // rows outlive minting policy. One such row per workspace was enough to
     // make every entry unreadable: the port's DocumentEntry accepts only a
     // canonical ULID documentId, so a listing that mapped the legacy row blew

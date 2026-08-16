@@ -73,8 +73,8 @@ export function CanvasListView({
     const infos = rows.map((r) => ({ path: r.path, updatedAt: r.updatedAt, name: r.displayName }))
     const names = Object.fromEntries(rows.map((r) => [r.path, r.displayName]))
     const filtered = filterCanvasesBySearch(infos, search, names)
-    const bySlug = new Map(rows.map((r) => [r.path, r]))
-    return filtered.map((c) => bySlug.get(c.path)).filter((r): r is CanvasListRow => !!r)
+    const byPath = new Map(rows.map((r) => [r.path, r]))
+    return filtered.map((c) => byPath.get(c.path)).filter((r): r is CanvasListRow => !!r)
   }, [rows, search])
 
   if (rows.length === 0) {

@@ -9,38 +9,38 @@ export function sortCanvasesByRecency(canvases: readonly CanvasInfo[]): CanvasIn
 export function filterCanvasesBySearch(
   canvases: readonly CanvasInfo[],
   query: string,
-  namesBySlug: Readonly<Record<string, string>>,
+  namesByPath: Readonly<Record<string, string>>,
 ): CanvasInfo[] {
   const q = query.trim().toLowerCase()
   if (!q) return [...canvases]
   return canvases.filter((c) => {
-    const n = namesBySlug[c.path]
+    const n = namesByPath[c.path]
     return c.path.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
   })
 }
 
-// Preserves the user-defined order in `pinnedSlugs` instead of resorting
-// those items by recency. Slugs with no matching canvas are dropped.
+// Preserves the user-defined order in `pinnedPaths` instead of resorting
+// those items by recency. Paths with no matching canvas are dropped.
 export function derivePinnedCanvases(
   canvases: readonly CanvasInfo[],
-  pinnedSlugs: readonly string[],
+  pinnedPaths: readonly string[],
 ): CanvasInfo[] {
-  const bySlug = new Map(canvases.map((c) => [c.path, c]))
-  return pinnedSlugs.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
+  const byPath = new Map(canvases.map((c) => [c.path, c]))
+  return pinnedPaths.map((s) => byPath.get(s)).filter((c): c is CanvasInfo => !!c)
 }
 
 // Groups by path prefix (the first "/"-delimited segment); canvases without
 // a "/" land in the ungrouped bucket (empty-string key). Group headers sort
 // alphabetically, with the ungrouped bucket always last. Canvases already
-// present in `pinnedSlugs` are excluded so they are not shown twice.
+// present in `pinnedPaths` are excluded so they are not shown twice.
 export function groupCanvases(
   canvases: readonly CanvasInfo[],
-  pinnedSlugs: ReadonlySet<string>,
+  pinnedPaths: ReadonlySet<string>,
 ): Array<[string, CanvasInfo[]]> {
   const groups = new Map<string, CanvasInfo[]>()
   const UNGROUPED = ''
   for (const c of canvases) {
-    if (pinnedSlugs.has(c.path)) continue
+    if (pinnedPaths.has(c.path)) continue
     const ix = c.path.indexOf('/')
     const key = ix === -1 ? UNGROUPED : c.path.slice(0, ix)
     const arr = groups.get(key)

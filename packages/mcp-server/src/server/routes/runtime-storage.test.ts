@@ -33,7 +33,7 @@ describe('computeStorageReport', () => {
 
   it('categorises canvas blobs, version thumbnails, files, db, exports, logs, and other', async () => {
     // Match the layout the daemon actually writes — uploaded files live
-    // under <DATA_DIR>/<workspaceId>/files/ (canvas-store.ts), so the
+    // under <DATA_DIR>/<workspaceId>/files/ (document-store.ts), so the
     // categorizer has to recognise the real per-workspace paths, not the
     // top-level shorthand.
     await seed('blobs/ws_1/canvas/abc.loro', 1000)

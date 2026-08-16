@@ -844,7 +844,7 @@ describe('DaemonIndexPage', () => {
   // deterministically, until the user reloaded the page.
   it('re-reads the list after a failed create so the retry does not repeat the same path', async () => {
     const created: string[] = []
-    let serverSlugs: string[] = ['untitled']
+    let serverPaths: string[] = ['untitled']
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.endsWith('/api/workspaces')) {
@@ -853,10 +853,10 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
         const path = JSON.parse(String(init?.body ?? '{}')).path as string
         created.push(path)
-        if (serverSlugs.includes(path)) {
+        if (serverPaths.includes(path)) {
           return Promise.resolve(jsonResponse({ title: `Canvas "${path}" already exists` }, 409))
         }
-        serverSlugs = [...serverSlugs, path]
+        serverPaths = [...serverPaths, path]
         return Promise.resolve(jsonResponse({ path }))
       }
       if (url.endsWith('/api/workspaces/ws-a/canvases')) {
@@ -866,7 +866,7 @@ describe('DaemonIndexPage', () => {
             canvases:
               created.length === 0
                 ? []
-                : serverSlugs.map((path) => ({ path, updatedAt: new Date().toISOString() })),
+                : serverPaths.map((path) => ({ path, updatedAt: new Date().toISOString() })),
           }),
         )
       }

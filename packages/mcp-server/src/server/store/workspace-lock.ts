@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 //
 // Background: file-gc walks every canvas + version of a workspace to
 // compute the referenced-fileId set, then unlinks every file not in
-// the set. Without a write barrier a concurrent saveCanvas() that
+// the set. Without a write barrier a concurrent saveDocument() that
 // introduces a new image reference between collect and unlink can have
 // its file deleted as "dangling". The window is widest on workspaces
 // with many versions because the collect pass is O(versions × frontiers).
@@ -20,14 +20,14 @@ const queues = new Map<string, Promise<void>>()
 // Reentrancy tracking. A single logical write transaction can legitimately
 // nest lock acquisitions for the SAME workspace — e.g. the HEAD-switch
 // route holds the lock across its whole read-modify-write, and the
-// checkoutTo hook it awaits in the middle calls saveCanvas(), which also
+// checkoutTo hook it awaits in the middle calls saveDocument(), which also
 // takes this lock. Since only one holder can ever be active per workspace
 // at a time, a nested acquisition can only be the current holder's own
 // continuation re-entering (queueing again would await its own completion
 // and deadlock forever). AsyncLocalStorage propagates through awaits along
 // the exact call chain that acquired the lock, so it distinguishes true
 // reentrancy from a genuinely separate concurrent caller (e.g. an
-// unrelated websocket handler's saveCanvas firing at the same time), which
+// unrelated websocket handler's saveDocument firing at the same time), which
 // must still queue normally rather than run concurrently.
 const heldByThisChain = new AsyncLocalStorage<ReadonlySet<string>>()
 
@@ -57,7 +57,7 @@ export async function withWorkspaceWriteLock<T>(
   try {
     await previous
   } catch {
-    // Earlier holder threw; we still acquire — file-gc + saveCanvas
+    // Earlier holder threw; we still acquire — file-gc + saveDocument
     // must run independently. The original error has already been
     // surfaced to that caller.
   }

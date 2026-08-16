@@ -17,7 +17,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { clearCache, getDoc } = await import('../store/doc-cache.js')
-const { saveCanvas } = await import('../store/canvas-store.js')
+const { saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
 
 function makeDocWithElements(visible: number, tombstones: number): LoroDoc {
@@ -59,8 +59,8 @@ describe('GET /api/debug', () => {
 
   it('returns session and canvas element counts for visible and tombstoned elements', async () => {
     await mkdir(join(tempDir, 'sess-a'), { recursive: true })
-    await saveCanvas('sess-a', 'canvas-1', makeDocWithElements(3, 2))
-    await saveCanvas('sess-a', 'canvas-2', makeDocWithElements(1, 0))
+    await saveDocument('sess-a', 'canvas-1', makeDocWithElements(3, 2))
+    await saveDocument('sess-a', 'canvas-2', makeDocWithElements(1, 0))
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -110,7 +110,7 @@ describe('GET /api/debug', () => {
       ],
       edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
     })
-    await saveCanvas('sess-nodes', 'canvas-1', doc)
+    await saveDocument('sess-nodes', 'canvas-1', doc)
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -149,7 +149,7 @@ describe('GET /api/debug', () => {
     map.set('type', 'rectangle')
     map.set('isDeleted', true)
     doc.commit()
-    await saveCanvas('sess-mixed', 'canvas-1', doc)
+    await saveDocument('sess-mixed', 'canvas-1', doc)
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -178,8 +178,8 @@ describe('GET /api/debug', () => {
 
   it('marks only canvases touched through getDoc as cached in the cache section', async () => {
     await mkdir(join(tempDir, 'sess-cache'), { recursive: true })
-    await saveCanvas('sess-cache', 'touched', makeDocWithElements(1, 0))
-    await saveCanvas('sess-cache', 'untouched', makeDocWithElements(1, 0))
+    await saveDocument('sess-cache', 'touched', makeDocWithElements(1, 0))
+    await saveDocument('sess-cache', 'untouched', makeDocWithElements(1, 0))
 
     // Only touched canvases should appear in cache.
     await getDoc('sess-cache', 'touched')

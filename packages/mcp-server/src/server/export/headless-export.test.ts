@@ -32,7 +32,7 @@ vi.mock('./headless-renderer.js', () => ({
 const { exportCanvasHeadless, exportCanvasHeadlessSvg, _hasLegacyElementsForTests } = await import(
   './headless-export.js'
 )
-const { saveCanvas } = await import('../store/canvas-store.js')
+const { saveDocument } = await import('../store/document-store.js')
 const { clearCache } = await import('../store/doc-cache.js')
 
 beforeEach(async () => {
@@ -58,7 +58,7 @@ function spatialTextDoc(nodeId: string, text: string): LoroDoc {
 describe('exportCanvasHeadless', () => {
   it('reads the doc, derives the spatial canvas, and forwards padding/scale/theme to the renderer', async () => {
     const doc = spatialTextDoc('n1', 'hello')
-    await saveCanvas('ws_a', 'design', doc)
+    await saveDocument('ws_a', 'design', doc)
 
     await exportCanvasHeadless({
       workspaceId: 'ws_a',
@@ -77,7 +77,7 @@ describe('exportCanvasHeadless', () => {
 
   it('accepts frameId and minFontPx without changing renderer output (both are ignored)', async () => {
     const doc = spatialTextDoc('n1', 'hello')
-    await saveCanvas('ws_ignored', 'design', doc)
+    await saveDocument('ws_ignored', 'design', doc)
 
     await exportCanvasHeadless({ workspaceId: 'ws_ignored', path: 'design' })
     const withoutIgnored = renderSpy.mock.calls[0][1]
@@ -100,7 +100,7 @@ describe('exportCanvasHeadless', () => {
     rect.set('type', 'rectangle')
     rect.set('isDeleted', false)
     doc.commit()
-    await saveCanvas('ws_legacy', 'design', doc)
+    await saveDocument('ws_legacy', 'design', doc)
 
     const capture = captureLogsForTests('debug')
     try {
@@ -124,8 +124,8 @@ describe('exportCanvasHeadless', () => {
   })
 
   it('does not create a legacy elements container as a side effect of probing a normal doc', async () => {
-    // Exercised directly against a bare LoroDoc (not via loadCanvas), so
-    // this is isolated from canvas-store's own, separate legacy-list
+    // Exercised directly against a bare LoroDoc (not via loadDocument), so
+    // this is isolated from document-store's own, separate legacy-list
     // migration probe on the load path.
     const doc = new LoroDoc()
     const nodes = doc.getMap('nodes')
@@ -158,7 +158,7 @@ describe('exportCanvasHeadless', () => {
 describe('exportCanvasHeadlessSvg', () => {
   it('renders the derived spatial canvas through renderSpatialCanvasToSvg and returns its markup', async () => {
     const doc = spatialTextDoc('n1', 'hello')
-    await saveCanvas('ws_svg', 'design', doc)
+    await saveDocument('ws_svg', 'design', doc)
 
     const result = await exportCanvasHeadlessSvg({ workspaceId: 'ws_svg', path: 'design' })
 

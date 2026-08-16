@@ -792,11 +792,11 @@ describe('createApp daemon mutation auth', () => {
   // version-store conversion lands and the cache invalidation path is settled.
 
   it('PUT /head rejects invalid target tip and does not change head', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
-    await saveCanvas('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
+    await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -823,11 +823,11 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('merge preview rejects invalid source tip without mutating branches', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
-    await saveCanvas('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
+    await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -858,7 +858,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('merge commit rejects invalid into tip without mutating live doc or branch tips', async () => {
     const { clearCache } = await import('./store/doc-cache.js')
-    const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument, loadDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
@@ -868,7 +868,7 @@ describe('createApp daemon mutation auth', () => {
     element.set('id', 'rect-1')
     element.set('type', 'rectangle')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -898,19 +898,19 @@ describe('createApp daemon mutation auth', () => {
     await expect(loadCanvasBranches('session1', 'canvas-a')).resolves.toEqual(before)
 
     clearCache()
-    const reloaded = await loadCanvas('session1', 'canvas-a')
+    const reloaded = await loadDocument('session1', 'canvas-a')
     const elements = reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['rect-1'])
   })
 
   it('merge pre-snapshot save carries system/merge operator', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const { FileVersionStore } = await import('./store/version-store.js')
     const saveSpy = vi.spyOn(FileVersionStore.prototype, 'save')
     const app = createApp(createRuntimeOptions())
 
     const doc = new LoroDoc()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -950,14 +950,14 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('merge dry run returns nonzero element counts for a nodes-model doc', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const app = createApp(createRuntimeOptions())
 
     const doc = makeSpatialDoc({
       nodes: [{ id: 'A', type: 'text', text: 'hi', x: 0, y: 0, width: 10, height: 10 }],
       edges: [],
     })
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -991,7 +991,7 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('merge dry run element counts include edges, matching previewElements.length', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const app = createApp(createRuntimeOptions())
 
     const doc = makeSpatialDoc({
@@ -1001,7 +1001,7 @@ describe('createApp daemon mutation auth', () => {
       ],
       edges: [{ id: 'e1', fromNode: 'A', toNode: 'B' }],
     })
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -1035,7 +1035,7 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {
-    const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument, loadDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
@@ -1046,7 +1046,7 @@ describe('createApp daemon mutation auth', () => {
       ],
       edges: [],
     })
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -1063,9 +1063,9 @@ describe('createApp daemon mutation auth', () => {
     await saveCanvasBranches('session1', 'canvas-a', state)
 
     // Main (the live doc, still HEAD) deletes A.
-    const mainDoc = await loadCanvas('session1', 'canvas-a')
+    const mainDoc = await loadDocument('session1', 'canvas-a')
     deleteSpatialNode(mainDoc, 'A')
-    await saveCanvas('session1', 'canvas-a', mainDoc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', mainDoc, { overwrite: true })
 
     const res = await app.request(
       '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
@@ -1082,7 +1082,7 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('committed merge returns newElementIds/changedElementIds derived from the nodes model', async () => {
-    const { saveCanvas, loadCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument, loadDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
 
@@ -1092,7 +1092,7 @@ describe('createApp daemon mutation auth', () => {
       nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
       edges: [],
     })
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
@@ -1110,7 +1110,7 @@ describe('createApp daemon mutation auth', () => {
     // Reload (a fresh doc instance importing the same history) and add C on
     // top — this is what feature's tip below points at, and what becomes
     // the live doc's new content.
-    const withC = await loadCanvas('session1', 'canvas-a')
+    const withC = await loadDocument('session1', 'canvas-a')
     writeSpatialNode(withC, {
       id: 'C',
       type: 'text',
@@ -1120,7 +1120,7 @@ describe('createApp daemon mutation auth', () => {
       width: 10,
       height: 10,
     })
-    await saveCanvas('session1', 'canvas-a', withC, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', withC, { overwrite: true })
 
     const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
     const afterAddC = await loadCanvasBranches('session1', 'canvas-a')
@@ -1144,7 +1144,7 @@ describe('createApp daemon mutation auth', () => {
   })
 
   it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
-    const { saveCanvas } = await import('./store/canvas-store.js')
+    const { saveDocument } = await import('./store/document-store.js')
     const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
     const { writeSpatialNode } = await import('@kamiazya/whiteboard-canvas-workspace')
 
@@ -1155,7 +1155,7 @@ describe('createApp daemon mutation auth', () => {
       nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
       edges: [],
     })
-    await saveCanvas('session1', 'canvas-a', forkDoc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
     const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
 
     await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
@@ -1193,7 +1193,7 @@ describe('createApp daemon mutation auth', () => {
     // Merge both peers' ops into the shared live doc so both tips remain
     // checkoutable against its full history.
     forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
-    await saveCanvas('session1', 'canvas-a', forkDoc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
 
     const state = await loadCanvasBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!

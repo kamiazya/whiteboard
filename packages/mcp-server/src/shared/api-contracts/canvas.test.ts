@@ -178,18 +178,18 @@ describe('saveVersionRequestSchema', () => {
 describe('restoreVersionRequestSchema', () => {
   it('parses an empty body', () => {
     const result: RestoreVersionRequest = restoreVersionRequestSchema.parse({})
-    expect(result.targetSlug).toBeUndefined()
+    expect(result.targetPath).toBeUndefined()
   })
 
-  it('roundtrip with targetSlug and overwrite', () => {
-    const valid: RestoreVersionRequest = { targetSlug: 'new-canvas', overwrite: true }
+  it('roundtrip with targetPath and overwrite', () => {
+    const valid: RestoreVersionRequest = { targetPath: 'new-canvas', overwrite: true }
     const result: RestoreVersionRequest = roundtrip(restoreVersionRequestSchema, valid)
     expect(result).toEqual(valid)
   })
 
-  it('rejects empty targetSlug', () => {
-    expect(restoreVersionRequestSchema.safeParse({ targetSlug: '' }).success).toBe(false)
-    expect(restoreVersionRequestSchema.safeParse({ targetSlug: '   ' }).success).toBe(false)
+  it('rejects empty targetPath', () => {
+    expect(restoreVersionRequestSchema.safeParse({ targetPath: '' }).success).toBe(false)
+    expect(restoreVersionRequestSchema.safeParse({ targetPath: '   ' }).success).toBe(false)
   })
 })
 

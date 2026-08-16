@@ -260,13 +260,13 @@ describe('ImportBrowserLocalPanel', () => {
     await store.save(makeCanvas('c1', 'My Canvas!'))
     await store.save(makeCanvas('c2', 'My Canvas!'))
 
-    const takenSlugs = new Set<string>()
+    const takenPaths = new Set<string>()
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/canvases')) {
         const { path } = JSON.parse(init?.body as string) as { path: string }
-        if (takenSlugs.has(path)) return jsonResponse({ title: 'exists' }, 409)
-        takenSlugs.add(path)
+        if (takenPaths.has(path)) return jsonResponse({ title: 'exists' }, 409)
+        takenPaths.add(path)
         return jsonResponse({ path })
       }
       return jsonResponse({ ok: true })

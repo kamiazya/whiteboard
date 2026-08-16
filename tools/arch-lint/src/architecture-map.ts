@@ -132,12 +132,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
  * either is its own lane, not this one's.
  */
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
-  // doc-cache.ts imports canvas-store.ts statically; canvas-store.ts closes
-  // the loop with `await import('./doc-cache.js')` at three eviction call
-  // sites — resolved at call time, so no module-eval TDZ risk.
+  // doc-cache.ts imports document-store.ts statically; document-store.ts
+  // closes the loop with `await import('./doc-cache.js')` at three eviction
+  // call sites — resolved at call time, so no module-eval TDZ risk.
   [
-    'packages/mcp-server/src/server/store/canvas-store.ts',
     'packages/mcp-server/src/server/store/doc-cache.ts',
+    'packages/mcp-server/src/server/store/document-store.ts',
   ],
   // ws.ts imports canvas.ts statically (setBroadcastFn); canvas.ts and its
   // live-doc.ts/restore.ts routers close the loop with `await import('../ws.js')` /

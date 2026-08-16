@@ -9,8 +9,8 @@ import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { loadCanvasBranches } from './branches-store.js'
-import { listCanvases, loadCanvas } from './canvas-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -130,9 +130,9 @@ async function collectReferencedFileIds(
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
-  const canvases = await listCanvases(workspaceId)
+  const canvases = await listDocuments(workspaceId)
   for (const { path } of canvases) {
-    const live = await loadCanvas(workspaceId, path)
+    const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
 
     const { branches } = await loadCanvasBranches(workspaceId, path)
@@ -195,8 +195,8 @@ async function collectReferencedFileIds(
 export interface PurgeFilesOptions {
   versionStore?: VersionStore
   // Don't unlink files whose mtime is younger than this many ms. Closes
-  // the upload-but-not-yet-saveCanvas race: routes/files.ts writes the
-  // blob first, the user (or agent) calls saveCanvas later to add the
+  // the upload-but-not-yet-saveDocument race: routes/files.ts writes the
+  // blob first, the user (or agent) calls saveDocument later to add the
   // image element that references it. Without a grace window, GC firing
   // between those two events permanently deletes a file that was about
   // to be referenced. Default 1 hour; tests pass 0 to bypass.
@@ -221,7 +221,7 @@ export async function purgeDanglingFiles(
 ): Promise<PurgeFilesResult> {
   validateWorkspaceId(workspaceId)
   // Hold the workspace write barrier across the collect + unlink pass so
-  // a concurrent saveCanvas / version-save cannot insert a new file
+  // a concurrent saveDocument / version-save cannot insert a new file
   // reference between snapshot and delete and have its file unlinked
   // as "dangling".
   const graceMs = resolveGraceMs(options)
@@ -259,9 +259,9 @@ export async function purgeDanglingFiles(
       try {
         const info = await stat(fullPath)
         // Tombstone delay: a file uploaded just now isn't tied to any
-        // canvas yet, but the user is about to call saveCanvas with the
+        // canvas yet, but the user is about to call saveDocument with the
         // matching image element. Spare freshly-touched files so that
-        // upload → saveCanvas window doesn't lose a legitimate blob.
+        // upload → saveDocument window doesn't lose a legitimate blob.
         if (graceMs > 0 && now - info.mtimeMs < graceMs) continue
         await unlink(fullPath)
         purgedCount += 1

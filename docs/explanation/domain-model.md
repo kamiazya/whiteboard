@@ -39,32 +39,33 @@ backed by more than one representation today. Read
 
 | mode | identity of a canvas | shown to the user |
 |---|---|---|
-| Browser-local | a random UUID, generated at creation | display name, plus a *display slug* derived from the name |
-| Daemon (gallery, editing, sync) | the pair `(workspaceId, slug)` | display name, plus the slug |
-| Daemon (agent/MCP tree) | a ULID `canvasId` plus a `segment` path | alias path derived from segments |
+| Browser-local | a random UUID, generated at creation | display name, plus a *display path* derived from the name |
+| Daemon (gallery, editing, sync) | the pair `(workspaceId, path)` | display name, plus the path |
+| Daemon (agent/MCP tree) | a ULID `documentId` plus a `segment` path | alias path derived from segments |
 
-**Slugs are the canonical user-facing identity** in daemon mode: URLs,
+**Paths are the canonical user-facing identity** in daemon mode: URLs,
 sync, versions, and branches all address a canvas as
-`(workspaceId, slug)`. A slug is assigned at creation (derived
+`(workspaceId, path)`. A path is assigned at creation (derived
 automatically — `untitled`, `untitled-2`, … — since creation asks for no
-name up front) and is currently immutable; whether slugs become renamable
+name up front) and is currently immutable; whether paths become renamable
 is deliberately an open question (see
-[ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md)).
+[ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
+which predates the rename and calls this a *slug* throughout).
 
-Browser-local canvases have no persisted or canonical slug. The
-slug-shaped label under a
+Browser-local canvases have no persisted or canonical path. The
+path-shaped label under a
 card in the browser-local list is **cosmetic**: it is derived from the
 display name on every render, is never stored, and collisions are
 suffixed (`notes`, `notes-2`). It deliberately uses the same character
-set as daemon slugs so that, if browser-local canvases ever gain real
-slugs, the labels users already see can be promoted without changing.
+set as daemon paths so that, if browser-local canvases ever gain real
+paths, the labels users already see can be promoted without changing.
 
 ## One product concept, two daemon-side representations
 
 The daemon currently keeps **two separate stores** that both hold
 "canvases", and they do not see each other:
 
-- The **workspace/slug store** backs everything the web app shows and
+- The **workspace/path store** backs everything the web app shows and
   edits: the gallery, the editor, names, pins, kinds, branches, versions,
   and sync. Its writers are the daemon's HTTP API only.
 - The **OpenCanvas doc store** backs the agent-facing MCP tools
@@ -79,8 +80,8 @@ appear to `wb_document_list`. The only value the two representations share
 is the raw `workspaceId` string, and neither side treats the other's use
 of it as authoritative. This split is a known, recorded state — not an
 accident and not yet a converged design — and the decision record for it,
-including what is settled (slug-canonical identity, single-workspace
-browser-local) and what is still open (slug rename, the convergence
+including what is settled (path-canonical identity, single-workspace
+browser-local) and what is still open (path rename, the convergence
 path), is [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md).
 
 ## Practical consequences today
@@ -89,11 +90,11 @@ path), is [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md
   through the same surface (for example, an agent driving the daemon's
   HTTP API, or a human using the tree view over `/api/v1` documents).
 - The workspace selector in the daemon gallery lists workspaces from the
-  workspace/slug store; the tree view reads the OpenCanvas store. A
+  workspace/path store; the tree view reads the OpenCanvas store. A
   workspace that exists in only one of the two renders as missing or
   empty in the other.
 - Browser-local canvases cross into daemon mode only by an explicit,
-  user-initiated copy, which re-creates the canvas under a new slug —
+  user-initiated copy, which re-creates the canvas under a new path —
   no identifier carries over.
 
 ← Back to [documentation home](../)

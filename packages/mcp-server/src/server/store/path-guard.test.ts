@@ -19,7 +19,7 @@ async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
     return {
       ...actual,
       validateWorkspaceId: (value: string) => value,
-      validateSlug: (value: string) => value,
+      validateDocumentPath: (value: string) => value,
       validateVersionId: (value: string) => value,
     }
   })

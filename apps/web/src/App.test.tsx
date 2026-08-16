@@ -520,7 +520,7 @@ describe('App reconnect-target persistence', () => {
     const saved = createUserSettingsStore().load()
     expect(saved.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(saved.storage.lastConnectedWorkspaceId).toBe('w1')
-    expect(saved.storage.lastConnectedSlug).toBe('main')
+    expect(saved.storage.lastConnectedPath).toBe('main')
   })
 
   it('never persists the bootstrapToken alongside the connection target', async () => {

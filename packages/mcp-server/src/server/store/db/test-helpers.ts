@@ -84,7 +84,7 @@ export async function createIsolatedDb(
   return {
     db,
     async dispose() {
-      // Drain registered dispose hooks (e.g. canvas-store's pending
+      // Drain registered dispose hooks (e.g. document-store's pending
       // auto-compact timers/in-flight compactions) before removing the cache
       // entry or destroying the driver, matching production's
       // closeDb()/clearDbCache() ordering. Removing the cache entry first

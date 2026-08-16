@@ -1,5 +1,5 @@
 import type { LoroDoc } from 'loro-crdt'
-import { loadCanvas, saveCanvas } from './canvas-store.js'
+import { loadDocument, saveDocument } from './document-store.js'
 
 // key: "workspaceId/path"
 //
@@ -34,7 +34,7 @@ export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc
     touch(key, existing)
     return existing
   }
-  const doc = await loadCanvas(workspaceId, path)
+  const doc = await loadDocument(workspaceId, path)
   touch(key, doc)
   return doc
 }
@@ -47,7 +47,7 @@ export async function applyAndPersist(
   const doc = await getDoc(workspaceId, path)
   const prevVV = doc.version()
   updater(doc)
-  await saveCanvas(workspaceId, path, doc, { overwrite: true })
+  await saveDocument(workspaceId, path, doc, { overwrite: true })
   // Return the incremental update that was applied so it can be broadcast over WS.
   return doc.export({ mode: 'update', from: prevVV })
 }

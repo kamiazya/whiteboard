@@ -7,19 +7,19 @@ import {
   type DeleteCanvasResponse,
   type ListCanvasesResponse,
   type ListWorkspacesResponse,
-  type RenameCanvasSlugResponse,
-  renameCanvasSlugRequestSchema,
+  type RenameDocumentPathResponse,
+  renameDocumentPathRequestSchema,
 } from '../../../shared/api-contracts/canvas.js'
 import { getLogger } from '../../log.js'
 import {
   ConflictError,
-  deleteCanvas,
-  listCanvases,
+  deleteDocument,
+  listDocuments,
   listWorkspaces,
-  renameCanvasSlug,
-  saveCanvas,
+  renameDocumentPath,
+  saveDocument,
   workspaceExists,
-} from '../../store/canvas-store.js'
+} from '../../store/document-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
@@ -72,7 +72,7 @@ export function createWorkspacesRouter() {
       if (!(await workspaceExists(workspaceId))) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }
-      const canvases = await listCanvases(workspaceId)
+      const canvases = await listDocuments(workspaceId)
       const response: ListCanvasesResponse = { canvases }
       return c.json(response)
     } catch (err) {
@@ -111,14 +111,14 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
+      await saveDocument(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
       const response: CreateCanvasResponse = { path }
       return c.json(response)
     } catch (err) {
       if (err instanceof ConflictError) {
         return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
-      getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
+      getLogger('canvas').error({ err: err as Error }, 'saveDocument failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' }, 500)
     }
   })
@@ -132,7 +132,7 @@ export function createWorkspacesRouter() {
     [],
     async (c, workspaceId, path) => {
       try {
-        const deleted = await deleteCanvas(workspaceId, path)
+        const deleted = await deleteDocument(workspaceId, path)
         if (!deleted) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
@@ -141,7 +141,7 @@ export function createWorkspacesRouter() {
       } catch (err) {
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('canvas').error({ err: err as Error }, 'deleteCanvas failed unexpectedly')
+        getLogger('canvas').error({ err: err as Error }, 'deleteDocument failed unexpectedly')
         return c.json({ title: 'Failed to delete canvas.' }, 500)
       }
     },
@@ -164,32 +164,32 @@ export function createWorkspacesRouter() {
       if (raw === null) {
         return c.json({ title: 'JSON body required' }, 400)
       }
-      const parsed = renameCanvasSlugRequestSchema.safeParse(raw)
+      const parsed = renameDocumentPathRequestSchema.safeParse(raw)
       if (!parsed.success) {
         return c.json({ title: 'path is required' }, 400)
       }
-      const newSlug = parsed.data.path
+      const newPath = parsed.data.path
       try {
-        validateDocumentPath(newSlug)
+        validateDocumentPath(newPath)
       } catch (err) {
         const body = validationErrorBody(err)
         if (body) return c.json({ title: body.message }, 400)
         throw err
       }
       try {
-        const result = await renameCanvasSlug(workspaceId, path, newSlug)
+        const result = await renameDocumentPath(workspaceId, path, newPath)
         if (!result) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
-        const response: RenameCanvasSlugResponse = { path: newSlug }
+        const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {
         if (err instanceof ConflictError) {
-          return c.json({ title: `Canvas "${newSlug}" already exists` }, 409)
+          return c.json({ title: `Canvas "${newPath}" already exists` }, 409)
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('canvas').error({ err: err as Error }, 'renameCanvasSlug failed unexpectedly')
+        getLogger('canvas').error({ err: err as Error }, 'renameDocumentPath failed unexpectedly')
         return c.json({ title: 'Failed to rename canvas.' }, 500)
       }
     },

@@ -32,7 +32,7 @@ const { createCanvasRouter } = await import('../canvas.js')
 // test does not intend to exercise.
 await import('../ws.js')
 
-describe('restore targetSlug-overwrite vs delete race', () => {
+describe('restore targetPath-overwrite vs delete race', () => {
   beforeEach(() => {
     clearCache()
   })
@@ -76,7 +76,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       body: targetDoc.export({ mode: 'update', from: tvv0 }),
     })
 
-    // Stall the restore route's getDoc(targetSlug) call so a DELETE of the
+    // Stall the restore route's getDoc(targetPath) call so a DELETE of the
     // target can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
@@ -100,7 +100,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+        body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
       },
     )
 
@@ -139,7 +139,7 @@ describe('restore in-place vs delete race', () => {
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
-    // Single canvas with a saved version to restore onto itself (no targetSlug).
+    // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
     const sourceList = sourceDoc.getMovableList('elements')

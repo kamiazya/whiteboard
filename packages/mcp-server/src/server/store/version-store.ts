@@ -15,7 +15,7 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { getDocumentIdByPath, upsertCanvasRow } from './db/upsert-workspace.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -102,7 +102,7 @@ function versionsBlobDir(workspaceId: string): string {
   return assertPathWithinDir(dir, blobsRoot(), 'version path')
 }
 
-// Exported so canvas-store's deleteCanvas can unlink a canvas's version
+// Exported so document-store's deleteDocument can unlink a canvas's version
 // thumbnails without duplicating this path join.
 export function thumbnailPath(workspaceId: string, id: string): string {
   validateVersionId(id)
@@ -277,7 +277,7 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await dbReady()
-    const documentId = await getCanvasIdBySlug(db, workspaceId, path)
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return []
     const rows = await db
       .selectFrom('versions')
@@ -341,7 +341,7 @@ export class FileVersionStore implements VersionStore {
     validateBranchName(newName)
     if (oldName === newName) return 0
     const db = await dbReady()
-    const documentId = await getCanvasIdBySlug(db, workspaceId, path)
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return 0
     const result = await db
       .updateTable('versions')
@@ -359,7 +359,7 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await dbReady()
-    const documentId = await getCanvasIdBySlug(db, workspaceId, path)
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
@@ -433,7 +433,7 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await dbReady()
-    const documentId = await getCanvasIdBySlug(db, workspaceId, path)
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return null
     const row = await db
       .selectFrom('versions')

@@ -69,9 +69,9 @@ export function useCanvasNames({
   // caller can decide how to react (the local-mode rename path is entirely
   // separate — it calls the host page's onRenameCanvas instead).
   const renameCanvas = useCallback(
-    async (targetSlug: string, name: string): Promise<boolean> => {
+    async (targetPath: string, name: string): Promise<boolean> => {
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetSlug, 'name'), {
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetPath, 'name'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),
@@ -91,9 +91,9 @@ export function useCanvasNames({
   // Toggle pin state and replace local state with the server response.
   // This intentionally avoids optimistic UI because rollback is not worth the added complexity.
   const togglePin = useCallback(
-    async (targetSlug: string, pinned: boolean) => {
+    async (targetPath: string, pinned: boolean) => {
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetSlug, 'pin'), {
+        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetPath, 'pin'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pinned }),

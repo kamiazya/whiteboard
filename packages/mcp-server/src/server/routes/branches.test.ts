@@ -105,13 +105,13 @@ describe('POST /api/workspaces/:sid/canvases/:path/branches', () => {
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.path/branches', {
+    const badPath = await app.request('/api/workspaces/s1/canvases/bad.path/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature-x' }),
     })
-    expect(badSlug.status).toBe(400)
-    await expect(badSlug.json()).resolves.toEqual({
+    expect(badPath.status).toBe(400)
+    await expect(badPath.json()).resolves.toEqual({
       error: 'invalid_document_path',
       message:
         'Invalid path "bad.path": segment "bad.path" contains \'.\' (only letters, digits, and \'-\' are allowed)',
@@ -233,9 +233,9 @@ describe('GET /api/workspaces/:sid/canvases/:path/branches', () => {
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.path/branches')
-    expect(badSlug.status).toBe(400)
-    await expect(badSlug.json()).resolves.toEqual({
+    const badPath = await app.request('/api/workspaces/s1/canvases/bad.path/branches')
+    expect(badPath.status).toBe(400)
+    await expect(badPath.json()).resolves.toEqual({
       error: 'invalid_document_path',
       message:
         'Invalid path "bad.path": segment "bad.path" contains \'.\' (only letters, digits, and \'-\' are allowed)',

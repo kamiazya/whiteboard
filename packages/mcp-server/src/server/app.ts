@@ -74,9 +74,9 @@ import {
   setHead as setHeadPersist,
   updateBranchTip,
 } from './store/branches-store.js'
-import { canvasExists, saveCanvas } from './store/canvas-store.js'
 import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
+import { documentExists, saveDocument } from './store/document-store.js'
 import { FileVersionStore } from './store/version-store.js'
 import { withWorkspaceWriteLock } from './store/workspace-lock.js'
 
@@ -468,7 +468,7 @@ export function createApp(options: AppOptions) {
         // its current position before a branch switch.
         getCurrentFrontiers: async (sid, path) => {
           const cached = peekDoc(sid, path)
-          if (!cached && !(await canvasExists(sid, path))) {
+          if (!cached && !(await documentExists(sid, path))) {
             return null
           }
           const doc = cached ?? (await getDoc(sid, path))
@@ -493,7 +493,7 @@ export function createApp(options: AppOptions) {
           const prevVV = doc.version()
           doc.import(clone.export({ mode: 'snapshot' }))
           doc.commit()
-          await saveCanvas(sid, path, doc, { overwrite: true })
+          await saveDocument(sid, path, doc, { overwrite: true })
           const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
           if (update.byteLength > 0) {
             broadcastLoroUpdate(sid, path, update)
@@ -520,7 +520,7 @@ export function createApp(options: AppOptions) {
         // reconcile+save) runs inside one workspace-lock hold. getDoc(sid,
         // path) alone is unlocked, so a concurrent rename/delete that runs
         // its whole lock-protected section between this unlocked read and
-        // the later saveCanvas() calls below would find no row left at
+        // the later saveDocument() calls below would find no row left at
         // this path and silently insert a phantom canvas (or resurrect
         // deleted content) instead of erroring or landing on the renamed
         // row. updateBranchTip/setHeadPersist/deleteBranch already acquire
@@ -669,7 +669,7 @@ export function createApp(options: AppOptions) {
               const prevVV = liveDoc.version()
               liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
               liveDoc.commit()
-              await saveCanvas(sid, path, liveDoc, { overwrite: true })
+              await saveDocument(sid, path, liveDoc, { overwrite: true })
               const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
               if (update.byteLength > 0) {
                 broadcastLoroUpdate(sid, path, update)
@@ -694,7 +694,7 @@ export function createApp(options: AppOptions) {
                 const prevVV = liveDoc.version()
                 liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
                 liveDoc.commit()
-                await saveCanvas(sid, path, liveDoc, { overwrite: true })
+                await saveDocument(sid, path, liveDoc, { overwrite: true })
                 const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
                 if (update.byteLength > 0) {
                   broadcastLoroUpdate(sid, path, update)

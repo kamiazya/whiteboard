@@ -11,8 +11,8 @@ import {
   requiredScopesForClientTextMessage,
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
-import { saveCanvas, workspaceExists } from '../store/canvas-store.js'
 import { evictDoc, getDoc } from '../store/doc-cache.js'
+import { saveDocument, workspaceExists } from '../store/document-store.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { setBroadcastFn } from './canvas.js'
@@ -112,7 +112,7 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
 }
 
 // Test-only completion signal for the WS persistence path. Firing strictly
-// after `saveCanvas` resolves lets a real-socket test await a deterministic
+// after `saveDocument` resolves lets a real-socket test await a deterministic
 // event instead of polling the filesystem/store — a no-op in production
 // since nothing ever registers a callback.
 let onPersistedForTests: ((workspaceId: string, path: string) => void) | undefined
@@ -238,7 +238,7 @@ export async function handleWsUpgrade(
   // "Synced" while editing into memory the next restart discards. Stale
   // pairings make this reachable in practice: a browser keeps its paired
   // workspace id in localStorage, and ids outlive the install that minted
-  // them. Workspace-level only — an unknown SLUG in a registered workspace
+  // them. Workspace-level only — an unknown path in a registered workspace
   // keeps the lazy empty doc, which is how opening a just-deleted canvas
   // degrades. 4404 because RFC 6455 reserves 4000-4999 for application use
   // and no registered close code means "not found".
@@ -373,7 +373,7 @@ export async function handleWsUpgrade(
     try {
       // Resolve the doc AND persist it inside one workspace-lock hold. getDoc()
       // alone is unlocked, so a rename/delete that runs its whole lock-protected
-      // section between an unlocked read here and saveCanvas()'s own later lock
+      // section between an unlocked read here and saveDocument()'s own later lock
       // acquisition would find no row left at this path and silently insert a
       // brand-new phantom canvas back at it (or resurrect deleted content).
       // Sharing the lock across the read and the write closes that window —
@@ -409,7 +409,7 @@ export async function handleWsUpgrade(
           return null
         }
 
-        await saveCanvas(workspaceId, path, doc, { overwrite: true })
+        await saveDocument(workspaceId, path, doc, { overwrite: true })
         return doc
       })
       if (currentDoc === null) return
@@ -440,10 +440,10 @@ export async function handleWsUpgrade(
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
         })
     } catch (err: unknown) {
-      // A failure here (loadCanvas via getDoc, or saveCanvas) is a
+      // A failure here (loadDocument via getDoc, or saveDocument) is a
       // server-side/state problem rather than client misbehavior. If the doc
       // was already mutated in-memory by a successful import above but
-      // saveCanvas then rejected, evict the cache entry so the next getDoc
+      // saveDocument then rejected, evict the cache entry so the next getDoc
       // reloads from disk instead of silently keeping the unpersisted
       // mutation live. The sender's local doc still has the import applied,
       // so leaving the socket open would let it keep building on an edit the

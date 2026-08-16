@@ -66,7 +66,7 @@ const storageSettingsSchema = z
     // this is UI-hint state (not an access boundary), so it is not enforced
     // by a cross-field refine the way daemonConnectionPayloadSchema does.
     lastConnectedWorkspaceId: z.string().optional(),
-    lastConnectedSlug: z.string().optional(),
+    lastConnectedPath: z.string().optional(),
     // Every daemon baseUrl a probe has actually confirmed, most recent
     // first (see daemon-discovery.ts's MRU helper). Same http(s)-only
     // constraint as localDaemonBaseUrl above and for the same reason:

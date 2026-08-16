@@ -88,17 +88,11 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   `loroCanvases`/`canvasFiles`. The biggest by count and the one the standing
   rule below is actually for: fix it where you already are, never as a sweep.
   `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
-- `canvas-store.ts` (mcp-server's daemon-side file/db store) — `CanvasDocStore`
-  and `canvas-doc-io.ts` are done. The file itself, its `saveCanvas`/
-  `loadCanvas`/`canvasExists`/`deleteCanvas`/`compactCanvas`/`listCanvases`
-  exports and its `'canvas-store'` log scope are not; ~29 files import it.
-- The `slug` tail the `slug` → `path` rename left behind. The column, the
-  storage layer and the URLs moved; identifiers did not, so `derive-new-canvas-
-  path.ts` still exports `deriveNewCanvasSlug`. Two of these are STORED or
-  PUBLISHED shapes and cost more than a rename: `targetSlug` (a restore
-  request field, so apps/web moves in the same increment) and
-  `lastConnectedSlug` (a persisted user-settings field — renaming drops the
-  hint for existing users, which is acceptable for a UI hint).
+- The blob tree's `canvas/` path segment
+  (`{dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro`), which
+  `document-store.ts` and `file-gc-sweeper.ts` both hardcode. Left because
+  moving it means walking every workspace's blob tree at boot — a
+  migration-bearing increment, not a rename.
 - The `@kamiazya/whiteboard-canvas-{model,codec,ports,workspace}` package
   names — all four `private`, so nothing outside the repo breaks; `render`
   and `viewer` are arguably correct (they are about the spatial scene) and
@@ -106,6 +100,12 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   names a package by string: tsconfig paths, the vitest project list,
   `tools/arch-lint`'s `architecture-map.ts`, `.claude/rules/package-*.md`,
   and `architecture-map.md`'s own table.
+
+`slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
+is what keeps it retired — the one part of this rule that could stop being
+prose. Adding a word there is only right when it has no legitimate meaning
+left; `canvas` will never qualify, because it is correct for the spatial
+surface and wrong only as the container noun.
 
 MCP tool names (ADR-0009 point 5) are DONE, along with point 4's collapse of
 the two exporters into a kind-branching `wb_document_get`. The registered

@@ -221,7 +221,7 @@ describe('DaemonDetectedBanner', () => {
         ...current.storage,
         localDaemonBaseUrl: 'http://127.0.0.1:3099',
         lastConnectedWorkspaceId: 'w1',
-        lastConnectedSlug: 'main',
+        lastConnectedPath: 'main',
       },
     }))
     render(
@@ -241,7 +241,7 @@ describe('DaemonDetectedBanner', () => {
     const saved = store.load()
     expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
     expect(saved.storage.lastConnectedWorkspaceId).toBeUndefined()
-    expect(saved.storage.lastConnectedSlug).toBeUndefined()
+    expect(saved.storage.lastConnectedPath).toBeUndefined()
   })
 
   it('does not render "Forget this daemon" when no target has ever been persisted', async () => {

@@ -4,7 +4,7 @@
  * package-canvas-workspace.md's "LoroDoc spatial layout"). Mirrors
  * apps/web/src/test-utils/browser-local-canvas.ts in spirit: build via the
  * real writeSpatialCanvas bridge rather than poking at LoroDoc internals, so
- * a fixture never drifts from what saveCanvas actually persists.
+ * a fixture never drifts from what saveDocument actually persists.
  *
  * The legacy 'elements' movable-list shape (see file-gc.test.ts's
  * makeDocWithImage) is retired but still guarded additively by file-gc's

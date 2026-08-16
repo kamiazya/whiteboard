@@ -1,7 +1,7 @@
 import { problemDetailsErrorSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { MutableRefObject } from 'react'
 import { useRef, useState } from 'react'
-import { deriveNewCanvasSlug } from '../../lib/derive-new-canvas-path.js'
+import { deriveNewCanvasPath } from '../../lib/derive-new-canvas-path.js'
 import type { CanvasInfo } from './types'
 
 interface UseCreateCanvasOptions {
@@ -62,7 +62,7 @@ export function useCreateCanvas({
         const scoped = canvases
           .filter((c) => c.path.startsWith(prefix))
           .map((c) => c.path.slice(prefix.length))
-        const target = `${prefix}${deriveNewCanvasSlug(scoped)}`
+        const target = `${prefix}${deriveNewCanvasPath(scoped)}`
         const res = await daemonFetch(
           `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
           {

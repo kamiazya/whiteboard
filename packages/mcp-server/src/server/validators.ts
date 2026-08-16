@@ -6,10 +6,10 @@ import {
   validateBrowserExternalUrl,
 } from '../shared/external-url-policy.js'
 
-// The rule itself lives in canvas-model so the shared layer and this
-// validator cannot drift apart; what stays here is only how a rejection is
-// explained, which the schema's single message cannot do per cause.
-const SAFE_SLUG_SEGMENT = DOCUMENT_PATH_SEGMENT_PATTERN
+// The path-segment rule itself is imported from canvas-model so the shared
+// layer and this validator cannot drift apart; what stays here is only how a
+// rejection is explained, which the schema's single message cannot do per
+// cause.
 const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
 const SAFE_BRANCH_NAME = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
@@ -64,7 +64,7 @@ async function defaultExternalUrlLookup(
 
 const externalUrlLookup = defaultExternalUrlLookup
 
-function diagnoseSlugSegment(segment: string): string | null {
+function diagnosePathSegment(segment: string): string | null {
   if (segment === '') {
     return 'empty segment (leading/trailing/consecutive "/" are not allowed)'
   }
@@ -74,7 +74,7 @@ function diagnoseSlugSegment(segment: string): string | null {
   }
   if (segment.startsWith('-')) return 'leading hyphen is not allowed'
   if (segment.endsWith('-')) return 'trailing hyphen is not allowed'
-  if (!SAFE_SLUG_SEGMENT.test(segment)) {
+  if (!DOCUMENT_PATH_SEGMENT_PATTERN.test(segment)) {
     return 'contains invalid character (only ASCII letters, digits, and "-" are allowed)'
   }
   return null
@@ -132,7 +132,7 @@ export function validateDocumentPath(path: string): string {
     throw new ValidationError('invalid_document_path', 'Invalid path: path is empty')
   }
   for (const segment of path.split('/')) {
-    const reason = diagnoseSlugSegment(segment)
+    const reason = diagnosePathSegment(segment)
     if (reason !== null) {
       throw new ValidationError(
         'invalid_document_path',

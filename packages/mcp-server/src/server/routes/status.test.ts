@@ -41,7 +41,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/client-count', () => {
     const badSession = await app.request('/api/w/bad.sid/canvas/canvas-a/client-count')
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/w/s1/canvas/bad.path/client-count')
-    expect(badSlug.status).toBe(400)
+    const badPath = await app.request('/api/w/s1/canvas/bad.path/client-count')
+    expect(badPath.status).toBe(400)
   })
 })

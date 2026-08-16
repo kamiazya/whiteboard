@@ -19,8 +19,8 @@ import {
   updateCanvas,
 } from '../lib/daemon-api-client.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
-import { deriveCopySlug } from '../lib/derive-copy-path.js'
-import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-path.js'
+import { deriveCopyPath } from '../lib/derive-copy-path.js'
+import { deriveNewCanvasPath } from '../lib/derive-new-canvas-path.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
@@ -106,7 +106,7 @@ export function DaemonIndexPage({
   // Which card's Duplicate action is currently in flight — disables just that
   // card's button (a second click during the async read-then-write must not
   // start a second copy) rather than a page-wide boolean.
-  const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null)
+  const [duplicatingPath, setDuplicatingPath] = useState<string | null>(null)
   // Disables both create controls while one is in flight, so a second press cannot send another
   // POST deriving the identical path from the same rows. The `disabled` attribute is the whole
   // mechanism — an early `if (creating) return` inside the handler was also tried and removed: it
@@ -204,7 +204,7 @@ export function DaemonIndexPage({
       setCreating(true)
       setCreateError(null)
       try {
-        const path = deriveNewCanvasSlug(rows.map((r) => r.path))
+        const path = deriveNewCanvasPath(rows.map((r) => r.path))
         const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, path, kind)
         onOpenCanvas(workspaceAtStart, created.path)
       } catch (err) {
@@ -228,13 +228,13 @@ export function DaemonIndexPage({
   // browser-local controller's read-then-write duplicate flow rather than
   // requiring a dedicated server-side "duplicate" endpoint.
   const handleDuplicate = useCallback(
-    async (sourceSlug: string) => {
-      if (duplicatingSlug !== null) return
+    async (sourcePath: string) => {
+      if (duplicatingPath !== null) return
       const workspaceAtStart = selectedWorkspace
       if (!workspaceAtStart) return
-      setDuplicatingSlug(sourceSlug)
+      setDuplicatingPath(sourcePath)
       setDuplicateError(null)
-      const sourceRow = rows.find((r) => r.path === sourceSlug)
+      const sourceRow = rows.find((r) => r.path === sourcePath)
       // The whole operation targets workspaceAtStart, not whatever the user
       // has switched the selector to by the time each await resolves — a
       // duplicate started in one workspace must finish in that SAME
@@ -246,14 +246,14 @@ export function DaemonIndexPage({
           daemonFetch,
           daemonBaseUrl,
           workspaceAtStart,
-          sourceSlug,
+          sourcePath,
         )
-        const existingSlugs = new Set(rows.map((r) => r.path))
-        const newSlug = deriveCopySlug(sourceSlug, existingSlugs)
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newSlug)
+        const existingPaths = new Set(rows.map((r) => r.path))
+        const newPath = deriveCopyPath(sourcePath, existingPaths)
+        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newPath)
         await updateCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
-        const newName = deriveCopyName(sourceRow?.displayName ?? sourceSlug, existingNames)
+        const newName = deriveCopyName(sourceRow?.displayName ?? sourcePath, existingNames)
         await setCanvasName(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, newName)
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
@@ -262,10 +262,10 @@ export function DaemonIndexPage({
         if (selectedWorkspaceRef.current !== workspaceAtStart) return
         setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
       } finally {
-        setDuplicatingSlug((current) => (current === sourceSlug ? null : current))
+        setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingSlug],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingPath],
   )
 
   const [pendingDelete, setPendingDelete] = useState<{
@@ -436,7 +436,7 @@ export function DaemonIndexPage({
                   <button
                     type="button"
                     aria-label={`Duplicate ${row.displayName}`}
-                    disabled={duplicatingSlug === row.path}
+                    disabled={duplicatingPath === row.path}
                     onClick={(event) => {
                       // Prevents the click from bubbling to the wrapping open-button.
                       event.stopPropagation()

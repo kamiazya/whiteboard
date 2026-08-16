@@ -46,15 +46,15 @@ vi.mock('../export/headless-export.js', () => ({
   exportCanvasHeadless: (args: MockHeadlessArgs) => mockExportCanvasHeadless(args),
 }))
 
-// Default canvasExists to true so existing tests that already construct a
+// Default documentExists to true so existing tests that already construct a
 // route + mock the headless renderer keep passing without each having to
 // stub the metadata-DB lookup. Missing-canvas tests opt out by overriding
 // the mock per-case.
 const mockCanvasExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
   async () => true,
 )
-vi.mock('../store/canvas-store.js', () => ({
-  canvasExists: (workspaceId: string, path: string) => mockCanvasExists(workspaceId, path),
+vi.mock('../store/document-store.js', () => ({
+  documentExists: (workspaceId: string, path: string) => mockCanvasExists(workspaceId, path),
 }))
 
 // Spies on the real implementation so most tests exercise genuine random
@@ -162,7 +162,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/export - error handling', () => 
   })
 
   it('returns 404 with canvas_not_found when the canvas does not exist', async () => {
-    // Headless rendering does NOT verify the canvas exists: getDoc / loadCanvas
+    // Headless rendering does NOT verify the canvas exists: getDoc / loadDocument
     // return an empty LoroDoc on cache miss, so a typo would otherwise
     // silently produce a blank PNG. Surfaced as 404 unconditionally now that
     // there is only one rendering path.
@@ -382,10 +382,10 @@ describe('POST /api/w/:workspaceId/canvas/:path/export - error handling', () => 
     })
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/w/s1/canvas/bad.path/export', {
+    const badPath = await app.request('/api/w/s1/canvas/bad.path/export', {
       method: 'POST',
     })
-    expect(badSlug.status).toBe(400)
+    expect(badPath.status).toBe(400)
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 

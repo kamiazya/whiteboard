@@ -40,7 +40,7 @@ const { createApp } = await import('./app.js')
 const { clearCache, getDoc } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
-const { saveCanvas } = await import('./store/canvas-store.js')
+const { saveDocument } = await import('./store/document-store.js')
 const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
 
 function createRuntimeOptions() {
@@ -95,7 +95,7 @@ describe('performMerge vs rename race', () => {
     const el1 = list.insertContainer(0, new LoroMap())
     el1.set('id', 'rect-1')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     // feature's tip freezes the rect-1-only state.
     const featureTipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
@@ -113,11 +113,11 @@ describe('performMerge vs rename race', () => {
     // Add rect-2 directly on top so main's empty tip (== "current live doc")
     // diverges from feature's frozen rect-1-only tip. Merging feature into
     // main (source wins) will reconcile the live doc back down to rect-1
-    // and persist it, exercising performMerge's getDoc -> saveCanvas span.
+    // and persist it, exercising performMerge's getDoc -> saveDocument span.
     const el2 = list.insertContainer(1, new LoroMap())
     el2.set('id', 'rect-2')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
+    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
     // Stall performMerge's getDoc() call so a path rename can be fired
     // while the merge request is paused mid-flight, matching the real

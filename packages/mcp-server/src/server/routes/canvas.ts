@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/canvas-store.js'
+import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/document-store.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas/_shared.js'
 import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './canvas/auto-version.js'
@@ -45,7 +45,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     setAutoVersionTrigger?.(triggerAutoVersion)
   })
 
-  // Auto-compact debounce: every successful saveCanvas reschedules a per-
+  // Auto-compact debounce: every successful saveDocument reschedules a per-
   // canvas compaction. The 30s default lets active editing sessions burst
   // without thrashing the op-log; once the user pauses, the shallow-snapshot
   // runs in the background. Tests can override the trigger via

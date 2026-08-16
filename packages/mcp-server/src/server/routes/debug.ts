@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { isAuthorized } from '../security/bearer-token.js'
-import { listCanvases, listWorkspaces, loadCanvas } from '../store/canvas-store.js'
 import { countAliveNodes, countLegacyTombstones } from '../store/count-alive-nodes.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
+import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
 
 type CanvasInfo = {
   path: string
@@ -19,7 +19,7 @@ type WorkspaceInfo = {
 
 async function summarizeCanvas(workspaceId: string, path: string): Promise<CanvasInfo> {
   const cached = peekDoc(workspaceId, path)
-  const doc = cached ?? (await loadCanvas(workspaceId, path))
+  const doc = cached ?? (await loadDocument(workspaceId, path))
   const visibleElements = countAliveNodes(doc)
   const tombstones = countLegacyTombstones(doc)
   return {
@@ -56,7 +56,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
     const workspaces = await listWorkspaces()
     const workspaceInfos: WorkspaceInfo[] = await Promise.all(
       workspaces.map(async ({ workspaceId }) => {
-        const canvases = await listCanvases(workspaceId)
+        const canvases = await listDocuments(workspaceId)
         const canvasInfos = await Promise.all(
           canvases.map(({ path }) => summarizeCanvas(workspaceId, path)),
         )

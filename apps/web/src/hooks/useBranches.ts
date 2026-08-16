@@ -31,7 +31,7 @@ export type BranchesState = CanvasBranchesState
 export type MergeResult = MergeResponse
 
 // ── URL builder ──
-// Slugs can contain "/", so always encode them.
+// Paths can contain "/", so always encode them.
 export function buildBranchUrls(
   workspaceId: string,
   path: string,
@@ -42,8 +42,8 @@ export function buildBranchUrls(
   stats: (name: string) => string
   merge: (source: string) => string
 } {
-  const safeSlug = encodeURIComponent(path)
-  const base = `/api/workspaces/${workspaceId}/canvases/${safeSlug}`
+  const safePath = encodeURIComponent(path)
+  const base = `/api/workspaces/${workspaceId}/canvases/${safePath}`
   return {
     list: `${base}/branches`,
     head: `${base}/head`,
@@ -233,7 +233,13 @@ export function useBranches(
   // Reset synchronously during render when the canvas changes — an effect
   // would leave one frame where consumers that don't check `loading` see the
   // PREVIOUS canvas's branches/head.
-  const canvasKey = `${workspaceId} ${path}`
+  // A literal NUL as the separator, written as an escape: neither a workspace
+  // id nor a document path can contain one, so the two halves cannot collide
+  // the way a `/` or `:` separator would. Spelled `\0` because a raw NUL byte
+  // in the source makes every tool treat this file as binary — grep reports
+  // "binary file matches" and prints nothing, which is how a stale name in
+  // here survived a repo-wide sweep.
+  const canvasKey = `${workspaceId}\0${path}`
   const [prevCanvasKey, setPrevCanvasKey] = useState(canvasKey)
   if (prevCanvasKey !== canvasKey) {
     setPrevCanvasKey(canvasKey)

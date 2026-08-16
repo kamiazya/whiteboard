@@ -34,7 +34,7 @@ export interface DaemonFileAdapterOptions {
    * the id alphabet overlaps the path charset, so an unknown ref is
    * treated as a legacy path reference.
    */
-  readonly resolveRefSlug?: (ref: string) => string | undefined
+  readonly resolveRefPath?: (ref: string) => string | undefined
 }
 
 export function createDaemonFileAdapter({
@@ -42,7 +42,7 @@ export function createDaemonFileAdapter({
   daemonBaseUrl,
   workspaceId,
   path,
-  resolveRefSlug,
+  resolveRefPath,
 }: DaemonFileAdapterOptions): CanvasFileAdapter {
   const canvasPath = (target: string) =>
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/canvas/${encodeURIComponent(target)}`
@@ -52,7 +52,7 @@ export function createDaemonFileAdapter({
 
     async loadDocument(ref) {
       try {
-        const target = resolveRefSlug?.(ref) ?? ref
+        const target = resolveRefPath?.(ref) ?? ref
         const res = await daemonFetch(`${canvasPath(target)}/snapshot`)
         if (!res.ok) return undefined
         const doc = new Loro()

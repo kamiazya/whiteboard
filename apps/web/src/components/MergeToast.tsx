@@ -78,7 +78,7 @@ export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): 
 
   const {
     workspaceId: mergeWorkspaceId,
-    path: mergeSlug,
+    path: mergePath,
     sourceName,
     newCount,
     changedCount,
@@ -99,7 +99,7 @@ export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): 
       const res = await fetchFn(
         canvasesApiUrl(
           mergeWorkspaceId,
-          mergeSlug,
+          mergePath,
           `versions/${encodeURIComponent(preMergeVersionId)}/restore`,
         ),
         { method: 'POST' },
@@ -114,12 +114,12 @@ export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): 
       log.error('restore request failed', {
         status: res.status,
         workspaceId: mergeWorkspaceId,
-        path: mergeSlug,
+        path: mergePath,
       })
       setUndoError(message)
     } catch (err) {
       // Keep the toast (and its retry affordance) visible; the restore did not happen.
-      log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, path: mergeSlug })
+      log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, path: mergePath })
       setUndoError(safeErrorCopy(err, 'Undo failed. Try again.'))
     } finally {
       setUndoing(false)

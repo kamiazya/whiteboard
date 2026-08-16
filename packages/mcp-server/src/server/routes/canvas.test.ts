@@ -5,7 +5,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   deleteCanvasResponseSchema,
-  renameCanvasSlugResponseSchema,
+  renameDocumentPathResponseSchema,
   updateCanvasResponseSchema,
 } from '../../shared/api-contracts/canvas.js'
 import { withTempDataDir } from './_test-helpers.js'
@@ -32,7 +32,7 @@ vi.mock('../store/doc-cache.js', async () => {
 })
 
 const { clearCache, peekDoc, getDoc } = await import('../store/doc-cache.js')
-const { saveCanvas } = await import('../store/canvas-store.js')
+const { saveDocument } = await import('../store/document-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { setBroadcastFn } = await import('./canvas/_shared.js')
 
@@ -48,7 +48,7 @@ describe('GET /api/workspaces', () => {
   })
 
   it('returns the canonical workspace list with workspaceId entries', async () => {
-    await saveCanvas('workspace-a', 'a', new LoroDoc())
+    await saveDocument('workspace-a', 'a', new LoroDoc())
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces')
 
@@ -100,8 +100,8 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
-  it('returns 500 with Problem Details title when saveCanvas fails unexpectedly', async () => {
-    // Block the canvas blob directory with a file so saveCanvas throws a
+  it('returns 500 with Problem Details title when saveDocument fails unexpectedly', async () => {
+    // Block the canvas blob directory with a file so saveDocument throws a
     // non-ConflictError, exercising the catch-all 500 branch (mutation-check
     // guard for the 400 -> 500 change).
     await mkdir(join(tmp.dir, 'blobs', 'ws1'), { recursive: true })
@@ -363,7 +363,7 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:path', () => {
   })
 
   it('returns 200 { ok: true }, parses with deleteCanvasResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
     const app = createCanvasRouter()
 
     const res = await app.request('/api/workspaces/session1/canvases/canvas-a', {
@@ -405,18 +405,18 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:path', () => {
     expect(badWs.status).toBe(400)
     expect(typeof ((await badWs.json()) as { title?: string }).title).toBe('string')
 
-    const badSlug = await app.request('/api/workspaces/session1/canvases/bad.path', {
+    const badPath = await app.request('/api/workspaces/session1/canvases/bad.path', {
       method: 'DELETE',
     })
-    expect(badSlug.status).toBe(400)
-    expect(typeof ((await badSlug.json()) as { title?: string }).title).toBe('string')
+    expect(badPath.status).toBe(400)
+    expect(typeof ((await badPath.json()) as { title?: string }).title).toBe('string')
   })
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    const canvasStore = await import('../store/canvas-store.js')
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    const canvasStore = await import('../store/document-store.js')
     const spy = vi
-      .spyOn(canvasStore, 'deleteCanvas')
+      .spyOn(canvasStore, 'deleteDocument')
       .mockRejectedValueOnce(
         corruptStoredData('/tmp/blobs/session1/canvas/abc.loro', 'broken canvas blob'),
       )
@@ -498,7 +498,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
   })
 
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
-    await saveCanvas('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a', new LoroDoc())
     const app = createCanvasRouter()
 
     const res = await app.request('/api/workspaces/session1/canvases/a/path', {
@@ -508,7 +508,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
     })
     expect(res.status).toBe(200)
     const json: unknown = await res.json()
-    expect(renameCanvasSlugResponseSchema.parse(json)).toEqual({ path: 'b' })
+    expect(renameDocumentPathResponseSchema.parse(json)).toEqual({ path: 'b' })
 
     const listRes = await app.request('/api/workspaces/session1/canvases')
     const listJson = (await listRes.json()) as { canvases: { path: string }[] }
@@ -542,8 +542,8 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
   })
 
   it('returns 409 with Problem Details { title } when the target path is already taken', async () => {
-    await saveCanvas('session1', 'a', new LoroDoc())
-    await saveCanvas('session1', 'b', new LoroDoc())
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'b', new LoroDoc())
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/session1/canvases/a/path', {
       method: 'PUT',
@@ -566,7 +566,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
     const baseDoc = new LoroDoc()
     baseDoc.getText('content').insert(0, 'original')
     baseDoc.commit()
-    await saveCanvas('session1', 'a', baseDoc)
+    await saveDocument('session1', 'a', baseDoc)
 
     // A client update built against the pre-rename base.
     const clientDoc = LoroDoc.fromSnapshot(baseDoc.export({ mode: 'snapshot' }))
@@ -624,7 +624,7 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
   })
 
   it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
-    await saveCanvas('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a', new LoroDoc())
     const app = createCanvasRouter()
 
     const noBody = await app.request('/api/workspaces/session1/canvases/a/path', {
@@ -632,19 +632,19 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
     })
     expect(noBody.status).toBe(400)
 
-    const badNewSlug = await app.request('/api/workspaces/session1/canvases/a/path', {
+    const badNewPath = await app.request('/api/workspaces/session1/canvases/a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'bad.path' }),
     })
-    expect(badNewSlug.status).toBe(400)
+    expect(badNewPath.status).toBe(400)
 
-    const emptySlug = await app.request('/api/workspaces/session1/canvases/a/path', {
+    const emptyPath = await app.request('/api/workspaces/session1/canvases/a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: '' }),
     })
-    expect(emptySlug.status).toBe(400)
+    expect(emptyPath.status).toBe(400)
 
     const badWorkspace = await app.request('/api/workspaces/bad.workspace/canvases/a/path', {
       method: 'PUT',
@@ -653,14 +653,14 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
     })
     expect(badWorkspace.status).toBe(400)
 
-    const badCurrentSlug = await app.request('/api/workspaces/session1/canvases/bad.path/path', {
+    const badCurrentPath = await app.request('/api/workspaces/session1/canvases/bad.path/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'b' }),
     })
-    expect(badCurrentSlug.status).toBe(400)
+    expect(badCurrentPath.status).toBe(400)
 
-    for (const res of [noBody, badNewSlug, emptySlug, badWorkspace, badCurrentSlug]) {
+    for (const res of [noBody, badNewPath, emptyPath, badWorkspace, badCurrentPath]) {
       const body = (await res.json()) as { title?: string }
       expect(typeof body.title).toBe('string')
       expect(body.title!.length).toBeGreaterThan(0)
@@ -732,10 +732,10 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
   })
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
-    await saveCanvas('session1', 'a', new LoroDoc())
-    const canvasStore = await import('../store/canvas-store.js')
+    await saveDocument('session1', 'a', new LoroDoc())
+    const canvasStore = await import('../store/document-store.js')
     const spy = vi
-      .spyOn(canvasStore, 'renameCanvasSlug')
+      .spyOn(canvasStore, 'renameDocumentPath')
       .mockRejectedValueOnce(
         corruptStoredData('/tmp/blobs/session1/canvas/abc.loro', 'broken canvas blob'),
       )
@@ -779,8 +779,8 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
   })
 
   it('returns the canvas list', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    await saveCanvas('session1', 'canvas-b', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/session1/canvases')
@@ -811,7 +811,7 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
     expect(res.status).toBe(404)
   })
 
-  // listCanvases no longer walks per-workspace directories, so the previous
+  // listDocuments no longer walks per-workspace directories, so the previous
   // "broken session directory" 500 case no longer applies.
 })
 
@@ -825,7 +825,7 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
   })
 
   it('also returns the canvas list from the canonical workspace route', async () => {
-    await saveCanvas('workspace1', 'canvas-a', new LoroDoc())
+    await saveDocument('workspace1', 'canvas-a', new LoroDoc())
 
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/workspace1/canvases')
@@ -851,7 +851,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/snapshot', () => {
     const map = list.insertContainer(0, new LoroMap())
     map.set('id', 'elem-001')
     doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc)
+    await saveDocument('session1', 'canvas-a', doc)
 
     const app = createCanvasRouter()
     const res = await app.request('/api/w/session1/canvas/canvas-a/snapshot')
@@ -887,7 +887,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/snapshot', () => {
   })
 
   it('returns 404 for a canvas that existed and was deleted', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
     const app = createCanvasRouter()
     await app.request('/api/workspaces/session1/canvases/canvas-a', { method: 'DELETE' })
 
@@ -907,7 +907,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/exists', () => {
 
   it('returns exists:true for a canvas that was actually saved', async () => {
     const doc = new LoroDoc()
-    await saveCanvas('session1', 'canvas-a', doc)
+    await saveDocument('session1', 'canvas-a', doc)
 
     const app = createCanvasRouter()
     const res = await app.request('/api/w/session1/canvas/canvas-a/exists')
@@ -921,7 +921,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/exists', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: false })
 
-    // GET /exists must never have the getDoc/loadCanvas side effect that
+    // GET /exists must never have the getDoc/loadDocument side effect that
     // /snapshot has: the canvas should still be absent afterward.
     const followUp = await app.request('/api/w/session1/canvas/never-created/exists')
     expect(await followUp.json()).toEqual({ exists: false })
@@ -959,7 +959,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
 
   it('returns structured 500 for a broken snapshot', async () => {
     const { getDb } = await import('../store/db/index.js')
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
     const row = await db
       .selectFrom('documents')
@@ -1019,8 +1019,8 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
   })
 
   it('iterates every canvas in the workspace and returns aggregated results', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    await saveCanvas('session1', 'canvas-b', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/canvases/optimize-all', {
@@ -1063,8 +1063,8 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
   })
 
   it('prune-sandwiched delegates to versionStore.pruneSandwichedAutoVersions for every canvas', async () => {
-    await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    await saveCanvas('session1', 'canvas-b', new LoroDoc())
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
     versionStore.pruneSandwichedAutoVersions = vi
@@ -1128,8 +1128,8 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
 
     // Clear the cache, reload, and confirm the change was persisted.
     clearCache()
-    const { loadCanvas } = await import('../store/canvas-store.js')
-    const serverDoc = await loadCanvas('session1', 'canvas-a')
+    const { loadDocument } = await import('../store/document-store.js')
+    const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as { id: string; type: string }[]
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('elem-from-client')
@@ -1149,7 +1149,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
     expect(body).toMatchObject({ error: 'payload_too_large' })
   })
 
-  it('evicts the cached doc when saveCanvas fails, so a subsequent read does not serve the unpersisted update', async () => {
+  it('evicts the cached doc when saveDocument fails, so a subsequent read does not serve the unpersisted update', async () => {
     const app = createCanvasRouter()
 
     // Persist an initial one-element state directly.
@@ -1158,7 +1158,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
     const initialElem = initialList.insertContainer(0, new LoroMap())
     initialElem.set('id', 'persisted')
     initial.commit()
-    await saveCanvas('session1', 'canvas-a', initial)
+    await saveDocument('session1', 'canvas-a', initial)
 
     // Pull it into the doc-cache so there is a live cached doc to poison.
     await app.request('/api/w/session1/canvas/canvas-a/snapshot')
@@ -1173,7 +1173,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    // Force the persistence step inside saveCanvas to fail after doc.import()
+    // Force the persistence step inside saveDocument to fail after doc.import()
     // has already mutated the cached doc.
     const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
       throw new Error('simulated snapshot failure')
@@ -1187,7 +1187,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
 
     expect(res.status).toBe(500)
     // The cache must be evicted: without eviction, the in-memory doc already
-    // absorbed the update even though saveCanvas never persisted it.
+    // absorbed the update even though saveDocument never persisted it.
     expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
 
     const reloaded = await getDoc('session1', 'canvas-a')
@@ -1385,7 +1385,7 @@ describe('versions API', () => {
     expect(resRestore.status).toBe(200)
   })
 
-  it('evicts the cached doc when saveCanvas fails during in-place restore, so a subsequent read does not serve the un-persisted reconcile', async () => {
+  it('evicts the cached doc when saveDocument fails during in-place restore, so a subsequent read does not serve the un-persisted reconcile', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
     // Step 1: seed with keep-me.
@@ -1424,7 +1424,7 @@ describe('versions API', () => {
 
     // Restore calls doc.export() twice before the failure point we care about:
     // once inside versionStore.load() to clone the live doc, then again inside
-    // saveCanvas() once reconcile+commit have already mutated the cached doc.
+    // saveDocument() once reconcile+commit have already mutated the cached doc.
     // Let the first pass through and fail only the second.
     let exportCallCount = 0
     const originalExport = LoroDoc.prototype.export
@@ -1457,7 +1457,7 @@ describe('versions API', () => {
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
-  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveCanvas fails', async () => {
+  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveDocument fails', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
     const initial = new LoroDoc()
@@ -1492,7 +1492,7 @@ describe('versions API', () => {
 
     // doc.import already mutated the live cached doc by the time
     // doc.commit() runs, so a throw here must still evict the cache -- not
-    // only the saveCanvas failure path further down.
+    // only the saveDocument failure path further down.
     const commitSpy = vi.spyOn(LoroDoc.prototype, 'commit').mockImplementationOnce(() => {
       throw new Error('simulated commit failure')
     })
@@ -1531,7 +1531,7 @@ describe('versions API', () => {
     expect(res.status).toBe(400)
   })
 
-  // targetSlug + overwrite must reconcile onto the target's LIVE cached doc
+  // targetPath + overwrite must reconcile onto the target's LIVE cached doc
   // instead of replacing persistence, so connected clients stay on the same
   // CRDT lineage and converge through the normal update broadcast.
   describe('overwrite restore reconciles instead of replacing', () => {
@@ -1539,7 +1539,7 @@ describe('versions API', () => {
       setBroadcastFn(() => {})
     })
 
-    it('targetSlug === path with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
+    it('targetPath === path with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
       const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
       // v1: one element.
@@ -1585,7 +1585,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-a', overwrite: true }),
+          body: JSON.stringify({ targetPath: 'canvas-a', overwrite: true }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1600,7 +1600,7 @@ describe('versions API', () => {
       expect(broadcastCalls[0]?.byteLength).toBeGreaterThan(0)
     })
 
-    it('targetSlug === path WITHOUT overwrite still restores in place (same-path is never treated as a distinct target)', async () => {
+    it('targetPath === path WITHOUT overwrite still restores in place (same-path is never treated as a distinct target)', async () => {
       const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
       const initial = new LoroDoc()
@@ -1626,7 +1626,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-a' }),
+          body: JSON.stringify({ targetPath: 'canvas-a' }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1679,7 +1679,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+          body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1716,7 +1716,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-new' }),
+          body: JSON.stringify({ targetPath: 'canvas-new' }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1758,7 +1758,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-new' }),
+          body: JSON.stringify({ targetPath: 'canvas-new' }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1805,7 +1805,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+          body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
         },
       )
       expect(restoreRes.status).toBe(200)
@@ -1849,7 +1849,7 @@ describe('versions API', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-b' }),
+          body: JSON.stringify({ targetPath: 'canvas-b' }),
         },
       )
       expect(restoreRes.status).toBe(409)
@@ -2315,8 +2315,8 @@ describe('auto-version corruption handling', () => {
     expect(sendVersionCreated).not.toHaveBeenCalled()
 
     clearCache()
-    const { loadCanvas } = await import('../store/canvas-store.js')
-    const serverDoc = await loadCanvas('session1', 'canvas-a')
+    const { loadDocument } = await import('../store/document-store.js')
+    const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['e1'])
   })

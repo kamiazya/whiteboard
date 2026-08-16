@@ -306,7 +306,7 @@ export function App({ providerState }: AppProps) {
     if (
       stored.localDaemonBaseUrl === baseUrl &&
       stored.lastConnectedWorkspaceId === workspaceId &&
-      stored.lastConnectedSlug === path
+      stored.lastConnectedPath === path
     ) {
       return
     }
@@ -316,7 +316,7 @@ export function App({ providerState }: AppProps) {
         ...current.storage,
         localDaemonBaseUrl: baseUrl,
         lastConnectedWorkspaceId: workspaceId,
-        lastConnectedSlug: path,
+        lastConnectedPath: path,
       },
     }))
     // daemonConnection is a stable module-scope singleton for the life of the

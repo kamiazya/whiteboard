@@ -12,7 +12,7 @@ import {
 import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
-import { canvasExists } from '../store/canvas-store.js'
+import { documentExists } from '../store/document-store.js'
 import { onCanvasAction } from './canvas/path-route.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
@@ -77,11 +77,11 @@ export function createExportRouter() {
       }
 
       // The headless path operates directly on the LoroDoc and does NOT
-      // verify that the canvas actually exists — getDoc / loadCanvas return
+      // verify that the canvas actually exists — getDoc / loadDocument return
       // an empty doc on cache miss, so a typoed path would otherwise emit a
       // blank PNG. Reject up front with 404 so callers learn about the typo
       // instead of shipping the silently-empty file.
-      if (!(await canvasExists(workspaceId, path))) {
+      if (!(await documentExists(workspaceId, path))) {
         const errBody: ExportErrorBody = {
           error: 'canvas_not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
@@ -130,9 +130,7 @@ async function renderHeadless(
 ): Promise<Buffer> {
   const result = await exportCanvasHeadless({
     workspaceId,
-    // The store layer still speaks `path`; renaming it through canvas-store
-    // is its own sweep.
-    path: path,
+    path,
     options: {
       padding: body.padding,
       scale: body.scale,

@@ -14,7 +14,7 @@ import { createDaemonFileAdapter } from './daemon-file-adapter.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const WS = 'ws-1'
-const SLUG = 'my-canvas'
+const path = 'my-canvas'
 
 function snapshotOf(text: string): Uint8Array {
   const doc = new Loro()
@@ -55,7 +55,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch: vi.fn(),
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     // The SAME convention browser-local uses, so a canvas keeps meaning the
@@ -73,12 +73,12 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     const url = await adapter.loadImageUrl('asset:file-abc')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/${SLUG}/file/file-abc`)
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/${path}/file/file-abc`)
     expect(url).toBe(FAKE_OBJECT_URL)
   })
 
@@ -88,7 +88,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     // Totality: a broken reference keeps the card, it never takes the page down.
@@ -101,7 +101,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     const file = new File(['xy'], 'x.png', { type: 'image/png' })
@@ -109,7 +109,7 @@ describe('createDaemonFileAdapter', () => {
 
     expect(ref).toBe(`asset:${FAKE_UUID}`)
     const [url, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`${BASE}/api/w/${WS}/canvas/${SLUG}/file/${FAKE_UUID}`)
+    expect(url).toBe(`${BASE}/api/w/${WS}/canvas/${path}/file/${FAKE_UUID}`)
     expect(init.method).toBe('PUT')
     // The route rejects an unrecognised Content-Type with 415, so the
     // picked file's own type has to travel.
@@ -122,7 +122,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     // Returning the ref anyway would put a node on the canvas pointing at
@@ -138,7 +138,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     const loaded = await adapter.loadDocument('sibling')
@@ -156,7 +156,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     const loaded = await adapter.loadDocument('notes')
@@ -170,7 +170,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
@@ -191,7 +191,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     expect((await adapter.loadDocument('diagram'))?.facets).toBeUndefined()
@@ -208,7 +208,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     expect((await adapter.loadDocument('notes'))?.facets).toEqual({
@@ -225,7 +225,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
@@ -237,7 +237,7 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
+      path: path,
     })
 
     await adapter.loadDocument('a b')
@@ -253,8 +253,8 @@ describe('createDaemonFileAdapter — id references', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
-      resolveRefSlug: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
+      path: path,
+      resolveRefPath: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
     })
     const loaded = await adapter.loadDocument('nanoid-123')
     expect(loaded).toBeDefined()
@@ -269,8 +269,8 @@ describe('createDaemonFileAdapter — id references', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: SLUG,
-      resolveRefSlug: () => undefined,
+      path: path,
+      resolveRefPath: () => undefined,
     })
     const loaded = await adapter.loadDocument('old-path-ref')
     expect(loaded).toBeDefined()

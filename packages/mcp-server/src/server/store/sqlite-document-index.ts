@@ -58,7 +58,7 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
  * canvas list, versions, branches and file GC already hang off, which is what
  * makes an agent-created document one a user can see.
  *
- * New rows are assigned a ULID, not the nanoid `saveCanvas` mints for its own
+ * New rows are assigned a ULID, not the nanoid `saveDocument` mints for its own
  * rows: ADR-0007 point 5 fixed the ULID as the `documentId` and the nanoid as a
  * storage detail, and `documentIdSchema` in the port's `DocumentEntry` accepts
  * only the former. A row predating this cannot round-trip through the port —
@@ -178,7 +178,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     // collation gives, and the row count per workspace is a list a human reads.
     //
     // Rows whose id is not a canonical ULID are SKIPPED, not surfaced:
-    // `saveCanvas` minted nanoid row ids before the id spaces converged, and
+    // `saveDocument` minted nanoid row ids before the id spaces converged, and
     // rows outlive minting policy. The port's DocumentEntry accepts only a
     // ULID, so mapping such a row does not degrade to one bad entry — it
     // fails output validation for the ENTIRE listing, and one legacy row per

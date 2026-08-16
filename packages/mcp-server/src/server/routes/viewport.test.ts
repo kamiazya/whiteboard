@@ -181,10 +181,10 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     })
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/w/s1/canvas/bad.path/viewport', {
+    const badPath = await app.request('/api/w/s1/canvas/bad.path/viewport', {
       method: 'POST',
     })
-    expect(badSlug.status).toBe(400)
+    expect(badPath.status).toBe(400)
     expect(mockSendViewportRequest).not.toHaveBeenCalled()
   })
 })

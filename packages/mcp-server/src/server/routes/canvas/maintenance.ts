@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { compactCanvas, listCanvases } from '../../store/canvas-store.js'
 import { evictDoc } from '../../store/doc-cache.js'
+import { compactDocument, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
@@ -22,7 +22,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // Avoid calling this frequently on highly active multi-peer canvases because concurrent applyAndPersist calls can race.
   onCanvasesRoute(app, 'post', ['compact'], async (c, workspaceId, path) => {
     try {
-      const result = await compactCanvas(workspaceId, path, versionStore)
+      const result = await compactDocument(workspaceId, path, versionStore)
       if (result.compacted) evictDoc(workspaceId, path)
       return c.json(result)
     } catch (err) {
@@ -46,7 +46,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
       throw err
     }
     try {
-      const canvases = await listCanvases(workspaceId)
+      const canvases = await listDocuments(workspaceId)
       const results: Array<{ path: string; deletedCount: number }> = []
       let totalDeleted = 0
       for (const { path } of canvases) {
@@ -77,7 +77,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
       throw err
     }
     try {
-      const canvases = await listCanvases(workspaceId)
+      const canvases = await listDocuments(workspaceId)
       const results: Array<{
         path: string
         compacted: boolean
@@ -88,7 +88,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
       let totalBeforeBytes = 0
       let totalAfterBytes = 0
       for (const { path } of canvases) {
-        const result = await compactCanvas(workspaceId, path, versionStore)
+        const result = await compactDocument(workspaceId, path, versionStore)
         if (result.compacted) evictDoc(workspaceId, path)
         results.push({ path, ...result })
         totalBeforeBytes += result.beforeBytes

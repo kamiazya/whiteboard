@@ -69,7 +69,7 @@ describe('createUserSettingsStore', () => {
     expect(reloaded.storage.dismissedDaemonCtaInstanceId).toBe('instance-1')
   })
 
-  it('persists localDaemonBaseUrl, lastConnectedWorkspaceId and lastConnectedSlug (reconnect target)', () => {
+  it('persists localDaemonBaseUrl, lastConnectedWorkspaceId and lastConnectedPath (reconnect target)', () => {
     const store = createUserSettingsStore()
     store.update((current) => ({
       ...current,
@@ -77,14 +77,14 @@ describe('createUserSettingsStore', () => {
         ...current.storage,
         localDaemonBaseUrl: 'http://127.0.0.1:3099',
         lastConnectedWorkspaceId: 'w1',
-        lastConnectedSlug: 'main',
+        lastConnectedPath: 'main',
       },
     }))
 
     const reloaded = createUserSettingsStore().load()
     expect(reloaded.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(reloaded.storage.lastConnectedWorkspaceId).toBe('w1')
-    expect(reloaded.storage.lastConnectedSlug).toBe('main')
+    expect(reloaded.storage.lastConnectedPath).toBe('main')
   })
 
   // The stored base URL is rendered into an `href`. Anything that can write

@@ -71,13 +71,13 @@ describe('getLogger (pino-backed)', () => {
   })
 
   it('emits a structured record via captureLogsForTests with scope, level, msg, and bindings as data', () => {
-    const log = getLogger('canvas-store')
+    const log = getLogger('document-store')
     log.warning({ workspaceId: 'ws_1', path: 'a' }, 'skipped corrupt row')
 
     expect(cap.records).toHaveLength(1)
     const record = cap.records[0]
     expect(record.level).toBe('warning')
-    expect(record.scope).toBe('canvas-store')
+    expect(record.scope).toBe('document-store')
     expect(record.msg).toBe('skipped corrupt row')
     expect(record.data).toMatchObject({ workspaceId: 'ws_1', path: 'a' })
     expect(typeof record.time).toBe('string')

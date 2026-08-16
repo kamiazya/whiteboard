@@ -78,8 +78,8 @@ export function CanvasDropdown({
     [filteredCanvases, pinnedSet],
   )
 
-  const navigate = (targetSlug: string) => {
-    onNavigateToCanvas(targetSlug)
+  const navigate = (targetPath: string) => {
+    onNavigateToCanvas(targetPath)
     onCanvasSearchChange('')
   }
 
@@ -226,14 +226,14 @@ export function CanvasDropdown({
                       </DropdownMenuLabel>
                     )}
                     {items.map((c) => {
-                      const leafSlug = group === '' ? c.path : c.path.slice(group.length + 1)
+                      const leafSegment = group === '' ? c.path : c.path.slice(group.length + 1)
                       return (
                         <CanvasItem
                           key={c.path}
                           canvas={c}
                           workspaceId={workspaceId}
                           customName={effectiveNames.canvases[c.path]}
-                          leafLabel={effectiveNames.canvases[c.path] ?? leafSlug}
+                          leafLabel={effectiveNames.canvases[c.path] ?? leafSegment}
                           active={c.path === path}
                           pinned={false}
                           isLocalMode={isLocalMode}
