@@ -86,6 +86,7 @@ export const FONT_DEGRADED = 'font-degraded'
 export function canLayoutInWorker(
   options: {
     readonly resolveFileCanvas?: unknown
+    readonly resolveFileMarkdown?: unknown
     readonly expandFileNode?: unknown
     readonly resolveFileImage?: unknown
     readonly resolveFileFacets?: unknown
@@ -103,6 +104,7 @@ export function canLayoutInWorker(
   if (!hasFileNode) return true
   return (
     options.resolveFileCanvas === undefined &&
+    options.resolveFileMarkdown === undefined &&
     options.expandFileNode === undefined &&
     options.resolveFileImage === undefined &&
     options.resolveFileFacets === undefined

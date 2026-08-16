@@ -1,0 +1,266 @@
+// `wb_scene_render`'s opt-in reference resolution: a file node pointing at a
+// markdown document in the same workspace renders that document's body.
+//
+// Opt-in, not default, because `composeCanvasScene` also backs
+// `wb_scene_digest`. Resolving by default would make a canvas's digest move
+// whenever a DIFFERENT document was edited, which is the property that makes
+// the digest usable as a change signal at all.
+import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { describe, expect, test } from 'vitest'
+import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { createCanvasDigestTool } from './canvas-digest.js'
+import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
+
+const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
+const DIAGRAM_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+const WORKSPACE_ID = 'ws-1'
+
+function makeDeps(canvasDocStore: FakeCanvasDocStore) {
+  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+}
+
+/**
+ * Seeds a workspace holding a canvas with one file node, plus the markdown
+ * document it references. The markdown document is written the way
+ * `wb_document_set` writes one — a single `okf-body` text node — because
+ * that IS a markdown document's stored shape on this side.
+ */
+async function seedWorkspace(store: FakeCanvasDocStore, ref: string) {
+  // `seed`, not `createDocument`: the index ASSIGNS an id, and these tests
+  // need the reference in the file node to name the document they seeded.
+  store.documentIndex.seed({
+    workspaceId: WORKSPACE_ID,
+    path: 'board',
+    canvasId: CANVAS_ID,
+    kind: 'spatial',
+  })
+  store.documentIndex.seed({
+    workspaceId: WORKSPACE_ID,
+    path: 'notes',
+    canvasId: NOTE_ID,
+    kind: 'markdown',
+    name: 'Weekly',
+  })
+
+  await seedDoc(store, CANVAS_ID, (doc) => {
+    writeDocumentKind(doc, 'spatial')
+    writeSpatialCanvas(doc, {
+      nodes: [{ id: 'f1', type: 'file', x: 0, y: 0, width: 400, height: 300, file: ref }],
+      edges: [],
+    })
+  })
+  await seedDoc(store, NOTE_ID, (doc) => {
+    writeDocumentKind(doc, 'markdown')
+    writeSpatialCanvas(doc, {
+      nodes: [
+        {
+          id: 'okf-body',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 600,
+          height: 400,
+          text: '# Weekly notes\n\nShipped the markdown file node.',
+        },
+      ],
+      edges: [],
+    })
+  })
+}
+
+describe('wb_scene_render reference resolution', () => {
+  test('renders the referenced markdown body when embedReferences is set', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly notes')
+    expect(result.svg).toContain('Shipped')
+  })
+
+  test('resolves a reference written as a document path, not only as an id', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, 'notes')
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly notes')
+  })
+
+  test('leaves the default render untouched', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    // Through the SCHEMA, so this asserts the declared default and the
+    // handler agree — calling execute with a hand-written `false` would only
+    // prove the handler honours what it was handed.
+    const byDefault = await tool.execute(
+      canvasRenderSvgInputSchema.parse({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID }),
+    )
+    const explicitlyOff = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: false,
+    })
+
+    expect(byDefault.svg).not.toContain('Weekly notes')
+    expect(explicitlyOff.svg).toBe(byDefault.svg)
+  })
+
+  test('keeps the card for a reference that resolves to a SPATIAL document', async () => {
+    // The markdown seam answers for markdown documents only. A spatial
+    // document is not prose, and rendering its first text node as if it
+    // were would misreport what the reference points at.
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, DIAGRAM_ID)
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'diagram',
+      canvasId: DIAGRAM_ID,
+      kind: 'spatial',
+    })
+    await seedDoc(store, DIAGRAM_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'INNER' }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).not.toContain('INNER')
+  })
+
+  test('renders a dangling reference as the plain card rather than failing', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, 'nowhere')
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, embedReferences: true }),
+    ).resolves.toMatchObject({ svg: expect.stringContaining('<svg') })
+  })
+})
+
+describe('reference resolution edge cases', () => {
+  test('keeps a resolved NAME for an indexed document whose snapshot is gone', async () => {
+    // The index and the doc store are separate: a row can outlive its
+    // snapshot (an interrupted delete, a restored index). The reference is
+    // still nameable even though its content is not readable, and the
+    // label is strictly better than showing a raw id.
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    await store.deleteDoc({ docRef: { kind: 'canvas', canvasId: NOTE_ID } })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly')
+    expect(result.svg).not.toContain('Weekly notes')
+  })
+
+  test('labels a reference with its document name instead of its raw id', async () => {
+    // The label seam is wired from the same `references` map as the body,
+    // so it needs its own assertion — a body-only test passes while the
+    // label wiring is missing entirely.
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      embedReferences: true,
+    })
+
+    expect(result.svg).toContain('Weekly')
+    expect(result.svg).not.toContain(NOTE_ID)
+  })
+})
+
+describe('wb_scene_render input schema', () => {
+  test('defaults embedReferences to false, so an existing caller keeps the pure render', () => {
+    const parsed = canvasRenderSvgInputSchema.parse({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+    })
+    expect(parsed.embedReferences).toBe(false)
+  })
+
+  test('rejects a non-boolean, rather than coercing it to on', () => {
+    expect(
+      canvasRenderSvgInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        embedReferences: 'yes',
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('wb_scene_digest', () => {
+  // Characterization, and deliberately NOT a guard on the opt-in wiring:
+  // this passes even if the digest is wired to resolve references, because
+  // `sceneDigest` reports one entry per ADDRESSABLE node — the chrome
+  // shapes carrying a document id — and content laid out INSIDE a node is
+  // excluded by design. So the digest is immune for a structural reason,
+  // which is stronger than "nobody wired it".
+  //
+  // What it does guard is that chrome-only contract from the other side: if
+  // `sceneDigest` ever started reporting laid-out content, a canvas's digest
+  // would begin moving whenever a DIFFERENT document was edited, and this
+  // goes red at that moment. The opt-in itself is guarded by
+  // 'leaves the default render untouched' above, which IS mutation-checked.
+  test('does not move when only the referenced document changes', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedWorkspace(store, NOTE_ID)
+    const digest = createCanvasDigestTool(makeDeps(store))
+
+    const before = await digest.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    // Edit ONLY the referenced document.
+    await seedDoc(store, NOTE_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          {
+            id: 'okf-body',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 400,
+            text: '# Rewritten\n\nCompletely different content now.',
+          },
+        ],
+        edges: [],
+      })
+    })
+
+    const after = await digest.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+    expect(after).toEqual(before)
+  })
+})
