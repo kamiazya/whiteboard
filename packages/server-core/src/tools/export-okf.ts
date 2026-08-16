@@ -12,7 +12,7 @@ import type { ServerDeps } from '../server-deps.js'
  * targets only the FIRST text node found (or an empty body when none
  * exists) — a real "canvas -> OKF" mapping for a full multi-node spatial
  * canvas is deferred to a future slice once the OKF-vs-spatial duality is
- * resolved in workspace.
+ * resolved in crdt.
  *
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with the workspace-scoped tools and as a

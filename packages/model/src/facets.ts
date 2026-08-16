@@ -77,7 +77,7 @@ export type FacetsRaw = z.infer<typeof facetsRawSchema>
  * decision 3) — rather than for the canvas, which is a spatial surface and
  * carries none. `facets` (the extension bucket) is deliberately excluded — it has
  * its own storage key and its own read/write pair (`writeFacets`/
- * `readFacets` in workspace) so one domain's CRDT merge never
+ * `readFacets` in crdt) so one domain's CRDT merge never
  * overwrites another's; folding it into this object would lose that
  * per-key merge granularity.
  *
