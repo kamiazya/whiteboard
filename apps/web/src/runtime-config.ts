@@ -1,40 +1,17 @@
-import { z } from 'zod'
+import {
+  bareOriginSchema,
+  type RuntimeConfig,
+  runtimeConfigSchema,
+} from '@kamiazya/whiteboard-mcp/api-client'
 import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 
-// Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
-// Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
-// Exported so other cross-boundary contracts (e.g. daemon-connection-payload.ts) reuse the same
-// origin-validation rules instead of redefining them.
-export const bareOriginSchema = z
-  .string()
-  .url()
-  .refine(
-    (v) => {
-      try {
-        const url = new URL(v)
-        return url.origin === v && !url.hostname.includes('*')
-      } catch {
-        return false
-      }
-    },
-    {
-      message:
-        'must be a bare origin (scheme + host + optional port, no path, query, hash, credentials, or wildcards)',
-    },
-  )
-
-export const runtimeConfigSchema = z
-  .object({
-    // Public origin of this deployed app (e.g., 'https://app.example.com').
-    // Used to construct absolute URLs for same-origin API calls.
-    publicOrigin: bareOriginSchema.optional(),
-    // Base URL of the local whiteboard daemon for daemon-pairing mode.
-    // e.g. 'http://127.0.0.1:3099'
-    daemonBaseUrl: bareOriginSchema.optional(),
-  })
-  .strict()
-
-export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>
+export type { RuntimeConfig }
+// The wire contract is owned by the daemon package's published /api-client
+// subpath (single source of truth across mcp-server and apps/web) — this
+// module re-exports it rather than redefining it, and adds only the
+// deployment-target policy that decides which parsed configs are acceptable
+// here (hosted-origin allowlisting).
+export { bareOriginSchema, runtimeConfigSchema }
 
 export function resolveRuntimeConfig(raw: unknown): RuntimeConfig {
   return runtimeConfigSchema.parse(raw)
