@@ -1,3 +1,4 @@
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
@@ -22,6 +23,13 @@ export interface MountCanvasViewerOptions {
   // this package has no way to know the host's expected origin, so it
   // cannot filter on the host's behalf.
   messageHandler?: (event: MessageEvent) => void
+  /**
+   * Resolved file references, keyed by the node's raw `file` value — the
+   * plain-data form of `CanvasViewer`'s two resolver props, because a
+   * function cannot cross the host↔widget boundary this API sits behind.
+   * Shaped to match `canvas_view`'s `references` payload exactly.
+   */
+  references?: Readonly<Record<string, { label?: string; body?: MdastRoot }>>
 }
 
 export interface CanvasViewerHandle {
@@ -56,6 +64,19 @@ function readEmbeddedScene(): unknown {
   return window.__WHITEBOARD_VIEWER_SCENE__
 }
 
+/**
+ * Turns the plain reference map into the two synchronous resolver props.
+ * Returns nothing when there is no map, so a host that supplies none leaves
+ * `CanvasViewer` exactly as it was before this existed.
+ */
+function referenceSeams(references: MountCanvasViewerOptions['references']) {
+  if (references === undefined) return {}
+  return {
+    resolveFileLabel: (file: string) => references[file]?.label,
+    resolveFileMarkdown: (file: string) => references[file]?.body,
+  }
+}
+
 export function mountCanvasViewer(
   container: HTMLElement,
   opts: MountCanvasViewerOptions = {},
@@ -83,6 +104,7 @@ export function mountCanvasViewer(
         height: opts.height,
         testId: opts.testId,
         label: opts.label,
+        ...referenceSeams(opts.references),
       }),
     )
   })

@@ -6,7 +6,11 @@
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
-import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
+import {
+  type CanvasViewerHandle,
+  type MountCanvasViewerOptions,
+  mountCanvasViewer,
+} from './mount.js'
 import { parseViewerScene, type ViewerScene } from './scene.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
@@ -98,21 +102,44 @@ const STICKY_BACKGROUND_COLOR = '#ffec99'
 // in exactly one place. The envelope crosses the host↔widget process
 // boundary, so it gets a Zod schema instead of a cast; `scene` stays
 // deliberately unknown here — parseViewerScene is its real validator.
+// `references` is validated HERE rather than trusted: it arrives from the
+// host, and a malformed entry would otherwise reach canvas-render's seams
+// as an arbitrary object. Declared loosely on purpose — `body` is checked
+// for shape, not against the full mdast schema, because a body this widget
+// cannot fully validate is still better dropped per-reference than having
+// the whole payload rejected. canvas-render is total over what it gets.
+const referenceSchema = z.object({
+  label: z.string().optional(),
+  body: z.object({ type: z.literal('root'), children: z.array(z.unknown()) }).optional(),
+})
+
 const toolResultEnvelopeSchema = z.object({
   structuredContent: z
     .object({
       canvasId: z.string().optional(),
       scene: z.unknown().optional(),
+      references: z.record(z.string(), referenceSchema).optional(),
     })
     .catchall(z.unknown())
     .optional(),
 })
 
-function extractCanvasIdAndScene(payload: unknown): { canvasId?: string; scene?: unknown } {
+function extractCanvasIdAndScene(payload: unknown): {
+  canvasId?: string
+  scene?: unknown
+  references?: MountCanvasViewerOptions['references']
+} {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
   const structuredContent = parsed.data.structuredContent
-  return { canvasId: structuredContent?.canvasId, scene: structuredContent?.scene }
+  return {
+    canvasId: structuredContent?.canvasId,
+    scene: structuredContent?.scene,
+    // Cast at this one boundary: the envelope validates `body` as a root
+    // with children, which is the shape the seam needs; canvas-render
+    // degrades on anything inside it that it cannot lay out.
+    references: structuredContent?.references as MountCanvasViewerOptions['references'],
+  }
 }
 
 // Validates BEFORE remount: remount disposes the live viewer first, so a
@@ -144,7 +171,7 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { canvasId, scene } = extractCanvasIdAndScene(payload)
+  const { canvasId, scene, references } = extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -153,7 +180,15 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', result.error)
     return
   }
-  remount(() => mountCanvasViewer(container, { scene }))
+  // References ride along with the scene: a file node pointing at a
+  // markdown document renders that document's prose only if the server put
+  // it in the payload, since this widget has no store to read it from.
+  remount(() =>
+    mountCanvasViewer(container, {
+      scene,
+      ...(references === undefined ? {} : { references }),
+    }),
+  )
   onValidResult(canvasId, result.value)
 }
 

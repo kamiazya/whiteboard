@@ -1,11 +1,10 @@
 # View a canvas inline in your AI chat (MCP Apps)
 
-> **Currently unavailable.** The OpenCanvas migration removed the `canvas_view` tool
-> this page describes, along with the rest of the pre-OpenCanvas tool surface. The
-> MCP Apps widget resource (`ui://whiteboard/canvas-view`) is still registered, but
-> no current MCP tool links `_meta.ui.resourceUri` to it, so nothing triggers the
-> inline view today. This page describes the Phase-A design; it is kept as a record
-> of intent until a tool is wired back up to the widget.
+> **Partly available.** `canvas_view` is wired back up to the widget resource, so
+> the inline view works again. The **Add a sticky note** control described near the
+> bottom of this page does not: it calls an `annotate` tool that the OpenCanvas
+> migration removed and nothing has replaced. Everything else on this page reflects
+> what ships today.
 
 Whiteboard's local daemon MCP server implements the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps)
 (`io.modelcontextprotocol/ui`, spec 2026-01-26). When your MCP client supports it, calling
@@ -14,11 +13,15 @@ no need to switch to a browser tab to see what the agent drew.
 
 ## What you get
 
-- A read-only view of the current canvas scene, rendered inline.
+- A read-only view of the current canvas document, rendered inline.
+- Its **file references resolved**: a node pointing at a markdown document in the
+  same workspace shows that document's prose, and every reference is labelled with
+  its readable name rather than its raw id. The widget has no store of its own, so
+  the server resolves these and sends them in the tool result alongside the scene.
 - The same self-contained viewer bundle used for
   [self-contained HTML export](../explanation/) — no daemon credentials, tokens, or
-  base URLs are ever passed into the widget. The widget only ever receives a scene
-  snapshot — nothing else.
+  base URLs are ever passed into the widget. The widget only ever receives the scene
+  snapshot plus the resolved references above — nothing else.
 - Zero external network access: the widget bundle is fully self-contained (fonts and
   every other asset are inlined), so the client's CSP for the view can stay at its
   strictest default.
@@ -34,6 +37,10 @@ connection at all, the button never appears; call `canvas_view` again to see a f
 snapshot instead.
 
 ## Adding a sticky note from the widget
+
+> **Not currently working.** The control below calls the `annotate` tool, which the
+> OpenCanvas migration removed; nothing has replaced it, so submitting a note fails.
+> The description is kept because the widget control itself still ships.
 
 On the same clients that show Refresh (host connected and `serverTools`
 advertised), the widget also shows a small text field with an **Add** button
@@ -53,11 +60,11 @@ This is **Phase A** of MCP Apps support:
 - Beyond adding a new sticky note as described above, the view is
   **read-only** — Refresh reloads the current scene, but there is no
   in-widget editing, moving, or deleting of existing elements.
-- Only `canvas_view` renders inline. `canvas_open` (opens the full editor in a real
-  browser tab) and `export_canvas` (writes a file) are intentionally **not**
-  UI-linked — `canvas_open` would need to pass the daemon's base URL into the widget,
-  and `export_canvas` has a file-write side effect that a UI "refresh" action should
-  never trigger silently.
+- Only `canvas_view` is UI-linked. It is the sole tool whose registration carries
+  `_meta.ui.resourceUri`; every other tool returns ordinary structured content. A
+  tool that opened the full editor would have to pass the daemon's base URL into the
+  widget, and an export tool has a file-write side effect a UI "refresh" should
+  never trigger silently — so neither is a candidate for linking.
 - Live sync (the view updating as the agent keeps drawing, without you or the widget
   calling the tool again) is a future phase.
 
@@ -77,11 +84,13 @@ Ask your agent to view the canvas, or call the tool directly:
 ```json
 {
   "name": "canvas_view",
-  "arguments": { "canvasId": "<workspaceId>/<slug>" }
+  "arguments": { "workspaceId": "<workspaceId>", "canvasId": "<document id>" }
 }
 ```
 
-The result's `structuredContent` carries `{ canvasId, scene }`, where `scene` is a
+The result's `structuredContent` carries `{ canvasId, scene, references }`, where
+`references` maps each file node's reference to its resolved `{ label?, body? }` and
+`scene` is a
 shape the canvas-viewer package's `parseViewerScene` accepts, so a supporting client
 renders it immediately. On a client without MCP Apps support, you see this JSON as
 the tool result instead of an inline view.

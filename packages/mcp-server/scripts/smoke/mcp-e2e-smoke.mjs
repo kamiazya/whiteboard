@@ -138,6 +138,7 @@ const EXPECTED_TOOLS = [
   'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
+  'canvas_view',
   'wb_edge_add',
   'wb_edge_lock',
   'wb_edge_patch',
@@ -370,6 +371,20 @@ async function main() {
     )
   }
   console.log('[e2e] wb_scene_render(embedReferences:true) → schema-valid svg')
+
+  // canvas_view is the MCP Apps UI tool: its payload is consumed by the
+  // widget rather than by a model, and it is the only tool whose result
+  // carries a `references` map. The SDK validates that map against
+  // canvasViewOutputSchema (mdastRootSchema inside), so this call is the
+  // runtime guard on a schema a type check cannot see through.
+  const viewed = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, canvasId })
+  if (viewed.canvasId !== canvasId) {
+    throw new Error(`canvas_view echoed the wrong canvasId: ${JSON.stringify(viewed)}`)
+  }
+  if (!Array.isArray(viewed.scene?.nodes) || typeof viewed.references !== 'object') {
+    throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
+  }
+  console.log('[e2e] canvas_view → scene + references for the widget')
 
   const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, canvasId })
   if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
