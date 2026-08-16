@@ -1,17 +1,17 @@
 import {
-  type RuntimeConfig,
   bareOriginSchema,
+  type RuntimeConfig,
   runtimeConfigSchema,
 } from '@kamiazya/whiteboard-mcp/api-client'
 import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 
+export type { RuntimeConfig }
 // The wire contract is owned by the daemon package's published /api-client
 // subpath (single source of truth across mcp-server and apps/web) — this
 // module re-exports it rather than redefining it, and adds only the
 // deployment-target policy that decides which parsed configs are acceptable
 // here (hosted-origin allowlisting).
 export { bareOriginSchema, runtimeConfigSchema }
-export type { RuntimeConfig }
 
 export function resolveRuntimeConfig(raw: unknown): RuntimeConfig {
   return runtimeConfigSchema.parse(raw)
