@@ -8,7 +8,7 @@
 import {
   writeCoreFacets,
   writeDocumentKind,
-  writeSpatialCanvas,
+  writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasBackend,
@@ -49,26 +49,14 @@ const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
 
 /**
  * A daemon-held markdown document in the shape `wb_document_set` actually
- * writes: the body as the single `okf-body` text node of the spatial
- * canvas (NOT the browser-local `body` text container), plus core facets
- * and the stored kind.
+ * writes: the body in the `body` text container, and NOT as a text node of
+ * the spatial canvas. The distinction is the whole point of this fixture —
+ * an agent-authored document that opened empty here is exactly the interop
+ * defect the one-writer rule exists to prevent.
  */
 function markdownSnapshot(): Uint8Array {
   const doc = new LoroDoc()
-  writeSpatialCanvas(doc, {
-    nodes: [
-      {
-        id: 'okf-body',
-        type: 'text',
-        x: 0,
-        y: 0,
-        width: 600,
-        height: 400,
-        text: '# Hello from an agent',
-      },
-    ],
-    edges: [],
-  })
+  writeMarkdownBody(doc, '# Hello from an agent')
   writeCoreFacets(doc, { type: 'markdown' })
   writeDocumentKind(doc, 'markdown')
   return doc.export({ mode: 'snapshot' })

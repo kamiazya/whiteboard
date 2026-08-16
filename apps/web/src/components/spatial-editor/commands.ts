@@ -157,6 +157,16 @@ export type EditorLeafCommand =
 export type EditorCommand =
   | EditorLeafCommand
   | { readonly kind: 'batch'; readonly commands: readonly EditorLeafCommand[] }
+  /**
+   * A markdown document's whole body, written to the doc's `body` text
+   * container. Deliberately NOT an `EditorLeafCommand`: it targets no node
+   * and no edge, leaves the `SpatialCanvas` value untouched, and can never
+   * appear inside a batch — the spatial editor does not issue it. It rides
+   * the command path anyway so a body edit gets the same debounce, undo step
+   * and local-update push as every other change, instead of a second write
+   * pipeline beside them.
+   */
+  | { readonly kind: 'set-body'; readonly text: string }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -462,6 +472,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return resizeNode(canvas, command.id, command.x, command.y, command.width, command.height)
     case 'set-text':
       return setText(canvas, command.id, command.text)
+    case 'set-body':
+      // The body is not IN the canvas — it is the doc's own `body` text
+      // container — so applying one leaves the canvas value identical.
+      // Returning the same reference is what keeps a keystroke in the
+      // markdown editor from re-rendering the spatial scene.
+      return canvas
     case 'connect-nodes':
       return connectNodes(canvas, command.edgeId, command.fromNode, command.toNode)
     case 'create-node':

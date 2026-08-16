@@ -53,6 +53,13 @@ export interface UseCanvasSyncResult {
   /** Node ids locked in the doc's sidecar map (never part of the canvas value). */
   lockedNodeIds: ReadonlySet<string>
   setNodeLock: (nodeId: string, locked: boolean) => void
+  /**
+   * The doc's `body` text container — a markdown document's whole body, and
+   * the ONE place it is stored (`wb_document_set` writes here too). Empty
+   * string before the first snapshot; a caller that also needs to know
+   * whether the document has hydrated reads `loaded`.
+   */
+  markdownBody: string
   /** OKF core facets from the doc's sidecar map; undefined until hydrated or when never written. */
   lockedEdgeIds: ReadonlySet<string>
   setEdgeLock: (edgeId: string, locked: boolean) => void
@@ -170,6 +177,7 @@ export function useCanvasSync(
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
+  const [markdownBody, setMarkdownBodyState] = useState('')
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -193,6 +201,9 @@ export function useCanvasSync(
     // all, when the backend goes to null.
     setLockedNodeIds(EMPTY_LOCKED_IDS)
     setLockedEdgeIds(EMPTY_LOCKED_IDS)
+    // The body belongs to the session being torn down, exactly as the locks
+    // do — left standing it would render against whatever document is next.
+    setMarkdownBodyState('')
 
     if (backend === null) {
       sessionRef.current = null
@@ -232,6 +243,11 @@ export function useCanvasSync(
       setLockedNodeIds(session.getNodeLocks())
       setLockedEdgeIds(session.getEdgeLocks())
     })
+    // The body changes no canvas value either, so it needs its own
+    // notification for the same reason locks do.
+    const unsubscribeBody = session.subscribeMarkdownBody(() => {
+      setMarkdownBodyState(session.getMarkdownBody())
+    })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
     // synchronously), and a missed notification would otherwise leave a
@@ -245,6 +261,7 @@ export function useCanvasSync(
       unsubscribe()
       unsubscribeHistory()
       unsubscribeLocks()
+      unsubscribeBody()
       session.dispose()
     }
   }, [backend])
@@ -362,6 +379,7 @@ export function useCanvasSync(
     canUndo,
     lockedNodeIds,
     setNodeLock,
+    markdownBody,
     lockedEdgeIds,
     setEdgeLock,
     canRedo,

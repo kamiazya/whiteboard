@@ -1,4 +1,3 @@
-import { canvasWithMarkdownBody, markdownBodyFromCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -236,6 +235,7 @@ export function DaemonCanvasPage({
     exportScene,
     lockedNodeIds,
     setNodeLock,
+    markdownBody: syncedMarkdownBody,
     lockedEdgeIds,
     setEdgeLock,
     syncStatus,
@@ -312,31 +312,23 @@ export function DaemonCanvasPage({
   const documentKind: DocumentKind =
     controller.canvases.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
-  // A markdown document's body lives in the canvas's single `okf-body` text
-  // node (the shape wb_document_set writes), so reads derive from the same
-  // synced canvas the spatial editor uses and writes travel the session's
-  // ordinary command path — debounce, undo and local-update forwarding
-  // included, with no second write pipeline. The ref keeps setMarkdownBody
-  // total under bursts: `next` is the whole body, so a canvas one commit
-  // behind only affects node identity, never content.
+  // A markdown document's body lives in the doc's `body` text container —
+  // the one place it is stored, and the shape `wb_document_set` writes. The
+  // read comes from the sync session (which republishes it on hydration,
+  // remote import and undo alike) and the write travels the session's
+  // ordinary command path, so a body edit gets the same debounce, undo step
+  // and local-update forwarding as every other change, with no second write
+  // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
+  // value passed alongside is the unchanged one this command does not touch.
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
     (next: string) => {
-      const {
-        canvas: nextCanvas,
-        node,
-        created,
-      } = canvasWithMarkdownBody(canvasValueRef.current, next)
-      onChange(
-        nextCanvas,
-        created ? { kind: 'create-node', node } : { kind: 'set-text', id: node.id, text: next },
-      )
+      onChange(canvasValueRef.current, { kind: 'set-body', text: next })
     },
     [onChange],
   )
-  const markdownBody =
-    documentKind === 'markdown' && canvasLoaded ? markdownBodyFromCanvas(canvasValue) : null
+  const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
 
   // `[[Name]]` aliases resolve against the same list the user can see; the
   // daemon summary carries no display name yet, so the path doubles as one.

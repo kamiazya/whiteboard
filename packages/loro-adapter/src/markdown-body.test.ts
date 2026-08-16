@@ -1,19 +1,15 @@
-// A markdown document's body has TWO stored representations in this
-// codebase, and until now no reader knew about both:
+// A markdown document's body is stored in ONE place: the Loro text
+// container named `body`. `writeMarkdownBody` is the only writer, and both
+// the daemon (`wb_document_set`, the sync session's `set-body` command) and
+// apps/web's browser-local editor go through it.
 //
-//   - mcp-server / the daemon store it as a single `okf-body` text node
-//     inside the spatial canvas (what `wb_document_set` writes).
-//   - apps/web's browser-local editor stores it in a Loro text container
-//     named `body`.
-//
-// Neither side could read the other's documents. This is the one reader
-// that answers "what is this document's body" for both, so a caller does
-// not have to know which side wrote it.
+// The `okf-body` TEXT NODE is history: documents an older writer left still
+// carry one, so `readMarkdownBody` falls back to it and `writeMarkdownBody`
+// clears it on the next write. Nothing writes one any more — that is what
+// these tests pin.
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import {
-  canvasWithMarkdownBody,
-  markdownBodyFromCanvas,
   readMarkdownBody,
   readSpatialCanvas,
   writeMarkdownBody,
@@ -118,74 +114,5 @@ describe('writeMarkdownBody', () => {
     writeMarkdownBody(doc, 'fresh')
     expect(readMarkdownBody(doc)).toBe('fresh')
     expect(readSpatialCanvas(doc).nodes).toEqual([])
-  })
-})
-
-const bodyNode = (text: string) =>
-  ({ id: 'okf-body', type: 'text', x: 0, y: 0, width: 600, height: 400, text }) as const
-
-describe('markdownBodyFromCanvas', () => {
-  it('reads the okf-body text node', () => {
-    expect(markdownBodyFromCanvas({ nodes: [bodyNode(BODY)], edges: [] })).toBe(BODY)
-  })
-
-  it('falls back to the first text node for a document written before the id was stable', () => {
-    const legacy = { ...bodyNode(BODY), id: 'legacy' }
-    expect(markdownBodyFromCanvas({ nodes: [legacy], edges: [] })).toBe(BODY)
-  })
-
-  it('answers with the empty string for a canvas with no text node', () => {
-    expect(markdownBodyFromCanvas({ nodes: [], edges: [] })).toBe('')
-  })
-})
-
-describe('canvasWithMarkdownBody', () => {
-  it('replaces the body node text, preserving its geometry', () => {
-    const before = { nodes: [{ ...bodyNode('old'), x: 40, width: 320 }], edges: [] }
-    const { canvas, node, created } = canvasWithMarkdownBody(before, 'new body')
-    expect(created).toBe(false)
-    expect(node).toEqual({ ...bodyNode('new body'), x: 40, width: 320 })
-    expect(canvas.nodes).toEqual([node])
-    // Immutable update: the input canvas is untouched.
-    expect(before.nodes[0]?.text).toBe('old')
-  })
-
-  it('targets the first text node in a legacy document without the stable id', () => {
-    const legacy = { ...bodyNode('old'), id: 'legacy' }
-    const { canvas, node, created } = canvasWithMarkdownBody({ nodes: [legacy], edges: [] }, 'new')
-    expect(created).toBe(false)
-    expect(node.id).toBe('legacy')
-    expect(canvas.nodes[0]?.type === 'text' && canvas.nodes[0].text).toBe('new')
-  })
-
-  it('creates the okf-body node when the document has none', () => {
-    const { canvas, node, created } = canvasWithMarkdownBody({ nodes: [], edges: [] }, BODY)
-    expect(created).toBe(true)
-    expect(node).toEqual(bodyNode(BODY))
-    expect(canvas.nodes).toEqual([node])
-  })
-
-  it('round-trips through markdownBodyFromCanvas', () => {
-    const { canvas } = canvasWithMarkdownBody({ nodes: [], edges: [] }, BODY)
-    expect(markdownBodyFromCanvas(canvas)).toBe(BODY)
-  })
-
-  it('replaces a non-text node squatting on the reserved id instead of duplicating it', () => {
-    // Mirrors the read path's 'ignores a non-text node' case: a file node
-    // holding okf-body is unreadable as a body, and the write must not
-    // produce two nodes with one id (keyed persistence would drop one).
-    const squatter = {
-      id: 'okf-body',
-      type: 'file',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-      file: 'x',
-    } as const
-    const { canvas, node, created } = canvasWithMarkdownBody({ nodes: [squatter], edges: [] }, BODY)
-    expect(created).toBe(true)
-    expect(canvas.nodes).toEqual([node])
-    expect(markdownBodyFromCanvas(canvas)).toBe(BODY)
   })
 })

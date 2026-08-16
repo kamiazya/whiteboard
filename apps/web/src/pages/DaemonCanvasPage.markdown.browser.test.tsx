@@ -9,11 +9,10 @@
  */
 
 import {
-  markdownBodyFromCanvas,
-  readSpatialCanvas,
+  MARKDOWN_BODY_KEY,
   writeCoreFacets,
   writeDocumentKind,
-  writeSpatialCanvas,
+  writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasBackend,
@@ -62,13 +61,10 @@ const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
 
 const BODY = '# Hello from an agent'
 
-/** The daemon shape: body as the okf-body node, kind stored on the doc. */
+/** The daemon shape: body in the `body` text container, kind on the doc. */
 function markdownSnapshot(): Uint8Array {
   const doc = new LoroDoc()
-  writeSpatialCanvas(doc, {
-    nodes: [{ id: 'okf-body', type: 'text', x: 0, y: 0, width: 600, height: 400, text: BODY }],
-    edges: [],
-  })
+  writeMarkdownBody(doc, BODY)
   writeCoreFacets(doc, { type: 'markdown' })
   writeDocumentKind(doc, 'markdown')
   return doc.export({ mode: 'snapshot' })
@@ -149,14 +145,16 @@ describe('DaemonCanvasPage markdown editing', () => {
 
     // The edit reaches the backend through the session's own local-update
     // forwarding: replaying pushed updates over the original snapshot must
-    // yield the typed body in the okf-body node (the daemon storage shape).
+    // yield the typed body in the `body` text container. Asserted on the
+    // container directly rather than through `readMarkdownBody`, whose node
+    // fallback would also accept a body written the old way.
     await waitFor(
       () => {
         expect(backend.pushed.length).toBeGreaterThan(0)
         const replay = new LoroDoc()
         replay.import(backend.snapshot)
         for (const update of backend.pushed) replay.import(update)
-        expect(markdownBodyFromCanvas(readSpatialCanvas(replay))).toBe(`${BODY} — edited here`)
+        expect(replay.getText(MARKDOWN_BODY_KEY).toString()).toBe(`${BODY} — edited here`)
       },
       { timeout: 10_000 },
     )
