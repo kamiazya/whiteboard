@@ -101,7 +101,7 @@ describe('LibsqlDocumentStore', () => {
     expect(loaded?.chunks[0]?.bytes).toEqual(new Uint8Array([9]))
 
     const rowCount = await handle.db
-      .selectFrom('canvasDocSnapshotChunks')
+      .selectFrom('documentSnapshotChunks')
       .select((eb) => eb.fn.countAll().as('count'))
       .executeTakeFirst()
     expect(Number(rowCount?.count)).toBe(1)

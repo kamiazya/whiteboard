@@ -13,7 +13,7 @@ interface WorkspacesTable {
   updatedAt: Timestamp
 }
 
-interface CanvasesTable {
+interface DocumentsTable {
   // Stable nanoid that survives slug renames. PK so child tables can FK on it.
   id: string
   workspaceId: string
@@ -34,16 +34,8 @@ interface CanvasesTable {
   kind: DocumentKind | null
 }
 
-/**
- * `canvasId` here, and `documentId` in everything that reads it, because a
- * COLUMN NAME is storage rather than vocabulary: renaming these two needs a
- * migration, and doing that while the tables around them are still
- * `canvases` / `canvasDocSnapshots` would leave the schema half-converted.
- * The DB schema's own vocabulary is a separate increment. Until then the
- * translation happens at each query, where kysely type-checks it.
- */
 interface BranchesTable {
-  canvasId: string
+  documentId: string
   name: string
   tipFrontiers: string
   color: string | null
@@ -54,7 +46,7 @@ interface BranchesTable {
 
 interface VersionsTable {
   id: string
-  canvasId: string
+  documentId: string
   branchName: string
   auto: Bool
   label: string | null
@@ -79,9 +71,9 @@ interface RuntimeTable {
 
 // Header row for a chunked DocumentStore snapshot. `docKey` is the
 // DocRef-derived string from ../doc-ref-key.ts. Chunk bytes themselves live
-// in CanvasDocSnapshotChunksTable; this row carries only the manifest
+// in DocumentSnapshotChunksTable; this row carries only the manifest
 // scalars plus the frontier the snapshot was taken at.
-interface CanvasDocSnapshotsTable {
+interface DocumentSnapshotsTable {
   docKey: string
   chunkCount: number
   totalBytes: number
@@ -89,7 +81,7 @@ interface CanvasDocSnapshotsTable {
   frontier: Uint8Array
 }
 
-interface CanvasDocSnapshotChunksTable {
+interface DocumentSnapshotChunksTable {
   docKey: string
   chunkIndex: number
   bytes: Uint8Array
@@ -98,7 +90,7 @@ interface CanvasDocSnapshotChunksTable {
 // Append-only delta log. `frontier` is the batch's resulting frontier,
 // duplicated onto every update row of that batch since canvas-ports'
 // DeltaBatch carries one frontier per batch, not per update.
-interface CanvasDocDeltasTable {
+interface DocumentDeltasTable {
   docKey: string
   seq: number
   bytes: Uint8Array
@@ -108,19 +100,19 @@ interface CanvasDocDeltasTable {
 // "Latest write wins" frontier per docKey, updated by both saveSnapshot and
 // appendDeltas so readFrontier does not need to compare rows across the two
 // differently-shaped logs above.
-interface CanvasDocFrontiersTable {
+interface DocumentFrontiersTable {
   docKey: string
   frontier: Uint8Array
 }
 
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
-  canvases: CanvasesTable
+  documents: DocumentsTable
   branches: BranchesTable
   versions: VersionsTable
   runtime: RuntimeTable
-  canvasDocSnapshots: CanvasDocSnapshotsTable
-  canvasDocSnapshotChunks: CanvasDocSnapshotChunksTable
-  canvasDocDeltas: CanvasDocDeltasTable
-  canvasDocFrontiers: CanvasDocFrontiersTable
+  documentSnapshots: DocumentSnapshotsTable
+  documentSnapshotChunks: DocumentSnapshotChunksTable
+  documentDeltas: DocumentDeltasTable
+  documentFrontiers: DocumentFrontiersTable
 }

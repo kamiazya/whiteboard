@@ -151,10 +151,10 @@ describe('x-whiteboard extension', () => {
 
   it('accepts an embed payload with a valid documentId and rejects a malformed one', () => {
     expect(
-      xWhiteboardSchema.safeParse({ kind: 'embed', canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
+      xWhiteboardSchema.safeParse({ kind: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
         .success,
     ).toBe(true)
-    expect(xWhiteboardSchema.safeParse({ kind: 'embed', canvasId: 'not-a-ulid' }).success).toBe(
+    expect(xWhiteboardSchema.safeParse({ kind: 'embed', documentId: 'not-a-ulid' }).success).toBe(
       false,
     )
   })
@@ -164,7 +164,7 @@ describe('x-whiteboard extension', () => {
       ...baseGeometry,
       type: 'text',
       text: 'hi',
-      'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+      'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     })
     expect(result.success).toBe(true)
   })

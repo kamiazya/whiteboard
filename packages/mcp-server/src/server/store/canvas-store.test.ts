@@ -81,7 +81,7 @@ describe('saveCanvas / loadCanvas', () => {
     const { getDataDir } = await import('../config.js')
     const db = await getDb(getDataDir())
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'ulid-mint')
@@ -150,7 +150,7 @@ describe('saveCanvas / loadCanvas', () => {
     await saveCanvas('session1', 'broken', new LoroDoc())
     const db = await getDb(tempDir)
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'broken')
@@ -640,7 +640,7 @@ describe('compactCanvas', () => {
     await store.save('session1', 'broken', doc, { auto: true })
     const db = await getDb(tempDir)
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'broken')
@@ -699,7 +699,7 @@ describe('compactCanvas', () => {
     async function readLastCompactedAt(slug: string): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
         .where('slug', '=', slug)
@@ -774,7 +774,7 @@ describe('deleteCanvas', () => {
 
     const db = await getDb(tempDir)
     const canvasRow = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-a')
@@ -789,7 +789,7 @@ describe('deleteCanvas', () => {
     await expect(deleteCanvas('session1', 'canvas-a')).resolves.toBe(true)
 
     const canvasAfter = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .selectAll()
       .where('id', '=', documentId)
       .executeTakeFirst()
@@ -797,13 +797,13 @@ describe('deleteCanvas', () => {
     const branchesAfter = await db
       .selectFrom('branches')
       .selectAll()
-      .where('canvasId', '=', documentId)
+      .where('documentId', '=', documentId)
       .execute()
     expect(branchesAfter).toEqual([])
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', documentId)
+      .where('documentId', '=', documentId)
       .execute()
     expect(versionsAfter).toEqual([])
 
@@ -817,7 +817,7 @@ describe('deleteCanvas', () => {
       .executeTakeFirst()
     expect(wsRow).toBeDefined()
     const siblingRow = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['slug'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-b')
@@ -832,7 +832,7 @@ describe('deleteCanvas', () => {
     await saveCanvas('session1', 'migrated', new LoroDoc())
     const db = await getDb(tempDir)
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'migrated')
@@ -859,7 +859,7 @@ describe('deleteCanvas', () => {
     await saveCanvas('session1', 'row-only', new LoroDoc())
     const db = await getDb(tempDir)
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'row-only')
@@ -869,7 +869,7 @@ describe('deleteCanvas', () => {
 
     await expect(deleteCanvas('session1', 'row-only')).resolves.toBe(true)
     const after = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .selectAll()
       .where('id', '=', row.id)
       .executeTakeFirst()
@@ -903,7 +903,7 @@ describe('renameCanvasSlug', () => {
 
     const db = await getDb(tempDir)
     const before = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'a')
@@ -918,7 +918,7 @@ describe('renameCanvasSlug', () => {
     expect(list.map((c) => c.slug)).toEqual(['b'])
 
     const after = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'b')
@@ -928,14 +928,14 @@ describe('renameCanvasSlug', () => {
     const branchesAfter = await db
       .selectFrom('branches')
       .selectAll()
-      .where('canvasId', '=', documentId)
+      .where('documentId', '=', documentId)
       .execute()
     expect(branchesAfter.map((b) => b.name).sort()).toEqual(['feature', 'main'])
 
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', documentId)
+      .where('documentId', '=', documentId)
       .execute()
     expect(versionsAfter.map((v) => v.id)).toEqual([version.id])
 
@@ -971,7 +971,7 @@ describe('renameCanvasSlug', () => {
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
     const before = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'a')
@@ -1060,7 +1060,7 @@ describe('auto-compact', () => {
     async function readLastCompactedAt(): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
         .where('slug', '=', 'big')
@@ -1259,7 +1259,7 @@ describe('auto-compact disposal', () => {
     async function readLastCompactedAt(): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
         .where('slug', '=', 'cached')
@@ -1398,7 +1398,7 @@ describe('auto-compact disposal', () => {
     async function readLastCompactedAt(): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
         .where('slug', '=', 'again')
@@ -1425,7 +1425,7 @@ describe('auto-compact disposal', () => {
     async function readLastCompactedAt(): Promise<number | null> {
       const db = await getDb(tempDir)
       const row = await db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select(['lastCompactedAt'])
         .where('workspaceId', '=', 'session1')
         .where('slug', '=', 'composed')

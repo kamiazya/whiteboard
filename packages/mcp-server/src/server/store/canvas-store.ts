@@ -104,7 +104,7 @@ export async function saveCanvas(
       // an intentional sync request (e.g. restore reconciling a different-
       // kind source's content onto an existing target) and is honored.
       await db
-        .updateTable('canvases')
+        .updateTable('documents')
         .set({
           updatedAt: Date.now(),
           ...(options.kind !== undefined ? { kind: options.kind } : {}),
@@ -114,7 +114,7 @@ export async function saveCanvas(
     } else {
       const now = Date.now()
       await db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: documentId,
           workspaceId,
@@ -296,13 +296,13 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
     const versionRows = await db
       .selectFrom('versions')
       .select(['id'])
-      .where('canvasId', '=', documentId)
+      .where('documentId', '=', documentId)
       .execute()
 
     // branches/versions rows cascade via the ON DELETE CASCADE FKs
     // declared in migration 0001 (PRAGMA foreign_keys=ON is set per
     // connection in db/index.ts).
-    await db.deleteFrom('canvases').where('id', '=', documentId).execute()
+    await db.deleteFrom('documents').where('id', '=', documentId).execute()
 
     const path = canvasBlobPath(workspaceId, documentId)
     await unlinkIfExists(path)
@@ -339,7 +339,7 @@ export async function getDocumentKind(
   validateSlug(slug)
   const db = await dbReady()
   const row = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['kind'])
     .where('workspaceId', '=', workspaceId)
     .where('slug', '=', slug)
@@ -392,7 +392,7 @@ export async function compactCanvas(
   // have not changed since the last successful compaction, and so the UI
   // can surface "Auto-optimised Ns ago" without reading file mtimes.
   await db
-    .updateTable('canvases')
+    .updateTable('documents')
     .set({ lastCompactedAt: Date.now() })
     .where('id', '=', documentId)
     .execute()
@@ -413,7 +413,7 @@ export async function compactCanvas(
 export async function readLatestCompactedAt(): Promise<number | null> {
   const db = await dbReady()
   const row = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select((eb) => eb.fn.max('lastCompactedAt').as('maxAt'))
     .executeTakeFirst()
   const value = row?.maxAt ?? null
@@ -596,7 +596,7 @@ export async function renameCanvasSlug(
       throw new ConflictError(`Canvas "${workspaceId}/${newSlug}" already exists`)
     }
     await db
-      .updateTable('canvases')
+      .updateTable('documents')
       .set({ slug: newSlug, updatedAt: Date.now() })
       .where('id', '=', documentId)
       .execute()
@@ -622,7 +622,7 @@ export async function listCanvases(
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['slug', 'id', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()

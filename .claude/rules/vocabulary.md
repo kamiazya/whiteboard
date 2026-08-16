@@ -57,19 +57,30 @@ Bounds, so this does not turn every change into a rename PR:
 - If a violation is load-bearing enough that fixing it in passing would
   obscure your actual change, leave it and say so rather than doing it badly.
 
-Backward compatibility is not a consideration for internal names. Every
-`@kamiazya/whiteboard-canvas-*` package is **private**; only
-`@kamiazya/whiteboard-mcp` publishes, and it is `0.0.x`. A deprecation alias
-here buys nobody anything and doubles the surface that has to be read.
+Backward compatibility is not a consideration, and not only for internal
+names. Every `@kamiazya/whiteboard-canvas-*` package is **private**; only
+`@kamiazya/whiteboard-mcp` publishes, and it is `0.0.x` with no users. A
+deprecation alias buys nobody anything and doubles the surface that has to be
+read.
+
+That extends to STORED and PUBLISHED shapes — the JSON Canvas `x-whiteboard`
+extension, the SQLite schema, tool parameters, URLs. Consistency of the model
+outranks the reading of an old document or database, so a field is renamed
+where a later version would have to migrate instead. Two consequences worth
+knowing before doing it:
+
+- A stored shape gets a MIGRATION where one is possible (`0009` renamed the
+  whole DB schema without losing a row), and a plain break where it is not
+  (`x-whiteboard.documentId` — a document exported under the old spelling
+  loses its embed on read).
+- A migration's own text is history and never renamed: its log key is
+  recorded in the database, and every table and column it names is the name
+  as it stood at that point in the log.
 
 ## Known violations, largest first
 
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
-- The `x-whiteboard.canvasId` field and the `branches`/`versions` `canvasId`
-  COLUMNS — the two places the word survives on purpose. Both are format or
-  storage contracts rather than names; see the notes at each. `canvasId` as
-  an identifier is otherwise done
 - `canvas-store.ts` (mcp-server's daemon-side file/db store) — `CanvasDocStore`
   and `canvas-doc-io.ts` are done
 - The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`

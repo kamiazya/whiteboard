@@ -150,7 +150,7 @@ export const canvasEdgeArbitrary = fc.record({
 
 export const xWhiteboardArbitrary = fc.record({
   kind: fc.constant('embed' as const),
-  canvasId: canonicalUlidArbitrary,
+  documentId: canonicalUlidArbitrary,
 })
 
 export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })

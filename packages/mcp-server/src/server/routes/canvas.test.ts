@@ -962,7 +962,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
     const row = await db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-a')

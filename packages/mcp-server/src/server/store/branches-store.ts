@@ -51,7 +51,7 @@ export async function loadCanvasBranches(
   validateSlug(slug)
   const db = await dbReady()
   const canvasRow = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['id', 'currentBranch'])
     .where('workspaceId', '=', workspaceId)
     .where('slug', '=', slug)
@@ -62,7 +62,7 @@ export async function loadCanvasBranches(
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('canvasId', '=', canvasRow.id)
+    .where('documentId', '=', canvasRow.id)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -102,13 +102,13 @@ async function saveCanvasBranchesLocked(
   const db = await dbReady()
   const documentId = await upsertCanvasRow(db, workspaceId, slug)
   await db.transaction().execute(async (trx) => {
-    await trx.deleteFrom('branches').where('canvasId', '=', documentId).execute()
+    await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
     if (state.branches.length > 0) {
       await trx
         .insertInto('branches')
         .values(
           state.branches.map((b) => ({
-            canvasId: documentId,
+            documentId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -120,7 +120,7 @@ async function saveCanvasBranchesLocked(
         .execute()
     }
     await trx
-      .updateTable('canvases')
+      .updateTable('documents')
       .set({ currentBranch: state.head, updatedAt: Date.now() })
       .where('id', '=', documentId)
       .execute()

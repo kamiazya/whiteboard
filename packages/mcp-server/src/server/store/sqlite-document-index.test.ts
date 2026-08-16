@@ -40,7 +40,7 @@ describe('SqliteDocumentIndex', () => {
         kind: 'spatial',
       })
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: 'Go1G4OcJKUBu',
           workspaceId: 'ws1',
@@ -75,7 +75,7 @@ describe('rows written before canvasIds were ULIDs', () => {
         .values({ id: 'ws-legacy', createdAt: 0, updatedAt: 0 })
         .execute()
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: 'uH6qTx6Ai2hl',
           workspaceId: 'ws-legacy',
@@ -146,7 +146,7 @@ describe('rows written before documents had a kind', () => {
         .values({ id: 'ws-k', createdAt: 0, updatedAt: 0 })
         .execute()
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: documentId,
           workspaceId: 'ws-k',

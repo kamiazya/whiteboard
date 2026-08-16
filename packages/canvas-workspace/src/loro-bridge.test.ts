@@ -149,7 +149,7 @@ describe('loro-bridge', () => {
     const doc = makeDoc()
     const node: SpatialNode = {
       ...TEXT_NODE,
-      'x-whiteboard': { kind: 'embed', canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+      'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     }
     const canvas: SpatialCanvas = { nodes: [node], edges: [] }
 
@@ -158,7 +158,7 @@ describe('loro-bridge', () => {
 
     expect(result.nodes[0]['x-whiteboard']).toEqual({
       kind: 'embed',
-      canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
     })
   })
 

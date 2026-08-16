@@ -30,7 +30,7 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
     .where('id', '=', workspaceId)
     .executeTakeFirst()
   const canvasRows = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['slug', 'displayName', 'isPinned', 'pinOrder'])
     .where('workspaceId', '=', workspaceId)
     .execute()
@@ -84,7 +84,7 @@ export async function setCanvasName(
   await upsertCanvasRow(db, workspaceId, slug)
   const now = Date.now()
   await db
-    .updateTable('canvases')
+    .updateTable('documents')
     .set({
       displayName: trimmed.length > 0 ? trimmed : null,
       updatedAt: now,
@@ -110,7 +110,7 @@ export async function setCanvasPinned(
   await upsertCanvasRow(db, workspaceId, slug)
   await db.transaction().execute(async (trx) => {
     const row = await trx
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['isPinned', 'pinOrder'])
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', slug)
@@ -119,21 +119,21 @@ export async function setCanvasPinned(
     const isPinnedNow = row.isPinned === 1
     if (pinned && !isPinnedNow) {
       const max = await trx
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select((eb) => eb.fn.max('pinOrder').as('maxOrder'))
         .where('workspaceId', '=', workspaceId)
         .where('isPinned', '=', 1)
         .executeTakeFirst()
       const nextOrder = (max?.maxOrder ?? -1) + 1
       await trx
-        .updateTable('canvases')
+        .updateTable('documents')
         .set({ isPinned: 1, pinOrder: nextOrder, updatedAt: Date.now() })
         .where('workspaceId', '=', workspaceId)
         .where('slug', '=', slug)
         .execute()
     } else if (!pinned && isPinnedNow) {
       await trx
-        .updateTable('canvases')
+        .updateTable('documents')
         .set({ isPinned: 0, pinOrder: null, updatedAt: Date.now() })
         .where('workspaceId', '=', workspaceId)
         .where('slug', '=', slug)

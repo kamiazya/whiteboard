@@ -17,7 +17,7 @@ const NODE_WITH_EXTENSION = {
   text: 'hi',
   'x-whiteboard': {
     kind: 'embed' as const,
-    canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const,
+    documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const,
   },
 }
 
@@ -54,7 +54,7 @@ describe('exportJsonCanvas', () => {
 
     expect(parsed.nodes[0]['x-whiteboard']).toEqual({
       kind: 'embed',
-      canvasId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
     })
   })
 

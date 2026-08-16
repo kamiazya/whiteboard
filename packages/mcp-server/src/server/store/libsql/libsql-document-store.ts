@@ -44,7 +44,7 @@ type Trx = Transaction<DatabaseSchema>
 async function upsertFrontier(trx: Trx, docKey: string, frontier: Frontier): Promise<void> {
   const blob = toBlob(frontier)
   await trx
-    .insertInto('canvasDocFrontiers')
+    .insertInto('documentFrontiers')
     .values({ docKey, frontier: blob })
     .onConflict((oc) => oc.column('docKey').doUpdateSet({ frontier: blob }))
     .execute()
@@ -70,7 +70,7 @@ export class LibsqlDocumentStore implements DocumentStore {
   async loadSnapshot({ docRef }: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const docKey = docRefKey(docRef)
     const header = await this.db
-      .selectFrom('canvasDocSnapshots')
+      .selectFrom('documentSnapshots')
       .select(['chunkCount', 'totalBytes', 'maxChunkBytes'])
       .where('docKey', '=', docKey)
       .executeTakeFirst()
@@ -80,7 +80,7 @@ export class LibsqlDocumentStore implements DocumentStore {
 
     const [chunkRows, frontier] = await Promise.all([
       this.db
-        .selectFrom('canvasDocSnapshotChunks')
+        .selectFrom('documentSnapshotChunks')
         .select(['chunkIndex', 'bytes'])
         .where('docKey', '=', docKey)
         .orderBy('chunkIndex', 'asc')
@@ -110,7 +110,7 @@ export class LibsqlDocumentStore implements DocumentStore {
   // than a per-log frontier — see their doc comments for why.
   private async currentFrontier(docKey: string): Promise<Frontier> {
     const row = await this.db
-      .selectFrom('canvasDocFrontiers')
+      .selectFrom('documentFrontiers')
       .select('frontier')
       .where('docKey', '=', docKey)
       .executeTakeFirst()
@@ -123,7 +123,7 @@ export class LibsqlDocumentStore implements DocumentStore {
 
     await this.db.transaction().execute(async (trx) => {
       await trx
-        .insertInto('canvasDocSnapshots')
+        .insertInto('documentSnapshots')
         .values({
           docKey,
           chunkCount: manifest.chunkCount,
@@ -141,11 +141,11 @@ export class LibsqlDocumentStore implements DocumentStore {
         )
         .execute()
 
-      await trx.deleteFrom('canvasDocSnapshotChunks').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('documentSnapshotChunks').where('docKey', '=', docKey).execute()
 
       if (chunks.length > 0) {
         await trx
-          .insertInto('canvasDocSnapshotChunks')
+          .insertInto('documentSnapshotChunks')
           .values(
             chunks.map((chunk) => ({
               docKey,
@@ -168,10 +168,10 @@ export class LibsqlDocumentStore implements DocumentStore {
     // frontier or a delta run addressing a snapshot that is gone, which
     // loadSnapshot cannot distinguish from a document mid-write.
     await this.db.transaction().execute(async (trx) => {
-      await trx.deleteFrom('canvasDocSnapshotChunks').where('docKey', '=', docKey).execute()
-      await trx.deleteFrom('canvasDocSnapshots').where('docKey', '=', docKey).execute()
-      await trx.deleteFrom('canvasDocDeltas').where('docKey', '=', docKey).execute()
-      await trx.deleteFrom('canvasDocFrontiers').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('documentSnapshotChunks').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('documentSnapshots').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('documentDeltas').where('docKey', '=', docKey).execute()
+      await trx.deleteFrom('documentFrontiers').where('docKey', '=', docKey).execute()
     })
     log.debug({ docKey }, 'deleted doc')
   }
@@ -183,7 +183,7 @@ export class LibsqlDocumentStore implements DocumentStore {
 
     await this.db.transaction().execute(async (trx) => {
       const maxRow = await trx
-        .selectFrom('canvasDocDeltas')
+        .selectFrom('documentDeltas')
         .select((eb) => eb.fn.max('seq').as('maxSeq'))
         .where('docKey', '=', docKey)
         .executeTakeFirst()
@@ -195,7 +195,7 @@ export class LibsqlDocumentStore implements DocumentStore {
         bytes: toBlob(update),
         frontier: frontierBlob,
       }))
-      await trx.insertInto('canvasDocDeltas').values(rows).execute()
+      await trx.insertInto('documentDeltas').values(rows).execute()
 
       await upsertFrontier(trx, docKey, newFrontier)
     })
@@ -221,7 +221,7 @@ export class LibsqlDocumentStore implements DocumentStore {
     const docKey = docRefKey(docRef)
     const [rows, frontier] = await Promise.all([
       this.db
-        .selectFrom('canvasDocDeltas')
+        .selectFrom('documentDeltas')
         .select('bytes')
         .where('docKey', '=', docKey)
         .orderBy('seq', 'asc')
@@ -238,7 +238,7 @@ export class LibsqlDocumentStore implements DocumentStore {
   async readFrontier({ docRef }: ReadFrontierInput): Promise<ReadFrontierResult> {
     const docKey = docRefKey(docRef)
     const row = await this.db
-      .selectFrom('canvasDocFrontiers')
+      .selectFrom('documentFrontiers')
       .select('frontier')
       .where('docKey', '=', docKey)
       .executeTakeFirst()

@@ -19,4 +19,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0006-drop-workspace-index',
   '0007-adopt-workspace-tree',
   '0008-ulid-legacy-canvas-ids',
+  '0009-document-vocabulary',
 ] as const satisfies readonly string[]

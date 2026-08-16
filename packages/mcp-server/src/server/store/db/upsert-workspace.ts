@@ -29,7 +29,7 @@ export async function getCanvasIdBySlug(
   slug: string,
 ): Promise<string | null> {
   const row = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['id'])
     .where('workspaceId', '=', workspaceId)
     .where('slug', '=', slug)
@@ -52,7 +52,7 @@ export async function upsertCanvasRow(
   const id = nanoid(12)
   const now = Date.now()
   await db
-    .insertInto('canvases')
+    .insertInto('documents')
     .values({
       id,
       workspaceId,

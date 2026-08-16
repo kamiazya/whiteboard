@@ -97,7 +97,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       // One statement, so the check and the claim cannot be separated: the
       // unique (workspaceId, slug) index decides, and a loser inserts nothing.
       const inserted = await this.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: documentId,
           workspaceId,
@@ -125,7 +125,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     path,
   }: ResolveDocumentInput): Promise<DocumentEntry | null> {
     const row = await this.db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .where('slug', '=', path)
@@ -139,7 +139,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     documentId,
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     const row = await this.db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', documentId)
@@ -150,7 +150,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
 
   async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
     const result = await this.db
-      .updateTable('canvases')
+      .updateTable('documents')
       .set({ displayName: name ?? null })
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', documentId)
@@ -170,7 +170,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       throw new WorkspaceNotFoundError(workspaceId)
     }
     const rows = await this.db
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['id', 'slug', 'kind', 'displayName'])
       .where('workspaceId', '=', workspaceId)
       .execute()
@@ -206,7 +206,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     await withWorkspaceWriteLock(workspaceId, async () => {
       await this.db.transaction().execute(async (trx) => {
         const rows = await trx
-          .selectFrom('canvases')
+          .selectFrom('documents')
           .select(['id', 'slug'])
           .where('workspaceId', '=', workspaceId)
           .execute()
@@ -248,7 +248,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
         const now = Date.now()
         for (const row of rewritten) {
           await trx
-            .updateTable('canvases')
+            .updateTable('documents')
             .set({ slug: row.slug, updatedAt: now })
             .where('id', '=', row.id)
             .execute()
@@ -260,7 +260,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
     await withWorkspaceWriteLock(workspaceId, async () => {
       const descendant = await this.db
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select('slug')
         .where('workspaceId', '=', workspaceId)
         .where('slug', 'like', `${path}/%`)
@@ -272,7 +272,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
         )
       }
       await this.db
-        .deleteFrom('canvases')
+        .deleteFrom('documents')
         .where('workspaceId', '=', workspaceId)
         .where('slug', '=', path)
         .execute()
