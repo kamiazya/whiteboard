@@ -65,6 +65,46 @@ it('the More-actions control is keyboard-operable (Enter opens the menu)', async
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 })
 
+it('a multi-selection gets the same doorway, opening align/distribute', async () => {
+  const spread: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
+      { id: 'b', type: 'text', x: 300, y: 220, width: 120, height: 60, text: 'B' },
+    ],
+    edges: [],
+  }
+  function MultiHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(spread)
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<MultiHost />)
+  const root = rootOf(container)
+  root.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', metaKey: true, bubbles: true }),
+  )
+
+  // Align/distribute were the least discoverable actions of all; the multi-
+  // selection's ⋯ is the first visible route to them.
+  const more = page.getByTestId('more-actions-handle')
+  await expect.element(more).toBeInTheDocument()
+  await userEvent.click(more)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-testid="context-menu"] [aria-label="Align left"]'),
+    ).not.toBeNull(),
+  )
+})
+
 it('arrow keys nudge the selected node; Shift enlarges the step', async () => {
   const { container } = render(<Host />)
   const root = rootOf(container)

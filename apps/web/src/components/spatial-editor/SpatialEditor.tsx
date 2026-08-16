@@ -3405,7 +3405,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 setContextMenu({
                   x: screen.x,
                   y: screen.y,
-                  nodeId: isMultiSelection ? selection.id : (selectedNode?.id ?? selection.id),
+                  nodeId: selection.id,
                   edgeId: undefined,
                   point: anchor,
                 })
