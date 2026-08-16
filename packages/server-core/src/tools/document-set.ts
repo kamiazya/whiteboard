@@ -113,7 +113,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       //
       // Absent is not cleared: an OKF with no `title` says nothing about the
       // name, so omitting it must not erase one.
-      const { facets, title, ...coreMeta } = frontmatter
+      const { facets, title, ...coreFacets } = frontmatter
       if (title !== undefined) {
         // A blank title is not a name, and the two are deliberately one
         // state — so writing one clears the name rather than storing '' for
@@ -125,7 +125,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
           ...(trimmed === '' ? {} : { name: trimmed }),
         })
       }
-      writeCoreFacets(doc, coreMeta)
+      writeCoreFacets(doc, coreFacets)
       if (facets) {
         writeFacets(doc, facets)
       }

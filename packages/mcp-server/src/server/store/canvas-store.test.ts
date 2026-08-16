@@ -29,7 +29,7 @@ const {
   scheduleAutoCompact,
   setAutoCompactTrigger,
   disposeAutoCompact,
-  getCanvasKind,
+  getDocumentKind,
   _inFlightAutoCompactCountForTests,
   _isDisposingAutoCompactForTests,
 } = await import('./canvas-store.js')
@@ -390,7 +390,7 @@ describe('listCanvases', () => {
   // canvases table.
 })
 
-describe('getCanvasKind', () => {
+describe('getDocumentKind', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
@@ -404,12 +404,12 @@ describe('getCanvasKind', () => {
   })
 
   it('returns null when the canvas does not exist', async () => {
-    expect(await getCanvasKind('session1', 'missing')).toBeNull()
+    expect(await getDocumentKind('session1', 'missing')).toBeNull()
   })
 
   it('returns the persisted kind for an existing canvas', async () => {
     await saveCanvas('session1', 'note', new LoroDoc(), { kind: 'markdown' })
-    expect(await getCanvasKind('session1', 'note')).toBe('markdown')
+    expect(await getDocumentKind('session1', 'note')).toBe('markdown')
   })
 
   it('reports an unrecorded kind as unknown rather than guessing spatial', async () => {
@@ -419,7 +419,7 @@ describe('getCanvasKind', () => {
     // opened by the wrong editor. Both callers already omit a null kind,
     // which copies the source's real state, unknown included.
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    expect(await getCanvasKind('session1', 'canvas-a')).toBeNull()
+    expect(await getDocumentKind('session1', 'canvas-a')).toBeNull()
   })
 })
 

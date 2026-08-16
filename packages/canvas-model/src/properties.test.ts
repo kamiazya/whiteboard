@@ -1,4 +1,5 @@
 import { describe, expect } from 'vitest'
+import { documentKindSchema } from './document-kind.js'
 import {
   coreFacetsSchema,
   extensionFacetsSchema,
@@ -12,7 +13,6 @@ import {
   mdastPhrasingContentSchema,
   mdastRootSchema,
 } from './mdast/index.js'
-import { canvasMetaSchema } from './meta.js'
 import {
   canvasEdgeSchema,
   spatialCanvasSchema,
@@ -22,8 +22,8 @@ import {
 import {
   canonicalUlidArbitrary,
   canvasEdgeArbitrary,
-  canvasMetaArbitrary,
   coreFacetsArbitrary,
+  documentKindArbitrary,
   extensionFacetsArbitrary,
   facetsRawArbitrary,
   markdownCanvasArbitrary,
@@ -36,8 +36,8 @@ import {
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 describe('arbitrary-conformance: every generator agrees with its schema', () => {
-  fcTest.prop([canvasMetaArbitrary], withDefaults())('canvasMetaSchema', (value) => {
-    expect(canvasMetaSchema.safeParse(value).success).toBe(true)
+  fcTest.prop([documentKindArbitrary], withDefaults())('documentKindSchema', (value) => {
+    expect(documentKindSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop([coreFacetsArbitrary], withDefaults())('coreFacetsSchema', (value) => {

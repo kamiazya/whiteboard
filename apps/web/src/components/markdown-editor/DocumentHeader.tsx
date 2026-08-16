@@ -1,13 +1,13 @@
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 
 export interface DocumentHeaderProps {
-  readonly meta: CanvasCoreMeta
+  readonly meta: StoredCoreFacets
 }
 
 /**
  * The rendered projection of the OKF core facets, shown above the document
  * body in Read mode. Display-only by design: facet EDITING stays in
- * `CanvasProperties` (the header row), which owns the whole-`CanvasCoreMeta`
+ * `CanvasProperties` (the header row), which owns the whole-`StoredCoreFacets`
  * emit contract — a second editor here would race it. The title rendered
  * here is the workspace display name's projection, exactly what `title:`
  * frontmatter serialises to.

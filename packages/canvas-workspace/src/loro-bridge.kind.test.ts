@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { readDocumentKind, writeDocumentKind } from './loro-bridge.js'
@@ -13,7 +13,7 @@ describe('document kind bridge', () => {
     expect(readDocumentKind(new LoroDoc())).toBeUndefined()
   })
 
-  test.each<CanvasKind>(['spatial', 'markdown'])('round-trips %s', (kind) => {
+  test.each<DocumentKind>(['spatial', 'markdown'])('round-trips %s', (kind) => {
     const doc = new LoroDoc()
     writeDocumentKind(doc, kind)
     expect(readDocumentKind(doc)).toBe(kind)

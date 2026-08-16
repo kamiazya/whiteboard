@@ -17,7 +17,7 @@ const tmp = withTempDataDir('whiteboard-restore-test-')
 
 const { createRestoreRouter } = await import('./restore.js')
 const { clearCache } = await import('../../store/doc-cache.js')
-const { saveCanvas, getCanvasKind } = await import('../../store/canvas-store.js')
+const { saveCanvas, getDocumentKind } = await import('../../store/canvas-store.js')
 const { createCanvasRouter } = await import('../canvas.js')
 // Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
 // documented cycle workaround for canvas.ts's dynamic import.
@@ -179,7 +179,7 @@ describe('restore router (kind propagation)', () => {
       },
     )
     expect(restoreRes.status).toBe(200)
-    expect(await getCanvasKind('session1', 'note-restored')).toBe('markdown')
+    expect(await getDocumentKind('session1', 'note-restored')).toBe('markdown')
   })
 
   it('leaves an unrecorded kind unrecorded on the target instead of stamping spatial', async () => {
@@ -193,7 +193,7 @@ describe('restore router (kind propagation)', () => {
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['n1']),
     })
-    expect(await getCanvasKind('session1', 'unknown-a')).toBeNull()
+    expect(await getDocumentKind('session1', 'unknown-a')).toBeNull()
 
     const saveRes = await app.request('/api/workspaces/session1/canvases/unknown-a/versions', {
       method: 'POST',
@@ -211,6 +211,6 @@ describe('restore router (kind propagation)', () => {
       },
     )
     expect(restoreRes.status).toBe(200)
-    expect(await getCanvasKind('session1', 'unknown-restored')).toBeNull()
+    expect(await getDocumentKind('session1', 'unknown-restored')).toBeNull()
   })
 })

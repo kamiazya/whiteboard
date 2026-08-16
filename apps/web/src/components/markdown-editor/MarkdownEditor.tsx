@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state'
 import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
-import { type CanvasCoreMeta, canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { canvasIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -40,7 +40,7 @@ export interface MarkdownEditorProps {
    * Core OKF facets, rendered as the document header in Read mode —
    * display-only; facet editing stays in `CanvasProperties`.
    */
-  meta?: CanvasCoreMeta
+  meta?: StoredCoreFacets
   /**
    * Maps `[[Name]]` aliases to canvas ids for the preview (canvas-codec's
    * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.

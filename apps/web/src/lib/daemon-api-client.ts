@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   type CanvasOkfV1Response,
   type CreateCanvasResponse,
@@ -93,7 +93,7 @@ export function createCanvas(
   daemonBaseUrl: string,
   workspaceId: string,
   slug: string,
-  kind?: CanvasKind,
+  kind?: DocumentKind,
 ): Promise<CreateCanvasResponse> {
   return fetchAndParse(
     fetchFn,

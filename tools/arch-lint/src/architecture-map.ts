@@ -56,7 +56,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // layer package (besides server-core, which re-exposes the bridge via
     // its Loro-backed store ports) allowed to import it directly.
     // zod: the bridge validates the persisted `core` LoroMap entries against
-    // canvas-model's canvasCoreMetaSchema field-by-field on read.
+    // canvas-model's storedCoreFacetsSchema field-by-field on read.
     allowedThirdParty: ['loro-crdt', 'zod'],
   },
   '@kamiazya/whiteboard-server-core': {

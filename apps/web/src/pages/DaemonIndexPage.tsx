@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -44,7 +44,7 @@ interface CanvasRow {
   slug: string
   displayName: string
   updatedAt: string
-  kind: CanvasKind
+  kind: DocumentKind
   pinned: boolean
   pinOrder: number
 }
@@ -198,7 +198,7 @@ export function DaemonIndexPage({
   // canvas already in the list; naming happens afterwards, in the opened
   // canvas's own top bar.
   const handleCreate = useCallback(
-    async (kind: CanvasKind) => {
+    async (kind: DocumentKind) => {
       if (!selectedWorkspace) return
       const workspaceAtStart = selectedWorkspace
       setCreating(true)

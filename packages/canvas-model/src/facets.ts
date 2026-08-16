@@ -73,14 +73,16 @@ export type FacetsRaw = z.infer<typeof facetsRawSchema>
 /**
  * The persisted counterpart to `coreFacetsSchema`: the core OKF facets plus
  * the `facetsRaw` bucket, as a single shape a store can write/read as one
- * unit. `facets` (the extension bucket) is deliberately excluded — it has
+ * unit. Named for what it holds — facets are OKF frontmatter (ADR-0009
+ * decision 3) — rather than for the canvas, which is a spatial surface and
+ * carries none. `facets` (the extension bucket) is deliberately excluded — it has
  * its own storage key and its own read/write pair (`writeFacets`/
  * `readFacets` in canvas-workspace) so one domain's CRDT merge never
  * overwrites another's; folding it into this object would lose that
  * per-key merge granularity.
  */
-export const canvasCoreMetaSchema = coreFacetsSchema.extend({
+export const storedCoreFacetsSchema = coreFacetsSchema.extend({
   facetsRaw: facetsRawSchema.optional(),
 })
 
-export type CanvasCoreMeta = z.infer<typeof canvasCoreMetaSchema>
+export type StoredCoreFacets = z.infer<typeof storedCoreFacetsSchema>

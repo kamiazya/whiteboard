@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
@@ -78,7 +78,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
   }, [store, pendingDelete])
 
   const handleCreate = useCallback(
-    async (kind: CanvasKind) => {
+    async (kind: DocumentKind) => {
       setCreating(true)
       try {
         const id = store.generateId()

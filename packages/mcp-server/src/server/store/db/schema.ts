@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
@@ -31,7 +31,7 @@ interface CanvasesTable {
   lastCompactedAt: Timestamp | null
   // Which editor opens this canvas. Null for rows created before this column
   // existed; the application layer maps null to 'spatial'.
-  kind: CanvasKind | null
+  kind: DocumentKind | null
 }
 
 interface BranchesTable {

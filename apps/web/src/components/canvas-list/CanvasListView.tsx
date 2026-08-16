@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { FileBox, FileText, Plus } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import {
@@ -18,7 +18,7 @@ export interface CanvasListRow {
   // passes the derived display slug — the same visual slot either way.
   secondary?: string
   updatedAt: string
-  kind: CanvasKind
+  kind: DocumentKind
 }
 
 // Clock drift between client and daemon can make (now - t) negative; clamp
@@ -37,9 +37,9 @@ export interface CanvasListViewProps {
   rows: readonly CanvasListRow[]
   onOpen: (slug: string) => void
   // Immediate create per ADR-0006: no name is collected up front. The menu
-  // picks which CanvasKind the caller creates; everything else about the
+  // picks which DocumentKind the caller creates; everything else about the
   // creation (slug derivation, the POST) is the caller's.
-  onCreate: (kind: CanvasKind) => void
+  onCreate: (kind: DocumentKind) => void
   // Capability slot: the daemon page passes CanvasThumb; browser-local omits
   // it and gets the label-only card. A render prop, NOT a scene render —
   // this component never imports canvas-render/canvas-viewer.

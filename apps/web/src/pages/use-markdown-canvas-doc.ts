@@ -14,7 +14,7 @@
  * the store cannot decode should degrade to "empty, editable, next save
  * overwrites" rather than a dead page.
  */
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import {
   MARKDOWN_BODY_KEY,
   readCoreFacets,
@@ -64,15 +64,15 @@ function queueSave(store: LoroStoreLike, canvasId: string, snapshot: Uint8Array)
  * as `markdown` is both true and the least surprising default, and the
  * field is free text the moment the user disagrees.
  */
-export const DEFAULT_MARKDOWN_CORE_META: CanvasCoreMeta = { type: 'markdown' }
+export const DEFAULT_MARKDOWN_CORE_FACETS: StoredCoreFacets = { type: 'markdown' }
 
 export interface MarkdownCanvasDocState {
   /** Null until the initial load resolves — render nothing editable before. */
   readonly body: string | null
   readonly setBody: (next: string) => void
   /** Null until the initial load resolves, mirroring `body`. */
-  readonly coreMeta: CanvasCoreMeta | null
-  readonly setCoreMeta: (next: CanvasCoreMeta) => void
+  readonly coreFacets: StoredCoreFacets | null
+  readonly setCoreFacets: (next: StoredCoreFacets) => void
   /**
    * The loaded Loro instance, for composition-root CRDT bindings
    * (loro-codemirror). Null until the initial load resolves. A binding
@@ -89,7 +89,7 @@ export function useMarkdownCanvasDoc(
   enabled: boolean,
 ): MarkdownCanvasDocState {
   const [body, setBodyState] = useState<string | null>(null)
-  const [coreMeta, setCoreMetaState] = useState<CanvasCoreMeta | null>(null)
+  const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const docRef = useRef<Loro | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -132,7 +132,7 @@ export function useMarkdownCanvasDoc(
         unsubscribe = doc.subscribe((event) => {
           if (cancelled) return
           setBodyState(readMarkdownBody(doc))
-          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+          setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_FACETS)
           if (event.by === 'local') scheduleSaveRef.current?.()
         })
         setDoc(doc)
@@ -152,7 +152,7 @@ export function useMarkdownCanvasDoc(
           writeMarkdownBody(doc, stored)
         }
         setBodyState(readMarkdownBody(doc))
-        setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_META)
+        setCoreMetaState(readCoreFacets(doc) ?? DEFAULT_MARKDOWN_CORE_FACETS)
       })
     return () => {
       cancelled = true
@@ -208,8 +208,8 @@ export function useMarkdownCanvasDoc(
     [scheduleSave],
   )
 
-  const setCoreMeta = useCallback(
-    (next: CanvasCoreMeta) => {
+  const setCoreFacets = useCallback(
+    (next: StoredCoreFacets) => {
       const doc = docRef.current
       if (doc === null) return
       setCoreMetaState(next)
@@ -222,5 +222,5 @@ export function useMarkdownCanvasDoc(
     [scheduleSave],
   )
 
-  return { body, setBody, coreMeta, setCoreMeta, doc }
+  return { body, setBody, coreFacets, setCoreFacets, doc }
 }

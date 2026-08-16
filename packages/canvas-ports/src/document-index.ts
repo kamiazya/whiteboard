@@ -1,6 +1,6 @@
 import {
   canvasIdSchema,
-  canvasKindSchema,
+  documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -15,7 +15,7 @@ export const documentEntrySchema = z
     // is the dishonest surface — and the read path is where "format unknown"
     // is said (wb_document_get refuses such a document with advice).
     // createDocument's input keeps `kind` required; only pre-kind rows lack it.
-    kind: canvasKindSchema.optional(),
+    kind: documentKindSchema.optional(),
     /**
      * What a human reads, as opposed to `path`, which is an address. Absent
      * rather than defaulted to the last path segment: a reader that wants
@@ -31,7 +31,7 @@ export const createDocumentInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     path: documentPathSchema,
-    kind: canvasKindSchema,
+    kind: documentKindSchema,
     name: z.string().min(1).optional(),
   })
   .strict()

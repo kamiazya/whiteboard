@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { generateCanvasId } from '@kamiazya/whiteboard-canvas-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -65,7 +65,7 @@ export async function saveCanvas(
   workspaceId: string,
   slug: string,
   doc: LoroDoc,
-  options: { overwrite?: boolean; kind?: CanvasKind } = {},
+  options: { overwrite?: boolean; kind?: DocumentKind } = {},
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
@@ -331,7 +331,10 @@ export async function deleteCanvas(workspaceId: string, slug: string): Promise<b
 // predates kinds would become permanently spatial and open in the wrong
 // editor, which is the exact failure the callers' comments say they are
 // copying the source's kind to avoid.
-export async function getCanvasKind(workspaceId: string, slug: string): Promise<CanvasKind | null> {
+export async function getDocumentKind(
+  workspaceId: string,
+  slug: string,
+): Promise<DocumentKind | null> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const db = await dbReady()

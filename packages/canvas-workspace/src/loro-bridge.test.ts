@@ -1,9 +1,9 @@
 import type {
-  CanvasCoreMeta,
   CanvasEdge,
   ExtensionFacets,
   SpatialCanvas,
   SpatialNode,
+  StoredCoreFacets,
 } from '@kamiazya/whiteboard-canvas-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -472,7 +472,7 @@ describe('core facets bridge', () => {
 
   test('round-trips every core field', () => {
     const doc = makeDoc()
-    const meta: CanvasCoreMeta = {
+    const meta: StoredCoreFacets = {
       type: 'note',
       title: 'A note',
       tags: ['idea', 'browser'],
@@ -487,7 +487,7 @@ describe('core facets bridge', () => {
 
   test('round-trips the minimal (type-only) core meta', () => {
     const doc = makeDoc()
-    const meta: CanvasCoreMeta = { type: 'canvas' }
+    const meta: StoredCoreFacets = { type: 'canvas' }
 
     writeCoreFacets(doc, meta)
 

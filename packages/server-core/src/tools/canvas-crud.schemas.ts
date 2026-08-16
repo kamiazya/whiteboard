@@ -1,6 +1,6 @@
 import {
   canvasIdSchema,
-  canvasKindSchema,
+  documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
@@ -12,7 +12,7 @@ export const createCanvasInputSchema = z
     path: documentPathSchema.describe(
       'Where the document goes, as a slash-separated path from the workspace root. Hierarchy is the path: `plan/sub` sits under `plan`, and no separate parent id is involved.',
     ),
-    kind: canvasKindSchema.describe(
+    kind: documentKindSchema.describe(
       'What the document is. `markdown` serialises as OKF, `spatial` as JSON Canvas. Required: the format follows from the document rather than from a read parameter, so a document created without one cannot be read back.',
     ),
     name: z

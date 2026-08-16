@@ -9,7 +9,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | word | means | does NOT mean |
 |---|---|---|
 | **Workspace** | the tree that holds documents; owns placement (`segment`, derived `alias`) and naming (display name) | anything about a document's content |
-| **Document** | the unit a workspace contains. Has a format | a canvas |
+| **Document** | the unit a workspace contains. Has a kind | a canvas |
 | **Facet** | OKF frontmatter (`type`, `tags`, extension `{domain}/{version}` buckets) | metadata on a JSON Canvas document — that concept does not exist yet |
 | **Body** | an OKF document's markdown body | a spatial document's content |
 | **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
@@ -22,9 +22,19 @@ Two consequences that catch people out:
 - **A document's name lives in the workspace, not in its content.** OKF
   frontmatter `title` is a *projection* of the workspace display name on
   serialise, never a second place to write it.
-- **Format follows from the document.** There is no "read this document as
+- **Kind follows from the document.** There is no "read this document as
   OKF" for a JSON Canvas document. Cross-format output is an explicitly lossy
   projection (today: `wb_scene_render` for SVG), not a parameter on a read.
+
+  ADR-0009 calls this a document's FORMAT while every implementation of it
+  says `kind` — the daemon's column, the index row's field,
+  `readDocumentKind`/`writeDocumentKind`, and the field each kind-carrying
+  contract publishes. The ADR itself says the two are one concept ("Kind and
+  format are already the same field") and criticises the codebase for
+  spelling it both ways at once, so the fix was to pick one. **`kind` won**,
+  because it was already everywhere the word is stored or published and
+  `format` survived only in a `meta.ts` nothing imported (since deleted).
+  `documentKindSchema` is the single source of truth.
 
 ## The standing rule
 
@@ -58,8 +68,6 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
 
 - `canvasId` throughout, for what is a document id
 - `CanvasDocStore`, `canvas-store.ts`, `canvas-doc-io.ts`
-- `canvasKindSchema = ['spatial','markdown']`, and `meta.ts`'s field literally
-  named `format` holding it
 - The `@kamiazya/whiteboard-canvas-{model,codec,render,ports,workspace,viewer}`
   package names — `render` and `viewer` are arguably correct (they are about
   the spatial scene); `model`, `codec`, `ports` and `workspace` are not

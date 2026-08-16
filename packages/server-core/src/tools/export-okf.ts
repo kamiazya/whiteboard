@@ -50,7 +50,7 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
   const { doc } = await loadSpatialCanvas(deps, input.canvasId)
-  const coreMeta = readCoreFacets(doc)
+  const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this
   // emits is a projection, and an unnamed document emits none rather than
@@ -61,7 +61,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   })
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)
-  const { title: _storedTitle, ...storedMeta } = coreMeta ?? {
+  const { title: _storedTitle, ...storedMeta } = coreFacets ?? {
     type: OKF_EXPORT_PLACEHOLDER_TYPE,
   }
   const frontmatter: OkfMarkdownFrontmatter = {

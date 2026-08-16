@@ -1,7 +1,7 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-canvas-codec'
 import {
   canvasIdSchema,
-  canvasKindSchema,
+  documentKindSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { readDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
@@ -32,7 +32,7 @@ export type DocumentGetInput = z.infer<typeof documentGetInputSchema>
 
 const documentGetOutputSchema = z
   .object({
-    kind: canvasKindSchema,
+    kind: documentKindSchema,
     content: z.string(),
     // Present only for a markdown document. Frontmatter is OKF's, and a JSON
     // Canvas document has none (ADR-0009 decision 3) — an always-present

@@ -1,4 +1,4 @@
-import { canvasKindSchema } from '@kamiazya/whiteboard-canvas-model'
+import { documentKindSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.
@@ -16,7 +16,7 @@ export const createCanvasRequestSchema = z.object({
   slug: z.string().trim().min(1),
   // Defaulted so every existing caller (which posts { slug } alone) keeps
   // creating a spatial canvas byte-identically to before this field existed.
-  kind: canvasKindSchema.default('spatial'),
+  kind: documentKindSchema.default('spatial'),
 })
 
 // `name: ''` deletes the stored name and falls back to the slug/workspaceId.
@@ -150,7 +150,7 @@ export const canvasSummarySchema = z.object({
   updatedAt: z.string(),
   // Rows stored before this field existed have no recorded kind and read
   // back as spatial — the only kind that existed then.
-  kind: canvasKindSchema.default('spatial'),
+  kind: documentKindSchema.default('spatial'),
 })
 
 export const listCanvasesResponseSchema = z.object({

@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -118,7 +118,7 @@ interface BrowserLocalCanvasPageProps {
  * placeholder for an unnamed canvas, so it stays a placeholder here instead
  * of becoming a real stored title on the first unrelated edit.
  */
-function fallbackCoreMeta(kind: CanvasSnapshot['kind'], name: string | null): CanvasCoreMeta {
+function fallbackCoreFacets(kind: CanvasSnapshot['kind'], name: string | null): StoredCoreFacets {
   const title = name && name !== 'untitled' ? name : undefined
   return { type: kind, ...(title ? { title } : {}) }
 }
@@ -241,8 +241,8 @@ export function BrowserLocalCanvasPage({
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
-  const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
-  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, canvasKind === 'markdown')
+  const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
+  const markdownDoc = useMarkdownCanvasDoc(resolvedLoro, canvasId, documentKind === 'markdown')
   // Binds CodeMirror straight to the document's 'body' text container:
   // edits land in the CRDT with real deltas (not the wholesale replace
   // setBody does), and an external change moves the local caret exactly.
@@ -264,7 +264,7 @@ export function BrowserLocalCanvasPage({
   const resolveAlias = useMemo(() => createSnapshotAliasResolver(canvases), [canvases])
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
-    body: canvasKind === 'markdown' ? (markdownDoc.body ?? '') : '',
+    body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
     resolveAlias,
   })
 
@@ -349,10 +349,10 @@ export function BrowserLocalCanvasPage({
   // written by use-markdown-body.
   const backend = useMemo(
     () =>
-      canvasId != null && canvasKind !== 'markdown' ? new BrowserLocalBackend(canvasId) : null,
+      canvasId != null && documentKind !== 'markdown' ? new BrowserLocalBackend(canvasId) : null,
     // Re-create backend only when canvasId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId, canvasKind],
+    [canvasId, documentKind],
   )
 
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
@@ -624,22 +624,22 @@ export function BrowserLocalCanvasPage({
   // facets, display settings) lives in the SAME row as workspace context —
   // the second chrome strip is gone. Kind decides the exact segment.
   const canvasTitleSlot =
-    canvasKind === 'markdown' ? (
-      markdownDoc.body !== null && markdownDoc.coreMeta !== null ? (
+    documentKind === 'markdown' ? (
+      markdownDoc.body !== null && markdownDoc.coreFacets !== null ? (
         <CanvasProperties
           inline
           key={canvasId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
-          meta={markdownDoc.coreMeta ?? fallbackCoreMeta(canvasKind, canvasName)}
+          meta={markdownDoc.coreFacets ?? fallbackCoreFacets(documentKind, canvasName)}
           onChange={(next) => {
-            markdownDoc.setCoreMeta(next)
+            markdownDoc.setCoreFacets(next)
             // title and the canvas name are ONE concept: the facet is the
             // document's own truth, the snapshot row is the copy the canvas
             // list reads without loading every document. `renameCanvas`
             // normalises a cleared title to 'untitled', which is exactly
             // what an absent facet should list as.
-            if (next.title !== markdownDoc.coreMeta?.title) {
+            if (next.title !== markdownDoc.coreFacets?.title) {
               void renameCanvas(next.title ?? '').catch(() => {
                 // Surfaced through persistence state; the facet write is
                 // independent and has already landed in the document.
@@ -659,7 +659,7 @@ export function BrowserLocalCanvasPage({
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
-        meta={coreFacets ?? fallbackCoreMeta(canvasKind, canvasName)}
+        meta={coreFacets ?? fallbackCoreFacets(documentKind, canvasName)}
         onChange={(next) => {
           setCoreFacets(next)
           if (next.title !== coreFacets?.title) {
@@ -777,9 +777,9 @@ export function BrowserLocalCanvasPage({
         </Button>
       )}
       <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
-        {canvasKind === 'markdown' ? (
+        {documentKind === 'markdown' ? (
           markdownDoc.body !== null &&
-          markdownDoc.coreMeta !== null && (
+          markdownDoc.coreFacets !== null && (
             <div className="flex h-full min-h-0 flex-col">
               <div className="min-h-0 flex-1">
                 <MarkdownEditor
@@ -790,7 +790,7 @@ export function BrowserLocalCanvasPage({
                   autoFocus
                   className="h-full"
                   theme={resolvedTheme}
-                  meta={markdownDoc.coreMeta}
+                  meta={markdownDoc.coreFacets}
                   resolveAlias={resolveAlias}
                   onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
                   resolveEmbed={resolveEmbed}

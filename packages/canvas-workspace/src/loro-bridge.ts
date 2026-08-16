@@ -1,16 +1,16 @@
 import {
-  type CanvasCoreMeta,
   type CanvasEdge,
-  type CanvasKind,
-  canvasCoreMetaSchema,
   canvasEdgeSchema,
   canvasExtensionSchema,
-  canvasKindSchema,
+  type DocumentKind,
+  documentKindSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
+  type StoredCoreFacets,
   spatialNodeSchema,
+  storedCoreFacetsSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
@@ -429,7 +429,7 @@ export function readFacets(doc: LoroDoc): ExtensionFacets {
  */
 const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
   Object.create(null),
-  canvasCoreMetaSchema.shape,
+  storedCoreFacetsSchema.shape,
 )
 
 /**
@@ -441,7 +441,7 @@ const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
  * omitted) rather than merging with stale prior state, matching
  * `writeFacets`'s replace-on-rewrite convention.
  */
-export function writeCoreFacets(doc: LoroDoc, meta: CanvasCoreMeta): void {
+export function writeCoreFacets(doc: LoroDoc, meta: StoredCoreFacets): void {
   replaceBucket(doc, CORE_KEY, { ...meta })
 }
 
@@ -454,7 +454,7 @@ export function writeCoreFacets(doc: LoroDoc, meta: CanvasCoreMeta): void {
  * result unrepresentable, since `type` is the one field every consumer
  * (`canvas_export_okf`'s placeholder fallback) depends on being present.
  */
-export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
+export function readCoreFacets(doc: LoroDoc): StoredCoreFacets | undefined {
   const coreMap = doc.getMap(CORE_KEY)
   if (coreMap.keys().length === 0) return undefined
 
@@ -466,7 +466,7 @@ export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
     if (parsed.success) candidate[key] = parsed.data
   }
 
-  const result = canvasCoreMetaSchema.safeParse(candidate)
+  const result = storedCoreFacetsSchema.safeParse(candidate)
   return result.success ? result.data : undefined
 }
 
@@ -561,7 +561,7 @@ export function writeMarkdownBody(doc: LoroDoc, body: string): void {
  * is what makes a format follow from the document rather than from a
  * caller-supplied parameter (ADR-0009 decision 4).
  */
-export function writeDocumentKind(doc: LoroDoc, kind: CanvasKind): void {
+export function writeDocumentKind(doc: LoroDoc, kind: DocumentKind): void {
   doc.getMap(DOCUMENT_KEY).set('kind', kind)
   doc.commit()
 }
@@ -572,7 +572,7 @@ export function writeDocumentKind(doc: LoroDoc, kind: CanvasKind): void {
  * into the same CRDT map. Both cases are for the caller to report; failing
  * here would replace its message with a parse error from three layers down.
  */
-export function readDocumentKind(doc: LoroDoc): CanvasKind | undefined {
-  const parsed = canvasKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
+export function readDocumentKind(doc: LoroDoc): DocumentKind | undefined {
+  const parsed = documentKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
   return parsed.success ? parsed.data : undefined
 }

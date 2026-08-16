@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import {
   canvasApiUrl,
   createCanvasRequestSchema,
@@ -45,7 +45,7 @@ interface ImportOneCanvasOptions {
   daemonBaseUrl: string
   workspaceId: string
   canvasName: string
-  canvasKind: CanvasKind
+  documentKind: DocumentKind
   loroLoad: LoroLoadResult
 }
 
@@ -95,7 +95,7 @@ export async function importOneCanvas(
 async function importOneCanvasUnsafe(
   options: ImportOneCanvasOptions,
 ): Promise<ImportOneCanvasResult> {
-  const { fetch, daemonBaseUrl, workspaceId, canvasName, canvasKind, loroLoad } = options
+  const { fetch, daemonBaseUrl, workspaceId, canvasName, documentKind, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {
     return { kind: 'failed', reason: loroLoadFailureReason(loroLoad.kind) }
@@ -106,7 +106,7 @@ async function importOneCanvasUnsafe(
 
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
     const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
-    const body = createCanvasRequestSchema.parse({ slug: candidateSlug, kind: canvasKind })
+    const body = createCanvasRequestSchema.parse({ slug: candidateSlug, kind: documentKind })
     const res = await fetch(
       `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
       {

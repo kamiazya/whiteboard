@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import type { z } from 'zod'
 
 /**
@@ -13,7 +13,7 @@ import type { z } from 'zod'
 export class DocumentKindMismatchError extends Error {
   constructor(
     public readonly canvasId: string,
-    public readonly kind: CanvasKind,
+    public readonly kind: DocumentKind,
     detail: string,
   ) {
     super(`Document ${canvasId} is a ${kind} document. ${detail}`)

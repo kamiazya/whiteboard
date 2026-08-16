@@ -1,4 +1,4 @@
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
@@ -12,7 +12,7 @@ export interface CanvasPropertiesProps {
    * push the canvas down mid-edit).
    */
   inline?: boolean
-  readonly meta: CanvasCoreMeta
+  readonly meta: StoredCoreFacets
   /**
    * Whether this document can hold facets at all. A facet is OKF frontmatter
    * (ADR-0009 decision 3) and a JSON Canvas document has none, so a spatial
@@ -25,7 +25,7 @@ export interface CanvasPropertiesProps {
    * browser-local canvases.
    */
   readonly showFacets?: boolean
-  readonly onChange: (next: CanvasCoreMeta) => void
+  readonly onChange: (next: StoredCoreFacets) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
   /**
@@ -58,7 +58,7 @@ const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'
 /**
  * Editor for the OKF CORE facets (`type` / `title` / `tags`).
  *
- * Every handler emits a WHOLE `CanvasCoreMeta`, never a patch, because
+ * Every handler emits a WHOLE `StoredCoreFacets`, never a patch, because
  * `writeCoreFacets` replaces the stored bucket outright and deletes any
  * field the caller omitted. `facetsRaw` — root-level frontmatter keys this
  * app does not model — therefore has to survive every edit here untouched,
@@ -95,12 +95,12 @@ export function CanvasProperties({
   // character lands flush against the previous word ("Release plan" typed
   // one key at a time arrives as "Releaseplan"). `onBlur` does the tidying
   // instead, once the edit is finished.
-  const withTitle = (raw: string): CanvasCoreMeta => {
+  const withTitle = (raw: string): StoredCoreFacets => {
     const { title: _dropped, ...rest } = meta
     return raw.trim() === '' ? rest : { ...rest, title: raw }
   }
 
-  const withTags = (next: readonly string[]): CanvasCoreMeta => {
+  const withTags = (next: readonly string[]): StoredCoreFacets => {
     const { tags: _dropped, ...rest } = meta
     return next.length === 0 ? rest : { ...rest, tags: [...next] }
   }

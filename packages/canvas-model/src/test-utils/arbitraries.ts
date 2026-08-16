@@ -24,10 +24,7 @@ export const canonicalUlidArbitrary: fc.Arbitrary<string> = fc
 
 const nodeIdArbitrary: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 24 })
 
-export const canvasMetaArbitrary = fc.record({
-  format: fc.constantFrom('markdown' as const, 'spatial' as const),
-  schemaVersion: fc.constant(1 as const),
-})
+export const documentKindArbitrary = fc.constantFrom('markdown' as const, 'spatial' as const)
 
 export const coreFacetsArbitrary = fc.record(
   {
@@ -91,7 +88,7 @@ export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, facetValu
   maxKeys: 4,
 })
 
-/** Valid-by-construction arbitrary for `canvasCoreMetaSchema`: core facets plus facetsRaw. */
+/** Valid-by-construction arbitrary for `storedCoreFacetsSchema`: core facets plus facetsRaw. */
 export const canvasCoreMetaArbitrary = fc
   .tuple(coreFacetsArbitrary, fc.option(facetsRawArbitrary, { nil: undefined }))
   .map(([core, facetsRaw]) => (facetsRaw === undefined ? core : { ...core, facetsRaw }))

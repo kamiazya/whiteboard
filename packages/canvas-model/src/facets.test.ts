@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  canvasCoreMetaSchema,
   coreFacetsSchema,
   extensionFacetsSchema,
   facetsRawSchema,
   RESERVED_ROOT_KEYS,
+  storedCoreFacetsSchema,
 } from './facets.js'
 
 describe('coreFacetsSchema', () => {
@@ -111,13 +111,13 @@ describe('facetsRawSchema', () => {
   })
 })
 
-describe('canvasCoreMetaSchema', () => {
+describe('storedCoreFacetsSchema', () => {
   it('accepts the minimal shape with only type', () => {
-    expect(canvasCoreMetaSchema.safeParse({ type: 'note' }).success).toBe(true)
+    expect(storedCoreFacetsSchema.safeParse({ type: 'note' }).success).toBe(true)
   })
 
   it('accepts core facets plus facetsRaw', () => {
-    const result = canvasCoreMetaSchema.safeParse({
+    const result = storedCoreFacetsSchema.safeParse({
       type: 'note',
       title: 'My note',
       tags: ['a', 'b'],
@@ -128,11 +128,11 @@ describe('canvasCoreMetaSchema', () => {
   })
 
   it('rejects a missing type', () => {
-    expect(canvasCoreMetaSchema.safeParse({ title: 'No type' }).success).toBe(false)
+    expect(storedCoreFacetsSchema.safeParse({ title: 'No type' }).success).toBe(false)
   })
 
   it('rejects facetsRaw containing a reserved root key', () => {
-    const result = canvasCoreMetaSchema.safeParse({ type: 'note', facetsRaw: { type: 'x' } })
+    const result = storedCoreFacetsSchema.safeParse({ type: 'note', facetsRaw: { type: 'x' } })
     expect(result.success).toBe(false)
   })
 })

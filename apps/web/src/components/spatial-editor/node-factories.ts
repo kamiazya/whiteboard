@@ -15,7 +15,7 @@
  * injected-id-minting discipline the callers rely on for deterministic
  * tests.
  */
-import type { CanvasKind, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { Box } from './geometry.js'
 import { findFreeSpot } from './geometry.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
@@ -88,7 +88,7 @@ export function fileNodeDefaults(
   point: Point,
   file: string,
   /** What the reference points at; a markdown document gets a prose-sized box. */
-  kind?: CanvasKind,
+  kind?: DocumentKind,
 ): Extract<SpatialNode, { type: 'file' }> {
   const box =
     kind === 'markdown'

@@ -1,11 +1,11 @@
 /**
  * The OKF core-facet editor. `writeCoreFacets` REPLACES the whole bucket
  * rather than merging, so every edit here has to hand back a complete
- * `CanvasCoreMeta` — including `facetsRaw`, the bucket holding root-level
+ * `StoredCoreFacets` — including `facetsRaw`, the bucket holding root-level
  * frontmatter keys this app does not understand. Dropping it on a title
  * edit would silently delete a field the document arrived with.
  */
-import type { CanvasCoreMeta } from '@kamiazya/whiteboard-canvas-model'
+import type { StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CanvasProperties } from './CanvasProperties.js'
@@ -22,7 +22,7 @@ function textboxValue(name: RegExp): string {
 
 afterEach(cleanup)
 
-function meta(overrides: Partial<CanvasCoreMeta> = {}): CanvasCoreMeta {
+function meta(overrides: Partial<StoredCoreFacets> = {}): StoredCoreFacets {
   return { type: 'markdown', ...overrides }
 }
 
@@ -118,8 +118,8 @@ describe('CanvasProperties title typing (controlled-input round trip)', () => {
   // returns is what the box shows on the very next render. Trimming there
   // erases a space the moment it is typed: the user cannot put one in.
   it('lets a space be typed in the middle of a title', () => {
-    let current: CanvasCoreMeta = { type: 'markdown' }
-    const onChange = vi.fn((next: CanvasCoreMeta) => {
+    let current: StoredCoreFacets = { type: 'markdown' }
+    const onChange = vi.fn((next: StoredCoreFacets) => {
       current = next
     })
     const { rerender } = render(<CanvasProperties meta={current} onChange={onChange} />)

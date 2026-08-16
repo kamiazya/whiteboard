@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
-import type { CanvasCoreMeta, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -54,8 +54,8 @@ export interface UseCanvasSyncResult {
   lockedNodeIds: ReadonlySet<string>
   setNodeLock: (nodeId: string, locked: boolean) => void
   /** OKF core facets from the doc's sidecar map; undefined until hydrated or when never written. */
-  coreFacets: CanvasCoreMeta | undefined
-  setCoreFacets: (meta: CanvasCoreMeta) => void
+  coreFacets: StoredCoreFacets | undefined
+  setCoreFacets: (meta: StoredCoreFacets) => void
   lockedEdgeIds: ReadonlySet<string>
   setEdgeLock: (edgeId: string, locked: boolean) => void
   canRedo: () => boolean
@@ -172,7 +172,7 @@ export function useCanvasSync(
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
-  const [coreFacets, setCoreFacetsState] = useState<CanvasCoreMeta | undefined>(undefined)
+  const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -278,7 +278,7 @@ export function useCanvasSync(
     sessionRef.current?.setEdgeLock(edgeId, locked)
   }, [])
 
-  const setCoreFacets = useCallback((meta: CanvasCoreMeta) => {
+  const setCoreFacets = useCallback((meta: StoredCoreFacets) => {
     sessionRef.current?.setCoreFacets(meta)
   }, [])
 

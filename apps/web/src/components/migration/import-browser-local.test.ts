@@ -91,7 +91,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws 1#x',
       canvasName: 'My Canvas',
-      canvasKind: 'markdown',
+      documentKind: 'markdown',
       loroLoad: loroOkResult(),
     })
 
@@ -124,7 +124,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
 
@@ -147,7 +147,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
 
@@ -168,7 +168,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
 
@@ -187,7 +187,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
 
@@ -205,7 +205,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
 
@@ -225,7 +225,7 @@ describe('importOneCanvas', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
       canvasName: 'My Canvas',
-      canvasKind: 'spatial',
+      documentKind: 'spatial',
       loroLoad: loroLoad as LoroLoadResult,
     })
 

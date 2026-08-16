@@ -1,5 +1,6 @@
 import { expectTypeOf, it } from 'vitest'
 import type { z } from 'zod'
+import type { DocumentKind, documentKindSchema } from './document-kind.js'
 import type {
   CoreFacets,
   coreFacetsSchema,
@@ -19,7 +20,6 @@ import type {
 import type { MarkdownCanvas, markdownCanvasSchema } from './markdown.js'
 import type { MdastNode } from './mdast/index.js'
 import { mdastNodeSchema } from './mdast/index.js'
-import type { CanvasMeta, canvasMetaSchema } from './meta.js'
 import type {
   CanvasColor,
   CanvasEdge,
@@ -38,7 +38,7 @@ import type {
 // has drifted from its schema (the create_frame assignedMembers bug's
 // shape) without needing a runtime check.
 it('type-source invariant: exported types equal z.infer of their schema', () => {
-  expectTypeOf<CanvasMeta>().toEqualTypeOf<z.infer<typeof canvasMetaSchema>>()
+  expectTypeOf<DocumentKind>().toEqualTypeOf<z.infer<typeof documentKindSchema>>()
   expectTypeOf<CoreFacets>().toEqualTypeOf<z.infer<typeof coreFacetsSchema>>()
   expectTypeOf<ExtensionFacets>().toEqualTypeOf<z.infer<typeof extensionFacetsSchema>>()
   expectTypeOf<FacetsRaw>().toEqualTypeOf<z.infer<typeof facetsRawSchema>>()

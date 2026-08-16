@@ -1,8 +1,13 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-canvas-model'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
-import { ConflictError, canvasExists, getCanvasKind, saveCanvas } from '../../store/canvas-store.js'
+import {
+  ConflictError,
+  canvasExists,
+  getDocumentKind,
+  saveCanvas,
+} from '../../store/canvas-store.js'
 import { countAliveNodes } from '../../store/count-alive-nodes.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
@@ -32,7 +37,7 @@ async function reconcileCommitSaveBroadcast(
   doc: LoroDoc,
   past: LoroDoc,
   label: string | undefined,
-  kind: CanvasKind | null = null,
+  kind: DocumentKind | null = null,
 ): Promise<void> {
   const { sendRestoreEvent } = await import('../ws.js')
   sendRestoreEvent(workspaceId, targetSlug, 'started', label)
@@ -171,7 +176,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               // below — the target's stored kind must follow it or a kind-aware
               // consumer (editor routing) opens the overwritten canvas with the
               // wrong editor.
-              const sourceKind = await getCanvasKind(workspaceId, slug)
+              const sourceKind = await getDocumentKind(workspaceId, slug)
               await reconcileCommitSaveBroadcast(
                 workspaceId,
                 targetSlug,
@@ -193,7 +198,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
             // carry the source's own kind rather than falling back to the
             // saveCanvas default.
             try {
-              const sourceKind = await getCanvasKind(workspaceId, slug)
+              const sourceKind = await getDocumentKind(workspaceId, slug)
               await saveCanvas(workspaceId, targetSlug, past, {
                 overwrite: false,
                 ...(sourceKind !== null ? { kind: sourceKind } : {}),

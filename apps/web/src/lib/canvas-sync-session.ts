@@ -1,4 +1,4 @@
-import type { CanvasCoreMeta, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-canvas-model'
 import {
   deleteSpatialNode,
   readCoreFacets,
@@ -156,8 +156,8 @@ export interface CanvasSyncSession {
   // part of the canvas value, so a title edit neither reaches an export as
   // a node nor makes the editor re-render its scene. `undefined` means the
   // document has never had core meta written.
-  getCoreFacets(): CanvasCoreMeta | undefined
-  setCoreFacets(meta: CanvasCoreMeta): void
+  getCoreFacets(): StoredCoreFacets | undefined
+  setCoreFacets(meta: StoredCoreFacets): void
   subscribeCoreFacets(listener: () => void): () => void
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
@@ -819,7 +819,7 @@ export function createCanvasSyncSession(
     }
   }
 
-  function getCoreFacets(): CanvasCoreMeta | undefined {
+  function getCoreFacets(): StoredCoreFacets | undefined {
     return doc === null ? undefined : readCoreFacets(doc)
   }
 
@@ -827,7 +827,7 @@ export function createCanvasSyncSession(
     for (const listener of coreFacetListeners) listener()
   }
 
-  function setCoreFacets(meta: CanvasCoreMeta): void {
+  function setCoreFacets(meta: StoredCoreFacets): void {
     if (doc === null) return
     // `writeCoreFacets` REPLACES the stored bucket, so `meta` must already be
     // complete — including `facetsRaw`. Reaches peers through the doc's own

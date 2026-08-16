@@ -108,9 +108,9 @@ describe('flush/load ordering across an effect cycle', () => {
     await waitFor(() => expect(result.current.doc).not.toBeNull())
 
     act(() => {
-      result.current.setCoreMeta({ type: 'note', title: 'リリース計画' })
+      result.current.setCoreFacets({ type: 'note', title: 'リリース計画' })
     })
-    expect(result.current.coreMeta?.title).toBe('リリース計画')
+    expect(result.current.coreFacets?.title).toBe('リリース計画')
 
     // Cycle the effect while the debounce still holds the edit — the shape
     // any transient enabled/canvasId flicker produces.
@@ -124,7 +124,7 @@ describe('flush/load ordering across an effect cycle', () => {
     releaseSave()
 
     await waitFor(() => expect(result.current.doc).not.toBeNull())
-    await waitFor(() => expect(result.current.coreMeta?.title).toBe('リリース計画'), {
+    await waitFor(() => expect(result.current.coreFacets?.title).toBe('リリース計画'), {
       timeout: 3000,
     })
     expect(saves.length).toBeGreaterThan(0)
