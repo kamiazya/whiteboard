@@ -28,23 +28,27 @@ export function hasClipboardFragment(): boolean {
 }
 
 /**
- * Cut ids whose boundary edges have already been reconnected by a paste.
- * Module-scoped like the slot: the "first paste only" rule must hold even
- * when the paste arrives via the OS clipboard (Ctrl+V re-parses the JSON
- * fresh each time, so the envelope itself cannot be consumed).
+ * Edge ids a cut's boundary reconnection created, per cut id. Module-scoped
+ * like the slot: the "reconnect once" rule must hold even when the paste
+ * arrives via the OS clipboard (Ctrl+V re-parses the JSON fresh each time,
+ * so the envelope itself cannot be consumed). Kept as the CREATED ids, not
+ * a boolean, so the decision can follow the document: an undone paste
+ * removes these edges from the canvas, and the next paste is a first paste
+ * again. An empty result is never recorded — a cross-canvas paste that
+ * found no peers must not erase the record of a real reconnection at home.
  */
-const consumedCutIds = new Set<string>()
+const reconnections = new Map<string, readonly string[]>()
 
-export function isCutConsumed(cutId: string): boolean {
-  return consumedCutIds.has(cutId)
+export function recordedReconnection(cutId: string): readonly string[] {
+  return reconnections.get(cutId) ?? []
 }
 
-export function markCutConsumed(cutId: string): void {
-  consumedCutIds.add(cutId)
+export function recordReconnection(cutId: string, edgeIds: readonly string[]): void {
+  if (edgeIds.length > 0) reconnections.set(cutId, edgeIds)
 }
 
 /** Test isolation only — production never clears the slot. */
 export function clearClipboardFragmentForTests(): void {
   current = null
-  consumedCutIds.clear()
+  reconnections.clear()
 }

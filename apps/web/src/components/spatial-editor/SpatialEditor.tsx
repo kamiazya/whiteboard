@@ -94,9 +94,9 @@ import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
 import {
-  isCutConsumed,
-  markCutConsumed,
   readClipboardFragment,
+  recordedReconnection,
+  recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -2115,10 +2115,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       at?: Point,
     ): boolean => {
       const current = canvasRef.current
-      // The cut surface reconnects on the FIRST paste only; after that the
-      // fragment behaves as a plain copy (no second wire onto the peer).
+      // The cut surface reconnects while the document shows no trace of a
+      // previous reconnection: as long as any edge a prior paste of this cut
+      // created is still on THIS canvas, the fragment behaves as a plain
+      // copy (no second wire onto the peer). Undo removes those edges, so
+      // the next paste is a first paste again.
       const cut =
-        fragment.cut !== undefined && !isCutConsumed(fragment.cut.id) ? fragment.cut : undefined
+        fragment.cut !== undefined &&
+        !recordedReconnection(fragment.cut.id).some((id) =>
+          current.edges.some((edge) => edge.id === id),
+        )
+          ? fragment.cut
+          : undefined
       const command = buildFragmentInsertCommand(
         current,
         { nodes: fragment.nodes, edges: fragment.edges, cut },
@@ -2128,7 +2136,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (command === undefined) return false
       const running = applyCommand(current, command)
       if (running === current) return false
-      if (cut !== undefined) markCutConsumed(cut.id)
+      if (cut !== undefined && command.kind === 'batch') {
+        // The boundary edges are the created edges with an endpoint OUTSIDE
+        // the created node set — that endpoint is the surviving peer.
+        const createdNodeIds = new Set(
+          command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
+        )
+        recordReconnection(
+          cut.id,
+          command.commands.flatMap((c) =>
+            c.kind === 'create-edge' &&
+            (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
+              ? [c.edge.id]
+              : [],
+          ),
+        )
+      }
       onChange(running, command)
       const remintedIds =
         command.kind === 'batch'
