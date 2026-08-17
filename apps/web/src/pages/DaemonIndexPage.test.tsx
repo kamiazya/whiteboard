@@ -156,7 +156,7 @@ describe('DaemonIndexPage', () => {
 
   it('marks a markdown row from the daemon list response as markdown on its card', async () => {
     // The read direction of `kind`: the daemon's documents-list response maps
-    // into CanvasRow and reaches the card's text marker. The create/POST
+    // into DocumentRow and reaches the card's text marker. The create/POST
     // direction is covered separately; without this test every page-level
     // mock defaults to spatial and the mapping could silently drop kind.
     installFetchMock({

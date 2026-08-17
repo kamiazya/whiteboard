@@ -5,7 +5,7 @@ import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
 
 // A document's blob has always lived at
-// `{dataDir}/blobs/{workspaceId}/document/{documentId}.loro`. The `canvas`
+// `{dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro`. The `canvas`
 // segment names the CONTAINER, which ADR-0009 calls a Document — the same
 // violation 0009 and 0010 removed from the database. It survived those two
 // because it is a stored LAYOUT rather than a column: correcting it means
@@ -15,6 +15,15 @@ import { getLogger } from '../../../log.js'
 // document's blob when it re-keys a nanoid to a ULID. What is different is
 // that this walk is per WORKSPACE, so the loop below is over the blobs root
 // rather than over a table.
+//
+// Ordering against 0011 is load-bearing, which is why this is 0012 and not
+// 0011: `0011-import-fs-blobs` reads `blobs/*/canvas/*.loro` as a frozen
+// literal, so a move that ran first would leave it importing nothing. It also
+// keeps reading the OLD segment afterwards on purpose — `prepareDataDir`
+// re-runs its import routine on every boot to catch a blob written by a
+// PRE-FLIP process, and such a process writes to `canvas/`. A `canvas/`
+// directory reappearing after this migration is therefore expected, not a
+// failure of it.
 //
 // Only the one segment moves. A workspace directory also holds `files/`
 // (uploaded attachments, swept by file-gc-sweeper), and renaming the

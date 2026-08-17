@@ -17,7 +17,7 @@ export const migration: Migration = {
     await db.schema.dropTable('workspaceIndexBacklinks').ifExists().execute()
     await db.schema.dropTable('workspaceIndexAliases').ifExists().execute()
     await db.schema.dropTable('workspaceIndexFacets').ifExists().execute()
-    await db.schema.dropTable('workspaceIndexDocumentList').ifExists().execute()
+    await db.schema.dropTable('workspaceIndexCanvasList').ifExists().execute()
   },
 
   // Irreversible by design (disposable-DB pre-1.0 policy): recreating five

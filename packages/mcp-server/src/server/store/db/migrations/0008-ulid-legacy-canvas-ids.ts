@@ -14,7 +14,7 @@ import { getLogger } from '../../../log.js'
 // in the same transaction (versions and branches carry a foreign key onto
 // canvases.id, so the parent and children cannot move separately).
 //
-// The `.loro` blob under blobs/<workspaceId>/document/ is named by the id, so
+// The `.loro` blob under blobs/<workspaceId>/canvas/ is named by the id, so
 // it is renamed too — after the row updates, because a missing blob must not
 // fail bootstrap (a row can outlive its blob: a crashed delete, a
 // hand-pruned data dir), while a renamed blob with an un-renamed row WOULD

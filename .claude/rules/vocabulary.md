@@ -124,9 +124,15 @@ rewrote every legacy fixture in `browser-idb-migration.browser.test.tsx` to
 the new vocabulary — leaving the migration untested while every assertion
 still passed. A third rewrote `/canvas/i.test(name)` in
 `0009-document-vocabulary.test.ts`, inverting an assertion that no table is
-still named for a canvas. Exclude `migrations/`, migration tests, and any
-regex whose subject is the OLD word, then re-read the diff of what you did
-exclude.
+still named for a canvas. A fourth pass — after a merge, when the exclusion
+list had been rebuilt — renamed a TABLE and a COLUMN inside
+`0004-workspace-index` (`workspaceIndexCanvasList`, `toCanvasId`), the drop
+in `0006`, and a stored `docKey` read in `0007`. Each would have broken the
+migration chain against a real database while typecheck and most of the suite
+stayed green. Exclude `migrations/`, migration tests, and any regex whose
+subject is the OLD word — then `git diff origin/main -- .../migrations/` and
+confirm it is empty except for the migration you are ADDING. That one command
+is the check; the exclusion list alone is not, because a merge resets it.
 
 **What deliberately did NOT move.** The window-event VALUES stay
 `'excalidraw:doc_changed'` and `'excalidraw:wb_version_saved'` —
@@ -136,6 +142,19 @@ exclude.
 the wire format with it. User-visible UI copy still says "canvas" ("New
 canvas", "Canvas actions"): what the product calls a thing to its users is a
 product decision, not a code-vocabulary one, and this rule does not reach it.
+
+**A second one is open for a harder reason: the `docKey` prefix.**
+`docRefKey()` emits `canvas:<documentId>` while `DocRef.kind` is `document`,
+and the mismatch is deliberate. It stopped being an in-memory map key the
+moment the byte store moved into the database — it is now the `docKey` column
+of `documentSnapshots` / `documentSnapshotChunks` / `documentFrontiers` /
+`documentDeltas`. A one-shot migration cannot fix it either:
+`0011-import-fs-blobs` writes that prefix as a frozen literal, and
+`prepareDataDir` calls its import routine again on EVERY boot, so rewritten
+rows would be re-seeded under the old prefix on the next start. Moving it
+means moving that routine's literal in the same increment and deciding what a
+recorded migration may re-read. Renaming it as part of a sweep would have made
+every document imported by 0011 silently invisible.
 
 **One container-noun use is still open, deliberately.** The wiki-link scheme
 `[[canvas:<ULID>]]` (`CANVAS_ID_PREFIX` in `codec/src/references/resolve.ts`,

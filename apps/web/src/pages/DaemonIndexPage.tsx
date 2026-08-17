@@ -40,7 +40,7 @@ export interface DaemonIndexPageProps {
   onOpenDocument: (workspaceId: string, path: string) => void
 }
 
-interface CanvasRow {
+interface DocumentRow {
   path: string
   displayName: string
   updatedAt: string
@@ -72,7 +72,7 @@ async function fetchWorkspaceNames(
   }
 }
 
-function sortRows(rows: CanvasRow[]): CanvasRow[] {
+function sortRows(rows: DocumentRow[]): DocumentRow[] {
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
@@ -94,7 +94,7 @@ export function DaemonIndexPage({
   const [view, setView] = useState<ViewKey>('grid')
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
-  const [rows, setRows] = useState<CanvasRow[]>([])
+  const [rows, setRows] = useState<DocumentRow[]>([])
   // False from the moment a workspace switch clears rows until its documents
   // fetch settles — rows=[] alone cannot distinguish "still loading" from
   // "genuinely empty", and rendering an empty state during the gap reads as
@@ -155,7 +155,7 @@ export function DaemonIndexPage({
         ])
         if (isStale()) return
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
-        const nextRows: CanvasRow[] = documentsRes.documents.map((c) => {
+        const nextRows: DocumentRow[] = documentsRes.documents.map((c) => {
           const pinOrder = pinIndex.get(c.path)
           return {
             path: c.path,

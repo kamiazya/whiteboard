@@ -1,20 +1,29 @@
 /**
- * The daemon's document store: a Loro snapshot per document on disk, plus the
- * `documents` row that gives it a workspace and a path. Everything the web app
- * shows and edits goes through here (ADR-0007's workspace/path store).
+ * The daemon's document store: a Loro snapshot per document, persisted
+ * through the same `LibsqlDocumentStore` the MCP tool surface writes
+ * (`canvas:<documentId>` rows), plus the `documents` row that gives it a
+ * workspace and a path. Everything the web app shows and edits goes through
+ * here (ADR-0007's workspace/path store), and now reads/writes the SAME
+ * bytes a `wb_document_*` tool call would — the FS `.loro` blob tree
+ * `documentBlobPath` still computes is no longer read or written here; it
+ * survives only as an identity label for corrupt-data error messages and as
+ * the legacy-migration backup path.
  *
  * `listDocuments`/`deleteDocument` here are NOT `DocumentIndex`'s methods of
  * the same names — that is the agent-facing side of the same split, reached
  * as `deps.documentIndex.*` and addressing documents by ULID rather than by
  * `(workspaceId, path)`. The names match because the concept does; the two
- * stores are what do not see each other.
+ * stores are what do not see each other. Both now write the same
+ * `LibsqlDocumentStore` rows, which is why `saveDocument`/`compactDocument`
+ * additionally take `withDocumentWriteLock` — see their comments.
  */
-import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -27,9 +36,16 @@ import {
 import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
-import { withWorkspaceWriteLock } from './workspace-lock.js'
+import { withDocumentWriteLock, withWorkspaceWriteLock } from './workspace-lock.js'
+
+// Chunk size shared with the MCP tool write path (server-core's
+// document-io.ts) and migration 0011's FS-blob importer: an arbitrary
+// value, but it must match across every writer of these rows so a snapshot
+// chunked by one path reassembles identically when read by another.
+const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
@@ -44,9 +60,11 @@ export class ConflictError extends Error {
 // The documentId is the stable row PK from the `documents` table, so renaming
 // a document's path does not move blobs around.
 //
-// The `document/` segment matches the entity (ADR-0009). Migration
-// `0012-document-blob-dir` moves an existing tree off the older `canvas/`
-// spelling at boot, so this module only ever needs to know the one name.
+// The segment used to be `canvas/`, the CONTAINER noun ADR-0009 calls a
+// Document. Correcting it meant walking every workspace's blob tree at boot,
+// so it is its own migration rather than part of a rename:
+// `0012-document-blob-dir` moves an existing tree across, and `0011-import-fs-blobs`
+// runs first and still reads the OLD segment as a frozen literal.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
@@ -69,6 +87,90 @@ const warnedSnapshots = new Set<string>()
 async function dbReady() {
   await prepareDataDir(getDataDir())
   return getDb(getDataDir())
+}
+
+// The MCP tool surface (server-core's ServerDeps) builds its own instance
+// from the same one-db-per-dataDir Kysely handle, so both sides read/write
+// the same `canvas:<documentId>` rows. The class is a stateless wrapper
+// around that handle, so a fresh instance per call is equivalent.
+async function documentStoreReady(): Promise<LibsqlDocumentStore> {
+  return new LibsqlDocumentStore(await dbReady())
+}
+
+// Chunk + replace a document's snapshot rows under the canvas-doc write
+// lock. Every mutating MCP tool serializes its load-modify-save against
+// this same key (workspace-lock.ts's withDocumentWriteLock) — since both
+// paths write the same Libsql rows, taking it here closes the lost-update
+// window between the HTTP/WS save path and an agent's tool call racing on
+// the SAME document. Callers hold the workspace lock first; that nesting
+// direction is safe because no code path ever acquires the canvas-doc lock
+// and then reaches for the workspace lock, so there is no cycle to
+// deadlock on.
+async function saveSnapshotLocked(
+  documentStore: LibsqlDocumentStore,
+  documentId: string,
+  snapshot: Uint8Array,
+  frontier: Uint8Array<ArrayBuffer>,
+): Promise<void> {
+  await withDocumentWriteLock(documentId, async () => {
+    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
+    await documentStore.saveSnapshot({
+      docRef: { kind: 'document', documentId },
+      manifest,
+      chunks,
+      frontier,
+    })
+  })
+}
+
+// Merge-then-save for the live-doc path. The lock alone only makes an
+// overwrite ATOMIC — it cannot make it correct: `doc` may be a long-lived
+// cached instance (doc-cache) that has not seen ops an MCP tool wrote to
+// these same rows since it loaded, and exporting it as the whole new truth
+// would erase them in one clean write. When the stored frontier is not
+// already contained in the doc's version (behind or concurrent), import
+// the stored snapshot first so the save is a CRDT merge — ops the doc
+// already carries are no-ops, unseen ops join the history (and, for a
+// cached doc, heal the live session in place). The frontier check is the
+// fast path: one small row read skips the full snapshot load whenever this
+// doc was the last writer. A stored snapshot that fails to import falls
+// back to plain overwrite — the pre-flip semantics for an unreadable
+// snapshot — with a warning.
+async function mergeAndSaveSnapshotLocked(
+  documentStore: LibsqlDocumentStore,
+  workspaceId: string,
+  documentId: string,
+  doc: LoroDoc,
+): Promise<number> {
+  const docRef = { kind: 'document' as const, documentId }
+  return withDocumentWriteLock(documentId, async () => {
+    const stored = await documentStore.readFrontier({ docRef })
+    if (stored !== null) {
+      const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
+      if (comparison === undefined || comparison < 0) {
+        try {
+          const existing = await documentStore.loadSnapshot({ docRef })
+          if (existing !== null) {
+            doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
+          }
+        } catch (err) {
+          getLogger('document').warning(
+            { workspaceId, documentId, err: err as Error },
+            'stored snapshot failed to merge before save; overwriting',
+          )
+        }
+      }
+    }
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
+    await documentStore.saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
+    return snapshot.byteLength
+  })
 }
 
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
@@ -99,19 +201,18 @@ export async function saveDocument(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-    // Pre-allocate the documentId for new documents so the blob can be written
-    // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
-    // transient corruption) we leave no DB row behind, so a retry can succeed
-    // instead of hitting a phantom ConflictError on the orphan.
+    // Pre-allocate the documentId for new documents so the snapshot can be
+    // written before any metadata row commits. If the snapshot write fails
+    // (driver error, transient corruption) we leave no DB row behind, so a
+    // retry can succeed instead of hitting a phantom ConflictError on the
+    // orphan.
     // A ULID, not a nanoid: the document index creates rows in this same
     // table and the port's DocumentEntry accepts only a canonical ULID, so a
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
     const documentId = existingDocumentId ?? generateDocumentId()
-    const blobPath = documentBlobPath(workspaceId, documentId)
-    await mkdir(dirname(blobPath), { recursive: true })
-    const snapshot = doc.export({ mode: 'snapshot' })
-    await writeFile(blobPath, snapshot)
+    const documentStore = await documentStoreReady()
+    const savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingDocumentId) {
       // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
@@ -150,7 +251,7 @@ export async function saveDocument(
         .onConflict((oc) => oc.columns(['workspaceId', 'path']).doUpdateSet({ updatedAt: now }))
         .execute()
     }
-    if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
+    if (savedBytes > SNAPSHOT_WARN_BYTES) {
       const key = `${workspaceId}/${path}`
       if (!warnedSnapshots.has(key)) {
         warnedSnapshots.add(key)
@@ -158,7 +259,7 @@ export async function saveDocument(
           {
             workspaceId,
             path,
-            bytes: snapshot.byteLength,
+            bytes: savedBytes,
             thresholdBytes: SNAPSHOT_WARN_BYTES,
           },
           'snapshot exceeds soft cap; consider compactDocument() to GC op-log',
@@ -178,43 +279,59 @@ export async function saveDocument(
   })
 }
 
-// ── load LoroDoc, returning an empty document when the blob is missing ──
+// ── load LoroDoc, returning an empty document when no snapshot exists ──
 export async function loadDocument(workspaceId: string, path: string): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
   const documentId = await getDocumentIdByPath(db, workspaceId, path)
   if (!documentId) return new LoroDoc()
+  // Purely a stable identity label for corrupt-data error messages and the
+  // legacy-migration backup file below — no longer an FS path this function
+  // reads from.
   const blobPath = documentBlobPath(workspaceId, documentId)
+  const documentStore = await documentStoreReady()
   let doc: LoroDoc
+  let originalBytes: Uint8Array
   try {
-    const bytes = await readFile(blobPath)
+    const snapshot = await documentStore.loadSnapshot({
+      docRef: { kind: 'document', documentId },
+    })
+    if (snapshot === null) return new LoroDoc()
     try {
-      doc = LoroDoc.fromSnapshot(new Uint8Array(bytes))
+      originalBytes = reassembleSnapshot(snapshot.manifest, snapshot.chunks)
     } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`)
+      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
+    }
+    try {
+      doc = LoroDoc.fromSnapshot(originalBytes)
+    } catch (error) {
+      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
     }
   } catch (error) {
-    if (isMissingFileError(error)) {
-      return new LoroDoc()
-    }
     if (isCorruptStoredDataError(error)) {
       throw error
     }
-    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`)
+    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`, {
+      locationKind: 'identity',
+    })
   }
   // One-shot legacy container migration. Older data stored "elements" in
   // LoroList; current code uses LoroMovableList. Repair on load and rewrite.
   const migrated = migrateLegacyListToMovable(doc)
   if (migrated) {
     try {
-      const bakPath = `${path}.pre-migrate-bak`
+      const bakPath = `${blobPath}.pre-migrate-bak`
       const bakExists = await access(bakPath)
         .then(() => true)
         .catch(() => false)
       if (!bakExists) {
-        const origBytes = await readFile(blobPath).catch(() => null)
-        if (origBytes) await writeFile(bakPath, origBytes)
+        await mkdir(dirname(bakPath), { recursive: true })
+        await writeFile(bakPath, originalBytes)
       }
       await saveDocument(workspaceId, path, doc, { overwrite: true })
     } catch (err) {
@@ -319,6 +436,13 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     // connection in db/index.ts).
     await db.deleteFrom('documents').where('id', '=', documentId).execute()
 
+    // Mirrors wb_document_delete (document-crud.ts): the identity row goes
+    // first, then the Libsql snapshot/delta/frontier rows, so a crash
+    // between the two leaves an orphaned-but-unreachable snapshot rather
+    // than a listed canvas with no content.
+    const documentStore = await documentStoreReady()
+    await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
+
     const blobPath = documentBlobPath(workspaceId, documentId)
     await unlinkIfExists(blobPath)
     await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
@@ -381,45 +505,85 @@ export async function compactDocument(
   if (!documentId) {
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
-  const blobPath = documentBlobPath(workspaceId, documentId)
-  let beforeBytes: number
-  try {
-    beforeBytes = (await stat(blobPath)).size
-  } catch (error) {
-    if (isMissingFileError(error)) {
+  const documentStore = await documentStoreReady()
+  const docRef = { kind: 'document' as const, documentId }
+
+  // Hold the canvas-doc write lock across the read that decides the shallow
+  // snapshot AND the write that persists it. Previously only the final
+  // saveSnapshotLocked call was locked, so a concurrent canvas-doc write (an
+  // MCP tool call, or a WS/HTTP save) landing between this function's reads
+  // and its write was invisible to both reads and got silently discarded by
+  // the shallow write that followed — the same lost-update class
+  // saveDocument's own write already guards against, now reachable here too
+  // because compaction's target and the tool surface's target are the same
+  // Libsql rows.
+  return withDocumentWriteLock(documentId, async () => {
+    const existing = await documentStore.loadSnapshot({ docRef })
+    if (existing === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
-    throw corruptStoredData(blobPath, `failed to stat canvas file (${errorMessage(error)})`)
-  }
+    const beforeBytes = existing.manifest.totalBytes
 
-  const cut = await versionStore.earliestFrontiers(workspaceId, path)
-  if (!cut) {
-    return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
-  }
+    const cut = await versionStore.earliestFrontiers(workspaceId, path)
+    if (!cut) {
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
+    }
 
-  const doc = await loadDocument(workspaceId, path)
-  const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
-  if (shallow.byteLength >= beforeBytes) {
-    return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
-  }
-  await writeFile(blobPath, shallow)
-  // Stamp the canvas row so the auto-Optimize loop can skip documents that
-  // have not changed since the last successful compaction, and so the UI
-  // can surface "Auto-optimised Ns ago" without reading file mtimes.
-  await db
-    .updateTable('documents')
-    .set({ lastCompactedAt: Date.now() })
-    .where('id', '=', documentId)
-    .execute()
-  // Drop the cached LoroDoc for this canvas. Without this, a still-resident
-  // full doc (held open by an active WS connection or a previous getDoc)
-  // would be re-exported on the next save and clobber the shallow snapshot
-  // we just wrote. Done inside compactDocument so every caller — manual
-  // optimize_canvases route and the debounced auto-compact alike — gets
-  // the same invariant for free.
-  const { evictDoc } = await import('./doc-cache.js')
-  evictDoc(workspaceId, path)
-  return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
+    // Decode inline rather than delegating to loadDocument(): that function
+    // also runs a one-shot legacy-migration that calls saveDocument, which
+    // would acquire the workspace lock while this canvas-doc lock is still
+    // held — the opposite of every other caller's nesting order (workspace
+    // lock outer, canvas-doc lock inner, per this module's header comment)
+    // and a lock-order-inversion deadlock waiting to happen against a
+    // concurrent saveDocument on the same document. Skipping migration here
+    // is safe: it is idempotent and re-runs on the next ordinary
+    // loadDocument() call, so compaction just defers it rather than losing it.
+    const blobPath = documentBlobPath(workspaceId, documentId)
+    let originalBytes: Uint8Array
+    try {
+      originalBytes = reassembleSnapshot(existing.manifest, existing.chunks)
+    } catch (error) {
+      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
+    }
+    let doc: LoroDoc
+    try {
+      doc = LoroDoc.fromSnapshot(originalBytes)
+    } catch (error) {
+      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
+    }
+
+    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    if (shallow.byteLength >= beforeBytes) {
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
+    }
+    await saveSnapshotLocked(
+      documentStore,
+      documentId,
+      shallow,
+      doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    )
+    // Stamp the canvas row so the auto-Optimize loop can skip documents that
+    // have not changed since the last successful compaction, and so the UI
+    // can surface "Auto-optimised Ns ago" without reading file mtimes.
+    await db
+      .updateTable('documents')
+      .set({ lastCompactedAt: Date.now() })
+      .where('id', '=', documentId)
+      .execute()
+    // Drop the cached LoroDoc for this canvas. Without this, a still-resident
+    // full doc (held open by an active WS connection or a previous getDoc)
+    // would be re-exported on the next save and clobber the shallow snapshot
+    // we just wrote. Done inside compactDocument so every caller — manual
+    // optimize_canvases route and the debounced auto-compact alike — gets
+    // the same invariant for free.
+    const { evictDoc } = await import('./doc-cache.js')
+    evictDoc(workspaceId, path)
+    return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
+  })
 }
 
 // ── most-recent auto-compact timestamp across all documents ───────────
