@@ -1,7 +1,8 @@
-import { readdir, readFile, rmdir, unlink } from 'node:fs/promises'
+import { readFile, rmdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Database } from './index.js'
+import { readDirSafe } from './migrations/0011-import-fs-blobs.js'
 
 // Identity-convergence cleanup: once migration 0011 (plus its startup
 // re-invocation) has proven a `blobs/<ws>/canvas/<id>.loro` file's bytes
@@ -33,17 +34,6 @@ export async function sweepImportedFsBlobs(db: Database, dataDir: string): Promi
     await rmdirIfEmpty(join(blobsRoot, workspaceId))
   }
   await rmdirIfEmpty(blobsRoot)
-}
-
-/** `readdir` a directory that may not exist (or may not BE a directory); both are a clean no-op. */
-async function readDirSafe(dir: string): Promise<string[]> {
-  try {
-    return await readdir(dir)
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ENOENT' || code === 'ENOTDIR') return []
-    throw err
-  }
 }
 
 /** `rmdir` a directory that may already be gone or non-empty; both are a clean no-op — a sibling versions/thumbnail or a `.pre-migrate-bak` file is expected to keep it alive. */
