@@ -87,19 +87,38 @@ async function dbReady() {
   return getDb(getDataDir())
 }
 
-// One LibsqlDocumentStore per Kysely handle, matching the one-db-per-dataDir
-// cache in db/index.ts — the MCP tool surface (server-core's ServerDeps)
-// builds its own instance from the same handle, so both sides read/write
-// the same `canvas:<documentId>` rows.
-const documentStores = new WeakMap<object, LibsqlDocumentStore>()
-
+// The MCP tool surface (server-core's ServerDeps) builds its own instance
+// from the same one-db-per-dataDir Kysely handle, so both sides read/write
+// the same `canvas:<documentId>` rows. The class is a stateless wrapper
+// around that handle, so a fresh instance per call is equivalent.
 async function documentStoreReady(): Promise<LibsqlDocumentStore> {
-  const db = await dbReady()
-  const existing = documentStores.get(db)
-  if (existing) return existing
-  const store = new LibsqlDocumentStore(db)
-  documentStores.set(db, store)
-  return store
+  return new LibsqlDocumentStore(await dbReady())
+}
+
+// Chunk + replace a document's snapshot rows under the canvas-doc write
+// lock. Every mutating MCP tool serializes its load-modify-save against
+// this same key (workspace-lock.ts's withCanvasDocWriteLock) — since both
+// paths write the same Libsql rows, taking it here closes the lost-update
+// window between the HTTP/WS save path and an agent's tool call racing on
+// the SAME document. Callers hold the workspace lock first; that nesting
+// direction is safe because no code path ever acquires the canvas-doc lock
+// and then reaches for the workspace lock, so there is no cycle to
+// deadlock on.
+async function saveSnapshotLocked(
+  documentStore: LibsqlDocumentStore,
+  documentId: string,
+  snapshot: Uint8Array,
+  frontier: Uint8Array<ArrayBuffer>,
+): Promise<void> {
+  await withCanvasDocWriteLock(documentId, async () => {
+    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
+    await documentStore.saveSnapshot({
+      docRef: { kind: 'canvas', documentId },
+      manifest,
+      chunks,
+      frontier,
+    })
+  })
 }
 
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
@@ -142,23 +161,12 @@ export async function saveDocument(
     const documentId = existingCanvasId ?? generateDocumentId()
     const snapshot = doc.export({ mode: 'snapshot' })
     const documentStore = await documentStoreReady()
-    // Every mutating MCP tool serializes its load-modify-save against this
-    // same key (workspace-lock.ts's withCanvasDocWriteLock) — now that both
-    // paths write the same Libsql rows, nesting it here closes the lost-
-    // update window between the HTTP/WS save path and an agent's tool call
-    // racing on the SAME document. Safe in exactly this nesting direction
-    // (workspace lock outer, canvas-doc lock inner): no code path ever
-    // acquires the canvas-doc lock and then reaches for the workspace lock,
-    // so there is no cycle to deadlock on.
-    await withCanvasDocWriteLock(documentId, async () => {
-      const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
-      await documentStore.saveSnapshot({
-        docRef: { kind: 'canvas', documentId },
-        manifest,
-        chunks,
-        frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-      })
-    })
+    await saveSnapshotLocked(
+      documentStore,
+      documentId,
+      snapshot,
+      doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    )
     await upsertWorkspaceRow(db, workspaceId)
     if (existingCanvasId) {
       // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
@@ -463,17 +471,12 @@ export async function compactDocument(
   if (shallow.byteLength >= beforeBytes) {
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
   }
-  // Same nesting as saveDocument: the canvas-doc lock guards this snapshot
-  // replace against a concurrent MCP tool write on the same document.
-  await withCanvasDocWriteLock(documentId, async () => {
-    const { manifest, chunks } = chunkSnapshot(shallow, SNAPSHOT_MAX_CHUNK_BYTES)
-    await documentStore.saveSnapshot({
-      docRef,
-      manifest,
-      chunks,
-      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
-  })
+  await saveSnapshotLocked(
+    documentStore,
+    documentId,
+    shallow,
+    doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+  )
   // Stamp the canvas row so the auto-Optimize loop can skip canvases that
   // have not changed since the last successful compaction, and so the UI
   // can surface "Auto-optimised Ns ago" without reading file mtimes.
