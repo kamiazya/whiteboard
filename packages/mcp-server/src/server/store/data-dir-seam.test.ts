@@ -34,7 +34,7 @@ describe('storage layer follows the effective data dir seam', () => {
     rmSync(importBaseDir, { recursive: true, force: true })
   })
 
-  it('persists canvas blobs and the sqlite db under an overridden data dir, not the import-time snapshot', async () => {
+  it('persists canvas snapshots and the sqlite db under an overridden data dir, not the import-time snapshot', async () => {
     overrideDir = mkdtempSync(join(tmpdir(), 'whiteboard-seam-override-'))
     overrideDataDir(overrideDir)
 
@@ -45,9 +45,23 @@ describe('storage layer follows the effective data dir seam', () => {
 
     const overrideEntries = await readdir(overrideDir)
     expect(overrideEntries).toContain('whiteboard.db')
-    expect(existsSync(join(overrideDir, 'blobs', 'ws-seam-test'))).toBe(true)
+
+    // Canvas content lives in the sqlite db's Libsql snapshot tables now,
+    // not a separate blob tree — confirm the row landed under the override
+    // dir's db, keyed to the document just saved.
+    const { getDb } = await import('./db/index.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const db = await getDb(overrideDir)
+    const documentId = await getDocumentIdByPath(db, 'ws-seam-test', 'seam-canvas')
+    expect(documentId).not.toBeNull()
+    const snapshotRow = await db
+      .selectFrom('documentSnapshots')
+      .select(['docKey'])
+      .where('docKey', '=', `canvas:${documentId}`)
+      .executeTakeFirst()
+    expect(snapshotRow).toBeDefined()
 
     // The import-time snapshot dir must stay untouched by canvas persistence.
-    expect(existsSync(join(importBaseDir, 'blobs'))).toBe(false)
+    expect(existsSync(join(importBaseDir, 'whiteboard.db'))).toBe(false)
   })
 })

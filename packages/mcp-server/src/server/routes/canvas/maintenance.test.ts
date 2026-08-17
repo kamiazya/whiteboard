@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
@@ -57,6 +57,9 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
+    const { LibsqlDocumentStore } = await import('../../store/libsql/libsql-document-store.js')
+    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
+
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
     const row = await db
@@ -65,8 +68,16 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tmp.dir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
-    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
+    // Corrupt the Libsql snapshot rows directly — content no longer lives in
+    // an FS blob for compactDocument to stat/read.
+    const libsqlStore = new LibsqlDocumentStore(db)
+    const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
+    await libsqlStore.saveSnapshot({
+      docRef: { kind: 'canvas', documentId: row.id },
+      manifest,
+      chunks,
+      frontier: new Uint8Array(),
+    })
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
