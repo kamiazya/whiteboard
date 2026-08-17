@@ -70,18 +70,15 @@ export interface PerformBranchMergeResult extends PerformMergeHookResult {
 // (3) detect LWW edge cases with detectMergeBadges
 // (4) on commit, update target tipFrontiers to source and, if target is HEAD,
 //     reconcile the live doc to the preview and broadcast the change
-// The whole read-modify-write (branch lookup, live-doc read, the
-// pre-merge snapshot, the tip/HEAD writes, and their doc
-// reconcile+save) runs inside one workspace-lock hold. getDoc(sid,
-// path) alone is unlocked, so a concurrent rename/delete that runs
-// its whole lock-protected section between this unlocked read and
-// the later saveDocument() calls below would find no row left at
-// this path and silently insert a phantom canvas (or resurrect
-// deleted content) instead of erroring or landing on the renamed
-// row. updateBranchTip/setHeadPersist/deleteBranch already acquire
-// this same per-workspace lock internally (branches-store.ts), so
-// they re-enter via the AsyncLocalStorage chain rather than
-// deadlocking — mirrors live-doc.ts's POST /update handler.
+// The whole read-modify-write (branch lookup, live-doc read via
+// getDoc, the pre-merge snapshot, the tip/HEAD writes, and their doc
+// reconcile+save) runs inside one workspace-lock hold, so document
+// rename/delete and branch rename/delete — which take the same
+// per-workspace lock — cannot interleave with a merge in flight.
+// updateBranchTip/setHeadPersist/deleteBranch also acquire this lock
+// internally (branches-store.ts) and re-enter via the
+// AsyncLocalStorage chain rather than deadlocking — mirrors
+// live-doc.ts's POST /update handler.
 export function performBranchMerge(
   deps: PerformBranchMergeDeps,
   sid: string,
@@ -226,6 +223,11 @@ export function performBranchMerge(
       liveDoc.commit()
       await saveDocument(sid, path, liveDoc, { overwrite: true })
       const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+      // loro's update export is never truly empty — a no-op exports a 22-byte
+      // header-only envelope (measured against loro-crdt directly) — so a
+      // no-op reconcile still broadcasts, and clients import the envelope as
+      // a no-op. This guard only defends against a hypothetical zero-byte
+      // export.
       if (update.byteLength > 0) {
         broadcastLoroUpdate(sid, path, update)
       }
@@ -255,6 +257,10 @@ export function performBranchMerge(
       const afterCommit = await loadCanvasBranches(sid, path)
       if (afterCommit.head === source && source !== into) {
         await setHeadPersist(sid, path, into)
+        // switchedHead reports the PERSISTED head switch. It is deliberately
+        // assigned before the reconcile below: if reconciliation then fails,
+        // HEAD has still durably moved, and hiding the switch would tell
+        // clients nothing changed when it did — the failure itself is warned.
         switchedHead = { from: source, to: into }
         sendHeadChanged(sid, path, into)
         // Already done when HEAD===target, but HEAD===source needs it here.

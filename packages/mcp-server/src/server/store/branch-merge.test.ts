@@ -414,7 +414,7 @@ describe('performBranchMerge', () => {
       performBranchMerge(deps, SID, PATH, { source: 'ghost', into: 'main', dryRun: false }),
     ).rejects.toMatchObject({
       name: 'BranchNotFoundError',
-      message: expect.stringContaining(`ghost`),
+      message: expect.stringMatching(new RegExp(`ghost.*${SID}/${PATH}`)),
     })
   })
 
@@ -428,7 +428,7 @@ describe('performBranchMerge', () => {
       performBranchMerge(deps, SID, PATH, { source: 'feature', into: 'ghost', dryRun: false }),
     ).rejects.toMatchObject({
       name: 'BranchNotFoundError',
-      message: expect.stringContaining('ghost'),
+      message: expect.stringMatching(new RegExp(`ghost.*${SID}/${PATH}`)),
     })
   })
 
@@ -449,18 +449,25 @@ describe('performBranchMerge', () => {
     await expect(loadCanvasBranches(SID, PATH)).resolves.toEqual(before)
   })
 
-  it('does not broadcast when the exported update is zero-length', async () => {
-    // HEAD===into with an already-identical target/source doc produces a
-    // zero-byte update export, which must not reach broadcastLoroUpdate.
+  it('a no-op reconcile still broadcasts a header-only envelope (loro never exports zero bytes)', async () => {
+    // HEAD===into with an INITIALIZED source tip pointing at the same state
+    // as the live doc: reconcileLiveDocToPreview runs and the import adds no
+    // ops. loro's update export is never truly empty — the no-op case is a
+    // 22-byte header-only envelope, which clients import as a no-op — so the
+    // byteLength guard does not (and cannot) filter it. This pins the
+    // MEASURED behavior; an earlier version of this test claimed the guard
+    // suppressed the broadcast, which no loro export can actually trigger.
     const deps = createDeps()
     const doc = makeSpatialDoc({
       nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
       edges: [],
     })
     await saveDocument(SID, PATH, doc, { overwrite: true })
-    const branch = await createBranch(SID, PATH, { name: 'feature' })
-    // feature's tip stays uninitialized (tracks the live doc identically to main).
-    expect(branch.tipFrontiers).toBe('')
+    await createBranch(SID, PATH, { name: 'feature' })
+    const state = await loadCanvasBranches(SID, PATH)
+    const feature = state.branches.find((b) => b.name === 'feature')!
+    feature.tipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    await saveCanvasBranches(SID, PATH, state)
 
     await performBranchMerge(deps, SID, PATH, {
       source: 'feature',
@@ -468,10 +475,59 @@ describe('performBranchMerge', () => {
       dryRun: false,
     })
 
-    // Uninitialized source tip means updateBranchTip/reconcile never ran at
-    // all (see the earlier "falls back to the live snapshot" case) — this
-    // pins the same zero-update guard from the HEAD===source cleanup branch.
-    expect(deps.broadcastLoroUpdate).not.toHaveBeenCalled()
+    expect(deps.broadcastLoroUpdate).toHaveBeenCalledTimes(1)
+    const [, , update] = deps.broadcastLoroUpdate.mock.calls[0]!
+    expect((update as Uint8Array).byteLength).toBeLessThan(30)
+  })
+
+  it('still reports switchedHead when reconciliation fails AFTER the head switch persisted', async () => {
+    // The head switch and the live-doc reconcile are separate effects:
+    // setHeadPersist has already durably moved HEAD when reconciliation
+    // throws, so the response reports the switch that DID happen (hiding it
+    // would tell clients nothing changed when it durably did) and the
+    // failure is a warning. Faithful to the pre-extraction inline behavior.
+    const deps = createDeps()
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    await saveDocument(SID, PATH, doc, { overwrite: true })
+    await createBranch(SID, PATH, { name: 'feature' })
+    // Diverge feature from main so the cleanup-branch reconcile has real
+    // bytes to broadcast — that broadcast is the injection point below.
+    const state = await loadCanvasBranches(SID, PATH)
+    const feature = state.branches.find((b) => b.name === 'feature')!
+    const diverged = makeSpatialDoc({
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'B', type: 'text', text: 'b', x: 50, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
+    })
+    feature.tipFrontiers = Buffer.from(encodeFrontiers(diverged.frontiers())).toString('base64')
+    await saveCanvasBranches(SID, PATH, state)
+    await saveDocument(SID, PATH, diverged, { overwrite: true })
+    await branchesStore.setHead(SID, PATH, 'feature')
+    deps.broadcastLoroUpdate.mockImplementationOnce(() => {
+      throw new Error('broadcast boom')
+    })
+    const cap = captureLogsForTests('warning')
+
+    try {
+      const result = await performBranchMerge(deps, SID, PATH, {
+        source: 'feature',
+        into: 'main',
+        dryRun: false,
+      })
+
+      expect(result.committed).toBe(true)
+      expect(result.switchedHead).toEqual({ from: 'feature', to: 'main' })
+      expect(cap.records).toContainEqual(
+        expect.objectContaining({ scope: 'merge', msg: 'post-merge head switch failed' }),
+      )
+    } finally {
+      cap.restore()
+    }
   })
 
   it('surfaces a resurrected badge across a two-sided divergence in both badges and conflictElementIds', async () => {
