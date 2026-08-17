@@ -488,3 +488,38 @@ it('the pending chip announces the hold and its ✕ cancels it — touch finally
   clip(root, 'paste')
   expect(latest.canvas.nodes).toHaveLength(3)
 })
+
+it('a touch tap on an EDGE during the hold selects the edge — placement is for empty space only', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  // (260, 80) sits on the straight a→b edge line, away from both boxes.
+  tapEmpty(root, 260, 80)
+
+  // The tap behaved as an edge tap, not a placement: nothing moved and the
+  // hold survives (edge interaction is not "done with the cut").
+  const a = latest.canvas.nodes.find((n) => n.id === 'a')
+  expect(a).toMatchObject({ x: 40, y: 40 })
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
+})
+
+it('a second rapid tap after placing does not mint a note — the press memory resets', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  tapEmpty(root, 600, 400)
+  // A second quick tap at ANOTHER empty spot: the double-press key is
+  // 'empty' regardless of position, so without the reset these two taps
+  // pair up and mint a note there.
+  tapEmpty(root, 200, 400)
+
+  // Two nodes still: the placement tap must not pair with the next tap as
+  // an empty double press (which creates a note).
+  expect(latest.canvas.nodes).toHaveLength(2)
+})

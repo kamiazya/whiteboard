@@ -1830,9 +1830,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // empty tap answers it HERE — one tap instead of long-press →
           // menu → Paste here. Mice keep the explicit paste: an empty click
           // is the deselect reflex, and hijacking it would misplace nodes.
+          // A tap that landed on an EDGE also starts a marquee (the press
+          // handler selects the edge and falls through here), so truly
+          // empty means no edge got selected — an edge tap keeps its normal
+          // meaning, and the hold survives it like any other interaction.
           // Resetting the press memory keeps the NEXT tap from reading as a
           // double press (which would also mint a note at the same spot).
-          else if (e.pointerType === 'touch' && pendingCut !== null) {
+          else if (e.pointerType === 'touch' && pendingCut !== null && selectedEdgeId === null) {
             lastPressRef.current = null
             pasteClipboard(marquee.start)
           }
