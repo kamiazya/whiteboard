@@ -13,6 +13,15 @@ describe('toInlineScriptJson', () => {
     expect(toInlineScriptJson({ port: 3099 })).toBe(JSON.stringify({ port: 3099 }))
   })
 
+  // Shrunk fast-check counterexample, pinned: JSON itself has no negative
+  // zero on serialize (JSON.stringify(-0) === "0"), so the round trip lands
+  // on +0. The property below therefore compares modulo JSON's own value
+  // model, not against the input verbatim.
+  it('normalizes -0 to 0, exactly as JSON.stringify does', () => {
+    expect(toInlineScriptJson([-0])).toBe('[0]')
+    expect(Object.is(JSON.parse(toInlineScriptJson([-0]))[0], 0)).toBe(true)
+  })
+
   // Bias string content toward '<': JSON values drawn uniformly almost never
   // contain it, which would make this property pass vacuously even with the
   // escape deleted.
