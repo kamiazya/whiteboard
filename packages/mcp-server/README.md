@@ -6,7 +6,8 @@
 
 # `@kamiazya/whiteboard-mcp`
 
-OpenCanvas-based whiteboard MCP server for Claude Code, Codex, and other MCP hosts.
+Whiteboard MCP server for Claude Code, Codex, and other MCP hosts. Documents are
+stored as OKF Markdown or [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/).
 
 ## Requirements
 

@@ -10,7 +10,7 @@
 // from its single definition instead of a hand-written mirror that can
 // silently drift from the server's shape.
 
-// The OpenCanvas /api/v1 list contract, re-exported from server-core so
+// The /api/v1 document list contract, re-exported from server-core so
 // apps/web keeps consuming every daemon HTTP contract through this one
 // barrel instead of importing a shared-layer package it is not allowed to
 // depend on directly (see .claude/rules/architecture-map.md).

@@ -1,5 +1,6 @@
 import {
   deleteSpatialNode,
+  readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
   readNodeLocks,
@@ -8,6 +9,7 @@ import {
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
+  writeCoreFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialEdge,
@@ -15,7 +17,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
@@ -67,6 +69,8 @@ function commandTargetKey(command: EditorCommand): string {
       // so a burst of keystrokes inside one debounce window collapses to the
       // last one — which is the entire point of deduping here.
       return 'body'
+    case 'set-facets':
+      return 'facets'
     case 'batch':
       // Mapped in writeCommandTarget (unlike the default arm), but each
       // batch is one distinct user action — never deduped against another.
@@ -161,6 +165,14 @@ export interface CanvasSyncSession {
   // its own notification. Empty string before the first snapshot.
   getMarkdownBody(): string
   subscribeMarkdownBody(listener: () => void): () => void
+  /**
+   * OKF core facets from the doc's `core` map. `undefined` until hydrated,
+   * when none were ever written, and — by `readCoreFacets`' own rule — for
+   * any SPATIAL document, which has no frontmatter to hold (ADR-0009
+   * decision 3). That last case is why the editor needs no separate flag to
+   * decide whether to offer the disclosure.
+   */
+  getCoreFacets(): StoredCoreFacets | undefined
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -207,6 +219,11 @@ function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCo
       // whole SpatialCanvas, which would leave the body container untouched
       // and silently drop the edit.
       writeMarkdownBody(doc, command.text)
+      return true
+    case 'set-facets':
+      // Same must-handle reasoning as set-body: the `core` map is outside
+      // the canvas the fallback would rewrite.
+      writeCoreFacets(doc, command.facets)
       return true
     case 'delete-node':
       // Always "handled": deleteSpatialNode is a documented no-op for an
@@ -386,7 +403,7 @@ export function createCanvasSyncSession(
    * Reads the doc and publishes it as the session's current canvas value.
    * The apply-generation counter still guards a session swap racing a
    * publish, but since this path is now fully synchronous (no awaited file
-   * fetch in between, unlike the pre-OpenCanvas Excalidraw bridge), the
+   * fetch in between, unlike the older Excalidraw bridge), the
    * generation check collapses to one bump + one isStale() check right
    * before publishing, rather than a capture-then-recheck pair spanning an
    * await.
@@ -829,6 +846,10 @@ export function createCanvasSyncSession(
     return doc === null ? '' : readMarkdownBody(doc)
   }
 
+  function getCoreFacets(): StoredCoreFacets | undefined {
+    return doc === null ? undefined : readCoreFacets(doc)
+  }
+
   function notifyBodyChanged(): void {
     for (const listener of bodyListeners) listener()
   }
@@ -867,5 +888,6 @@ export function createCanvasSyncSession(
     subscribeLocks,
     getMarkdownBody,
     subscribeMarkdownBody,
+    getCoreFacets,
   }
 }

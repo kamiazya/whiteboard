@@ -44,7 +44,7 @@ setServerCoreLogSink((record) => {
   }
 })
 
-export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): void {
+export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
   const { tools } = createServer(deps)
 
   // Every MUTATING tool below runs inside withCanvasDocWriteLock, keyed on

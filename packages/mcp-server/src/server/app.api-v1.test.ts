@@ -1,5 +1,5 @@
 /**
- * The daemon mounts server-core's /api/v1 OpenCanvas surface when given
+ * The daemon mounts server-core's /api/v1 document surface when given
  * ServerDeps. Until this slice, createServer(deps) was only used for its
  * MCP tools — the HTTP app it returns was never mounted, so the workspace
  * tree (documentId + path world) was unreachable over HTTP even though the
@@ -53,7 +53,7 @@ function createRuntimeOptions(token?: string) {
   }
 }
 
-describe('createApp /api/v1 OpenCanvas mount', () => {
+describe('createApp /api/v1 document mount', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
     await mkdir(join(tmp.dir, 'data'), { recursive: true })

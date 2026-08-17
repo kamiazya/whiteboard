@@ -9,7 +9,7 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { createNodePatchTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { registerOpenCanvasTools } from '../mcp/opencanvas-tools.js'
+import { registerDocumentTools } from '../mcp/document-tools.js'
 import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import { _resetWorkspaceLocksForTests, withCanvasDocWriteLock } from './workspace-lock.js'
 
@@ -184,7 +184,7 @@ describe('withCanvasDocWriteLock', () => {
 describe('registered MCP handlers', () => {
   function registeredHandlers(deps: Awaited<ReturnType<typeof makeDeps>>) {
     const registerTool = vi.fn()
-    registerOpenCanvasTools({ registerTool } as never, deps as never)
+    registerDocumentTools({ registerTool } as never, deps as never)
     const byName = new Map<string, (args: unknown, extra: unknown) => Promise<unknown>>()
     for (const call of registerTool.mock.calls) {
       byName.set(call[0] as string, call[2] as never)

@@ -6,6 +6,7 @@ import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
+import { CanvasProperties } from '../components/canvas-properties/CanvasProperties.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
@@ -236,6 +237,8 @@ export function DaemonCanvasPage({
     lockedNodeIds,
     setNodeLock,
     markdownBody: syncedMarkdownBody,
+    coreFacets,
+    setCoreFacets,
     lockedEdgeIds,
     setEdgeLock,
     syncStatus,
@@ -577,13 +580,26 @@ export function DaemonCanvasPage({
           {canvas && (
             <WorkspaceTopBar
               statusSlot={connectionStatus}
-              // No identity slot here yet, deliberately. A document's NAME is
-              // the workspace's (ADR-0009 decision 2) and the daemon's canvas
-              // summary carries no display name — only a path — so there is
-              // nothing to render but the path, and nothing to write it back
-              // through. The browser-local page has a real name to show and
-              // does mount one. Restoring this needs the workspace-level
-              // display-name API first, not a title read out of the content.
+              // Document identity in the merged header row, mirroring the
+              // browser-local page. The NAME is the workspace's — the top bar
+              // hands it down from `/names`, the same surface the canvas
+              // dropdown renames through — never a `title` read out of the
+              // content, which ADR-0009 decision 2 forbids and
+              // `storedCoreFacetsSchema` has no room for.
+              titleSlot={(identity) => (
+                <CanvasProperties
+                  inline
+                  key={`${canvas.workspaceId}/${canvas.path}`}
+                  title={identity.name}
+                  onTitleChange={identity.onRename}
+                  // Facets are OKF frontmatter, so only a markdown document
+                  // has any — `readCoreFacets` answers `undefined` for a
+                  // spatial one (ADR-0009 decision 3), which is what decides
+                  // the disclosure here without a second flag to keep in sync.
+                  facets={coreFacets}
+                  onFacetsChange={setCoreFacets}
+                />
+              )}
               workspaceId={canvas.workspaceId}
               path={canvas.path}
               canvases={controller.canvases}
@@ -736,11 +752,7 @@ export function DaemonCanvasPage({
               body: markdownBody,
               setBody: setMarkdownBody,
               theme: resolvedTheme,
-              // Kind only: the daemon has no facets wiring on this page (see
-              // the WorkspaceTopBar note), so there is no stored `type`/`tags`
-              // to show and inventing one would be a value the user could not
-              // edit.
-              meta: { type: documentKind },
+              meta: coreFacets ?? { type: documentKind },
               resolveAlias,
               onOpenCanvas: (id) => controller.switchCanvas(resolveRefPath(id) ?? id),
               resolveEmbed,

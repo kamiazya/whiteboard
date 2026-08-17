@@ -26,6 +26,7 @@ import type {
   LineJumps,
   SpatialCanvas,
   SpatialNode,
+  StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import type { Point } from './viewport.js'
@@ -167,6 +168,12 @@ export type EditorCommand =
    * pipeline beside them.
    */
   | { readonly kind: 'set-body'; readonly text: string }
+  /**
+   * A markdown document's OKF core facets, written to the doc's `core` map.
+   * Same class as `set-body` and not an `EditorLeafCommand` for the same
+   * reasons: no node, no edge, canvas value untouched, never in a batch.
+   */
+  | { readonly kind: 'set-facets'; readonly facets: StoredCoreFacets }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -473,10 +480,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
     case 'set-text':
       return setText(canvas, command.id, command.text)
     case 'set-body':
-      // The body is not IN the canvas — it is the doc's own `body` text
-      // container — so applying one leaves the canvas value identical.
-      // Returning the same reference is what keeps a keystroke in the
-      // markdown editor from re-rendering the spatial scene.
+    case 'set-facets':
+      // Neither is IN the canvas — the body is the doc's own `body` text
+      // container and the facets are its `core` map — so applying one leaves
+      // the canvas value identical. Returning the same reference is what
+      // keeps a keystroke in the markdown editor from re-rendering the
+      // spatial scene.
       return canvas
     case 'connect-nodes':
       return connectNodes(canvas, command.edgeId, command.fromNode, command.toNode)
@@ -623,7 +632,7 @@ const DUPLICATE_OFFSET_PX = 16
  */
 export function buildFragmentInsertCommand(
   canvas: SpatialCanvas,
-  fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
   createId: () => string,
   anchor?: Point,
 ): EditorCommand | undefined {
@@ -643,6 +652,26 @@ export function buildFragmentInsertCommand(
     dx = Math.round(anchor.x - (minX + maxX) / 2)
     dy = Math.round(anchor.y - (minY + maxY) / 2)
   }
+  // A cut fragment reconnects its severed boundary edges to peers that
+  // still exist on THIS canvas (same-canvas paste is a move); a missing
+  // peer means a cross-canvas paste or a deleted neighbour, and the edge
+  // drops silently — exactly what a plain copy would have done.
+  const canvasNodeIds = new Set(canvas.nodes.map((node) => node.id))
+  const boundaryEdges = (fragment.cut?.boundaryEdges ?? []).flatMap((edge) => {
+    const from = reminted.idMap.get(edge.fromNode)
+    const to = reminted.idMap.get(edge.toNode)
+    if ((from === undefined) === (to === undefined)) return []
+    const peer = from === undefined ? edge.fromNode : edge.toNode
+    if (!canvasNodeIds.has(peer)) return []
+    return [
+      {
+        ...edge,
+        id: reminted.mintId(),
+        fromNode: from ?? edge.fromNode,
+        toNode: to ?? edge.toNode,
+      },
+    ]
+  })
   return {
     kind: 'batch',
     commands: [
@@ -650,7 +679,9 @@ export function buildFragmentInsertCommand(
         (node) =>
           ({ kind: 'create-node', node: { ...node, x: node.x + dx, y: node.y + dy } }) as const,
       ),
-      ...reminted.edges.map((edge) => ({ kind: 'create-edge', edge }) as const),
+      ...[...reminted.edges, ...boundaryEdges].map(
+        (edge) => ({ kind: 'create-edge', edge }) as const,
+      ),
     ],
   }
 }

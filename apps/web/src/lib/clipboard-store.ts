@@ -27,7 +27,28 @@ export function hasClipboardFragment(): boolean {
   return current !== null && current.nodes.length > 0
 }
 
+/**
+ * Edge ids a cut's boundary reconnection created, per cut id. Module-scoped
+ * like the slot: the "reconnect once" rule must hold even when the paste
+ * arrives via the OS clipboard (Ctrl+V re-parses the JSON fresh each time,
+ * so the envelope itself cannot be consumed). Kept as the CREATED ids, not
+ * a boolean, so the decision can follow the document: an undone paste
+ * removes these edges from the canvas, and the next paste is a first paste
+ * again. An empty result is never recorded — a cross-canvas paste that
+ * found no peers must not erase the record of a real reconnection at home.
+ */
+const reconnections = new Map<string, readonly string[]>()
+
+export function recordedReconnection(cutId: string): readonly string[] {
+  return reconnections.get(cutId) ?? []
+}
+
+export function recordReconnection(cutId: string, edgeIds: readonly string[]): void {
+  if (edgeIds.length > 0) reconnections.set(cutId, edgeIds)
+}
+
 /** Test isolation only — production never clears the slot. */
 export function clearClipboardFragmentForTests(): void {
   current = null
+  reconnections.clear()
 }

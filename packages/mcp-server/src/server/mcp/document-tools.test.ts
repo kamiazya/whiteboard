@@ -4,11 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
+import { registerDocumentTools } from './document-tools.js'
 // Side-effect import: registering these tools also installs the server-core
-// log-sink wiring at module scope (see opencanvas-tools.ts).
+// log-sink wiring at module scope (see document-tools.ts).
 import { CANVAS_VIEW_RESOURCE_URI, RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { UI_LINKED_TOOLS } from './mcp-smoke-coverage.js'
-import { registerOpenCanvasTools } from './opencanvas-tools.js'
 
 function fakeServer() {
   const registerTool = vi.fn()
@@ -22,10 +22,10 @@ function fakeDeps() {
   }
 }
 
-describe('registerOpenCanvasTools', () => {
+describe('registerDocumentTools', () => {
   it('registers wb_version_save, wb_version_list, and wb_version_restore via the server-core wiring', () => {
     const server = fakeServer()
-    registerOpenCanvasTools(server, fakeDeps())
+    registerDocumentTools(server, fakeDeps())
 
     const registerToolMock = vi.mocked(server.registerTool)
     const names = registerToolMock.mock.calls.map((call) => call[0])
@@ -41,7 +41,7 @@ describe('registerOpenCanvasTools', () => {
     // capability and the widget bundle all shipped, and no tool linked
     // them. UI_LINKED_TOOLS is only a claim until this asserts it.
     const server = fakeServer()
-    registerOpenCanvasTools(server, fakeDeps())
+    registerDocumentTools(server, fakeDeps())
 
     const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)
     expect(call, `${name} is not registered at all`).toBeDefined()
@@ -55,7 +55,7 @@ describe('registerOpenCanvasTools', () => {
     // The mirror-into-legacy-key branch runs for every tool, so a bug there
     // could stamp the linkage onto tools that must not render as a widget.
     const server = fakeServer()
-    registerOpenCanvasTools(server, fakeDeps())
+    registerDocumentTools(server, fakeDeps())
     const dataPlane = vi
       .mocked(server.registerTool)
       .mock.calls.filter((c) => !UI_LINKED_TOOLS.includes(c[0] as never))
@@ -68,13 +68,13 @@ describe('registerOpenCanvasTools', () => {
 
   it("forwards a server-core log record to this composition root's logger", () => {
     // Registering the tools (via the side-effect import above) installs
-    // the module-scope setServerCoreLogSink wiring in opencanvas-tools.ts.
+    // the module-scope setServerCoreLogSink wiring in document-tools.ts.
     // Without it, any record a server-core call site logs (via its own
     // injectable getLogger) would be silently dropped instead of reaching
     // an operator — see server-core/src/log.ts's doc comment on why this
     // shared layer cannot reach for mcp-server's pino logger directly.
     const server = fakeServer()
-    registerOpenCanvasTools(server, fakeDeps())
+    registerDocumentTools(server, fakeDeps())
 
     const capture = captureLogsForTests('debug')
     try {

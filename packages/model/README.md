@@ -1,6 +1,6 @@
 # @kamiazya/whiteboard-model
 
-OpenCanvas data-model Zod schemas (meta / facets / spatial / markdown /
+Whiteboard document-model Zod schemas (meta / facets / spatial / markdown /
 workspace-tree / mdast subset). Named `model` — sibling to
 `packages/canvas-viewer` in this monorepo's per-concern `packages/*`
 layout — to make clear this package is the pure data-model contract, not

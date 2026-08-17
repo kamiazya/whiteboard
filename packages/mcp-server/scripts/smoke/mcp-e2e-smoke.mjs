@@ -3,7 +3,7 @@
 //
 // Purpose:
 // Start the MCP server outside the parent client's context and verify that each
-// OpenCanvas tool behaves according to spec using JSON-RPC stdio.
+// document tool behaves according to spec using JSON-RPC stdio.
 //
 // Coverage:
 //   1. tools/list matches the authoritative set in mcp-smoke-coverage.ts

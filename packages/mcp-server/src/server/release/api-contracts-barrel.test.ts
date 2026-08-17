@@ -27,7 +27,7 @@ describe('api-contracts barrel scope', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
     // '@kamiazya/whiteboard-server-core' is a deliberate widening: the
-    // OpenCanvas /api/v1 contracts (canvas list + OKF read) are consumed by
+    // /api/v1 document contracts (canvas list + OKF read) are consumed by
     // apps/web through this barrel so it never imports the shared-layer
     // package directly (architecture-map.md).
     expect(specifiers).toEqual([

@@ -28,6 +28,22 @@ export const clipboardFragmentSchema = z
     edges: z.array(canvasEdgeSchema),
     /** Inline assets keyed by the file-node `file` reference they carry. */
     files: z.record(z.string(), clipboardFileAssetSchema).optional(),
+    /**
+     * Present only on a CUT fragment: the cut surface. `boundaryEdges` are
+     * the edges the cut severed — exactly one endpoint in the fragment, the
+     * other a peer left behind on the source canvas. A same-canvas paste
+     * reconnects them to peers that still exist (cut is a move, not a
+     * delete); anywhere else the peers are absent and they drop silently.
+     * `id` is minted per cut so the reconnect happens on the FIRST paste
+     * only — later pastes are plain copies.
+     */
+    cut: z
+      .object({
+        id: z.string().min(1),
+        boundaryEdges: z.array(canvasEdgeSchema),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -65,6 +81,17 @@ export const clipboardFragmentSchema = z
           code: 'custom',
           message: `edge "${edge.id}" references toNode "${edge.toNode}" outside the fragment`,
           path: ['edges', index, 'toNode'],
+        })
+      }
+    })
+    value.cut?.boundaryEdges.forEach((edge, index) => {
+      // A boundary edge must CROSS the border: exactly one endpoint inside.
+      const inFragment = Number(seen.has(edge.fromNode)) + Number(seen.has(edge.toNode))
+      if (inFragment !== 1) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `boundary edge "${edge.id}" must have exactly one endpoint in the fragment`,
+          path: ['cut', 'boundaryEdges', index],
         })
       }
     })

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
 
-// The two OpenCanvas diagram sources rendered by architecture.docs-snapshot,
+// The two spatial-canvas diagram sources rendered by architecture.docs-snapshot,
 // canvas-presentation.docs-snapshot, and canvas-auth-flow.docs-snapshot. A
 // hand-edited .canvas file that fails to parse must fail loudly here rather
 // than silently rendering an empty PNG.

@@ -21,8 +21,6 @@ export default mergeConfig(
         // Smoke and distribution tests require a live daemon or packaged binary.
         '**/*.smoke.test.ts',
         '**/*.distribution.test.ts',
-        // Incomplete server-mode auth route — expects 403 but handler not yet wired.
-        '**/routes/canvas.test.ts',
         // vi.spyOn(process.stderr, 'write') conflicts with Stryker worker isolation;
         // the stderr non-leak contract is covered by the regular mcp-node suite.
         '**/cli/dispatcher-server-run.test.ts',
