@@ -32,7 +32,7 @@ const { createCanvasRouter } = await import('../canvas.js')
 // test does not intend to exercise.
 await import('../ws.js')
 
-describe('restore targetSlug-overwrite vs delete race', () => {
+describe('restore targetPath-overwrite vs delete race', () => {
   beforeEach(() => {
     clearCache()
   })
@@ -76,7 +76,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       body: targetDoc.export({ mode: 'update', from: tvv0 }),
     })
 
-    // Stall the restore route's getDoc(targetSlug) call so a DELETE of the
+    // Stall the restore route's getDoc(targetPath) call so a DELETE of the
     // target can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
@@ -86,13 +86,13 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       '../../store/doc-cache.js',
     )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, slug) => {
-      if (gateArmed && slug === 'canvas-b') {
+    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
+      if (gateArmed && path === 'canvas-b') {
         gateArmed = false
         signalGetDocCalled()
         await getDocGate
       }
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const restorePromise = app.request(
@@ -100,7 +100,7 @@ describe('restore targetSlug-overwrite vs delete race', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+        body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
       },
     )
 
@@ -122,8 +122,8 @@ describe('restore targetSlug-overwrite vs delete race', () => {
     // after the delete removed it -- the delete serializes after the
     // restore's write under the workspace lock, so canvas-b must be gone.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual(['canvas-a'])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual(['canvas-a'])
   })
 })
 
@@ -139,7 +139,7 @@ describe('restore in-place vs delete race', () => {
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
-    // Single canvas with a saved version to restore onto itself (no targetSlug).
+    // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
     const sourceList = sourceDoc.getMovableList('elements')
@@ -158,7 +158,7 @@ describe('restore in-place vs delete race', () => {
     })
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
-    // Stall the restore route's getDoc(slug) call so a DELETE of the same
+    // Stall the restore route's getDoc(path) call so a DELETE of the same
     // canvas can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
@@ -168,13 +168,13 @@ describe('restore in-place vs delete race', () => {
       '../../store/doc-cache.js',
     )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, slug) => {
-      if (gateArmed && slug === 'canvas-a') {
+    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
+      if (gateArmed && path === 'canvas-a') {
         gateArmed = false
         signalGetDocCalled()
         await getDocGate
       }
-      return actual.getDoc(workspaceId, slug)
+      return actual.getDoc(workspaceId, path)
     })
 
     const restorePromise = app.request(
@@ -203,7 +203,7 @@ describe('restore in-place vs delete race', () => {
     // lock, so canvas-a must be gone -- the restore must not have won a
     // race that resurrects it after the delete.
     const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { slug: string }[] }
-    expect(listJson.canvases.map((c) => c.slug)).toEqual([])
+    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
+    expect(listJson.canvases.map((c) => c.path)).toEqual([])
   })
 })

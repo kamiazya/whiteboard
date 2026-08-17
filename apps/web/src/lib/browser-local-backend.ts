@@ -36,7 +36,7 @@ import { LoroStore } from './loro-store.js'
  * transaction for appendDelta.
  */
 export class BrowserLocalBackend implements CanvasBackend {
-  private readonly canvasId: string
+  private readonly documentId: string
   private readonly store: LoroStore
   private readonly fileStore: CanvasFileStore
   private handlers: CanvasBackendHandlers | null = null
@@ -44,8 +44,8 @@ export class BrowserLocalBackend implements CanvasBackend {
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(canvasId: string, store?: LoroStore, fileStore?: CanvasFileStore) {
-    this.canvasId = canvasId
+  constructor(documentId: string, store?: LoroStore, fileStore?: CanvasFileStore) {
+    this.documentId = documentId
     this.store = store ?? new LoroStore()
     this.fileStore = fileStore ?? new CanvasFileStore()
   }
@@ -82,13 +82,13 @@ export class BrowserLocalBackend implements CanvasBackend {
 
   private async _doWrite(bytes: Uint8Array): Promise<void> {
     try {
-      const existing = await this.store.load(this.canvasId)
+      const existing = await this.store.load(this.documentId)
       if (existing.kind === 'not-found') {
         // First write: save as snapshot.
-        await this.store.save(this.canvasId, bytes)
+        await this.store.save(this.documentId, bytes)
       } else if (existing.kind === 'ok') {
         // Subsequent writes: append as delta.
-        await this.store.appendDelta(this.canvasId, bytes)
+        await this.store.appendDelta(this.documentId, bytes)
       } else {
         // Existing record is corrupt or version-mismatch; appending would
         // silently discard the delta. Surface the failure.
@@ -161,7 +161,7 @@ export class BrowserLocalBackend implements CanvasBackend {
 
     let result: Awaited<ReturnType<LoroStore['load']>>
     try {
-      result = await this.store.load(this.canvasId)
+      result = await this.store.load(this.documentId)
     } catch {
       if (this.isStale(handlers)) return
       handlers.onError?.('storage-failure')

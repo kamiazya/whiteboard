@@ -46,7 +46,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 })
 
 const { createFileGcSweeper } = await import('./file-gc-sweeper.js')
-const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
+const { saveDocument, loadDocument } = await import('./document-store.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { captureLogsForTests } = await import('../log.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -621,7 +621,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     // Uses the REAL default purge fn (no `purge` override) to prove
     // createFileGcSweeper wires its internally-constructed FileVersionStore
     // into purgeDanglingFiles, not just that a caller-supplied stub works.
-    await saveCanvas(
+    await saveDocument(
       'ws_v',
       'evolving',
       (() => {
@@ -637,13 +637,13 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
       })(),
     )
     const store = new FileVersionStore()
-    await store.save('ws_v', 'evolving', await loadCanvas('ws_v', 'evolving'), { auto: false })
+    await store.save('ws_v', 'evolving', await loadDocument('ws_v', 'evolving'), { auto: false })
 
-    const live = await loadCanvas('ws_v', 'evolving')
+    const live = await loadDocument('ws_v', 'evolving')
     const list = live.getMovableList('elements')
     if (list.length > 0) list.delete(0, list.length)
     live.commit()
-    await saveCanvas('ws_v', 'evolving', live, { overwrite: true })
+    await saveDocument('ws_v', 'evolving', live, { overwrite: true })
 
     const filesDir = join(tempDir, 'ws_v', 'files')
     await mkdir(filesDir, { recursive: true })
@@ -752,7 +752,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
   })
 
   it('skips the blobs dir when it only holds canvas snapshots (no files/ child)', async () => {
-    // canvas-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/canvas/...
+    // document-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/canvas/...
     // -- no files/ child of its own -- so the shared discovery containment
     // check already excludes it without a name-based special case.
     const blobsDir = join(tempDir, 'blobs', 'some_other_ws', 'canvas')

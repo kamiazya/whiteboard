@@ -2,12 +2,13 @@
  * The wire between the editor and the layout worker.
  *
  * Everything here is structured-cloneable BY CONSTRUCTION, which is the
- * constraint that shapes it: `renderCanvasToSvg` takes five FUNCTION seams
- * (resolveFileLabel/Canvas/Image/Facets, expandFileNode) and a function
- * cannot cross a `postMessage`. Only the one seam whose input is plain data
- * — the file-reference label table — is carried here and rebuilt worker-side;
- * a canvas that needs any of the other four falls back to main-thread layout
- * rather than silently rendering without them (see `canLayoutInWorker`).
+ * constraint that shapes it: `renderCanvasToSvg` takes FUNCTION seams
+ * (`resolveReference`, `expandFileNode`) and a function cannot cross a
+ * `postMessage`. Only the parts whose input is plain data — the
+ * file-reference label table and the dangling-ref list — are carried here
+ * and rebuilt worker-side by `composeReferenceSeam`; a canvas whose host
+ * resolves reference CONTENT falls back to main-thread layout rather than
+ * silently rendering without it (see `canLayoutInWorker`).
  *
  * Markdown text crosses as part of the canvas and the WORKER parses it, so
  * parse and layout leave the main thread together. The old blocker was never
@@ -23,8 +24,13 @@
  * Dates that a JSON round trip would quietly drop.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { BoundingBox, EdgeAnchorPair, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  BoundingBox,
+  EdgeAnchorPair,
+  ResolvedReference,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
@@ -38,7 +44,7 @@ export type LayoutRequest = {
   readonly theme: ResolvedTheme
   readonly fileRefLabels?: readonly FileRefLabel[]
   /** File refs the host resolved as dangling — the plain-data form of the
-   * resolveFileMissing seam, precomputed against THIS canvas's file nodes
+   * seam's `missing` field, precomputed against THIS canvas's file nodes
    * (a function cannot cross the wire; a small ref list can). */
   readonly missingFileRefs?: readonly string[]
 }
@@ -75,38 +81,65 @@ export type LayoutResponse =
 export const FONT_DEGRADED = 'font-degraded'
 
 /**
+ * The reference seam, layered: whatever CONTENT the host resolved, with the
+ * plain-data chrome (readable labels, dangling refs) on top.
+ *
+ * ONE producer for both threads. The worker rebuilds its seam from the two
+ * lists in the request and the main thread builds the same seam from the
+ * callbacks it has; two hand-written compositions of "label overrides
+ * content" is exactly how the offloaded and synchronous renders of one
+ * canvas start disagreeing about what it says.
+ *
+ * Returns `undefined` when nothing is supplied, so a host that wires none
+ * leaves the layout exactly as it was before any of this existed.
+ */
+export function composeReferenceSeam(parts: {
+  readonly content?: (ref: string) => ResolvedReference | undefined
+  readonly labels?: ReadonlyMap<string, string>
+  readonly missing?: ReadonlySet<string>
+}): ((ref: string) => ResolvedReference | undefined) | undefined {
+  const { content, labels, missing } = parts
+  const hasLabels = labels !== undefined && labels.size > 0
+  const hasMissing = missing !== undefined && missing.size > 0
+  if (content === undefined && !hasLabels && !hasMissing) return undefined
+  return (ref) => {
+    const resolved = content?.(ref)
+    const label = hasLabels ? labels.get(ref) : undefined
+    const isMissing = hasMissing && missing.has(ref)
+    if (resolved === undefined && label === undefined && !isMissing) return undefined
+    return {
+      ...resolved,
+      ...(label !== undefined ? { label } : {}),
+      ...(isMissing ? { missing: true } : {}),
+    }
+  }
+}
+
+/**
  * Whether a canvas's render options can cross the wire at all.
  *
- * The four function seams below are supplied by a host page. None of the
- * app's own mount sites passes one today, but an embedded editor does, and
+ * The CONTENT seam is supplied by a host page and cannot be serialized, so
+ * a canvas that could call it has to be laid out on the main thread —
  * shipping a scene rendered WITHOUT a seam the caller wired would be a
- * silent content regression — worse than the jank this worker exists to
- * remove.
+ * silent content regression, worse than the jank this worker exists to
+ * remove. Labels and dangling refs are exempt because they already cross as
+ * data and the worker rebuilds them through `composeReferenceSeam`.
  */
 export function canLayoutInWorker(
   options: {
-    readonly resolveFileCanvas?: unknown
-    readonly resolveFileMarkdown?: unknown
+    readonly resolveReferenceContent?: unknown
     readonly expandFileNode?: unknown
-    readonly resolveFileImage?: unknown
-    readonly resolveFileFacets?: unknown
   },
   canvas: SpatialCanvas,
 ): boolean {
-  // The seams only disqualify a canvas that could actually CALL one: every
-  // seam here is keyed on a file reference, so a canvas without a file node
-  // lays out identically with or without them. This is judged per canvas
-  // rather than per host because the real pages supply the seams
-  // UNCONDITIONALLY (useCanvasFileSeams returns them whether or not any file
-  // node exists) — a presence check reads as "this host has file support"
-  // and silently turns the worker off for every production canvas.
+  // The seam only disqualifies a canvas that could actually CALL it: it is
+  // keyed on a file reference, so a canvas without a file node lays out
+  // identically with or without it. This is judged per canvas rather than
+  // per host because the real pages supply the seam UNCONDITIONALLY
+  // (useCanvasFileSeams returns it whether or not any file node exists) — a
+  // presence check reads as "this host has file support" and silently turns
+  // the worker off for every production canvas.
   const hasFileNode = canvas.nodes.some((node) => node.type === 'file')
   if (!hasFileNode) return true
-  return (
-    options.resolveFileCanvas === undefined &&
-    options.resolveFileMarkdown === undefined &&
-    options.expandFileNode === undefined &&
-    options.resolveFileImage === undefined &&
-    options.resolveFileFacets === undefined
-  )
+  return options.resolveReferenceContent === undefined && options.expandFileNode === undefined
 }

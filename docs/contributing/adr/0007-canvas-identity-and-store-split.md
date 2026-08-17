@@ -2,6 +2,16 @@
 
 **Status:** Accepted
 
+> **Vocabulary note (2026-08-16):** this ADR predates [ADR-0009](0009-mcp-tool-naming.md)
+> and says **slug** throughout for what the code, the database column, the URLs
+> and the docs now all call a document's **path**. The identity decision itself
+> stands unchanged — `(workspaceId, path)` is still the canonical user-facing
+> identity, and "slug rename" is still the open question it describes. Only the
+> word moved. `slug` now fails an executable check
+> (`tools/arch-lint/src/vocabulary-check.test.ts`), which is why this note
+> exists: a reader arriving here would otherwise meet a banned word in an
+> Accepted decision. See `.claude/rules/vocabulary.md`.
+
 ## Context
 
 The daemon holds "canvases" in two representations that are co-located in

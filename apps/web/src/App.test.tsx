@@ -38,7 +38,7 @@ afterEach(cleanup)
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialCanvasId prop so a test can assert App derives it from
-// the /local/:canvasId URL (parseBrowserLocalRoute) rather than merely
+// the /local/:documentId URL (parseBrowserLocalRoute) rather than merely
 // mounting the page.
 let receivedInitialCanvasId: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
@@ -396,7 +396,7 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialCanvasId from a /local/:canvasId cold-load URL', async () => {
+  it('derives initialCanvasId from a /local/:documentId cold-load URL', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/local/c2']}>
@@ -444,7 +444,7 @@ describe('App daemon-pairing routing', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -460,7 +460,7 @@ describe('App daemon-pairing routing', () => {
     expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
     expect(receivedDaemonPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
-    expect(receivedDaemonPageProps?.slug).toBe('main')
+    expect(receivedDaemonPageProps?.path).toBe('main')
     expect(receivedDaemonPageProps?.token).toBe('tok')
   })
 
@@ -499,13 +499,13 @@ describe('App reconnect-target persistence', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('persists baseUrl/workspaceId/slug to user settings on a successful #wb= pairing', async () => {
+  it('persists baseUrl/workspaceId/path to user settings on a successful #wb= pairing', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -520,7 +520,7 @@ describe('App reconnect-target persistence', () => {
     const saved = createUserSettingsStore().load()
     expect(saved.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(saved.storage.lastConnectedWorkspaceId).toBe('w1')
-    expect(saved.storage.lastConnectedSlug).toBe('main')
+    expect(saved.storage.lastConnectedPath).toBe('main')
   })
 
   it('never persists the bootstrapToken alongside the connection target', async () => {
@@ -529,7 +529,7 @@ describe('App reconnect-target persistence', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'super-secret-token',
       },
@@ -590,7 +590,7 @@ describe('App local-daemon provider state', () => {
     await screen.findByTestId('daemon-index-page')
     const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
       workspaceId: string,
-      slug: string,
+      path: string,
     ) => void
     act(() => {
       onOpenCanvas('w1', 'main')
@@ -598,7 +598,7 @@ describe('App local-daemon provider state', () => {
     expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
-    expect(receivedDaemonPageProps?.slug).toBe('main')
+    expect(receivedDaemonPageProps?.path).toBe('main')
     expect(receivedDaemonPageProps?.capabilities).toEqual(LOCAL_DAEMON_STATE.capabilities)
     expect(receivedDaemonPageProps?.browserLocalStore).toBeDefined()
     expect(receivedDaemonPageProps?.onContinueBrowserLocal).toBeInstanceOf(Function)
@@ -636,7 +636,7 @@ describe('App local-daemon provider state', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'main')
     })
@@ -659,7 +659,7 @@ describe('App local-daemon provider state', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('workspace-b', 'main')
     })
@@ -682,12 +682,12 @@ describe('App local-daemon provider state', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'canvas-a')
     })
     await screen.findByTestId('daemon-canvas-page')
-    expect(receivedDaemonPageProps?.slug).toBe('canvas-a')
+    expect(receivedDaemonPageProps?.path).toBe('canvas-a')
 
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
@@ -698,12 +698,12 @@ describe('App local-daemon provider state', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'canvas-b')
     })
     await screen.findByTestId('daemon-canvas-page')
-    expect(receivedDaemonPageProps?.slug).toBe('canvas-b')
+    expect(receivedDaemonPageProps?.path).toBe('canvas-b')
   })
 
   it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES', async () => {
@@ -716,7 +716,7 @@ describe('App local-daemon provider state', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'main')
     })
@@ -747,7 +747,7 @@ describe('App local-daemon provider state', () => {
       act(() => {
         const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
           workspaceId: string,
-          slug: string,
+          path: string,
         ) => void
         onOpenCanvas('w1', 'main')
       })
@@ -770,13 +770,13 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('lands on the index when the #wb= payload has no slug', async () => {
+  it('lands on the index when the #wb= payload has no path', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
-        slug: undefined,
+        path: undefined,
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -790,13 +790,13 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
   })
 
-  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no slug', async () => {
+  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no path', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'workspace-b',
-        slug: undefined,
+        path: undefined,
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -851,20 +851,20 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /w/:workspaceId/canvas/:slug deep link straight into DaemonCanvasPage', async () => {
+  it('cold-loads a /w/:workspaceId/canvas/:path deep link straight into DaemonCanvasPage', async () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
     expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
-    expect(receivedDaemonPageProps?.slug).toBe('main')
+    expect(receivedDaemonPageProps?.path).toBe('main')
   })
 
-  it('cold-loads a NESTED document path deep link, slug intact', async () => {
+  it('cold-loads a NESTED document path deep link, path intact', async () => {
     // The tail is the document's path since the data layer converged on
     // paths; the page must receive it verbatim, separators and all.
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/notes/2026/plan')
     expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
-    expect(receivedDaemonPageProps?.slug).toBe('notes/2026/plan')
+    expect(receivedDaemonPageProps?.path).toBe('notes/2026/plan')
   })
 
   it('cold-loads a /w/:workspaceId deep link into the gallery pre-scoped to that workspace', async () => {
@@ -879,7 +879,7 @@ describe('App URL routing', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'main')
     })
@@ -904,7 +904,7 @@ describe('App URL routing', () => {
     act(() => {
       const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
         workspaceId: string,
-        slug: string,
+        path: string,
       ) => void
       onOpenCanvas('w1', 'main')
     })
@@ -928,7 +928,7 @@ describe('App URL routing', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -976,7 +976,7 @@ describe('App shell (single instance above the routed pages)', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -1066,7 +1066,7 @@ describe('App /settings routing', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
-        slug: undefined,
+        path: undefined,
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },
@@ -1085,7 +1085,7 @@ describe('App /settings routing', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
-        slug: undefined,
+        path: undefined,
         authMode: 'none',
       },
     }
@@ -1160,7 +1160,7 @@ describe('App error boundary', () => {
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
-        slug: 'main',
+        path: 'main',
         authMode: 'bootstrap',
         bootstrapToken: 'tok',
       },

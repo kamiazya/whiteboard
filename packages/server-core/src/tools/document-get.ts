@@ -1,20 +1,16 @@
-import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-canvas-codec'
-import {
-  canvasIdSchema,
-  canvasKindSchema,
-  workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind } from '@kamiazya/whiteboard-canvas-workspace'
+import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
+import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { documentIdSchema, documentKindSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
+import { loadOrCreateDocument } from './document-io.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
 const documentGetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     options: z
       .object({
         strict: z
@@ -32,7 +28,7 @@ export type DocumentGetInput = z.infer<typeof documentGetInputSchema>
 
 const documentGetOutputSchema = z
   .object({
-    kind: canvasKindSchema,
+    kind: documentKindSchema,
     content: z.string(),
     // Present only for a markdown document. Frontmatter is OKF's, and a JSON
     // Canvas document has none (ADR-0009 decision 3) — an always-present
@@ -43,9 +39,9 @@ const documentGetOutputSchema = z
 export type DocumentGetOutput = z.infer<typeof documentGetOutputSchema>
 
 export class DocumentKindUnknownError extends Error {
-  constructor(public readonly canvasId: string) {
+  constructor(public readonly documentId: string) {
     super(
-      `Document ${canvasId} records no kind, so there is no format to read it as. ` +
+      `Document ${documentId} records no kind, so there is no format to read it as. ` +
         'Documents created before kinds existed are affected. Editing one records a kind: ' +
         'wb_node_add / wb_node_patch / wb_edge_patch record it as spatial and keep what it holds, ' +
         'and wb_document_set records it as markdown — which replaces its content, so it is ' +
@@ -72,21 +68,21 @@ export function createDocumentGetTool(deps: ServerDeps) {
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      const doc = await loadOrCreateDocument(deps, input.documentId)
       const kind = readDocumentKind(doc)
       if (kind === undefined) {
-        throw new DocumentKindUnknownError(input.canvasId)
+        throw new DocumentKindUnknownError(input.documentId)
       }
       if (kind === 'markdown') {
         const { markdown, frontmatter } = await exportOkf(deps, {
           workspaceId: input.workspaceId,
-          canvasId: input.canvasId,
+          documentId: input.documentId,
         })
         return { kind, content: markdown, frontmatter }
       }
       const { json } = await exportJsonCanvas(deps, {
         workspaceId: input.workspaceId,
-        canvasId: input.canvasId,
+        documentId: input.documentId,
         ...(input.options ? { options: input.options } : {}),
       })
       return { kind, content: json }

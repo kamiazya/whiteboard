@@ -23,7 +23,7 @@ describe('canvas-sync event name constants', () => {
     window.addEventListener(CANVAS_SYNC_DOC_CHANGED_EVENT, handler)
     dispatchIdentityEvent(CANVAS_SYNC_DOC_CHANGED_EVENT, {
       workspaceId: 'ws',
-      slug: 'slug',
+      path: 'path',
     })
     window.removeEventListener(CANVAS_SYNC_DOC_CHANGED_EVENT, handler)
     expect(handler).toHaveBeenCalledTimes(1)

@@ -3,7 +3,7 @@
 // edge between two free nodes is still lockable. Same host-state seam as
 // the node lock: the editor takes the set as a prop and reports toggles
 // through a callback.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

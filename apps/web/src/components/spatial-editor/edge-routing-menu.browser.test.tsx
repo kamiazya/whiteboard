@@ -5,7 +5,7 @@
 // host composes the popover and the editor over one canvas state, exactly
 // as the page does; the popover's own wiring is pinned in
 // canvas-settings.browser.test.tsx.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

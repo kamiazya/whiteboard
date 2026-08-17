@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
 export interface WorkspaceFileTreeCanvas {
-  readonly canvasId: string
+  readonly documentId: string
   readonly path: string
 }
 

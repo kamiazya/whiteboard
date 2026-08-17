@@ -1,14 +1,14 @@
-import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
+import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
-import { InMemoryCanvasDocStore } from '../server/store/inmemory/in-memory-canvas-doc-store.js'
+import { InMemoryDocumentStore } from '../server/store/inmemory/in-memory-document-store.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
 describe('createContainer', () => {
-  it('resolves TOKENS.CanvasDocStore to an InMemoryCanvasDocStore', () => {
+  it('resolves TOKENS.DocumentStore to an InMemoryDocumentStore', () => {
     const container = createContainer()
-    expect(container.get(TOKENS.CanvasDocStore)).toBeInstanceOf(InMemoryCanvasDocStore)
+    expect(container.get(TOKENS.DocumentStore)).toBeInstanceOf(InMemoryDocumentStore)
   })
 
   it('resolves TOKENS.BlobStore to an InMemoryBlobStore', () => {
@@ -19,7 +19,7 @@ describe('createContainer', () => {
   it('resolves each port to the same singleton instance across repeated calls', () => {
     const container = createContainer()
 
-    expect(container.get(TOKENS.CanvasDocStore)).toBe(container.get(TOKENS.CanvasDocStore))
+    expect(container.get(TOKENS.DocumentStore)).toBe(container.get(TOKENS.DocumentStore))
     expect(container.get(TOKENS.BlobStore)).toBe(container.get(TOKENS.BlobStore))
   })
 })
@@ -30,9 +30,9 @@ describe('resolveServerDeps', () => {
 
     const deps = resolveServerDeps(container)
 
-    expect(deps.canvasDocStore).toBeInstanceOf(InMemoryCanvasDocStore)
+    expect(deps.documentStore).toBeInstanceOf(InMemoryDocumentStore)
     expect(deps.blobStore).toBeInstanceOf(InMemoryBlobStore)
-    expect(deps.canvasDocStore).toBe(container.get(TOKENS.CanvasDocStore))
+    expect(deps.documentStore).toBe(container.get(TOKENS.DocumentStore))
   })
 
   it('throws a clear, descriptive error when a token is not bound in the container', () => {
@@ -40,15 +40,15 @@ describe('resolveServerDeps', () => {
     const container = new Container()
     container.load(emptyModule)
 
-    expect(() => resolveServerDeps(container)).toThrow(/CanvasDocStore/)
+    expect(() => resolveServerDeps(container)).toThrow(/DocumentStore/)
   })
 })
 
-describe('canvas-ports TOKENS identity', () => {
+describe('ports TOKENS identity', () => {
   it('is the same Symbol across separate imports (global registry)', async () => {
-    const reimported = await import('@kamiazya/whiteboard-canvas-ports')
-    expect(reimported.TOKENS.CanvasDocStore).toBe(TOKENS.CanvasDocStore)
-    expect(typeof TOKENS.CanvasDocStore).toBe('symbol')
-    expect(Symbol.for('whiteboard.ports.CanvasDocStore')).toBe(TOKENS.CanvasDocStore)
+    const reimported = await import('@kamiazya/whiteboard-ports')
+    expect(reimported.TOKENS.DocumentStore).toBe(TOKENS.DocumentStore)
+    expect(typeof TOKENS.DocumentStore).toBe('symbol')
+    expect(Symbol.for('whiteboard.ports.DocumentStore')).toBe(TOKENS.DocumentStore)
   })
 })

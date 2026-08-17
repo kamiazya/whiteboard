@@ -4,7 +4,7 @@
 // cuts straight through that node. Picking an exposed side instead keeps
 // the route outside; authored sides and fully-covered nodes keep the old
 // behaviour.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 

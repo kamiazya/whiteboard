@@ -55,12 +55,12 @@ const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
 // The boot path (server/mcp/index.ts) must construct stores only through the
 // DI container (createContainer + createStoreLocalModule), never by
 // importing a concrete store class directly — that would let a manual
-// `new LibsqlCanvasDocStore(...)` construction bypass the container and
+// `new LibsqlDocumentStore(...)` construction bypass the container and
 // silently drift from what the container actually binds.
 const FORBIDDEN_MANUAL_STORE_IMPORTS_IN_BOOT_PATH: readonly { name: string; pattern: RegExp }[] = [
   {
-    name: 'direct import of LibsqlCanvasDocStore',
-    pattern: /from\s+['"].*libsql-canvas-doc-store/,
+    name: 'direct import of LibsqlDocumentStore',
+    pattern: /from\s+['"].*libsql-document-store/,
   },
   { name: 'direct import of FsBlobStore', pattern: /from\s+['"].*fs-blob-store/ },
 ]

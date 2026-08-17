@@ -1,5 +1,5 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
@@ -8,7 +8,7 @@ import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
- * `CanvasDocStore.loadSnapshot`'s `DocRef` (`{ kind: 'canvas', canvasId }`)
+ * `DocumentStore.loadSnapshot`'s `DocRef` (`{ kind: 'canvas', documentId }`)
  * carries no `workspaceId` — this field is accepted for API symmetry with
  * workspace-scoped tools and as a future authorization-scoping hook, not
  * passed to the store.
@@ -16,7 +16,7 @@ import type { ServerDeps } from '../server-deps.js'
 export const canvasRenderSvgInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     embedReferences: z
       .boolean()
       .default(false)
@@ -40,7 +40,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      const { canvas } = await loadSpatialCanvas(deps, input.canvasId)
+      const { canvas } = await loadSpatialCanvas(deps, input.documentId)
       const references = input.embedReferences
         ? await resolveFileReferences(deps, input.workspaceId, canvas)
         : undefined

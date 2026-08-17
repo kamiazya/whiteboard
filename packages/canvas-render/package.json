@@ -19,7 +19,7 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-canvas-model": "workspace:*",
+    "@kamiazya/whiteboard-model": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

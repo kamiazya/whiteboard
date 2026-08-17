@@ -2,8 +2,9 @@
 // right-click empty space to create "here". Real pointer input throughout —
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -212,6 +213,27 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
     (container.querySelector('[data-testid="edge-label-editor"]') as HTMLTextAreaElement).value,
   ).toBe('link')
   expect(latest.canvas.edges).toHaveLength(1)
+})
+
+it('the edge menu keeps the shared band order: properties, then verbs, Delete last', async () => {
+  const { EdgeHost } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // Same catalog discipline as the node menu: property rows (Arrows, sides,
+  // Color) come first, verbs (Edit label) after, and the destructive entry
+  // sits alone at the bottom.
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const names = Array.from(
+    menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], fieldset'),
+  ).map((el) => el.getAttribute('aria-label') ?? el.textContent)
+  expect(names.indexOf('Arrows')).toBeGreaterThanOrEqual(0)
+  expect(names.indexOf('Arrows')).toBeLessThan(names.indexOf('Edit label'))
+  expect(names.indexOf('Color')).toBeLessThan(names.indexOf('Edit label'))
+  expect(names[names.length - 1]).toBe('Delete')
 })
 
 // Deterministic option-click for the inline property rows: applying an

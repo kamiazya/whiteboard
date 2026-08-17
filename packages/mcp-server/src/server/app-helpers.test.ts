@@ -32,8 +32,10 @@ describe('toInlineScriptJson', () => {
     (value) => {
       const output = toInlineScriptJson(value)
       expect(output).not.toContain('<')
-      // Modulo JSON's own value model: JSON.stringify maps -0 to "0", so the
-      // faithful expectation is the value as JSON itself would round-trip it.
+      // Compared against JSON's own projection of the value, not the value:
+      // JSON.stringify collapses -0 to 0 (fc.jsonValue generates -0, found
+      // by seed 1616450870), and that loss is JSON's, not the escape's. The
+      // invariant worth stating is that the ESCAPE adds no loss beyond it.
       expect(JSON.parse(output)).toEqual(JSON.parse(JSON.stringify(value)))
     },
   )

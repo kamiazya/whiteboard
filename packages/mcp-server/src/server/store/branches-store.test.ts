@@ -91,7 +91,7 @@ describe('branches-store', () => {
       expect(loaded).toEqual(state)
     })
 
-    it('saves and loads nested slugs such as "621/header"', async () => {
+    it('saves and loads nested paths such as "621/header"', async () => {
       const state = {
         head: 'main',
         branches: [
@@ -123,7 +123,7 @@ describe('branches-store', () => {
       await expect(saveCanvasBranches('../evil', 'x', state)).rejects.toThrow(/Invalid workspaceId/)
     })
 
-    it('rejects invalid slugs such as empty strings, "..", and "/foo"', async () => {
+    it('rejects invalid paths such as empty strings, "..", and "/foo"', async () => {
       const state = {
         head: 'main',
         branches: [
@@ -135,9 +135,9 @@ describe('branches-store', () => {
           },
         ],
       }
-      await expect(saveCanvasBranches('sess', '', state)).rejects.toThrow(/Invalid slug/)
-      await expect(saveCanvasBranches('sess', '/foo', state)).rejects.toThrow(/Invalid slug/)
-      await expect(saveCanvasBranches('sess', '../x', state)).rejects.toThrow(/Invalid slug/)
+      await expect(saveCanvasBranches('sess', '', state)).rejects.toThrow(/Invalid path/)
+      await expect(saveCanvasBranches('sess', '/foo', state)).rejects.toThrow(/Invalid path/)
+      await expect(saveCanvasBranches('sess', '../x', state)).rejects.toThrow(/Invalid path/)
     })
   })
 
@@ -180,7 +180,7 @@ describe('branches-store', () => {
       )
     })
 
-    it('validates branch names with the same rules as slugs', async () => {
+    it('validates branch names with the same rules as paths', async () => {
       await expect(createBranch('sess-a', 'canvas-x', { name: '' })).rejects.toThrow(
         /Invalid branch name/,
       )

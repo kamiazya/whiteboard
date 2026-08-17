@@ -128,15 +128,15 @@ describe('createCanvasInputSchema', () => {
 describe('createCanvasOutputSchema', () => {
   it('accepts valid output', () => {
     const result = createCanvasOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       path: 'my-doc',
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects invalid canvasId', () => {
+  it('rejects invalid documentId', () => {
     const result = createCanvasOutputSchema.safeParse({
-      canvasId: 'not-a-ulid',
+      documentId: 'not-a-ulid',
       path: 'my-doc',
     })
     expect(result.success).toBe(false)
@@ -144,7 +144,7 @@ describe('createCanvasOutputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = createCanvasOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       path: 'my-doc',
       extra: 1,
     })
@@ -156,12 +156,12 @@ describe('getCanvasInputSchema', () => {
   it('accepts valid input', () => {
     const result = getCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects missing canvasId', () => {
+  it('rejects missing documentId', () => {
     const result = getCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
     })
@@ -170,7 +170,7 @@ describe('getCanvasInputSchema', () => {
 
   it('rejects missing workspaceId', () => {
     const result = getCanvasInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(false)
   })
@@ -178,7 +178,7 @@ describe('getCanvasInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = getCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       extra: true,
     })
     expect(result.success).toBe(false)
@@ -188,7 +188,7 @@ describe('getCanvasInputSchema', () => {
 describe('getCanvasOutputSchema', () => {
   it('accepts valid canvas detail', () => {
     const result = getCanvasOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       path: 'my-doc',
     })
     expect(result.success).toBe(true)
@@ -196,14 +196,14 @@ describe('getCanvasOutputSchema', () => {
 
   it('rejects a missing path', () => {
     const result = getCanvasOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(false)
   })
 
   it('rejects extra keys (strict)', () => {
     const result = getCanvasOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       path: 'my-doc',
       extra: true,
     })
@@ -246,8 +246,8 @@ describe('listCanvasesOutputSchema', () => {
   it('accepts array with valid canvas details', () => {
     const result = listCanvasesOutputSchema.safeParse({
       canvases: [
-        { canvasId: VALID_CANVAS_ID, path: 'doc-a' },
-        { canvasId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'doc-b' },
+        { documentId: VALID_CANVAS_ID, path: 'doc-a' },
+        { documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'doc-b' },
       ],
     })
     expect(result.success).toBe(true)
@@ -255,7 +255,7 @@ describe('listCanvasesOutputSchema', () => {
 
   it('rejects a canvas detail with no path', () => {
     const result = listCanvasesOutputSchema.safeParse({
-      canvases: [{ canvasId: VALID_CANVAS_ID }],
+      canvases: [{ documentId: VALID_CANVAS_ID }],
     })
     expect(result.success).toBe(false)
   })
@@ -273,19 +273,19 @@ describe('deleteCanvasInputSchema', () => {
   it('accepts valid input', () => {
     const result = deleteCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(true)
   })
 
   it('rejects missing workspaceId', () => {
     const result = deleteCanvasInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing canvasId', () => {
+  it('rejects missing documentId', () => {
     const result = deleteCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
     })
@@ -295,7 +295,7 @@ describe('deleteCanvasInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = deleteCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       force: true,
     })
     expect(result.success).toBe(false)

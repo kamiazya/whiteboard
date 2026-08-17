@@ -3,7 +3,7 @@
 // ranking never proposed, and the edge reaches its target the long way
 // round: the reported canvas arrived at n2's BOTTOM from below, four
 // corners, when n2's right side was one corner away.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

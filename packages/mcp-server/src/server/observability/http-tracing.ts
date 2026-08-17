@@ -13,7 +13,7 @@ import { extractContextFromHeaders, getTracer } from './tracing.js'
 // W3C trace context, and records HTTP semantic-convention attributes.
 //
 // Span name + http.route follow the *matched* Hono route pattern (e.g.
-// "/api/workspaces/:wid/canvases/:slug/compact"), not the wildcard the
+// "/api/workspaces/:wid/canvases/:path/compact"), not the wildcard the
 // middleware itself is registered under. We learn the matched route by
 // inspecting `c.req.matchedRoutes` AFTER next() — at middleware-entry the
 // router has not yet matched a downstream handler, so `c.req.routePath`

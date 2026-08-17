@@ -21,7 +21,7 @@ catalog:
   vite: "^8.2.0"
   vitest: "^4.1.10"
   "@vitest/browser-playwright": "^4.1.10"
-  # canvas-codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
+  # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
   unified: "^11.0.5"
   remark-parse: "^11.0.0"
   remark-stringify: "^11.0.0"

@@ -10,8 +10,8 @@ const OLDER = '2026-08-01T00:00:00Z'
 
 function rows() {
   return [
-    { slug: 'alpha', displayName: 'Alpha', updatedAt: OLDER, kind: 'spatial' as const },
-    { slug: 'notes', displayName: 'Notes', updatedAt: NOW, kind: 'markdown' as const },
+    { path: 'alpha', displayName: 'Alpha', updatedAt: OLDER, kind: 'spatial' as const },
+    { path: 'notes', displayName: 'Notes', updatedAt: NOW, kind: 'markdown' as const },
   ]
 }
 
@@ -113,7 +113,7 @@ describe('CanvasListView', () => {
 
   it('capability permutation: renderThumb renders per card; omitting it yields label-only cards', () => {
     renderList({
-      renderThumb: (row) => <div data-testid={`thumb-${row.slug}`} />,
+      renderThumb: (row) => <div data-testid={`thumb-${row.path}`} />,
     })
     expect(screen.getByTestId('thumb-notes')).toBeTruthy()
     expect(screen.getByTestId('thumb-alpha')).toBeTruthy()
@@ -143,7 +143,7 @@ describe('CanvasListView', () => {
       renderList({
         rows: [
           {
-            slug: 'alpha',
+            path: 'alpha',
             displayName: 'Alpha',
             secondary: 'alpha',
             updatedAt: '2026-08-11T00:00:00Z',
@@ -168,7 +168,7 @@ describe('CanvasListView', () => {
           aria-label={`Act on ${row.displayName}`}
           onClick={(e) => {
             e.stopPropagation()
-            onAction(row.slug)
+            onAction(row.path)
           }}
         >
           Act

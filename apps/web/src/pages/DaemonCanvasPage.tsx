@@ -1,23 +1,29 @@
-import { isImageRef } from '@kamiazya/whiteboard-canvas-model'
 import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectCanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
+import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
+import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
+import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
+import {
+  type MarkdownEmbedLoader,
+  useMarkdownEmbedContent,
+} from '../hooks/use-markdown-embed-content.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useFavicon } from '../hooks/useFavicon.js'
@@ -27,7 +33,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
-import { deriveNewCanvasSlug } from '../lib/derive-new-canvas-slug.js'
+import { deriveNewCanvasPath } from '../lib/derive-new-canvas-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
@@ -54,7 +60,7 @@ const LazyImportSection = lazy(() =>
 export interface DaemonCanvasPageProps {
   daemonBaseUrl: string
   workspaceId?: string
-  slug?: string
+  path?: string
   // The daemon credential for this session: a bootstrap token (#wb= flow)
   // or a pairing session token (pairing-grant flow). Feeds both the HTTP
   // side (createDaemonFetch's Authorization header) and the WS upgrade
@@ -68,7 +74,7 @@ export interface DaemonCanvasPageProps {
   onContinueBrowserLocal?: () => void
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
-  createBackend?: (workspaceId: string, slug: string, daemonFetch: typeof fetch) => CanvasBackend
+  createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => CanvasBackend
   // Optional: when provided (the real App.tsx wiring always provides it),
   // renders a collapsed "Import from this browser" disclosure so a user who
   // previously worked browser-local can copy those canvases onto this
@@ -83,7 +89,7 @@ export interface DaemonCanvasPageProps {
 export function DaemonCanvasPage({
   daemonBaseUrl,
   workspaceId,
-  slug,
+  path,
   token,
   capabilities = LOCAL_DAEMON_CAPABILITIES,
   onContinueBrowserLocal,
@@ -110,8 +116,8 @@ export function DaemonCanvasPage({
   const createBackendRef = useRef(createBackend)
   createBackendRef.current = createBackend
   const resolvedCreateBackend = useCallback(
-    (workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend => {
-      const injected = createBackendRef.current?.(workspaceId, slug, daemonFetch)
+    (workspaceId: string, path: string, daemonFetch: typeof fetch): CanvasBackend => {
+      const injected = createBackendRef.current?.(workspaceId, path, daemonFetch)
       if (injected) return injected
       // A secure page cannot open a ws:// socket to an http daemon at all, so
       // the transport is decided up front rather than attempted and retried.
@@ -131,7 +137,7 @@ export function DaemonCanvasPage({
         // without it a pairing-grant session authenticates HTTP but opens
         // the socket credential-less and is rejected 401 (edits then stay
         // browser-only while the page looks connected).
-        return new DaemonBackend(workspaceId, slug, daemonBaseUrl, {
+        return new DaemonBackend(workspaceId, path, daemonBaseUrl, {
           fetch: daemonFetch,
           wsToken: () => token,
         })
@@ -139,12 +145,12 @@ export function DaemonCanvasPage({
       // Null where SharedWorker is unavailable; SseBackend then opens its own
       // stream, which is correct but not shared across tabs.
       const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-      return new SseBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch }, shared)
+      return new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared)
     },
     [daemonBaseUrl, token],
   )
 
-  const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })
+  const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
   // Stable across the page's lifetime, mirroring BrowserLocalCanvasPage's
   // own settingsStore — read fresh (not cached in state) wherever the
@@ -153,12 +159,12 @@ export function DaemonCanvasPage({
 
   const { resolvedTheme } = useThemeMode()
 
-  // The selected (workspaceId, slug) pair once both are known, computed once so
+  // The selected (workspaceId, path) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
-  // instead of repeating `workspaceId !== null && slug !== null`.
+  // instead of repeating `workspaceId !== null && path !== null`.
   const canvas =
-    controller.workspaceId !== null && controller.slug !== null
-      ? { workspaceId: controller.workspaceId, slug: controller.slug }
+    controller.workspaceId !== null && controller.path !== null
+      ? { workspaceId: controller.workspaceId, path: controller.path }
       : null
 
   const [authError, setAuthError] = useState(false)
@@ -190,16 +196,16 @@ export function DaemonCanvasPage({
   } | null>(null)
   const [importSectionOpen, setImportSectionOpen] = useState(false)
 
-  // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
+  // Backend identity is keyed on (workspaceId, path, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
   // useCanvasSync's own effect cleanup (see BrowserLocalCanvasPage for the
   // same ownership split: this hook only decides WHEN to swap identity, not
   // how disconnect/connect ordering happens).
   const backend = useMemo(() => {
-    if (controller.workspaceId === null || controller.slug === null) return null
-    return resolvedCreateBackend(controller.workspaceId, controller.slug, daemonFetch)
+    if (controller.workspaceId === null || controller.path === null) return null
+    return resolvedCreateBackend(controller.workspaceId, controller.path, daemonFetch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedCreateBackend, controller.workspaceId, controller.slug, daemonFetch])
+  }, [resolvedCreateBackend, controller.workspaceId, controller.path, daemonFetch])
 
   // A rejected session belongs to one backend identity — switching to a new
   // canvas opens a fresh connection, so a stale banner must not outlive the
@@ -229,6 +235,7 @@ export function DaemonCanvasPage({
     exportScene,
     lockedNodeIds,
     setNodeLock,
+    markdownBody: syncedMarkdownBody,
     lockedEdgeIds,
     setEdgeLock,
     syncStatus,
@@ -241,20 +248,20 @@ export function DaemonCanvasPage({
   })
 
   // New file nodes store the target's immutable id (ADR-0008: stored
-  // references key on ids, so a slug rename cannot dangle them); the
-  // daemon's read routes stay slug-addressed, so refs resolve to the
-  // CURRENT slug through the live canvases list. Read through a ref so the
+  // references key on ids, so a path rename cannot dangle them); the
+  // daemon's read routes stay path-addressed, so refs resolve to the
+  // CURRENT path through the live canvases list. Read through a ref so the
   // adapter identity survives list refreshes; the lookup itself resolves by
-  // membership, never by format — legacy slug refs miss it and pass
+  // membership, never by format — legacy path refs miss it and pass
   // through unchanged.
   const canvasesRef = useRef(controller.canvases)
   canvasesRef.current = controller.canvases
-  const resolveRefSlug = useCallback(
-    (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.slug,
+  const resolveRefPath = useCallback(
+    (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
     [],
   )
 
-  // A ref that matches NEITHER a live id nor a live slug points at a deleted
+  // A ref that matches NEITHER a live id nor a live path points at a deleted
   // canvas (or one imported from elsewhere): the editor renders it as a quiet
   // "Missing reference" and hides the follow affordances — following would
   // lazily create an empty canvas under the dangling ref. Image refs live in
@@ -263,33 +270,35 @@ export function DaemonCanvasPage({
   const missingFileRef = useMemo(() => {
     const entries = controller.canvases
     if (entries.length === 0) return undefined
-    const known = new Set(entries.flatMap((entry) => [entry.slug, ...(entry.id ? [entry.id] : [])]))
+    const known = new Set(entries.flatMap((entry) => [entry.path, ...(entry.id ? [entry.id] : [])]))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [controller.canvases])
+
+  const fileAdapter = useMemo(
+    () =>
+      createDaemonFileAdapter({
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId: canvas?.workspaceId ?? '',
+        path: canvas?.path ?? '',
+        resolveRefPath,
+      }),
+    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
+  )
 
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
   // updatedAt, exactly as in browser-local mode.
   const fileSeams = useCanvasFileSeams({
     canvas: canvasValue,
-    adapter: useMemo(
-      () =>
-        createDaemonFileAdapter({
-          daemonFetch,
-          daemonBaseUrl,
-          workspaceId: canvas?.workspaceId ?? '',
-          slug: canvas?.slug ?? '',
-          resolveRefSlug,
-        }),
-      [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.slug, resolveRefSlug],
-    ),
-    // Keyed by BOTH id and slug so id refs and legacy slug refs each find
+    adapter: fileAdapter,
+    // Keyed by BOTH id and path so id refs and legacy path refs each find
     // their staleness stamp.
     stampOf: useMemo(
       () =>
         new Map(
           controller.canvases.flatMap((entry) => [
-            [entry.slug, entry.updatedAt ?? ''] as const,
+            [entry.path, entry.updatedAt ?? ''] as const,
             ...(entry.id ? [[entry.id, entry.updatedAt ?? ''] as const] : []),
           ]),
         ),
@@ -297,24 +306,74 @@ export function DaemonCanvasPage({
     ),
   })
 
+  // The open document's kind, from the canvases list summary (default
+  // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
+  // page itself no longer chooses an editor.
+  const documentKind: DocumentKind =
+    controller.canvases.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
+
+  // A markdown document's body lives in the doc's `body` text container —
+  // the one place it is stored, and the shape `wb_document_set` writes. The
+  // read comes from the sync session (which republishes it on hydration,
+  // remote import and undo alike) and the write travels the session's
+  // ordinary command path, so a body edit gets the same debounce, undo step
+  // and local-update forwarding as every other change, with no second write
+  // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
+  // value passed alongside is the unchanged one this command does not touch.
+  const canvasValueRef = useRef(canvasValue)
+  canvasValueRef.current = canvasValue
+  const setMarkdownBody = useCallback(
+    (next: string) => {
+      onChange(canvasValueRef.current, { kind: 'set-body', text: next })
+    },
+    [onChange],
+  )
+  const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
+
+  // `[[Name]]` aliases resolve against the same list the user can see; the
+  // daemon summary carries no display name yet, so the path doubles as one.
+  const resolveAlias = useMemo(
+    () =>
+      createSnapshotAliasResolver(
+        controller.canvases.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
+      ),
+    [controller.canvases],
+  )
+  const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
+    async (canvasId) => {
+      const target = await fileAdapter.loadDocument(canvasId)
+      if (target?.body === undefined) return undefined
+      // Body only. A document's title is the workspace's (ADR-0009 decision
+      // 2) and the daemon summary carries no display name, so there is none
+      // to label the embed with — the facets deliberately no longer hold one.
+      return { body: target.body }
+    },
+    [fileAdapter],
+  )
+  const resolveEmbed = useMarkdownEmbedContent({
+    body: markdownBody ?? '',
+    resolveAlias,
+    load: loadEmbedSource,
+  })
+
   const commands = useWhiteboardCommands({
     provider: { kind: 'local-daemon', daemonBaseUrl, capabilities },
     // The daemon canvas summary carries no display name yet (only
-    // slug/updatedAt) — the slug doubles as `name` until that changes.
+    // path/updatedAt) — the path doubles as `name` until that changes.
     canvas:
       canvas !== null
-        ? { workspaceId: canvas.workspaceId, canvasId: canvas.slug, name: canvas.slug }
+        ? { workspaceId: canvas.workspaceId, documentId: canvas.path, name: canvas.path }
         : null,
   })
 
-  // Identity key = workspaceId+slug, matching this page's own canvas.
+  // Identity key = workspaceId+path, matching this page's own canvas.
   // Read once at mount: the routed /settings page is the only place this
   // toggles, and navigating there and back remounts this page (a route
   // change), which re-reads the store fresh — no in-mount reactivity needed.
   const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
   useBrowserToolRegistry(
     commands,
-    canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null,
+    canvas !== null ? `${canvas.workspaceId}/${canvas.path}` : null,
     webMcpEnabled,
   )
 
@@ -322,7 +381,7 @@ export function DaemonCanvasPage({
   // (style user-selectable on the routed /settings page; same remount-
   // re-reads reasoning as webMcpEnabled above).
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
-  const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.slug ?? '')
+  const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
   useFavicon({
     style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
@@ -344,12 +403,12 @@ export function DaemonCanvasPage({
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
-  // The slug is derived from the loaded canvases so it never collides with one
+  // The path is derived from the loaded canvases so it never collides with one
   // already in this workspace; naming happens afterwards in the canvas's top bar.
   const handleCreateCanvas = async (): Promise<void> => {
     setCreating(true)
     try {
-      await controller.createCanvas(deriveNewCanvasSlug(controller.canvases.map((c) => c.slug)))
+      await controller.createCanvas(deriveNewCanvasPath(controller.canvases.map((c) => c.path)))
     } finally {
       setCreating(false)
     }
@@ -361,7 +420,7 @@ export function DaemonCanvasPage({
     setSaveVersionMessage(null)
     try {
       const res = await daemonFetch(
-        `${daemonBaseUrl}${canvasesApiUrl(canvas.workspaceId, canvas.slug, 'versions')}`,
+        `${daemonBaseUrl}${canvasesApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -518,8 +577,15 @@ export function DaemonCanvasPage({
           {canvas && (
             <WorkspaceTopBar
               statusSlot={connectionStatus}
+              // No identity slot here yet, deliberately. A document's NAME is
+              // the workspace's (ADR-0009 decision 2) and the daemon's canvas
+              // summary carries no display name — only a path — so there is
+              // nothing to render but the path, and nothing to write it back
+              // through. The browser-local page has a real name to show and
+              // does mount one. Restoring this needs the workspace-level
+              // display-name API first, not a title read out of the content.
               workspaceId={canvas.workspaceId}
-              slug={canvas.slug}
+              path={canvas.path}
               canvases={controller.canvases}
               onNavigateToCanvas={controller.switchCanvas}
               capabilities={{
@@ -543,7 +609,7 @@ export function DaemonCanvasPage({
             />
           )}
           {capabilities.branches && canvas && (
-            <HeaderBranchBanner workspaceId={canvas.workspaceId} slug={canvas.slug} />
+            <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
           )}
           {/* This row only exists when it carries something meaningful: a
             real workspace CHOICE (two or more), or capability teasers. A
@@ -663,79 +729,95 @@ export function DaemonCanvasPage({
             </Button>
           </div>
         ) : (
-          // Spatial is the only view this slice supports; markdown-view
-          // persistence is deferred (canvas-workspace has no markdown-body
-          // container to write to yet).
-          <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
-            {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
+          <DocumentEditorSurface
+            kind={documentKind}
+            documentKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+            markdown={{
+              body: markdownBody,
+              setBody: setMarkdownBody,
+              theme: resolvedTheme,
+              // Kind only: the daemon has no facets wiring on this page (see
+              // the WorkspaceTopBar note), so there is no stored `type`/`tags`
+              // to show and inventing one would be a value the user could not
+              // edit.
+              meta: { type: documentKind },
+              resolveAlias,
+              onOpenCanvas: (id) => controller.switchCanvas(resolveRefPath(id) ?? id),
+              resolveEmbed,
+            }}
+            spatial={() => (
+              <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                 gesture and open text editor all describe ONE canvas, and
                 `SpatialCanvas` carries no id for the editor to notice a switch
                 by. Without the key, switching canvases silently inherits the
                 previous canvas's viewport. */}
-            <SpatialEditor
-              key={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
-              // Decided from the canvas's own shape, but only once its
-              // document has loaded — at mount every canvas still looks
-              // empty.
-              initialTool={
-                canvasLoaded
-                  ? resolveInitialTool({
-                      isEmpty: canvasValue.nodes.length === 0,
-                      lastTool: readLastTool(),
-                    })
-                  : undefined
-              }
-              ref={spatialEditorRef}
-              canvas={canvasValue}
-              onChange={onChange}
-              externalVersion={externalVersion}
-              theme={resolvedTheme}
-              // File-node reference = the target's immutable id (rename-
-              // safe); the label shows its current slug and the current
-              // canvas is excluded. Legacy documents still carry slug refs,
-              // which resolveRefSlug misses and switchCanvas takes as-is.
-              // An older daemon's list has no ids yet; those entries fall
-              // back to slug refs (same behavior as before ids existed).
-              fileRefOptions={controller.canvases
-                .filter((entry) => entry.slug !== canvas?.slug)
-                .map((entry) => ({
-                  file: entry.id ?? entry.slug,
-                  label: entry.slug,
-                  kind: entry.kind,
-                }))}
-              onOpenFileRef={(file) => controller.switchCanvas(resolveRefSlug(file) ?? file)}
-              missingFileRef={missingFileRef}
-              {...fileSeams}
-              lockedNodeIds={lockedNodeIds}
-              lockedEdgeIds={lockedEdgeIds}
-              onToggleNodeLock={setNodeLock}
-              onToggleEdgeLock={setEdgeLock}
-              paletteLeading={
-                <HistoryCluster
-                  onUndo={() => void undo()}
-                  onRedo={() => void redo()}
-                  canUndo={canUndo()}
-                  canRedo={canRedo()}
-                  versions={
-                    capabilities.versions && canvas
-                      ? {
-                          workspaceId: canvas.workspaceId,
-                          slug: canvas.slug,
-                          onRestored: clearLocalUndo,
-                          refreshSignal: versionRefreshSignal,
-                          versionPanelExtra,
-                        }
+                <SpatialEditor
+                  key={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+                  // Decided from the canvas's own shape, but only once its
+                  // document has loaded — at mount every canvas still looks
+                  // empty.
+                  initialTool={
+                    canvasLoaded
+                      ? resolveInitialTool({
+                          isEmpty: canvasValue.nodes.length === 0,
+                          lastTool: readLastTool(),
+                        })
                       : undefined
                   }
+                  ref={spatialEditorRef}
+                  canvas={canvasValue}
+                  onChange={onChange}
+                  externalVersion={externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = the target's immutable id (rename-
+                  // safe); the label shows its current path and the current
+                  // canvas is excluded. Legacy documents still carry path refs,
+                  // which resolveRefPath misses and switchCanvas takes as-is.
+                  // An older daemon's list has no ids yet; those entries fall
+                  // back to path refs (same behavior as before ids existed).
+                  fileRefOptions={controller.canvases
+                    .filter((entry) => entry.path !== canvas?.path)
+                    .map((entry) => ({
+                      file: entry.id ?? entry.path,
+                      label: entry.path,
+                      kind: entry.kind,
+                    }))}
+                  onOpenFileRef={(file) => controller.switchCanvas(resolveRefPath(file) ?? file)}
+                  missingFileRef={missingFileRef}
+                  {...fileSeams}
+                  lockedNodeIds={lockedNodeIds}
+                  lockedEdgeIds={lockedEdgeIds}
+                  onToggleNodeLock={setNodeLock}
+                  onToggleEdgeLock={setEdgeLock}
+                  paletteLeading={
+                    <HistoryCluster
+                      onUndo={() => void undo()}
+                      onRedo={() => void redo()}
+                      canUndo={canUndo()}
+                      canRedo={canRedo()}
+                      versions={
+                        capabilities.versions && canvas
+                          ? {
+                              workspaceId: canvas.workspaceId,
+                              path: canvas.path,
+                              onRestored: clearLocalUndo,
+                              refreshSignal: versionRefreshSignal,
+                              versionPanelExtra,
+                            }
+                          : undefined
+                      }
+                    />
+                  }
                 />
-              }
-            />
-          </div>
+              </div>
+            )}
+          />
         )}
         {capabilities.merge && canvas && (
           <MergeToast
             workspaceId={canvas.workspaceId}
-            slug={canvas.slug}
+            path={canvas.path}
             onRestored={clearLocalUndo}
           />
         )}

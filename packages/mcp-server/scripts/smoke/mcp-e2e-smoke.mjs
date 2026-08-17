@@ -128,7 +128,7 @@ function cleanup(exitCode) {
 
 process.on('SIGINT', () => cleanup(130))
 
-/** Workspace slug used for every canvas the smoke creates. */
+/** Workspace path used for every canvas the smoke creates. */
 const WORKSPACE_ID = 'e2e'
 
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
@@ -200,11 +200,11 @@ async function main() {
     kind: 'spatial',
     createWorkspace: true,
   })
-  if (typeof created.canvasId !== 'string' || created.path !== 'e2e-src') {
+  if (typeof created.documentId !== 'string' || created.path !== 'e2e-src') {
     throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
   }
-  const canvasId = created.canvasId
-  console.log(`[e2e] wb_document_create → ${canvasId}`)
+  const documentId = created.documentId
+  console.log(`[e2e] wb_document_create → ${documentId}`)
 
   // A document's name is the workspace's, not its content's (ADR-0009), so
   // it round-trips through create -> list without any document read.
@@ -215,11 +215,11 @@ async function main() {
     name: 'リリース計画 2026 / v2',
   })
   const namedList = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
-  const namedRow = namedList.canvases.find((c) => c.canvasId === named.canvasId)
+  const namedRow = namedList.canvases.find((c) => c.documentId === named.documentId)
   if (namedRow?.name !== 'リリース計画 2026 / v2') {
     throw new Error(`wb_document_list lost the document name: ${JSON.stringify(namedRow)}`)
   }
-  const unnamedRow = namedList.canvases.find((c) => c.canvasId === canvasId)
+  const unnamedRow = namedList.canvases.find((c) => c.documentId === documentId)
   if (unnamedRow === undefined || 'name' in unnamedRow) {
     throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
   }
@@ -229,17 +229,17 @@ async function main() {
   // spatial one refuses it.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    canvasId: named.canvasId,
+    documentId: named.documentId,
     facets: { 'e2e/1': { note: 'before-save' } },
   })
-  if (facets.canvasId !== named.canvasId) {
+  if (facets.documentId !== named.documentId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
   console.log('[e2e] wb_facet_set → set on the markdown document')
 
   await expectToolError(
     'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, canvasId, facets: { 'e2e/1': { note: 'nope' } } },
+    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e/1': { note: 'nope' } } },
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
@@ -248,10 +248,10 @@ async function main() {
   // and what the lock round-trip below needs to have something to lock.
   const added = await callTool('wb_node_add', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     node: { id: 'lockable', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'lockable' },
   })
-  if (added.canvasId !== canvasId || added.node?.id !== 'lockable') {
+  if (added.documentId !== documentId || added.node?.id !== 'lockable') {
     throw new Error(`wb_node_add returned unexpected shape: ${JSON.stringify(added)}`)
   }
   console.log('[e2e] wb_node_add → lockable')
@@ -260,7 +260,7 @@ async function main() {
     'wb_node_add',
     {
       workspaceId: WORKSPACE_ID,
-      canvasId,
+      documentId,
       node: { id: 'lockable', type: 'text', x: 1, y: 1, width: 10, height: 10, text: 'clobber' },
     },
     'on an id that is already taken',
@@ -271,12 +271,12 @@ async function main() {
   // node, so it also proves wb_node_add adds rather than replaces.
   await callTool('wb_node_add', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     node: { id: 'target', type: 'text', x: 300, y: 0, width: 200, height: 100, text: 'target' },
   })
   const linked = await callTool('wb_edge_add', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     edge: { id: 'link', fromNode: 'lockable', toNode: 'target' },
   })
   if (linked.edge?.id !== 'link') {
@@ -290,7 +290,7 @@ async function main() {
     'wb_edge_add',
     {
       workspaceId: WORKSPACE_ID,
-      canvasId,
+      documentId,
       edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' },
     },
     'with an endpoint the canvas does not have',
@@ -299,12 +299,12 @@ async function main() {
 
   const nodeLocked = await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     nodeId: 'lockable',
     locked: true,
   })
   if (
-    nodeLocked.canvasId !== canvasId ||
+    nodeLocked.documentId !== documentId ||
     nodeLocked.nodeId !== 'lockable' ||
     nodeLocked.locked !== true
   ) {
@@ -315,7 +315,7 @@ async function main() {
   // The lock binds agents, not just the pointer.
   await expectToolError(
     'wb_node_patch',
-    { workspaceId: WORKSPACE_ID, canvasId, nodeId: 'lockable', patch: { x: 999 } },
+    { workspaceId: WORKSPACE_ID, documentId, nodeId: 'lockable', patch: { x: 999 } },
     'on a locked node',
     'node is locked',
   )
@@ -324,7 +324,7 @@ async function main() {
   // an export. This is the runtime guard for the sidecar-map contract.
   const exportedWithLocks = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
   })
   const exportedCanvas = JSON.parse(exportedWithLocks.content)
   const leaked = [...exportedCanvas.nodes, ...exportedCanvas.edges].filter(
@@ -337,7 +337,7 @@ async function main() {
 
   await callTool('wb_node_lock', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     nodeId: 'lockable',
     locked: false,
   })
@@ -348,7 +348,7 @@ async function main() {
   // content — this is the runtime guard that the laid-out scene still
   // validates against canvasRenderSvgOutputSchema / sceneDigestSchema
   // through the real MCP SDK, which a type-level check cannot see.
-  const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, canvasId })
+  const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
   if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<rect')) {
     throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
   }
@@ -362,7 +362,7 @@ async function main() {
   // reference happens to resolve.
   const renderedWithRefs = await callTool('wb_scene_render', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     embedReferences: true,
   })
   if (typeof renderedWithRefs.svg !== 'string' || !renderedWithRefs.svg.includes('<rect')) {
@@ -377,16 +377,16 @@ async function main() {
   // carries a `references` map. The SDK validates that map against
   // canvasViewOutputSchema (mdastRootSchema inside), so this call is the
   // runtime guard on a schema a type check cannot see through.
-  const viewed = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, canvasId })
-  if (viewed.canvasId !== canvasId) {
-    throw new Error(`canvas_view echoed the wrong canvasId: ${JSON.stringify(viewed)}`)
+  const viewed = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  if (viewed.documentId !== documentId) {
+    throw new Error(`canvas_view echoed the wrong documentId: ${JSON.stringify(viewed)}`)
   }
   if (!Array.isArray(viewed.scene?.nodes) || typeof viewed.references !== 'object') {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }
   console.log('[e2e] canvas_view → scene + references for the widget')
 
-  const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, canvasId })
+  const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, documentId })
   if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
     throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
   }
@@ -408,10 +408,10 @@ async function main() {
   // layout the nodes above happen to have.
   const tidied = await callTool('wb_canvas_tidy', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
   })
   if (
-    tidied.canvasId !== canvasId ||
+    tidied.documentId !== documentId ||
     !Array.isArray(tidied.moved) ||
     tidied.moved.some(
       (m) => typeof m.id !== 'string' || typeof m.x !== 'number' || typeof m.y !== 'number',
@@ -423,7 +423,7 @@ async function main() {
 
   const edgeLocked = await callTool('wb_edge_lock', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     edgeId: 'link',
     locked: true,
   })
@@ -434,26 +434,26 @@ async function main() {
 
   await expectToolError(
     'wb_edge_patch',
-    { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'link', patch: { label: 'nope' } },
+    { workspaceId: WORKSPACE_ID, documentId, edgeId: 'link', patch: { label: 'nope' } },
     'on a locked edge',
     'edge is locked',
   )
 
   await expectToolError(
     'wb_edge_lock',
-    { workspaceId: WORKSPACE_ID, canvasId, edgeId: 'no-such-edge', locked: true },
+    { workspaceId: WORKSPACE_ID, documentId, edgeId: 'no-such-edge', locked: true },
     'with an id the canvas does not have',
     'edge not found',
   )
 
   // wb_version_save
   const saved = await callTool('wb_version_save', {
-    canvasId,
+    documentId,
     label: 'e2e',
   })
   if (
     !saved.versionId ||
-    saved.canvasId !== canvasId ||
+    saved.documentId !== documentId ||
     saved.label !== 'e2e' ||
     !saved.timestamp ||
     !saved.frontier
@@ -463,9 +463,9 @@ async function main() {
   console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
   // wb_version_list
-  const listed = await callTool('wb_version_list', { canvasId })
+  const listed = await callTool('wb_version_list', { documentId })
   if (
-    listed.canvasId !== canvasId ||
+    listed.documentId !== documentId ||
     !Array.isArray(listed.versions) ||
     !listed.versions.some((v) => v.versionId === saved.versionId)
   ) {
@@ -476,11 +476,11 @@ async function main() {
   // wb_version_restore
   const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
-    canvasId,
+    documentId,
     versionId: saved.versionId,
   })
   if (
-    restored.canvasId !== canvasId ||
+    restored.documentId !== documentId ||
     restored.restoredVersionId !== saved.versionId ||
     restored.label !== saved.label ||
     restored.frontier !== saved.frontier
@@ -501,14 +501,14 @@ async function main() {
     path: 'e2e-okf',
     kind: 'markdown',
   })
-  const mdCanvasId = mdCreated.canvasId
+  const mdCanvasId = mdCreated.documentId
 
   // A write in the format the document is not in destroys rather than
   // fails: OKF into the spatial one replaces its nodes, a node into the
   // markdown one lands beside the text node holding its body.
   await expectToolError(
     'wb_document_set',
-    { workspaceId: WORKSPACE_ID, canvasId, markdown: '---\ntype: note\n---\nBody.' },
+    { workspaceId: WORKSPACE_ID, documentId, markdown: '---\ntype: note\n---\nBody.' },
     'on a spatial document',
     'This writes OKF Markdown',
   )
@@ -516,7 +516,7 @@ async function main() {
     'wb_node_add',
     {
       workspaceId: WORKSPACE_ID,
-      canvasId: mdCanvasId,
+      documentId: mdCanvasId,
       node: { id: 'stray', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'stray' },
     },
     'on a markdown document',
@@ -538,17 +538,17 @@ async function main() {
   ].join('\n')
   const imported = await callTool('wb_document_set', {
     workspaceId: WORKSPACE_ID,
-    canvasId: mdCanvasId,
+    documentId: mdCanvasId,
     markdown: importMarkdown,
   })
-  if (!imported.imported || imported.canvasId !== mdCanvasId) {
+  if (!imported.imported || imported.documentId !== mdCanvasId) {
     throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
   console.log('[e2e] wb_document_set → imported')
 
   const exported = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
-    canvasId: mdCanvasId,
+    documentId: mdCanvasId,
   })
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)

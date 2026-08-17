@@ -26,12 +26,12 @@ paths:
   process lifecycle — `mcp-server` owns that.
 - InversifyJS or any DI container wiring — composition roots only.
 - Scene graph, layout, rendering internals — `canvas-render`.
-- Tree ops, alias/index derivation — `canvas-workspace`.
+- Tree ops, alias/index derivation — `loro-adapter`.
 
 ## Dependency rules
 
-- Runtime dependencies: `canvas-model`, `canvas-codec`, `canvas-render`,
-  `canvas-ports`, `canvas-workspace`, `hono`, and `zod` (via `catalog:` or
+- Runtime dependencies: `model`, `codec`, `canvas-render`,
+  `ports`, `loro-adapter`, `hono`, and `zod` (via `catalog:` or
   `workspace:*`).
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.
@@ -43,7 +43,7 @@ paths:
 - Tools and routes receive their dependencies from the `createServer`
   factory (via `ServerDeps`), never through direct module imports of a
   store/sync implementation. The shared layer only knows the port
-  contracts from `canvas-ports`.
+  contracts from `ports`.
 - Every contract crossing a process boundary (MCP tool I/O, HTTP response
   shape) is declared once as a Zod schema and consumed via `z.infer` — no
   hand-written interface next to a schema.

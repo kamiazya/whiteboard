@@ -1,7 +1,7 @@
 // In-app copy/cut/paste (editor-completeness slice 4): Cmd/Ctrl+C/X/V over
 // the module-level clipboard store — cross-canvas within the tab, every
 // mutation ONE batch command (one undo step), reminted ids on every paste.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'

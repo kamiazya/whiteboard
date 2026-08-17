@@ -1,4 +1,4 @@
-import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
+import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 
 export interface AliasResolverEntry {
   readonly id: string
@@ -6,7 +6,7 @@ export interface AliasResolverEntry {
 }
 
 /**
- * Builds canvas-codec's `AliasResolver` from a canvas snapshot list:
+ * Builds codec's `AliasResolver` from a canvas snapshot list:
  * `[[Name]]` resolves iff exactly ONE canvas carries that display name.
  * Ambiguity resolves to null — the reference stays literal bracket text
  * (the codec's documented degradation) rather than a link that silently

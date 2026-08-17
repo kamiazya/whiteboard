@@ -1,19 +1,19 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasRenderSvgTool } from './canvas-render-svg.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
 describe('wb_scene_render tool', () => {
   test('renders a seeded canvas to SVG with dimensions', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
@@ -24,7 +24,7 @@ describe('wb_scene_render tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       embedReferences: false,
     })
 
@@ -39,12 +39,12 @@ describe('wb_scene_render tool', () => {
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
-    const tool = createCanvasRenderSvgTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createCanvasRenderSvgTool(makeDeps(new FakeDocumentStore()))
 
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         embedReferences: false,
       }),
     ).rejects.toThrow(CanvasNotFoundError)

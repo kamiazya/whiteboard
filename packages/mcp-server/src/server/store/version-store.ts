@@ -7,7 +7,7 @@ import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import {
   validateBranchName,
-  validateSlug,
+  validateDocumentPath,
   validateVersionId,
   validateWorkspaceId,
 } from '../validators.js'
@@ -15,7 +15,7 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { getDocumentIdByPath, upsertCanvasRow } from './db/upsert-workspace.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -43,7 +43,7 @@ export interface OperatorInfo {
 
 export interface VersionEntry {
   id: string
-  slug: string
+  path: string
   createdAt: string
   elementCount: number
   label?: string
@@ -56,28 +56,28 @@ export interface VersionEntry {
 export interface VersionStore {
   save(
     workspaceId: string,
-    slug: string,
+    path: string,
     doc: LoroDoc,
     opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
   ): Promise<VersionEntry>
   // liveDoc is passed in so checkout can happen on a clone without affecting
   // the live document. Returns an independent past-state doc.
   load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null>
-  list(workspaceId: string, slug: string): Promise<VersionEntry[]>
+  list(workspaceId: string, path: string): Promise<VersionEntry[]>
   saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void>
   loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null>
-  // Frontiers referenced by the oldest retained version for this slug. Returns
+  // Frontiers referenced by the oldest retained version for this path. Returns
   // null when none exist, because compaction would otherwise risk losing all
   // history.
-  earliestFrontiers(workspaceId: string, slug: string): Promise<Frontiers | null>
+  earliestFrontiers(workspaceId: string, path: string): Promise<Frontiers | null>
   // Public API used when creating branches from a version id.
   // Returns null only when the version is missing.
   getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
   // Rewrite branchName from oldName to newName for all versions of the given
-  // slug. Returns the number of rewritten rows.
+  // path. Returns the number of rewritten rows.
   renameBranchInVersions(
     workspaceId: string,
-    slug: string,
+    path: string,
     oldName: string,
     newName: string,
   ): Promise<number>
@@ -88,7 +88,7 @@ export interface VersionStore {
   // stay (they are the only rollback target outside the bracketed range).
   pruneSandwichedAutoVersions(
     workspaceId: string,
-    slug: string,
+    path: string,
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
@@ -102,7 +102,7 @@ function versionsBlobDir(workspaceId: string): string {
   return assertPathWithinDir(dir, blobsRoot(), 'version path')
 }
 
-// Exported so canvas-store's deleteCanvas can unlink a canvas's version
+// Exported so document-store's deleteDocument can unlink a canvas's version
 // thumbnails without duplicating this path join.
 export function thumbnailPath(workspaceId: string, id: string): string {
   validateVersionId(id)
@@ -129,7 +129,7 @@ async function dbReady() {
 
 interface VersionRow {
   id: string
-  canvasId: string
+  documentId: string
   branchName: string
   auto: number
   label: string | null
@@ -143,8 +143,8 @@ interface VersionRow {
   hasThumbnail: number
   createdAt: number
   // The store hydrates this from the canvases row at list time so callers
-  // still see a slug field on each entry.
-  slug: string
+  // still see a path field on each entry.
+  path: string
 }
 
 function rowToEntry(row: VersionRow): VersionEntry {
@@ -160,7 +160,7 @@ function rowToEntry(row: VersionRow): VersionEntry {
       : undefined
   return {
     id: row.id,
-    slug: row.slug,
+    path: row.path,
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === 1,
@@ -174,12 +174,12 @@ function rowToEntry(row: VersionRow): VersionEntry {
 export class FileVersionStore implements VersionStore {
   async save(
     workspaceId: string,
-    slug: string,
+    path: string,
     doc: LoroDoc,
     opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
-    validateSlug(slug)
+    validateDocumentPath(path)
     // Hold the per-workspace write barrier so a concurrent
     // purgeDanglingFiles cannot interleave with the version row being
     // created. The references this save records are a subset of what
@@ -207,12 +207,12 @@ export class FileVersionStore implements VersionStore {
       const operator = opts.operator
 
       const db = await dbReady()
-      const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+      const documentId = await upsertCanvasRow(db, workspaceId, path)
       await db
         .insertInto('versions')
         .values({
           id,
-          canvasId,
+          documentId,
           branchName,
           auto: opts.auto ? 1 : 0,
           label: opts.label ?? null,
@@ -228,11 +228,11 @@ export class FileVersionStore implements VersionStore {
         })
         .execute()
 
-      await this.prune(workspaceId, canvasId)
+      await this.prune(workspaceId, documentId)
 
       return {
         id,
-        slug,
+        path,
         createdAt: new Date(createdAt).toISOString(),
         elementCount,
         auto: opts.auto,
@@ -250,9 +250,9 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('canvases', 'canvases.id', 'versions.canvasId')
+      .innerJoin('documents', 'documents.id', 'versions.documentId')
       .select(['versions.frontiers'])
-      .where('canvases.workspaceId', '=', workspaceId)
+      .where('documents.workspaceId', '=', workspaceId)
       .where('versions.id', '=', id)
       .executeTakeFirst()
     if (!row) return null
@@ -273,20 +273,20 @@ export class FileVersionStore implements VersionStore {
     return clone
   }
 
-  async list(workspaceId: string, slug: string): Promise<VersionEntry[]> {
+  async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
     validateWorkspaceId(workspaceId)
-    validateSlug(slug)
+    validateDocumentPath(path)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return []
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (!documentId) return []
     const rows = await db
       .selectFrom('versions')
       .selectAll()
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
       .execute()
-    return rows.map((r) => rowToEntry({ ...r, slug } as VersionRow))
+    return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
 
   async saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void> {
@@ -302,51 +302,51 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const owningCanvas = await db
       .selectFrom('versions')
-      .innerJoin('canvases', 'canvases.id', 'versions.canvasId')
+      .innerJoin('documents', 'documents.id', 'versions.documentId')
       .select(['versions.id'])
-      .where('canvases.workspaceId', '=', workspaceId)
+      .where('documents.workspaceId', '=', workspaceId)
       .where('versions.id', '=', id)
       .executeTakeFirst()
     if (!owningCanvas) {
       throw new Error(`version "${id}" not found in workspace "${workspaceId}"`)
     }
-    const path = thumbnailPath(workspaceId, id)
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, bytes)
+    const blobPath = thumbnailPath(workspaceId, id)
+    await mkdir(dirname(blobPath), { recursive: true })
+    await writeFile(blobPath, bytes)
     await db.updateTable('versions').set({ hasThumbnail: 1 }).where('id', '=', id).execute()
   }
 
   async loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null> {
-    const path = thumbnailPath(workspaceId, id)
+    const blobPath = thumbnailPath(workspaceId, id)
     try {
-      const bytes = await readFile(path)
+      const bytes = await readFile(blobPath)
       return new Uint8Array(bytes)
     } catch (error) {
       if (isMissingFileError(error)) {
         return null
       }
-      throw corruptStoredData(path, `failed to read version thumbnail (${errorMessage(error)})`)
+      throw corruptStoredData(blobPath, `failed to read version thumbnail (${errorMessage(error)})`)
     }
   }
 
   async renameBranchInVersions(
     workspaceId: string,
-    slug: string,
+    path: string,
     oldName: string,
     newName: string,
   ): Promise<number> {
     validateWorkspaceId(workspaceId)
-    validateSlug(slug)
+    validateDocumentPath(path)
     validateBranchName(oldName)
     validateBranchName(newName)
     if (oldName === newName) return 0
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return 0
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (!documentId) return 0
     const result = await db
       .updateTable('versions')
       .set({ branchName: newName })
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .where('branchName', '=', oldName)
       .executeTakeFirst()
     return Number(result.numUpdatedRows ?? 0)
@@ -354,17 +354,17 @@ export class FileVersionStore implements VersionStore {
 
   async pruneSandwichedAutoVersions(
     workspaceId: string,
-    slug: string,
+    path: string,
   ): Promise<{ deletedCount: number; deletedIds: string[] }> {
     validateWorkspaceId(workspaceId)
-    validateSlug(slug)
+    validateDocumentPath(path)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return { deletedCount: 0, deletedIds: [] }
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
       .select(['id', 'branchName', 'auto', 'createdAt'])
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .orderBy('branchName', 'asc')
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
@@ -396,13 +396,13 @@ export class FileVersionStore implements VersionStore {
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db
       .deleteFrom('versions')
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .where('id', 'in', toDelete)
       .execute()
     for (const id of toDelete) {
-      const path = thumbnailPath(workspaceId, id)
+      const blobPath = thumbnailPath(workspaceId, id)
       try {
-        await unlink(path)
+        await unlink(blobPath)
       } catch (err) {
         if (!isMissingFileError(err)) {
           getLogger('version-store prune-sandwiched').error(
@@ -421,24 +421,24 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('canvases', 'canvases.id', 'versions.canvasId')
+      .innerJoin('documents', 'documents.id', 'versions.documentId')
       .select(['versions.frontiers'])
-      .where('canvases.workspaceId', '=', workspaceId)
+      .where('documents.workspaceId', '=', workspaceId)
       .where('versions.id', '=', id)
       .executeTakeFirst()
     return row?.frontiers ?? null
   }
 
-  async earliestFrontiers(workspaceId: string, slug: string): Promise<Frontiers | null> {
+  async earliestFrontiers(workspaceId: string, path: string): Promise<Frontiers | null> {
     validateWorkspaceId(workspaceId)
-    validateSlug(slug)
+    validateDocumentPath(path)
     const db = await dbReady()
-    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-    if (!canvasId) return null
+    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (!documentId) return null
     const row = await db
       .selectFrom('versions')
       .select(['frontiers'])
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
       .limit(1)
@@ -448,18 +448,18 @@ export class FileVersionStore implements VersionStore {
       return decodeFrontiers(base64ToBytes(row.frontiers))
     } catch (error) {
       throw corruptStoredData(
-        `versions/${slug}`,
+        `versions/${path}`,
         `frontiers could not be decoded (${errorMessage(error)})`,
       )
     }
   }
 
-  private async prune(workspaceId: string, canvasId: string): Promise<void> {
+  private async prune(workspaceId: string, documentId: string): Promise<void> {
     const db = await dbReady()
     const autos = await db
       .selectFrom('versions')
       .select(['id'])
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .where('auto', '=', 1)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
@@ -469,17 +469,17 @@ export class FileVersionStore implements VersionStore {
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')
-      .where('canvasId', '=', canvasId)
+      .where('documentId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
     for (const id of toRemove) {
-      const path = thumbnailPath(workspaceId, id)
+      const blobPath = thumbnailPath(workspaceId, id)
       try {
-        await unlink(path)
+        await unlink(blobPath)
       } catch (error) {
         if (!isMissingFileError(error)) {
           getLogger('version-store prune').error(
-            { path, err: error as Error },
+            { path: blobPath, err: error as Error },
             'failed to remove thumbnail',
           )
         }

@@ -16,20 +16,20 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "workspaceId", "slug"],
+          "required": ["kind", "workspaceId", "path"],
           "properties": {
             "kind": { "type": "string", "const": "daemon" },
             "workspaceId": { "type": "string" },
-            "slug": { "type": "string" }
+            "path": { "type": "string" }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "canvasId"],
+          "required": ["kind", "documentId"],
           "properties": {
             "kind": { "type": "string", "const": "browser-local" },
-            "canvasId": { "type": "string" }
+            "documentId": { "type": "string" }
           }
         },
         { "type": "null" }

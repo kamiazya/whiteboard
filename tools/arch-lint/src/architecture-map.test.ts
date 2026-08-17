@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { exemptedBoundaryViolationKinds } from './architecture-map.js'
 
 describe('exemptedBoundaryViolationKinds', () => {
-  it('exempts canvas-workspace from loro-crdt-import via allowedThirdParty, not an explicit list', () => {
-    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-canvas-workspace')
+  it('exempts workspace from loro-crdt-import via allowedThirdParty, not an explicit list', () => {
+    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-loro-adapter')
     expect(kinds.has('loro-crdt-import')).toBe(true)
     expect(kinds.has('dom-global')).toBe(false)
   })
@@ -17,7 +17,7 @@ describe('exemptedBoundaryViolationKinds', () => {
   })
 
   it('returns an empty set for a package with no exemptions', () => {
-    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-canvas-model')
+    const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-model')
     expect(kinds.size).toBe(0)
   })
 

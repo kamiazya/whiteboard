@@ -75,13 +75,16 @@ describe('daemon Authorization header single-seam guard', () => {
    * under a receiver this guard never sees.
    */
   it.each([
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the string IS the code shape under test
     ['headers.set, canonical case', "headers.set('Authorization', `Bearer ${token}`)"],
     ['headers.append', "headers.append('Authorization', value)"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the string IS the code shape under test
     ['object literal', 'fetch(url, { headers: { Authorization: `Bearer ${token}` } })'],
     ['computed key', "h['Authorization'] = value"],
     ['lowercase name', "headers.set('authorization', value)"],
     ['arbitrary receiver', "h.set('Authorization', value)"],
     ['Headers from array entries', "new Headers([['authorization', token]])"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the string IS the code shape under test
     ['Headers from object', 'new Headers({ authorization: `Bearer ${token}` })'],
   ])('the guard catches %s', (_form, sample) => {
     const matched = AUTHORIZATION_HEADER_PATTERNS.some((pattern) => pattern.test(sample))

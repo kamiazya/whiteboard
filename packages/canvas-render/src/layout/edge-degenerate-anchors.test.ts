@@ -7,7 +7,7 @@
 // Found by the routing scoreboard's property, not by a report: it is exactly
 // the arrangement `wb_canvas_tidy` produces when it snaps nodes into a
 // column, so it is reachable without anyone placing boxes by hand.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

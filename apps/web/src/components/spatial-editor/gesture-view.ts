@@ -12,8 +12,9 @@
  * every pointer frame), and that split is the perf design — these helpers
  * stay cheap enough to call at either cadence.
  */
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+
 import type { EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { carriedWithDrag } from './drag-preview.js'
 import type { Box } from './geometry.js'
 import type { GestureState } from './gestures.js'

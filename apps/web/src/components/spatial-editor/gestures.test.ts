@@ -1,4 +1,4 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
 
@@ -467,6 +467,54 @@ describe('text-edit gesture', () => {
   })
 })
 
+describe('cancel-text-edit on a freshly created node', () => {
+  it('keeps the box when NOTHING was typed — an empty note is a layout tool', () => {
+    const c = canvas()
+    const created = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 100, y: 100 } },
+      { createId: () => 'fresh' },
+    )
+    const result = reduceGesture(created.state, c, { type: 'cancel-text-edit' })
+    // Escape closes the editor; it does not eat the box someone placed to
+    // sketch a layout. Discard-with-the-node stays reserved for the case
+    // where text WAS typed.
+    expect(result.commands).toEqual([])
+    expect(result.state).toEqual({ kind: 'idle' })
+    expect(result.selectedId).toBe('fresh')
+  })
+
+  it('a real pointercancel still discards the untouched new node — OS-broken is not "done here"', () => {
+    // The keep-the-box rule is for the EXPLICIT cancel (Escape): a person
+    // saying "done here". pointercancel is the platform tearing the gesture
+    // down mid-flight; the half-made node it strands is debris, and the
+    // lost-capture handling relies on this staying a discard.
+    const c = canvas()
+    const created = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 100, y: 100 } },
+      { createId: () => 'fresh' },
+    )
+    const result = reduceGesture(created.state, c, { type: 'pointercancel' })
+    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
+  })
+
+  it('still takes the node with it when text was typed and then discarded', () => {
+    const c = canvas()
+    const created = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 100, y: 100 } },
+      { createId: () => 'fresh' },
+    )
+    const typing = reduceGesture(created.state, c, { type: 'update-text-edit', text: 'oops' })
+    const result = reduceGesture(typing.state, c, { type: 'cancel-text-edit' })
+    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'fresh' }])
+  })
+})
+
 describe('dblclick-empty (create-node)', () => {
   it('creates a text node centered on the point, selects it, and opens it for typing immediately', () => {
     const c = canvas()
@@ -619,7 +667,7 @@ describe('multi-selection resize', () => {
 describe('cancel-text-edit removes a node that only existed for the cancelled edit', () => {
   const empty = (): SpatialCanvas => ({ nodes: [], edges: [] })
 
-  it('deletes the just-created node — nothing was typed, so nothing should remain', () => {
+  it('keeps the just-created node on cancel — an empty box is a deliberate layout tool', () => {
     const created = reduceGesture(
       createIdleState(),
       empty(),
@@ -634,8 +682,10 @@ describe('cancel-text-edit removes a node that only existed for the cancelled ed
     }
     const cancelled = reduceGesture(created.state, withNode, { type: 'cancel-text-edit' })
     expect(cancelled.state).toEqual({ kind: 'idle' })
-    expect(cancelled.commands).toEqual([{ kind: 'delete-node', id: 'n-new' }])
-    expect(cancelled.selectedId).toBeNull()
+    // Escape closes the editor and nothing more: no delete command, and the
+    // box stays selected so it can be moved or resized immediately.
+    expect(cancelled.commands).toEqual([])
+    expect(cancelled.selectedId).toBe('n-new')
   })
 
   it('keeps an existing node — cancel reverts the edit, it does not delete', () => {

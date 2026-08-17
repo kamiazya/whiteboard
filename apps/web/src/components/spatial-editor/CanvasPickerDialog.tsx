@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 /**
  * Canvas picker — the reference-entry surface for file nodes, used by the
  * palette's Document entry (create) and the context menu's "Change target"
@@ -24,7 +24,7 @@ export interface FileRefOption {
    * block fits and the body silently does not render at all. Absent keeps
    * the card-sized default.
    */
-  readonly kind?: CanvasKind
+  readonly kind?: DocumentKind
 }
 
 export interface CanvasPickerDialogProps {

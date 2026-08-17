@@ -10,7 +10,7 @@ import {
 
 const validDetail: MergeCommittedDetail = {
   workspaceId: 'w1',
-  slug: 'c1',
+  path: 'c1',
   sourceName: 'feature',
   targetName: 'main',
   newCount: 2,

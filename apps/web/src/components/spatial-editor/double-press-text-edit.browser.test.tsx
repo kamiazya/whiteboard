@@ -6,7 +6,7 @@
 // while synthetic-event tests stayed green. The editor therefore detects a
 // double press itself, by node id and time window, which is stable against
 // re-renders. These tests drive real pointer input end to end.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

@@ -2,7 +2,7 @@
 // this pins the wiring: a multi-node selection gets a Tidy action scoped to
 // the selection, empty space gets a whole-canvas one, one action is one undo
 // step, and a locked node is never moved.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

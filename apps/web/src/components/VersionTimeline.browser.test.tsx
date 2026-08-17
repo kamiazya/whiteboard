@@ -26,7 +26,7 @@ function mkBranchesResponse(): Response {
 function mkVersionsResponse(count = 24): Response {
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
-    slug: 'canvas-a',
+    path: 'canvas-a',
     createdAt: new Date(Date.now() - index * 60_000).toISOString(),
     elementCount: 58,
     label: `Version ${index + 1}`,
@@ -74,7 +74,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </div>,
     )
 
@@ -109,7 +109,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
       </div>,
     )
 
@@ -148,7 +148,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />
       </div>,
     )
 
@@ -190,7 +190,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />
       </div>,
     )
 

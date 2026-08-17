@@ -1,9 +1,9 @@
-import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { setNodeLock } from '@kamiazya/whiteboard-canvas-workspace'
+import { setNodeLock } from '@kamiazya/whiteboard-loro-adapter'
+import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { NodeNotFoundError } from './errors.js'
 
 /**
@@ -12,14 +12,14 @@ import { NodeNotFoundError } from './errors.js'
  * the keyboard to undo an agent's own mistake.
  *
  * The lock itself is editor state, not canvas content — it lives in the
- * doc's sidecar map (see canvas-workspace's `setNodeLock`), so it is
+ * doc's sidecar map (see crdt's `setNodeLock`), so it is
  * durable and syncs to peers, yet never appears in an export, a render,
  * or a JSON Canvas file.
  */
 export const nodeLockInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     nodeId: nodeIdSchema,
     locked: z.boolean(),
   })
@@ -28,7 +28,7 @@ export type NodeLockInput = z.infer<typeof nodeLockInputSchema>
 
 export const nodeLockOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     nodeId: nodeIdSchema,
     locked: z.boolean(),
   })
@@ -42,19 +42,19 @@ export function createNodeLockTool(deps: ServerDeps) {
     inputSchema: nodeLockInputSchema,
     outputSchema: nodeLockOutputSchema,
     execute: async (input: NodeLockInput): Promise<NodeLockOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // Reject a ghost id rather than storing a lock nothing can ever
       // clear from the UI (the editor only offers unlock on a real node).
       if (!canvas.nodes.some((node) => node.id === input.nodeId)) {
-        throw new NodeNotFoundError(input.canvasId, input.nodeId)
+        throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
       setNodeLock(doc, input.nodeId, input.locked)
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
-      return { canvasId: input.canvasId, nodeId: input.nodeId, locked: input.locked }
+      return { documentId: input.documentId, nodeId: input.nodeId, locked: input.locked }
     },
   }
 }

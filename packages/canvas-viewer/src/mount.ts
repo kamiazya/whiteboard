@@ -1,4 +1,5 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
@@ -25,9 +26,10 @@ export interface MountCanvasViewerOptions {
   messageHandler?: (event: MessageEvent) => void
   /**
    * Resolved file references, keyed by the node's raw `file` value — the
-   * plain-data form of `CanvasViewer`'s two resolver props, because a
-   * function cannot cross the host↔widget boundary this API sits behind.
-   * Shaped to match `canvas_view`'s `references` payload exactly.
+   * plain-data form of `CanvasViewer`'s resolver prop, because a function
+   * cannot cross the host↔widget boundary this API sits behind. Shaped to
+   * match `canvas_view`'s `references` payload exactly, which is why `body`
+   * is spelled that way here and `markdown` inside the layout.
    */
   references?: Readonly<Record<string, { label?: string; body?: MdastRoot }>>
 }
@@ -65,15 +67,21 @@ function readEmbeddedScene(): unknown {
 }
 
 /**
- * Turns the plain reference map into the two synchronous resolver props.
+ * Turns the plain reference map into the synchronous resolver prop.
  * Returns nothing when there is no map, so a host that supplies none leaves
  * `CanvasViewer` exactly as it was before this existed.
  */
 function referenceSeams(references: MountCanvasViewerOptions['references']) {
   if (references === undefined) return {}
   return {
-    resolveFileLabel: (file: string) => references[file]?.label,
-    resolveFileMarkdown: (file: string) => references[file]?.body,
+    resolveReference: (ref: string): ResolvedReference | undefined => {
+      const entry = references[ref]
+      if (entry === undefined) return undefined
+      return {
+        ...(entry.label !== undefined ? { label: entry.label } : {}),
+        ...(entry.body !== undefined ? { markdown: entry.body } : {}),
+      }
+    },
   }
 }
 

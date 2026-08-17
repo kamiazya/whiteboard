@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
+import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
 
 // The two OpenCanvas diagram sources rendered by architecture.docs-snapshot,

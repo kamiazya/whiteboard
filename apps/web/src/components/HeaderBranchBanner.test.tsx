@@ -40,7 +40,7 @@ import { HeaderBranchBanner } from './HeaderBranchBanner.js'
 function baseDetail(overrides: Partial<MergeCommittedDetail> = {}): MergeCommittedDetail {
   return {
     workspaceId: 's1',
-    slug: 'c1',
+    path: 'c1',
     sourceName: 'feature-a',
     targetName: 'main',
     newCount: 0,
@@ -61,7 +61,7 @@ afterEach(() => {
 describe('HeaderBranchBanner', () => {
   it('does not render the banner when HEAD is main', async () => {
     state.current.state.head = 'main'
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     // Wait for the initial fetch path.
     await act(async () => {
       await Promise.resolve()
@@ -70,7 +70,7 @@ describe('HeaderBranchBanner', () => {
   })
 
   it('renders the banner when HEAD is not main and unmergedCommits > 0', async () => {
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })
@@ -81,7 +81,7 @@ describe('HeaderBranchBanner', () => {
 
   it('hides the banner when unmergedCommits is 0', async () => {
     state.current.getBranchStats = vi.fn().mockResolvedValue({ unmergedCommits: 0, isHead: true })
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await act(async () => {
       await Promise.resolve()
     })
@@ -90,7 +90,7 @@ describe('HeaderBranchBanner', () => {
 
   it('hides the banner when getBranchStats rejects (failures stay silent)', async () => {
     state.current.getBranchStats = vi.fn().mockRejectedValue(new Error('network error'))
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await waitFor(() => {
       expect(state.current.getBranchStats).toHaveBeenCalled()
     })
@@ -99,14 +99,14 @@ describe('HeaderBranchBanner', () => {
 
   it('does NOT register an excalidraw:head_changed listener (callback model, not window bus)', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     const registeredEvents = addSpy.mock.calls.map((call) => call[0])
     expect(registeredEvents).not.toContain('excalidraw:head_changed')
     addSpy.mockRestore()
   })
 
   it('re-fetches stats on a matching merge_committed event', async () => {
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })
@@ -124,8 +124,8 @@ describe('HeaderBranchBanner', () => {
     })
   })
 
-  it('ignores a merge_committed event for a different workspace/slug', async () => {
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+  it('ignores a merge_committed event for a different workspace/path', async () => {
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })
@@ -142,7 +142,7 @@ describe('HeaderBranchBanner', () => {
   })
 
   it('ignores a Zod-invalid merge_committed event detail', async () => {
-    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })

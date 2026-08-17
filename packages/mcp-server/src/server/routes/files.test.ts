@@ -44,7 +44,7 @@ const { createFilesRouter } = await import('./files.js')
 const { IncompleteFileGcScanError } = await import('../store/file-gc.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
-describe('PUT /api/w/:workspaceId/canvas/:slug/file/:fileId', () => {
+describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -130,7 +130,7 @@ describe('PUT /api/w/:workspaceId/canvas/:slug/file/:fileId', () => {
   })
 })
 
-describe('GET /api/w/:workspaceId/canvas/:slug/file/:fileId', () => {
+describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1', 'files'), { recursive: true })
@@ -240,7 +240,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
   it('returns a structured 503 when the GC scan is incomplete instead of an unstructured 500', async () => {
     purgeDanglingFilesMock.mockRejectedValue(
       new IncompleteFileGcScanError('session1', [
-        { kind: 'branch', slug: 'canvas-a', branch: 'feature', cause: new Error('boom') },
+        { kind: 'branch', path: 'canvas-a', branch: 'feature', cause: new Error('boom') },
       ]),
     )
 

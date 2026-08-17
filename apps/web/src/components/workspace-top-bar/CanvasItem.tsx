@@ -13,10 +13,10 @@ interface CanvasItemProps {
   pinned: boolean
   isLocalMode: boolean
   onNavigate: () => void
-  onTogglePin: (slug: string, nextPinned: boolean) => void
+  onTogglePin: (path: string, nextPinned: boolean) => void
 }
 
-// Dropdown item with thumbnail, name, optional slug subtitle, and a pin toggle.
+// Dropdown item with thumbnail, name, optional path subtitle, and a pin toggle.
 // Keep the pin control on the right edge. Show it constantly when pinned, otherwise reveal it on hover.
 // Stop propagation on mouse down because Radix selection is driven from that event.
 export function CanvasItem({
@@ -46,7 +46,7 @@ export function CanvasItem({
           <FileText className="size-4 text-muted-foreground/50" />
         </div>
       ) : (
-        <CanvasThumb workspaceId={workspaceId} slug={canvas.slug} />
+        <CanvasThumb workspaceId={workspaceId} path={canvas.path} />
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
@@ -54,9 +54,9 @@ export function CanvasItem({
         >
           {leafLabel}
         </span>
-        {customName && customName !== canvas.slug && (
+        {customName && customName !== canvas.path && (
           <span className="truncate font-mono text-[10px] text-muted-foreground">
-            {canvas.slug}
+            {canvas.path}
           </span>
         )}
       </div>
@@ -70,7 +70,7 @@ export function CanvasItem({
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            onTogglePin(canvas.slug, !pinned)
+            onTogglePin(canvas.path, !pinned)
           }}
           className={cn(
             'shrink-0 rounded p-1 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground transition-opacity',

@@ -147,9 +147,9 @@ export function DaemonDetectedBanner({
   // to be recomputed explicitly when we write to it — a useMemo keyed on the
   // store would keep serving pre-Forget values until a reload.
   const [storedTarget, setStoredTarget] = useState(() => {
-    const { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug } =
+    const { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath } =
       settingsStore.load().storage
-    return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug }
+    return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath }
   })
 
   // Trailing slashes would otherwise produce `http://host:3099//canvas/...`.
@@ -357,13 +357,13 @@ export function DaemonDetectedBanner({
         ...current.storage,
         localDaemonBaseUrl: undefined,
         lastConnectedWorkspaceId: undefined,
-        lastConnectedSlug: undefined,
+        lastConnectedPath: undefined,
       },
     }))
     setStoredTarget({
       localDaemonBaseUrl: undefined,
       lastConnectedWorkspaceId: undefined,
-      lastConnectedSlug: undefined,
+      lastConnectedPath: undefined,
     })
     handleDismiss()
   }

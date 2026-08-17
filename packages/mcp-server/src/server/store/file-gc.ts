@@ -1,7 +1,7 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { imageRefId, isImageRef } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { purgeResultSchema } from '../../shared/api-contracts/canvas.js'
@@ -9,8 +9,8 @@ import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { loadCanvasBranches } from './branches-store.js'
-import { listCanvases, loadCanvas } from './canvas-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -81,7 +81,7 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 // represented here: that failure means the persisted tipFrontiers bytes are
 // corrupt (no retry repairs it), so it throws corruptStoredData directly
 // instead of being collected as a skipped, retryable target.
-type SkippedScanTarget = { kind: 'version'; slug: string; versionId: string; cause: unknown }
+type SkippedScanTarget = { kind: 'version'; path: string; versionId: string; cause: unknown }
 
 // Walk every canvas in the workspace (live state, plus past versions and
 // every branch tip) and collect referenced fileIds.
@@ -130,12 +130,12 @@ async function collectReferencedFileIds(
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
-  const canvases = await listCanvases(workspaceId)
-  for (const { slug } of canvases) {
-    const live = await loadCanvas(workspaceId, slug)
+  const canvases = await listDocuments(workspaceId)
+  for (const { path } of canvases) {
+    const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
 
-    const { branches } = await loadCanvasBranches(workspaceId, slug)
+    const { branches } = await loadCanvasBranches(workspaceId, path)
     for (const branch of branches) {
       // Every branch tip (including HEAD's, which is redundant with the
       // live scan above but harmless) is a live reference set — a file
@@ -152,18 +152,18 @@ async function collectReferencedFileIds(
         // as corrupt_stored_data (500) instead of folding it into the
         // retryable incomplete-scan (503) path.
         log.error(
-          { workspaceId, slug, branch: branch.name, err },
+          { workspaceId, path, branch: branch.name, err },
           'corrupt branch tipFrontiers; refusing to purge',
         )
         throw corruptStoredData(
-          `${workspaceId}/${slug} branch "${branch.name}"`,
+          `${workspaceId}/${path} branch "${branch.name}"`,
           `tipFrontiers could not be decoded or checked out (${err instanceof Error ? err.message : String(err)})`,
         )
       }
     }
 
     if (!versionStore) continue
-    const versions = await versionStore.list(workspaceId, slug)
+    const versions = await versionStore.list(workspaceId, path)
     for (const v of versions) {
       // load() forks the live doc internally and checks out the version's
       // frontiers. If a version cannot be inspected (missing frontier
@@ -181,8 +181,8 @@ async function collectReferencedFileIds(
         }
         collectFromDoc(past, referenced)
       } catch (err) {
-        log.warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
-        skipped.push({ kind: 'version', slug, versionId: v.id, cause: err })
+        log.warning({ workspaceId, path, versionId: v.id, err }, 'skipped version')
+        skipped.push({ kind: 'version', path, versionId: v.id, cause: err })
       }
     }
   }
@@ -195,8 +195,8 @@ async function collectReferencedFileIds(
 export interface PurgeFilesOptions {
   versionStore?: VersionStore
   // Don't unlink files whose mtime is younger than this many ms. Closes
-  // the upload-but-not-yet-saveCanvas race: routes/files.ts writes the
-  // blob first, the user (or agent) calls saveCanvas later to add the
+  // the upload-but-not-yet-saveDocument race: routes/files.ts writes the
+  // blob first, the user (or agent) calls saveDocument later to add the
   // image element that references it. Without a grace window, GC firing
   // between those two events permanently deletes a file that was about
   // to be referenced. Default 1 hour; tests pass 0 to bypass.
@@ -221,7 +221,7 @@ export async function purgeDanglingFiles(
 ): Promise<PurgeFilesResult> {
   validateWorkspaceId(workspaceId)
   // Hold the workspace write barrier across the collect + unlink pass so
-  // a concurrent saveCanvas / version-save cannot insert a new file
+  // a concurrent saveDocument / version-save cannot insert a new file
   // reference between snapshot and delete and have its file unlinked
   // as "dangling".
   const graceMs = resolveGraceMs(options)
@@ -259,9 +259,9 @@ export async function purgeDanglingFiles(
       try {
         const info = await stat(fullPath)
         // Tombstone delay: a file uploaded just now isn't tied to any
-        // canvas yet, but the user is about to call saveCanvas with the
+        // canvas yet, but the user is about to call saveDocument with the
         // matching image element. Spare freshly-touched files so that
-        // upload → saveCanvas window doesn't lose a legitimate blob.
+        // upload → saveDocument window doesn't lose a legitimate blob.
         if (graceMs > 0 && now - info.mtimeMs < graceMs) continue
         await unlink(fullPath)
         purgedCount += 1

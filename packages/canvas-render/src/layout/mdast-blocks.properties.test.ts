@@ -8,7 +8,7 @@
  * module without a property test while `spatial-canvas` and `edge-routing`
  * had one each.
  *
- * The generator is LOCAL rather than canvas-model's shared
+ * The generator is LOCAL rather than model's shared
  * `mdastRootArbitrary` for one reason: density. The shared generator's
  * leaves include html/image/math/wikiLink/embed, which do not become text
  * runs at all, and its text is `fc.string()`, which almost never contains
@@ -32,7 +32,7 @@ import type {
   MdastFlowContent,
   MdastPhrasingContent,
   MdastRoot,
-} from '@kamiazya/whiteboard-canvas-model/mdast'
+} from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect } from 'vitest'
 import type { Scene, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -284,7 +284,7 @@ describe('layoutMdastBlocks properties', () => {
         rootOf(
           (graph[id] ?? []).map(
             (child) =>
-              ({ type: 'paragraph', children: [{ type: 'embed', canvasId: child }] }) as const,
+              ({ type: 'paragraph', children: [{ type: 'embed', documentId: child }] }) as const,
           ),
         )
       const scene = layoutMdastBlocks(docOf(rootId), {
@@ -303,8 +303,8 @@ describe('layoutMdastBlocks properties', () => {
           if (!Array.isArray(children)) continue
           let childPath = path
           if (node.kind === 'embedResolved') {
-            expect(path).not.toContain(node.canvasId)
-            childPath = [...path, node.canvasId]
+            expect(path).not.toContain(node.documentId)
+            childPath = [...path, node.documentId]
           }
           deepest = Math.max(deepest, inspect(children, childPath))
         }

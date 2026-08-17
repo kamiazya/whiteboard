@@ -6,7 +6,7 @@
 // A synthetic MouseEvent('click') skips pointerdown entirely and cannot see
 // this, which is why the older test missed it: only a real pointer sequence
 // (userEvent) exercises the capture path.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

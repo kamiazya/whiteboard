@@ -15,7 +15,7 @@
 // `spatial-geometry-parity.test.ts` guard). A caller that wants a
 // non-default geometry passes `SpatialLayoutOptions.geometry` explicitly at
 // the call site, never through this resolver.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Appearance } from '../scene-graph.js'
 
 /** What a resolver decided for one spatial node's chrome. */

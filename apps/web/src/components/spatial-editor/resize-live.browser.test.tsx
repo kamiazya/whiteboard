@@ -2,7 +2,7 @@
 // preview size every frame and its edges re-route to the moving border —
 // mirroring what live drag already guarantees for moves. Assertions taken
 // MID-gesture before any pointerup.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

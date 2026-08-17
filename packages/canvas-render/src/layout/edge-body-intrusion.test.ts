@@ -4,7 +4,7 @@
 // extra edge crossing, which can. The optimizer therefore scores body
 // intrusion in its heaviest slot, trading an edge crossing away to avoid
 // a tunnel.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

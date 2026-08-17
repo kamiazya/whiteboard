@@ -94,8 +94,8 @@ describe('getDb / closeDb', () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
 
-    // The branches table FKs canvases.id with ON DELETE CASCADE. Inserting a
-    // branch row whose canvasId does not exist must throw, and deleting a
+    // The branches table FKs documents.id with ON DELETE CASCADE. Inserting a
+    // branch row whose documentId does not exist must throw, and deleting a
     // canvas must also delete its branches.
     const now = Date.now()
     await db
@@ -103,11 +103,11 @@ describe('getDb / closeDb', () => {
       .values({ id: 'ws-fk', displayName: null, createdAt: now, updatedAt: now })
       .execute()
     await db
-      .insertInto('canvases')
+      .insertInto('documents')
       .values({
         id: 'cv-fk',
         workspaceId: 'ws-fk',
-        slug: 'main',
+        path: 'main',
         displayName: null,
         isPinned: 0,
         pinOrder: null,
@@ -119,7 +119,7 @@ describe('getDb / closeDb', () => {
     await db
       .insertInto('branches')
       .values({
-        canvasId: 'cv-fk',
+        documentId: 'cv-fk',
         name: 'main',
         tipFrontiers: '',
         color: null,
@@ -133,7 +133,7 @@ describe('getDb / closeDb', () => {
       db
         .insertInto('branches')
         .values({
-          canvasId: 'cv-does-not-exist',
+          documentId: 'cv-does-not-exist',
           name: 'orphan',
           tipFrontiers: '',
           color: null,
@@ -144,11 +144,11 @@ describe('getDb / closeDb', () => {
         .execute(),
     ).rejects.toThrow(/FOREIGN KEY/i)
 
-    await db.deleteFrom('canvases').where('id', '=', 'cv-fk').execute()
+    await db.deleteFrom('documents').where('id', '=', 'cv-fk').execute()
     const remaining = await db
       .selectFrom('branches')
       .selectAll()
-      .where('canvasId', '=', 'cv-fk')
+      .where('documentId', '=', 'cv-fk')
       .execute()
     expect(remaining).toEqual([])
   })

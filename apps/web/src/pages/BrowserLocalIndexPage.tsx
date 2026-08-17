@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
 import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
@@ -7,7 +7,7 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
   store: BrowserLocalStore
-  onOpenCanvas: (canvasId: string) => void
+  onOpenCanvas: (documentId: string) => void
 }
 
 // The browser-local landing surface: the same shared list the daemon gallery
@@ -42,11 +42,11 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
     if (!snapshots) return []
     const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     // No `secondary`: a browser-local canvas is addressed by UUID and has no
-    // slug. Deriving a label from the name instead collapses every non-Latin
+    // path. Deriving a label from the name instead collapses every non-Latin
     // name to `untitled`/`untitled-2` — indistinguishable in the one column
     // that exists to distinguish rows (ADR-0008).
     return sorted.map((s) => ({
-      slug: s.id,
+      path: s.id,
       displayName: s.name,
       updatedAt: s.updatedAt,
       kind: s.kind,
@@ -78,7 +78,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
   }, [store, pendingDelete])
 
   const handleCreate = useCallback(
-    async (kind: CanvasKind) => {
+    async (kind: DocumentKind) => {
       setCreating(true)
       try {
         const id = store.generateId()
@@ -135,7 +135,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
               onClick={(event) => {
                 // Prevents the click from bubbling to the wrapping open-button.
                 event.stopPropagation()
-                setPendingDelete({ id: row.slug, displayName: row.displayName })
+                setPendingDelete({ id: row.path, displayName: row.displayName })
               }}
               className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
             >

@@ -5,7 +5,7 @@ import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 describe('createServer', () => {
   it('returns an app', () => {
     const { app } = createServer({
-      canvasDocStore: {} as never,
+      documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
     })
@@ -15,7 +15,7 @@ describe('createServer', () => {
 
   it('wires the wb_facet_set tool', () => {
     const { tools } = createServer({
-      canvasDocStore: {} as never,
+      documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
     })
@@ -25,7 +25,7 @@ describe('createServer', () => {
 
   it('wires the render/export tools with input and output schemas', () => {
     const { tools } = createServer({
-      canvasDocStore: {} as never,
+      documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
     })

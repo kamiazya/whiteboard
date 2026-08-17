@@ -9,7 +9,7 @@
  * command shape a real create/delete gesture would report.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -58,7 +58,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
 describe('BrowserLocalCanvasPage create/delete-node reload persistence (browser — real IndexedDB)', () => {
-  let canvasId = ''
+  let documentId = ''
 
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -148,11 +148,11 @@ describe('BrowserLocalCanvasPage create/delete-node reload persistence (browser 
       { timeout: 10000, interval: 600 },
     )
     const keys = await loroCanvasesKeys()
-    canvasId = keys.find((k) => k !== '__placeholder__')!
-    expect(canvasId).toBeDefined()
+    documentId = keys.find((k) => k !== '__placeholder__')!
+    expect(documentId).toBeDefined()
     await waitFor(
       async () => {
-        expect(await persistedNodeIds(canvasId)).toContain('created-node')
+        expect(await persistedNodeIds(documentId)).toContain('created-node')
       },
       { timeout: 10000, interval: 600 },
     )
@@ -181,7 +181,7 @@ describe('BrowserLocalCanvasPage create/delete-node reload persistence (browser 
         act(() => {
           latestOnChange!(afterDelete, deleteCmd)
         })
-        expect(await persistedNodeIds(canvasId)).not.toContain('created-node')
+        expect(await persistedNodeIds(documentId)).not.toContain('created-node')
       },
       { timeout: 10000, interval: 600 },
     )

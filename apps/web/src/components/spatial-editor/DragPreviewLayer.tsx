@@ -88,7 +88,6 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
           {preview.arrows.map((arrow, i) => (
             <polygon
               // Arrow identity is positional within one preview frame.
-              // biome-ignore lint/suspicious/noArrayIndexKey: static per-frame list
               key={i}
               points={arrow.map((p) => `${p.x},${p.y}`).join(' ')}
               fill="currentColor"

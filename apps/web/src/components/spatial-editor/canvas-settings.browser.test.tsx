@@ -2,7 +2,7 @@
 // pick applies the canvas-wide command immediately and keeps it open for
 // the next tweak, consecutive picks chain under a deferred parent, and
 // dismissal returns focus to the gear.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

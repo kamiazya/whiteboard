@@ -9,7 +9,8 @@
  * what jsdom cannot exercise.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -214,10 +215,9 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('リリース計画')
     await expectTitleValue('リリース計画')
 
-    // title and the canvas name are one concept: the switcher label is the
-    // snapshot row, written from the same edit as the OKF core facet.
-    // title and the canvas name are one concept — observed in the switcher's
-    // LIST, since its trigger names the workspace rather than the canvas.
+    // The title IS the canvas name — one value in the snapshot row, observed
+    // in the switcher's LIST since its trigger names the workspace rather
+    // than the canvas.
     await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
     // Scoped to the menu item: the title INPUT holds the same string, so a
     // bare text query matches both and cannot tell them apart.
@@ -227,13 +227,28 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await waitForSaved()
     first.unmount()
 
-    // The facet itself round-trips through the Loro 'core' map, so the
-    // title comes back even though the switcher could have supplied a name.
     render(<BrowserLocalCanvasPage store={store} />)
     await waitFor(() => {
       const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
       expect(restored.value).toBe('リリース計画')
     })
+
+    // And it came back from the WORKSPACE, not from a second copy in the
+    // content: the document a rename touches holds no `title` facet at all
+    // (ADR-0009 decision 2). Without this the test passes on a document that
+    // stores the name twice, which is the state it exists to rule out.
+    // By kind, not by index: the workspace still holds the initial spatial
+    // canvas this flow started from.
+    const entry = (await store.listCanvases()).find((row) => row.kind === 'markdown')
+    expect(entry?.name).toBe('リリース計画')
+    const loaded = await new LoroStore().load(entry?.id ?? '')
+    expect(loaded.kind).toBe('ok')
+    if (loaded.kind === 'ok') {
+      const doc = new Loro()
+      doc.import(loaded.snapshot)
+      for (const delta of loaded.deltas ?? []) doc.import(delta)
+      expect(doc.getMap('core').get('title')).toBeUndefined()
+    }
   })
 
   it('keeps the body when core facets are written, and vice versa', async () => {
@@ -308,9 +323,10 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await userEvent.keyboard('Fast switch')
     await expectTitleValue('Fast switch')
 
-    // Unmount INSIDE the save debounce. `renameCanvas` has already written the
-    // snapshot name, so a cancelled facet save would leave the list name and
-    // the OKF title permanently disagreeing.
+    // Unmount immediately after typing. The name goes through `renameCanvas`,
+    // which flushes rather than debouncing — but the markdown document's own
+    // save is still pending, and an unmount that tore the page down before
+    // the rename landed would lose the title with it.
     first.unmount()
 
     render(<BrowserLocalCanvasPage store={store} />)
@@ -341,13 +357,15 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     const first = render(<BrowserLocalCanvasPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
 
-    // Facets belong to the CANVAS, so a spatial canvas has the bar too —
-    // its document just lives behind the sync session's delta protocol
-    // rather than the markdown hook's snapshot save.
+    // Naming is format-agnostic (ADR-0009 decision 2), so a spatial canvas
+    // carries the same title box — reading and writing the same snapshot row
+    // the markdown one does.
     const title = await screen.findByRole('textbox', { name: /title/i }, { timeout: 10_000 })
-    // A canvas that predates the facet bar shows its NAME as the title, not
-    // an empty box the user would have to retype.
     expect((title as HTMLInputElement).value).toBe('Diagram A')
+    // But NOT the facets beside it: a facet is OKF frontmatter and JSON
+    // Canvas has nowhere to put one (decision 3). The disclosure used to be
+    // hidden while the page went on writing through it.
+    expect(screen.queryByRole('button', { name: /properties/i })).toBeNull()
 
     // clear(), not a select-all chord: the browser's select-all is Cmd+A on
     // macOS and Ctrl+A elsewhere, so `{Control>}a{/Control}` selects nothing
@@ -542,5 +560,119 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
       },
       { timeout: 10_000 },
     )
+  })
+
+  describe('a document written by the daemon before the body writers were unified', () => {
+    // `wb_document_set` used to store a body as an `okf-body` TEXT NODE
+    // rather than the `body` text container CodeMirror binds to. Both sides
+    // now write the container, but documents in the old shape are already in
+    // stores — and only a real browser can show what CodeMirror actually
+    // displays for one, which is the half a hook test cannot reach.
+    const LEGACY_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const LEGACY_BODY = 'body stored as an okf-body node'
+
+    async function seedLegacyNote(store: IndexedDBStore, name: string): Promise<void> {
+      await store.save({
+        id: LEGACY_ID,
+        name,
+        updatedAt: '2026-05-24T00:00:00.000Z',
+        kind: 'markdown' as const,
+      })
+      const doc = new Loro()
+      writeSpatialCanvas(doc, {
+        nodes: [
+          {
+            id: MARKDOWN_BODY_NODE_ID,
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 400,
+            text: LEGACY_BODY,
+          },
+        ],
+        edges: [],
+      })
+      doc.commit()
+      await new LoroStore().save(LEGACY_ID, doc.export({ mode: 'snapshot' }))
+    }
+
+    it('is editable in the real editor without losing the body it was opened with', async () => {
+      // This needs a real browser for the CRDT binding. `LoroSyncPlugin`
+      // syncs the `body` CONTAINER into CodeMirror on mount, overwriting the
+      // `value` prop — so for a document whose prose is still in a node, the
+      // editor settles on the placeholder while the preview shows the text,
+      // and the next edit saves over the original.
+      //
+      // Asserted AFTER a full edit/save/remount cycle rather than on first
+      // paint: the value prop is briefly visible before the binding takes
+      // over, so an assertion at mount can pass on a frame that is about to
+      // be replaced. By the reopen there is no path that puts the old body
+      // on screen unless it really was converted and persisted.
+      const store = new IndexedDBStore()
+      await seedLegacyNote(store, 'Legacy note')
+      await store.setDefaultCanvasId(LEGACY_ID)
+      const first = render(<BrowserLocalCanvasPage store={store} />)
+
+      const editable = await waitFor(
+        () => {
+          const el = document.querySelector('.cm-content')
+          expect(el).not.toBeNull()
+          return el as HTMLElement
+        },
+        { timeout: 10_000 },
+      )
+      editable.focus()
+      await userEvent.keyboard('{Control>}{End}{/Control}{Enter}and an appended line')
+      await waitFor(() => {
+        expect(document.querySelector('.cm-content')?.textContent).toContain('and an appended line')
+      })
+
+      await waitForSaved()
+      first.unmount()
+
+      render(<BrowserLocalCanvasPage store={store} />)
+      await waitFor(
+        () => {
+          const text = document.querySelector('.cm-content')?.textContent
+          expect(text).toContain(LEGACY_BODY)
+          expect(text).toContain('and an appended line')
+        },
+        { timeout: 10_000 },
+      )
+    })
+
+    it('renders as an ![[embed]] target', async () => {
+      const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+      const store = new IndexedDBStore()
+      await seedLegacyNote(store, 'Legacy embed target')
+      await store.save({
+        id: SOURCE_ID,
+        name: 'Embed source',
+        updatedAt: '2026-05-24T00:00:01.000Z',
+        kind: 'markdown' as const,
+      })
+      await store.setDefaultCanvasId(SOURCE_ID)
+      render(<BrowserLocalCanvasPage store={store} />)
+
+      const editable = await waitFor(
+        () => {
+          const el = document.querySelector('[contenteditable="true"]')
+          expect(el).not.toBeNull()
+          return el as HTMLElement
+        },
+        { timeout: 10_000 },
+      )
+      editable.focus()
+      await userEvent.keyboard(`![[[[canvas:${LEGACY_ID}]]{Enter}{Enter}trailing`)
+
+      await waitFor(
+        () => {
+          const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+          expect(preview?.textContent).toContain(LEGACY_BODY)
+        },
+        { timeout: 10_000 },
+      )
+    })
   })
 })

@@ -930,7 +930,7 @@ describe('embedPlaceholder rendering', () => {
         {
           kind: 'embedPlaceholder',
           bbox: { x: 0, y: 100, w: 200, h: 16 },
-          canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
           title: 'Missing note',
           reason: 'unresolvable',
         },

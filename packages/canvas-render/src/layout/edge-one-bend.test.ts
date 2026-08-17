@@ -6,7 +6,7 @@
 // no line behind it. The departure stub itself stays: its depth is what
 // separates edges sharing a side into distinct corridors, so a one-corner
 // route still carries a collinear stub point.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

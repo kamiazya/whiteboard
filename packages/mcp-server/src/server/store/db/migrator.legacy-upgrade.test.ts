@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
+import { Kysely, type MigrationProvider, Migrator, SqliteDialect, sql } from 'kysely'
 import LibsqlNativeDatabase from 'libsql'
 import { expect, it, vi } from 'vitest'
+import { migrations } from './migrations/index.js'
 
 let dataDir = ''
 vi.mock('../../config.js', () => ({
@@ -16,6 +17,15 @@ vi.mock('../../config.js', () => ({
 const { runMigrations } = await import('./migrator.js')
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
+/**
+ * The last migration a pre-0008 data dir had applied. Migrating exactly this
+ * far is what makes the legacy state below real: the alternative — running
+ * everything and then deleting 0008's log row — models a database that cannot
+ * exist, and breaks the moment 0008 stops being the newest migration (kysely
+ * rejects a log with a hole in it).
+ */
+const PRE_0008 = '0007-adopt-workspace-tree'
+
 it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob follows', async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-boot-verify-'))
   const dbPath = join(dataDir, 'whiteboard.db')
@@ -27,11 +37,14 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
     }),
   })
   await sql`PRAGMA foreign_keys = ON`.execute(db)
-  // Run every migration once (fresh dir, 0008 no-ops), then rewind ONLY the
-  // 0008 log entry and inject the legacy state — exactly the shape a real
-  // pre-upgrade data dir presents at next boot.
-  await runMigrations(db as never)
-  await sql`DELETE FROM kysely_migration WHERE name = '0008-ulid-legacy-canvas-ids'`.execute(db)
+
+  const provider: MigrationProvider = { getMigrations: async () => migrations }
+  const { error } = await new Migrator({ db: db as never, provider }).migrateTo(PRE_0008)
+  expect(error).toBeUndefined()
+
+  // The legacy state, written against the schema as it stood at 0007: the
+  // documents table was still `canvases`, its path column was still `slug`,
+  // and ids were nanoids.
   await db.insertInto('workspaces').values({ id: 'ws-boot', createdAt: 0, updatedAt: 0 }).execute()
   await db
     .insertInto('canvases')
@@ -50,9 +63,12 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
   await mkdir(blobDir, { recursive: true })
   await writeFile(join(blobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([9]))
 
+  // What the next boot does.
   await runMigrations(db as never)
 
-  const row = (await db.selectFrom('canvases').selectAll().executeTakeFirstOrThrow()) as {
+  // Read back through the CURRENT name, so this also pins that 0009 carried
+  // the row across the rename rather than leaving it behind.
+  const row = (await db.selectFrom('documents').selectAll().executeTakeFirstOrThrow()) as {
     id: string
   }
   expect(row.id).toMatch(ULID)

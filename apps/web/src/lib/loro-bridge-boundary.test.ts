@@ -1,9 +1,9 @@
 /**
  * Source-scan guard: apps/web production code must mutate/inspect a spatial
- * LoroDoc only through canvas-workspace's bridge functions
+ * LoroDoc only through crdt's bridge functions
  * (writeSpatialNode/writeSpatialEdge/deleteSpatialNode/deleteSpatialEdge/
  * writeSpatialCanvas/readSpatialCanvas), never by calling
- * `doc.getMap('nodes'|'edges')` directly — see package-canvas-workspace.md's
+ * `doc.getMap('nodes'|'edges')` directly — see package-crdt.md's
  * "callers never manipulate the Loro layout directly" rule.
  *
  * The one documented exemption is `src/test-utils/` — browser-local-canvas.ts

@@ -3,7 +3,7 @@
  * focusable connect-target per other node, reached by Tab then Enter/Space
  * (matching `reducePointerUpConnecting`'s `targetNodeId` contract).
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { NodeBox } from './geometry.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 

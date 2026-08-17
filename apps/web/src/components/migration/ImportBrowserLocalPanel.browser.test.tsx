@@ -71,8 +71,8 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/canvases')) {
-        const { slug } = JSON.parse(init?.body as string) as { slug: string }
-        return jsonResponse({ slug })
+        const { path } = JSON.parse(init?.body as string) as { path: string }
+        return jsonResponse({ path })
       }
       return jsonResponse({ ok: true })
     })

@@ -16,20 +16,20 @@ vi.mock('../config.js', () => ({
 }))
 
 // Mock ws.ts so each test can control getClientCount and sendViewportRequest.
-const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
+const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
 const mockSendViewportRequest =
   vi.fn<
-    (workspaceId: string, slug: string, requestId: string, params: Record<string, unknown>) => void
+    (workspaceId: string, path: string, requestId: string, params: Record<string, unknown>) => void
   >()
 
 vi.mock('./ws.js', () => ({
-  getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
+  getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
   sendViewportRequest: (
     workspaceId: string,
-    slug: string,
+    path: string,
     requestId: string,
     params: Record<string, unknown>,
-  ) => mockSendViewportRequest(workspaceId, slug, requestId, params),
+  ) => mockSendViewportRequest(workspaceId, path, requestId, params),
 }))
 
 const { createViewportRouter, resolveViewportRequest } = await import('./viewport.js')
@@ -40,7 +40,7 @@ function makeApp(options: { timeoutMs?: number } = {}) {
   return app
 }
 
-describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () => {
+describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-viewport-test-'))
     mockGetClientCount.mockReset()
@@ -87,7 +87,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
 
   it('forwards mode="fit", elementIds, padding, and animate to sendViewportRequest', async () => {
     mockGetClientCount.mockReturnValue(1)
-    mockSendViewportRequest.mockImplementation((_sid, _slug, requestId) => {
+    mockSendViewportRequest.mockImplementation((_sid, _path, requestId) => {
       queueMicrotask(() => {
         resolveViewportRequest(requestId)
       })
@@ -118,7 +118,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
 
   it('forwards mode="move", scrollX, scrollY, and zoom to sendViewportRequest', async () => {
     mockGetClientCount.mockReturnValue(1)
-    mockSendViewportRequest.mockImplementation((_sid, _slug, requestId) => {
+    mockSendViewportRequest.mockImplementation((_sid, _path, requestId) => {
       queueMicrotask(() => resolveViewportRequest(requestId))
     })
     const app = makeApp()
@@ -139,7 +139,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
 
   it('returns 200 even without a request body', async () => {
     mockGetClientCount.mockReturnValue(1)
-    mockSendViewportRequest.mockImplementation((_sid, _slug, requestId) => {
+    mockSendViewportRequest.mockImplementation((_sid, _path, requestId) => {
       queueMicrotask(() => resolveViewportRequest(requestId))
     })
     const app = makeApp()
@@ -156,7 +156,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
 
   it('clears the timeout timer once the WS client resolves early', async () => {
     mockGetClientCount.mockReturnValue(1)
-    mockSendViewportRequest.mockImplementation((_sid, _slug, requestId) => {
+    mockSendViewportRequest.mockImplementation((_sid, _path, requestId) => {
       queueMicrotask(() => resolveViewportRequest(requestId))
     })
     const app = makeApp({ timeoutMs: 5_000 })
@@ -172,7 +172,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
     }
   })
 
-  it('returns 400 for invalid workspaceId or slug without reaching WS', async () => {
+  it('returns 400 for invalid workspaceId or path without reaching WS', async () => {
     mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
 
@@ -181,10 +181,10 @@ describe('POST /api/w/:workspaceId/canvas/:slug/viewport - error handling', () =
     })
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/w/s1/canvas/bad.slug/viewport', {
+    const badPath = await app.request('/api/w/s1/canvas/bad.path/viewport', {
       method: 'POST',
     })
-    expect(badSlug.status).toBe(400)
+    expect(badPath.status).toBe(400)
     expect(mockSendViewportRequest).not.toHaveBeenCalled()
   })
 })

@@ -16,7 +16,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { clearCache } = await import('../store/doc-cache.js')
-const { loadCanvas, saveCanvas } = await import('../store/canvas-store.js')
+const { loadDocument, saveDocument } = await import('../store/document-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./canvas.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
@@ -106,12 +106,12 @@ describe('handleWsUpgrade workspace existence', () => {
     expect(ws.sent).toEqual([])
   })
 
-  it('still serves an unknown slug inside a registered workspace', async () => {
-    // Workspace-level honesty only: a missing SLUG in a real workspace keeps
+  it('still serves an unknown path inside a registered workspace', async () => {
+    // Workspace-level honesty only: a missing path in a real workspace keeps
     // the lazy empty-doc behavior, which is how opening a just-deleted canvas
     // degrades. Refusing that too would be a behavior change this fix does
     // not need.
-    await saveCanvas('session1', 'exists', new LoroDoc())
+    await saveDocument('session1', 'exists', new LoroDoc())
     const ws = new FakeWebSocket()
     await handleWsUpgrade(
       {
@@ -134,7 +134,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
     // A connect now requires a REGISTERED workspace (an unregistered one is
     // refused with 4404 instead of served a phantom), which is also the shape
     // production always has: a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -186,7 +186,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
     expect(ws.sent.filter((message) => typeof message === 'string')).toHaveLength(0)
 
     clearCache()
-    const saved = await loadCanvas('session1', 'canvas-a')
+    const saved = await loadDocument('session1', 'canvas-a')
     const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['ws-elem'])
 
@@ -197,7 +197,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
     const doc = new LoroDoc()
     const entry = {
       id: 'v1',
-      slug: 'canvas-a',
+      path: 'canvas-a',
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 1,
       auto: true,
@@ -273,7 +273,7 @@ describe('handleWsUpgrade viewport replay', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -390,7 +390,7 @@ describe('handleWsUpgrade ws_trace propagation', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -502,7 +502,7 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -548,7 +548,7 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     // Nor was it persisted to disk: reading it back yields an empty canvas,
     // not one containing the rejected element.
     clearCache()
-    const saved = await loadCanvas('session1', 'canvas-readonly')
+    const saved = await loadDocument('session1', 'canvas-readonly')
     const savedElements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(savedElements).toEqual([])
 
@@ -582,7 +582,7 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     await new Promise((resolve) => setTimeout(resolve, 30))
 
     clearCache()
-    const saved = await loadCanvas('session1', 'canvas-writable')
+    const saved = await loadDocument('session1', 'canvas-writable')
     const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['persists-fine'])
 
@@ -647,7 +647,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -718,13 +718,13 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
       expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
 
       clearCache()
-      const saved = await loadCanvas('session1', 'canvas-malformed-2')
+      const saved = await loadDocument('session1', 'canvas-malformed-2')
       expect(saved.getMovableList('elements').toJSON()).toEqual([])
 
       const warnRecord = logs.records.find((r) => r.level === 'warning' && r.scope === 'ws')
       expect(warnRecord).toBeDefined()
       expect(warnRecord?.data?.workspaceId).toBe('session1')
-      expect(warnRecord?.data?.slug).toBe('canvas-malformed-2')
+      expect(warnRecord?.data?.path).toBe('canvas-malformed-2')
       expect(typeof warnRecord?.data?.updateBytes).toBe('number')
       const serialized = JSON.stringify(warnRecord)
       expect(serialized).not.toContain(canary)
@@ -804,7 +804,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
     // A connect requires a REGISTERED workspace (an unregistered one is
     // refused 4404 instead of served a phantom) — the shape production
     // always has, since a canvas is created before any tab opens it.
-    await saveCanvas('session1', 'registered-seed', new LoroDoc())
+    await saveDocument('session1', 'registered-seed', new LoroDoc())
     clearCache()
   })
 
@@ -814,7 +814,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
     setAutoVersionTrigger(() => Promise.resolve(null))
   })
 
-  it('closes 1011 and evicts the cache when saveCanvas fails after a valid import, without crashing', async () => {
+  it('closes 1011 and evicts the cache when saveDocument fails after a valid import, without crashing', async () => {
     setAutoVersionTrigger(() => Promise.resolve(null))
     const { peekDoc } = await import('../store/doc-cache.js')
     const logs = captureLogsForTests()
@@ -848,13 +848,13 @@ describe('handleWsUpgrade binary update persistence failure', () => {
       expect(ws.closes).toEqual([{ code: 1011, reason: 'Failed to persist canvas update' }])
       expect(peekDoc('session1', 'canvas-persist-fail')).toBeUndefined()
 
-      const saved = await loadCanvas('session1', 'canvas-persist-fail')
+      const saved = await loadDocument('session1', 'canvas-persist-fail')
       expect(saved.getMovableList('elements').toJSON()).toEqual([])
 
       const errorRecord = logs.records.find((r) => r.level === 'error' && r.scope === 'ws')
       expect(errorRecord).toBeDefined()
       expect(errorRecord?.data?.workspaceId).toBe('session1')
-      expect(errorRecord?.data?.slug).toBe('canvas-persist-fail')
+      expect(errorRecord?.data?.path).toBe('canvas-persist-fail')
       const serialized = JSON.stringify(errorRecord)
       expect(serialized).not.toContain('ws-elem')
       expect(serialized.toLowerCase()).not.toContain('token')
@@ -894,7 +894,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
       // save look like a persistence failure: no 1011 close, data lands on
       // disk, and the throw is only logged, not fatal.
       expect(ws.closes).toEqual([])
-      const saved = await loadCanvas('session1', 'canvas-hook-throws')
+      const saved = await loadDocument('session1', 'canvas-hook-throws')
       expect(saved.getMovableList('elements').toJSON()).toEqual([{ id: 'hook-elem' }])
 
       const warningRecord = logs.records.find(
@@ -902,7 +902,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
       )
       expect(warningRecord).toBeDefined()
       expect(warningRecord?.data?.workspaceId).toBe('session1')
-      expect(warningRecord?.data?.slug).toBe('canvas-hook-throws')
+      expect(warningRecord?.data?.path).toBe('canvas-hook-throws')
     } finally {
       setOnPersistedForTests(undefined)
       logs.restore()

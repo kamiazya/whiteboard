@@ -1,9 +1,3 @@
-import {
-  type AliasResolver,
-  parseMarkdownBlockLines,
-  parseMarkdownBody,
-  resolveReferences,
-} from '@kamiazya/whiteboard-canvas-codec'
 import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutMdastBlocks,
@@ -11,13 +5,19 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type AliasResolver,
+  parseMarkdownBlockLines,
+  parseMarkdownBody,
+  resolveReferences,
+} from '@kamiazya/whiteboard-codec'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
   readonly maxWidth: number
   readonly background?: string
   /**
-   * Maps `[[Name]]` aliases to canvas ids (canvas-codec's separate
+   * Maps `[[Name]]` aliases to canvas ids (codec's separate
    * resolution pass over the parsed tree). Absent, only `[[canvas:ULID]]`
    * references resolve; unresolved aliases stay literal bracket text.
    */
@@ -36,7 +36,7 @@ export interface RenderMarkdownPreviewOptions {
 /**
  * Pure parse -> layout -> serialize helper backing the preview pane. This is
  * the ONLY renderer for markdown in this component: it goes through
- * canvas-codec's `parseMarkdownBody` and canvas-render's `layoutMdastBlocks`
+ * codec's `parseMarkdownBody` and canvas-render's `layoutMdastBlocks`
  * / `renderSceneToSvg`, the same path CanvasViewer uses for spatial text
  * nodes and export. There is no markdown-to-HTML fallback anywhere in this
  * file — that would be a second renderer and would reintroduce the
@@ -81,7 +81,7 @@ const PREVIEW_PADDING_PX = 8
  * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
  * anchors derived from a second layout could disagree with what is
  * painted (fragment seams change block heights). Source lines come from
- * canvas-codec's position sidecar, index-aligned with the scene's
+ * codec's position sidecar, index-aligned with the scene's
  * top-level nodes (both map `root.children` 1:1). Empty anchors (an
  * unparseable mid-edit body) tell the caller to keep its proportional
  * fallback.

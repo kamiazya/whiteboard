@@ -1,19 +1,19 @@
+import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  canvasIdSchema,
+  documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
- * pattern (canvas-model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
+ * pattern (model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
  * never use this tool to set a core facet (`type`/`title`/`tags`/`view`) or
  * the raw `facets` root key itself — those don't match the pattern and are
  * rejected at parse time rather than needing a separate namespace guard.
@@ -21,7 +21,7 @@ import { DocumentKindMismatchError } from './errors.js'
 export const facetSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     facets: extensionFacetsSchema,
   })
   .strict()
@@ -29,7 +29,7 @@ export type FacetSetInput = z.infer<typeof facetSetInputSchema>
 
 export const facetSetOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     facets: extensionFacetsSchema,
   })
   .strict()
@@ -43,8 +43,8 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.documentId)
 
       // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
       // document has nodes and edges and no frontmatter to put one in, so a
@@ -57,7 +57,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       const kind = readDocumentKind(doc)
       if (kind === 'spatial') {
         throw new DocumentKindMismatchError(
-          input.canvasId,
+          input.documentId,
           kind,
           'Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Set them on the markdown document this one refers to, or write its content with wb_document_set.',
         )
@@ -66,9 +66,9 @@ export function createFacetSetTool(deps: ServerDeps) {
       const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...input.facets }
       writeFacets(doc, mergedFacets)
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
+      await saveDocumentSnapshot(deps, input.documentId, doc)
 
-      return { canvasId: input.canvasId, facets: mergedFacets }
+      return { documentId: input.documentId, facets: mergedFacets }
     },
   }
 }

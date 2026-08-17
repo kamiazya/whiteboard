@@ -11,7 +11,7 @@ import {
 } from './useBranches.js'
 
 describe('buildBranchUrls', () => {
-  it('encodes hierarchical slug with "/" safely', () => {
+  it('encodes hierarchical path with "/" safely', () => {
     const urls = buildBranchUrls('sess_1', '621/header')
     expect(urls.list).toBe('/api/workspaces/sess_1/canvases/621%2Fheader/branches')
     expect(urls.head).toBe('/api/workspaces/sess_1/canvases/621%2Fheader/head')
@@ -417,7 +417,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     consoleErrorSpy.mockRestore()
   })
 
-  it('refetch() hits the new URL after workspaceId/slug change', async () => {
+  it('refetch() hits the new URL after workspaceId/path change', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () =>
         new Response(JSON.stringify({ head: 'main', branches: [] }), {
@@ -428,15 +428,15 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     vi.stubGlobal('fetch', fetchMock)
 
     const { result, rerender } = renderHook(
-      ({ workspaceId, slug }: { workspaceId: string; slug: string }) =>
-        useBranches(workspaceId, slug),
-      { initialProps: { workspaceId: 'sess_1', slug: 'canvas-a' } },
+      ({ workspaceId, path }: { workspaceId: string; path: string }) =>
+        useBranches(workspaceId, path),
+      { initialProps: { workspaceId: 'sess_1', path: 'canvas-a' } },
     )
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0))
     })
 
-    rerender({ workspaceId: 'sess_1', slug: 'canvas-b' })
+    rerender({ workspaceId: 'sess_1', path: 'canvas-b' })
     await act(async () => {
       await result.current.refetch()
     })
@@ -472,14 +472,14 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     )
 
     const { result, rerender } = renderHook(
-      ({ workspaceId, slug }: { workspaceId: string; slug: string }) =>
-        useBranches(workspaceId, slug),
-      { initialProps: { workspaceId: 'sess_1', slug: 'canvas-a' } },
+      ({ workspaceId, path }: { workspaceId: string; path: string }) =>
+        useBranches(workspaceId, path),
+      { initialProps: { workspaceId: 'sess_1', path: 'canvas-a' } },
     )
 
     // Switch to canvas-b while canvas-a fetch is still in-flight.
     await act(async () => {
-      rerender({ workspaceId: 'sess_1', slug: 'canvas-b' })
+      rerender({ workspaceId: 'sess_1', path: 'canvas-b' })
       await new Promise((r) => setTimeout(r, 0))
     })
 
@@ -558,7 +558,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     expect(result.current.state.head).toBe('main')
   })
 
-  it('resets state to the defaults when workspaceId/slug changes, instead of exposing the previous canvas', async () => {
+  it('resets state to the defaults when workspaceId/path changes, instead of exposing the previous canvas', async () => {
     let resolveB: (() => void) | undefined
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       (input) => {
@@ -602,16 +602,16 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     vi.stubGlobal('fetch', fetchMock)
 
     const { result, rerender } = renderHook(
-      ({ workspaceId, slug }: { workspaceId: string; slug: string }) =>
-        useBranches(workspaceId, slug),
-      { initialProps: { workspaceId: 'sess_1', slug: 'canvas-a' } },
+      ({ workspaceId, path }: { workspaceId: string; path: string }) =>
+        useBranches(workspaceId, path),
+      { initialProps: { workspaceId: 'sess_1', path: 'canvas-a' } },
     )
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0))
     })
     expect(result.current.state.head).toBe('feature')
 
-    rerender({ workspaceId: 'sess_1', slug: 'canvas-b' })
+    rerender({ workspaceId: 'sess_1', path: 'canvas-b' })
     // While canvas-b's fetch is in flight, the hook must not hand canvas-a's
     // branches/head to consumers that don't check `loading`.
     expect(result.current.loading).toBe(true)
@@ -855,7 +855,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     expect(result.current.state.head).toBe('main')
   })
 
-  it('rerendering with a new fetch identity (same workspaceId/slug) routes the next refetch through it', async () => {
+  it('rerendering with a new fetch identity (same workspaceId/path) routes the next refetch through it', async () => {
     const fetchA = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () =>
         new Response(JSON.stringify({ head: 'from-a', branches: [] }), {
@@ -885,7 +885,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
       await result.current.refetch()
     })
 
-    // A stale apiRef (recreated only on workspaceId/slug change, not fetchFn)
+    // A stale apiRef (recreated only on workspaceId/path change, not fetchFn)
     // would still call fetchA here.
     expect(result.current.state.head).toBe('from-b')
     expect(fetchB).toHaveBeenCalled()

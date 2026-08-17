@@ -36,7 +36,6 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const CapturingSpatialEditor = forwardRef<unknown, Parameters<typeof actual.SpatialEditor>[0]>(
     (props, ref) => {
       capturedThemes.push(props.theme)
-      // biome-ignore lint/suspicious/noExplicitAny: forwarding to the real forwardRef component
       return <actual.SpatialEditor {...props} ref={ref as any} />
     },
   )
@@ -91,7 +90,7 @@ describe('DaemonCanvasPage theme wiring', () => {
     window.localStorage.clear()
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
   afterEach(() => {

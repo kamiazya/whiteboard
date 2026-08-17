@@ -3,7 +3,7 @@
 // so a carried edge re-siding onto the same side mid-gesture used to
 // re-fraction the bystander's anchor — a stationary edge visibly sliding
 // along its node. Overrides can now pin the committed anchor points too.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors } from './spatial-edges.js'
 

@@ -37,7 +37,7 @@ let subscribeAuth: (string | null)[] = []
 let messageBodies: string[] = []
 let updateWrites: {
   workspaceId: string
-  slug: string
+  path: string
   auth: string | null
   body: Uint8Array
 }[] = []
@@ -82,13 +82,13 @@ const server = setupServer(
     return HttpResponse.json({ ok: true })
   }),
   // The daemon's own update route, which the worker writes a tab's work to.
-  // Addressed by workspace and slug rather than by the document key the rest
-  // of the worker routes on — the key IS `${workspaceId}/${slug}`, which is
+  // Addressed by workspace and path rather than by the document key the rest
+  // of the worker routes on — the key IS `${workspaceId}/${path}`, which is
   // what lets the worker reconstruct this URL at all.
-  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:path/update`, async ({ request, params }) => {
     updateWrites.push({
       workspaceId: String(params.workspaceId),
-      slug: String(params.slug),
+      path: String(params.path),
       auth: request.headers.get('Authorization'),
       body: new Uint8Array(await request.arrayBuffer()),
     })
@@ -97,7 +97,7 @@ const server = setupServer(
   // The worker seeds every subscribed document's replica from this route.
   // Answered (with "unknown") rather than left unhandled: `bypass` would let
   // the request escape to whatever real daemon is listening on this port.
-  http.get(`${BASE}/api/w/:workspaceId/canvas/:slug/snapshot`, () =>
+  http.get(`${BASE}/api/w/:workspaceId/canvas/:path/snapshot`, () =>
     HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
   ),
 )
@@ -481,9 +481,9 @@ describe('authority replica', () => {
     await until(() => updateWrites.length >= 1)
     const write = updateWrites[0]
     if (!write) throw new Error('no write')
-    // The document key is `${workspaceId}/${slug}`, so the worker addressing
+    // The document key is `${workspaceId}/${path}`, so the worker addressing
     // the route correctly is the whole reason it can own this write at all.
-    expect(`${write.workspaceId}/${write.slug}`).toBe(doc)
+    expect(`${write.workspaceId}/${write.path}`).toBe(doc)
     // The credential travels with the write. `daemon-auth-seam.test.ts` scans
     // the source to prove no OTHER place assembles this header; only an actual
     // request proves the one place that should, does — and an unauthenticated

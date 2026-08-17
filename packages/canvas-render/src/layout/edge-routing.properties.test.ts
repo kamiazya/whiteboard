@@ -2,7 +2,7 @@
 // each pins an invariant whose violation shipped (or nearly shipped) as a
 // real defect, generalized from its example test so the generator explores
 // the arrangements nobody thought to write down.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'

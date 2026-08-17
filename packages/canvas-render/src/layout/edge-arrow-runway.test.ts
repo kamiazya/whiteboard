@@ -10,7 +10,7 @@
 // and comes back up into the arrival anchor, so when the ARRIVAL box extends
 // further out than the departure box, the corridor clears it by less than the
 // stub depth — by nothing at all once the difference exceeds it.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { finalSegmentLength } from '../test-utils/routing-metrics.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'

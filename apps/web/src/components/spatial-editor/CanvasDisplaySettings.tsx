@@ -9,7 +9,7 @@
  * Radix owns dismissal (outside click, Escape) and returns focus to the
  * gear, so a keyboard user never falls to <body>.
  */
-import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'

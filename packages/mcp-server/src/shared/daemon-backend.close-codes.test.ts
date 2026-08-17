@@ -52,7 +52,7 @@ describe('DaemonBackend close-code policy', () => {
 
   it('treats close code 1003 as terminal: no reconnect timer scheduled, onAuthError called', async () => {
     const { DaemonBackend } = await import('./daemon-backend.js')
-    const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
+    const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/')
     const onAuthError = () => {
       authErrorCalled = true
     }
@@ -83,7 +83,7 @@ describe('DaemonBackend close-code policy', () => {
 
   it('code 1006 still reconnects with backoff (unchanged behavior)', async () => {
     const { DaemonBackend } = await import('./daemon-backend.js')
-    const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
+    const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/')
     let scheduledDelay: number | null = null
     const setTimeoutSpy = ((_fn: () => void, delay: number) => {
       scheduledDelay = delay
@@ -112,7 +112,7 @@ describe('DaemonBackend close-code policy', () => {
 
   it('reconnects after 1011: the server closes with 1011 when it fails to persist a canvas update, which is a server-side state problem, not a client protocol violation, so the client must retry rather than treat it as terminal', async () => {
     const { DaemonBackend } = await import('./daemon-backend.js')
-    const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
+    const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/')
     let scheduledDelay: number | null = null
     const setTimeoutSpy = ((_fn: () => void, delay: number) => {
       scheduledDelay = delay

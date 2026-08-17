@@ -43,7 +43,7 @@ function mkSaveVersionResponse(): Response {
   const body: SaveVersionResponse = {
     version: {
       id: 'v-saved-001',
-      slug: 'design/login-flow',
+      path: 'design/login-flow',
       createdAt: new Date('2026-06-07T10:00:00Z').toISOString(),
       elementCount: 42,
       label: '',
@@ -62,7 +62,7 @@ function mkSaveVersionResponse(): Response {
 function mkVersionsResponse(count = 24): Response {
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
-    slug: 'design/login-flow',
+    path: 'design/login-flow',
     createdAt: new Date(Date.now() - index * 60_000).toISOString(),
     elementCount: 58 + index,
     label: `Version ${index + 1}`,
@@ -87,10 +87,10 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
     <div className="h-[560px] w-[1100px] bg-background p-6">
       <WorkspaceTopBar
         workspaceId="sess_1"
-        slug="design/login-flow"
+        path="design/login-flow"
         canvases={[
-          { slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
-          { slug: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
+          { path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
+          { path: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
         ]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
@@ -177,7 +177,7 @@ describe('WorkspaceTopBar browser mode', () => {
     expect(
       JSON.parse(String(fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')?.[1]?.body)),
     ).toEqual({
-      slug: 'design/untitled',
+      path: 'design/untitled',
     })
 
     // Second activation: 500 without title → generic fallback, internals never shown.
@@ -224,7 +224,7 @@ describe('WorkspaceTopBar browser mode', () => {
     window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
-  it('dispatches excalidraw:wb_version_saved with {workspaceId, slug} on a schema-conforming save, clearing the useDirtyState-driven HeaderSaveDot', async () => {
+  it('dispatches excalidraw:wb_version_saved with {workspaceId, path} on a schema-conforming save, clearing the useDirtyState-driven HeaderSaveDot', async () => {
     // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
       const url =
@@ -251,7 +251,7 @@ describe('WorkspaceTopBar browser mode', () => {
     // HeaderSaveDot's dot is visible before the save clears it.
     window.dispatchEvent(
       new CustomEvent('excalidraw:doc_changed', {
-        detail: { workspaceId: 'sess_1', slug: 'design/login-flow' },
+        detail: { workspaceId: 'sess_1', path: 'design/login-flow' },
       }),
     )
     await waitFor(() => {
@@ -267,9 +267,9 @@ describe('WorkspaceTopBar browser mode', () => {
       expect(versionSavedFired).toHaveBeenCalledTimes(1)
       const event = versionSavedFired.mock.calls[0]![0] as CustomEvent<{
         workspaceId: string
-        slug: string
+        path: string
       }>
-      expect(event.detail).toEqual({ workspaceId: 'sess_1', slug: 'design/login-flow' })
+      expect(event.detail).toEqual({ workspaceId: 'sess_1', path: 'design/login-flow' })
     })
 
     // The dirty dot clears once useDirtyState observes the matching wb_version_saved event.

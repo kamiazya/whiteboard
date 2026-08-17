@@ -9,7 +9,7 @@ function fakeCommands(): WhiteboardCommands {
   return {
     getAppContext: async () => ({
       provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', canvasId: 'c1' },
+      canvas: { kind: 'browser-local', documentId: 'c1' },
     }),
   }
 }
@@ -117,7 +117,7 @@ describe('useBrowserToolRegistry', () => {
     expect(serialized).not.toContain('daemonbaseurl')
     expect(result).toEqual({
       provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', canvasId: 'c1' },
+      canvas: { kind: 'browser-local', documentId: 'c1' },
     })
   })
 
@@ -260,7 +260,7 @@ describe('useBrowserToolRegistry', () => {
     const realCommands = createWhiteboardCommands({
       current: {
         provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
-        canvas: { canvasId: 'c1', name: 'c1' },
+        canvas: { documentId: 'c1', name: 'c1' },
       },
     })
 

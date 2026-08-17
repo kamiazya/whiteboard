@@ -10,7 +10,7 @@ import { MergeToast } from './MergeToast.js'
 
 const baseDetail: MergeCommittedDetail = {
   workspaceId: 's1',
-  slug: 'c1',
+  path: 'c1',
   sourceName: 'feature-a',
   targetName: 'main',
   newCount: 2,
@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe('MergeToast', () => {
   it('shows the toast when the event is received', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     expect(screen.queryByTestId('merge-toast')).toBeNull()
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
@@ -44,14 +44,14 @@ describe('MergeToast', () => {
     expect(screen.getByText(/2 added · 1 changed/)).toBeTruthy()
   })
 
-  it('ignores events for a different session or slug', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+  it('ignores events for a different session or path', () => {
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted({ ...baseDetail, workspaceId: 'other' }))
     expect(screen.queryByTestId('merge-toast')).toBeNull()
   })
 
   it('ignores a malformed detail without crashing', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => {
       window.dispatchEvent(
         new CustomEvent(MERGE_COMMITTED_EVENT, { detail: { ...baseDetail, newCount: 'nope' } }),
@@ -61,7 +61,7 @@ describe('MergeToast', () => {
   })
 
   it('shows "No content changes" when there is no diff', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() =>
       dispatchMergeCommitted({ ...baseDetail, newCount: 0, changedCount: 0, conflictCount: 0 }),
     )
@@ -69,20 +69,20 @@ describe('MergeToast', () => {
   })
 
   it('shows the Undo button when preMergeVersionId is present', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast-undo')).toBeTruthy()
   })
 
   it('hides the Undo button when preMergeVersionId is missing', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted({ ...baseDetail, preMergeVersionId: undefined }))
     expect(screen.queryByTestId('merge-toast-undo')).toBeNull()
   })
 
   it('posts restore and calls onRestored when Undo is clicked', async () => {
     const onRestored = vi.fn()
-    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
+    render(<MergeToast workspaceId="s1" path="c1" onRestored={onRestored} />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
@@ -98,7 +98,7 @@ describe('MergeToast', () => {
       .fn()
       .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted({ ...baseDetail, preMergeVersionId: 'v/pre?weird#id' }))
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
@@ -113,11 +113,11 @@ describe('MergeToast', () => {
       .fn()
       .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    const { rerender } = render(<MergeToast workspaceId="s1" slug="c1" />)
+    const { rerender } = render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     // Simulate switching to a different canvas while the toast is still open;
-    // the toast state is not keyed on workspaceId/slug so it survives the switch.
-    rerender(<MergeToast workspaceId="s1" slug="c2" />)
+    // the toast state is not keyed on workspaceId/path so it survives the switch.
+    rerender(<MergeToast workspaceId="s1" path="c2" />)
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled()
@@ -127,7 +127,7 @@ describe('MergeToast', () => {
   })
 
   it('closes immediately when the close button is clicked', () => {
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-close'))
     expect(screen.queryByTestId('merge-toast')).toBeNull()
@@ -139,7 +139,7 @@ describe('MergeToast', () => {
       vi.fn().mockResolvedValue(new Response(JSON.stringify({ title: 'nope' }), { status: 409 })),
     )
     const onRestored = vi.fn()
-    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
+    render(<MergeToast workspaceId="s1" path="c1" onRestored={onRestored} />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
@@ -153,7 +153,7 @@ describe('MergeToast', () => {
 
   it('auto-dismisses after mouseleave even when the 5s timer already elapsed while hovered', () => {
     vi.useFakeTimers()
-    render(<MergeToast workspaceId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" path="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     const toast = screen.getByTestId('merge-toast')
     fireEvent.mouseEnter(toast)
@@ -174,7 +174,7 @@ describe('MergeToast', () => {
   it('keeps the toast open and shows an error when restore throws', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     const onRestored = vi.fn()
-    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
+    render(<MergeToast workspaceId="s1" path="c1" onRestored={onRestored} />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
@@ -192,7 +192,7 @@ describe('MergeToast', () => {
     const onRestored = vi.fn()
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />
+        <MergeToast workspaceId="s1" path="c1" onRestored={onRestored} />
       </DaemonApiContext.Provider>,
     )
     act(() => dispatchMergeCommitted(baseDetail))

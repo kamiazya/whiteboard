@@ -1,8 +1,8 @@
 // Pure clipboard-fragment helpers (editor-completeness slice 2): extract a
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { clipboardFragmentSchema } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'

@@ -11,9 +11,9 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 // supply an in-memory fake instead of touching real IndexedDB or the
 // loro-crdt library directly.
 export interface LoroStoreLike {
-  save(canvasId: string, snapshot: Uint8Array): Promise<void>
+  save(documentId: string, snapshot: Uint8Array): Promise<void>
   createEmptySnapshot(): Uint8Array
-  load(canvasId: string): Promise<LoroLoadResult>
+  load(documentId: string): Promise<LoroLoadResult>
 }
 
 export type BrowserLocalPersistenceState =
@@ -63,7 +63,7 @@ function createCanvasSnapshot(
 export function useBrowserLocalCanvasController(
   store: BrowserLocalStore,
   loro: LoroStoreLike = new LoroStore(),
-  // A canvas id requested by the URL (e.g. a bookmarked /local/:canvasId
+  // A canvas id requested by the URL (e.g. a bookmarked /local/:documentId
   // deep link), read once at mount. Takes priority over the store's own
   // "default canvas" pointer, which it also repoints on success so a later
   // plain (no deep link) load resumes here — the same contract switchCanvas

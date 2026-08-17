@@ -3,8 +3,9 @@
 // canvas-render's own default geometry in EITHER theme mode. Asserts light
 // and dark produce identical geometry and differ only in color — the
 // executable form of the dark-mode-is-a-theme-parameter design decision.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { renderCanvasToSvg } from './scene-render.js'
 

@@ -8,7 +8,7 @@ import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 // canvas <-> ws import cycle.
 export type BroadcastFn = (
   workspaceId: string,
-  slug: string,
+  path: string,
   update: Uint8Array,
   excludeWs?: WebSocket,
 ) => void

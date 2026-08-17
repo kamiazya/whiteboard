@@ -56,9 +56,9 @@ describe('docs snapshot — canvas browser UI hero', () => {
         width={1280}
         height={760}
         canvases={[
-          { slug: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' },
-          { slug: 'design/login-flow', updatedAt: '2026-04-30T12:00:00.000Z' },
-          { slug: 'sketches/inbox', updatedAt: '2026-04-29T12:00:00.000Z' },
+          { path: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' },
+          { path: 'design/login-flow', updatedAt: '2026-04-30T12:00:00.000Z' },
+          { path: 'sketches/inbox', updatedAt: '2026-04-29T12:00:00.000Z' },
         ]}
         scene={ARCHITECTURE_SCENE}
       />,

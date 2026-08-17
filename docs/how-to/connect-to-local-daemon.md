@@ -112,7 +112,7 @@ the daemon's own page — there is no silent grant path.
 
 1. Ask your AI agent (Claude, Codex, or any MCP client connected to the
    whiteboard daemon) to call the `create_pairing_link` MCP tool. Optionally
-   pass `workspaceId` / `slug` to target a specific canvas, or `webOrigin` to
+   pass `workspaceId` / `path` to target a specific canvas, or `webOrigin` to
    point at a non-default web app deployment.
 2. The tool returns a URL carrying a `#wb=` fragment with a short-lived
    bootstrap token (see [ADR-0002](../contributing/adr/0002-browser-to-daemon-transport.md)

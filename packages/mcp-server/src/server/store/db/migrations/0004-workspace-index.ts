@@ -1,9 +1,9 @@
 import type { Kysely, Migration } from 'kysely'
 
-// Backing store for canvas-ports' WorkspaceIndex: five workspace-scoped
+// Backing store for ports' WorkspaceIndex: five workspace-scoped
 // tables (canvas list, facets, aliases, backlinks, alias history), each
 // carrying `workspaceId` as its isolation key so one index can safely back
-// many workspaces (see canvas-ports' WorkspaceIndex doc comment).
+// many workspaces (see ports' WorkspaceIndex doc comment).
 //
 // `seq` records each row's position within the array the owning `applyRows`
 // call received for that table. InMemoryWorkspaceIndex's read methods

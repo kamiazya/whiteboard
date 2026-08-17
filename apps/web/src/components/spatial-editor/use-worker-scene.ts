@@ -22,8 +22,9 @@
  * Markdown is parsed in the WORKER along with layout (see the protocol's
  * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {
@@ -75,10 +76,18 @@ function createLayoutWorker(): Worker | null {
 export function useWorkerScene(
   canvas: SpatialCanvas,
   base: { readonly measure: MeasureText; readonly theme: ResolvedTheme },
-  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
+  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
+    /**
+     * The host's CONTENT resolver, uncomposed. `resolveReference` beside it
+     * already has the label/missing chrome folded in, which crosses to the
+     * worker as data — so only this one decides whether the canvas has to
+     * stay on the main thread.
+     */
+    readonly resolveReferenceContent?: unknown
+  },
   fileRefLabels: readonly FileRefLabel[] | undefined,
-  // The plain-data twin of fileSeamOptions.resolveFileMissing: the refs the
-  // host resolved as dangling in THIS canvas. The function serves the
+  // The plain-data twin of the seam's `missing` field: the refs the host
+  // resolved as dangling in THIS canvas. The composed seam serves the
   // synchronous path; only this list can cross to the worker.
   missingFileRefs?: readonly string[],
 ): RenderedCanvas {
@@ -187,7 +196,6 @@ export function useWorkerScene(
     }
     // `renderNow` closes over the current inputs by design: a fallback must
     // lay out what was asked for, not what the effect last saw.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [inputs, offloadable])
 
   // Started at MOUNT, not on the first edit. The worker's module load and its

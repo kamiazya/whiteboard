@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { documentEntrySchema } from '@kamiazya/whiteboard-canvas-ports'
-import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-canvas-ports/test-utils'
+import { documentEntrySchema } from '@kamiazya/whiteboard-ports'
+import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { SqliteDocumentIndex } from './sqlite-document-index.js'
@@ -21,10 +21,10 @@ describe('SqliteDocumentIndex', () => {
   })
 
   it('lists past a legacy nanoid row instead of letting it poison the whole listing', async () => {
-    // `saveCanvas` minted nanoid row ids before the id spaces converged, and
+    // `saveDocument` minted nanoid row ids before the id spaces converged, and
     // rows outlive minting policy. One such row per workspace was enough to
     // make every entry unreadable: the port's DocumentEntry accepts only a
-    // canonical ULID canvasId, so a listing that mapped the legacy row blew
+    // canonical ULID documentId, so a listing that mapped the legacy row blew
     // up output validation for the ENTIRE list — the agent surface went dark
     // over a row it could never have created. The honest degradation is the
     // one these rows always had: visible to the user's gallery, absent from
@@ -40,11 +40,11 @@ describe('SqliteDocumentIndex', () => {
         kind: 'spatial',
       })
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: 'Go1G4OcJKUBu',
           workspaceId: 'ws1',
-          slug: 'legacy-row',
+          path: 'legacy-row',
           kind: 'spatial',
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -52,7 +52,7 @@ describe('SqliteDocumentIndex', () => {
         .execute()
 
       const entries = await index.listDocuments({ workspaceId: 'ws1' })
-      expect(entries.map((e) => e.canvasId)).toEqual([created.canvasId])
+      expect(entries.map((e) => e.documentId)).toEqual([created.documentId])
     } finally {
       await handle.dispose()
       await rm(tempDir, { recursive: true, force: true })
@@ -75,11 +75,11 @@ describe('rows written before canvasIds were ULIDs', () => {
         .values({ id: 'ws-legacy', createdAt: 0, updatedAt: 0 })
         .execute()
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
           id: 'uH6qTx6Ai2hl',
           workspaceId: 'ws-legacy',
-          slug: 'pre-ulid-doc',
+          path: 'pre-ulid-doc',
           displayName: null,
           isPinned: 0,
           pinOrder: null,
@@ -135,22 +135,22 @@ describe('rows written before documents had a kind', () => {
   // "format unknown" is said (wb_document_get already refuses one with
   // advice, rather than the listing pretending it does not exist).
   async function withKindlessRow(
-    body: (index: SqliteDocumentIndex, canvasId: string) => Promise<void>,
+    body: (index: SqliteDocumentIndex, documentId: string) => Promise<void>,
   ): Promise<void> {
     const tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-kindless-'))
     const handle = await createIsolatedDb({ dataDir: tempDir })
-    const canvasId = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const documentId = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
     try {
       await handle.db
         .insertInto('workspaces')
         .values({ id: 'ws-k', createdAt: 0, updatedAt: 0 })
         .execute()
       await handle.db
-        .insertInto('canvases')
+        .insertInto('documents')
         .values({
-          id: canvasId,
+          id: documentId,
           workspaceId: 'ws-k',
-          slug: 'pre-kind-doc',
+          path: 'pre-kind-doc',
           displayName: 'Old diagram',
           isPinned: 0,
           pinOrder: null,
@@ -160,7 +160,7 @@ describe('rows written before documents had a kind', () => {
           kind: null,
         })
         .execute()
-      await body(new SqliteDocumentIndex(handle.db), canvasId)
+      await body(new SqliteDocumentIndex(handle.db), documentId)
     } finally {
       await handle.dispose()
       await rm(tempDir, { recursive: true, force: true })
@@ -179,13 +179,13 @@ describe('rows written before documents had a kind', () => {
   })
 
   it('resolves the document by id and by path', async () => {
-    await withKindlessRow(async (index, canvasId) => {
-      const byId = await index.resolveDocumentById({ workspaceId: 'ws-k', canvasId })
+    await withKindlessRow(async (index, documentId) => {
+      const byId = await index.resolveDocumentById({ workspaceId: 'ws-k', documentId })
       expect(byId?.path).toBe('pre-kind-doc')
       expect(byId?.kind).toBeUndefined()
 
       const byPath = await index.resolveDocument({ workspaceId: 'ws-k', path: 'pre-kind-doc' })
-      expect(byPath?.canvasId).toBe(canvasId)
+      expect(byPath?.documentId).toBe(documentId)
     })
   })
 })

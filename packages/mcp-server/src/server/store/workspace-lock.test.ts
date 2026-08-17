@@ -78,7 +78,7 @@ describe('withWorkspaceWriteLock', () => {
 
   it('lets the current holder re-enter the same workspace lock without deadlocking', async () => {
     // A single logical write transaction (e.g. the branches HEAD-switch
-    // route) can call something like saveCanvas() from within its own
+    // route) can call something like saveDocument() from within its own
     // already-held critical section. Queueing again would await its own
     // completion and hang forever — the nested call must run immediately.
     const events: string[] = []

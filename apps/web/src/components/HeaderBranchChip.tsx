@@ -64,7 +64,7 @@ const MergeDialog = lazy(() => import('./MergeDialog').then((m) => ({ default: m
 
 export interface HeaderBranchChipProps {
   workspaceId: string
-  slug: string
+  path: string
   disabled?: boolean
   // Bump this (e.g. a counter) when an external event (WS-observed HEAD
   // change from another client) should force a list refresh. The chip's own
@@ -98,7 +98,7 @@ function TruncatedMenuLabel({ text }: { text: string }): JSX.Element {
 
 export function HeaderBranchChip({
   workspaceId,
-  slug,
+  path,
   disabled,
   refreshSignal,
   mergeEnabled = true,
@@ -113,7 +113,7 @@ export function HeaderBranchChip({
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(workspaceId, slug, fetchFn)
+  } = useBranches(workspaceId, path, fetchFn)
 
   // Skip the initial mount (refetch already runs internally via useBranches'
   // own effect) — only react to a refreshSignal value that actually changes
@@ -628,7 +628,7 @@ export function HeaderBranchChip({
             onClose={() => setPendingMerge(null)}
             runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
             workspaceId={workspaceId}
-            slug={slug}
+            path={path}
           />
         </Suspense>
       )}

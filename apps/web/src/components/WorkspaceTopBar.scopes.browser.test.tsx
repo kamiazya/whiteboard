@@ -24,8 +24,8 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
     <div className="h-[200px] w-[1100px] bg-background p-6">
       <WorkspaceTopBar
         workspaceId="local"
-        slug="my-canvas"
-        canvases={[{ slug: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
+        path="my-canvas"
+        canvases={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
         onNavigateToCanvas={() => {}}
         {...props}
       />
@@ -35,7 +35,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
 
 describe('top bar scopes', () => {
   it('names the workspace, not the canvas, on the switcher trigger', () => {
-    renderTopBar({ workspaceId: 'local', slug: 'my-canvas' })
+    renderTopBar({ workspaceId: 'local', path: 'my-canvas' })
     // The canvas name belongs to row two's title field. Row one says where
     // you are, and picking a canvas is navigation WITHIN that workspace.
     expect(screen.queryByRole('button', { name: /my-canvas/ })).toBeNull()

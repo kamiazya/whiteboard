@@ -1,11 +1,15 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import { type FacetCardData, layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
+import {
+  layoutSpatialCanvas,
+  layoutSpatialEdges,
+  type ResolvedReference,
+} from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 
@@ -19,7 +23,7 @@ const appearance: SpatialAppearanceResolver = {
  * A tiny fake mdast parser mirroring the one in spatial-canvas.test.ts:
  * `'__THROW__'` simulates a markdown construct outside the caller's
  * accepted subset, exercising `layoutSpatialCanvas`'s own body-parse
- * degradation path rather than canvas-codec's real parser (a
+ * degradation path rather than codec's real parser (a
  * cross-package dependency this package must not take).
  */
 function fakeParseBody(text: string): MdastRoot {
@@ -141,19 +145,21 @@ describe('layoutSpatialCanvas properties (PBT)', () => {
  * `composeFileFacets` path (usable card, degrades-to-nothing, no match)
  * across generated canvases without needing its own arbitrary.
  */
-function fakeResolveFileFacets(file: string): FacetCardData | undefined {
-  if (file === 'a.md') {
+function fakeResolveFacets(ref: string): ResolvedReference | undefined {
+  if (ref === 'a.md') {
     return {
-      title: 'Card',
-      rows: [
-        { label: 'type', value: 'note' },
-        { label: 'tags', value: 'x, y' },
-      ],
+      facets: {
+        title: 'Card',
+        rows: [
+          { label: 'type', value: 'note' },
+          { label: 'tags', value: 'x, y' },
+        ],
+      },
     }
   }
-  if (file === 'notes/b.md') {
+  if (ref === 'notes/b.md') {
     // No usable content: degrades to the plain chrome+label rendering.
-    return { rows: [] }
+    return { facets: { rows: [] } }
   }
   return undefined
 }
@@ -163,7 +169,7 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
     measure,
     parseBody: fakeParseBody,
     appearance,
-    resolveFileFacets: fakeResolveFileFacets,
+    resolveReference: fakeResolveFacets,
   }
 
   fcTest.prop([spatialCanvasArb], withDefaults())(
@@ -180,7 +186,7 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
     (canvas) => {
       const withNoOpSeam = layoutSpatialCanvas(canvas, {
         ...optionsWithFacets,
-        resolveFileFacets: () => undefined,
+        resolveReference: () => undefined,
       })
       const withoutSeam = layoutSpatialCanvas(canvas, {
         measure,
@@ -198,17 +204,19 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
  * a body that renders, an empty body that degrades, and a reference the
  * resolver does not know.
  */
-function fakeResolveFileMarkdown(file: string): MdastRoot | undefined {
-  if (file === 'a.md') {
+function fakeResolveMarkdown(ref: string): ResolvedReference | undefined {
+  if (ref === 'a.md') {
     return {
-      type: 'root',
-      children: [
-        { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Body' }] },
-        { type: 'paragraph', children: [{ type: 'text', value: 'prose that wraps somewhere' }] },
-      ],
+      markdown: {
+        type: 'root',
+        children: [
+          { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Body' }] },
+          { type: 'paragraph', children: [{ type: 'text', value: 'prose that wraps somewhere' }] },
+        ],
+      },
     }
   }
-  if (file === 'notes/b.md') return { type: 'root', children: [] }
+  if (ref === 'notes/b.md') return { markdown: { type: 'root', children: [] } }
   return undefined
 }
 
@@ -233,7 +241,7 @@ const malformedBodyArb: fc.Arbitrary<MdastRoot> = fc
 
 describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
   const bare = { measure, parseBody: fakeParseBody, appearance }
-  const withMarkdown = { ...bare, resolveFileMarkdown: fakeResolveFileMarkdown }
+  const withMarkdown = { ...bare, resolveReference: fakeResolveMarkdown }
 
   fcTest.prop([spatialCanvasArb], withDefaults())(
     'a resolving markdown resolver never throws and renders identically twice (determinism)',
@@ -249,7 +257,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     (canvas) => {
       const withNoOpSeam = layoutSpatialCanvas(canvas, {
         ...withMarkdown,
-        resolveFileMarkdown: () => undefined,
+        resolveReference: () => undefined,
       })
       expect(withNoOpSeam).toEqual(layoutSpatialCanvas(canvas, bare))
     },
@@ -260,7 +268,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     (canvas) => {
       const withThrowingSeam = layoutSpatialCanvas(canvas, {
         ...withMarkdown,
-        resolveFileMarkdown: () => {
+        resolveReference: () => {
           throw new Error('simulated resolver failure')
         },
       })
@@ -277,7 +285,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
       // can hand over children layout cannot dispatch on, and those throw
       // from inside the layout call rather than the resolver.
       expect(() =>
-        layoutSpatialCanvas(canvas, { ...bare, resolveFileMarkdown: () => body }),
+        layoutSpatialCanvas(canvas, { ...bare, resolveReference: () => ({ markdown: body }) }),
       ).not.toThrow()
     },
   )
@@ -294,8 +302,11 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     }
     const text = collectRunText(
       layoutSpatialCanvas(canvas, {
-        ...withMarkdown,
-        resolveFileFacets: fakeResolveFileFacets,
+        ...bare,
+        resolveReference: (ref) => ({
+          ...fakeResolveMarkdown(ref),
+          ...fakeResolveFacets(ref),
+        }),
       }).nodes,
     )
     expect(text).toContain('Card')
@@ -313,7 +324,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
       // guard would restate composeFileMarkdown's documented fall-through
       // as a failure.
       const cardOnly = collectRunText(
-        layoutSpatialCanvas(canvas, { ...bare, resolveFileFacets: fakeResolveFileFacets }).nodes,
+        layoutSpatialCanvas(canvas, { ...bare, resolveReference: fakeResolveFacets }).nodes,
       )
       if (!cardOnly.includes('Card')) return
       const bodyOnly = collectRunText(layoutSpatialCanvas(canvas, withMarkdown).nodes)
@@ -321,8 +332,11 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
 
       const both = collectRunText(
         layoutSpatialCanvas(canvas, {
-          ...withMarkdown,
-          resolveFileFacets: fakeResolveFileFacets,
+          ...bare,
+          resolveReference: (ref) => ({
+            ...fakeResolveMarkdown(ref),
+            ...fakeResolveFacets(ref),
+          }),
         }).nodes,
       )
       expect(both).toContain('Body')

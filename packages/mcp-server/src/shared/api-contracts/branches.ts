@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Request / response schemas for the /api/workspaces/:sid/canvases/:slug/branches
+// Request / response schemas for the /api/workspaces/:sid/canvases/:path/branches
 // family. Imported by the route handler (validates incoming bodies + types its
 // `c.json(...)` responses) and the React client (parses fetch responses) so a
 // wire-format change has exactly one place to update.

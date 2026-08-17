@@ -53,16 +53,16 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, () => HttpResponse.json({ ok: true })),
-  http.post(`${BASE}/api/w/:workspaceId/canvas/:slug/update`, async ({ request, params }) => {
+  http.get(`${BASE}/api/w/:workspaceId/canvas/:path/update`, () => HttpResponse.json({ ok: true })),
+  http.post(`${BASE}/api/w/:workspaceId/canvas/:path/update`, async ({ request, params }) => {
     updateWrites.push({
-      doc: `${String(params.workspaceId)}/${String(params.slug)}`,
+      doc: `${String(params.workspaceId)}/${String(params.path)}`,
       body: new Uint8Array(await request.arrayBuffer()),
     })
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/canvas/:slug/snapshot`, ({ params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.slug)}`
+  http.get(`${BASE}/api/w/:workspaceId/canvas/:path/snapshot`, ({ params }) => {
+    const doc = `${String(params.workspaceId)}/${String(params.path)}`
     snapshotHits.push(doc)
     if (failingSnapshots.has(doc)) return HttpResponse.json({ title: 'boom' }, { status: 503 })
     const bytes = snapshotByDoc.get(doc)

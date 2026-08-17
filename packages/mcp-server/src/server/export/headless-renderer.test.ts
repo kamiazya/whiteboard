@@ -3,7 +3,7 @@
 // so a regression inside `headless-renderer.ts` itself surfaces in the unit
 // test suite.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Resolved AFTER vi.resetModules(), never statically imported at the top of

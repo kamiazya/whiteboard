@@ -1,8 +1,8 @@
 import type { Extension } from '@codemirror/state'
-import type { AliasResolver } from '@kamiazya/whiteboard-canvas-codec'
-import { type CanvasCoreMeta, canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import type { AliasResolver } from '@kamiazya/whiteboard-codec'
+import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -40,9 +40,14 @@ export interface MarkdownEditorProps {
    * Core OKF facets, rendered as the document header in Read mode —
    * display-only; facet editing stays in `CanvasProperties`.
    */
-  meta?: CanvasCoreMeta
+  meta?: StoredCoreFacets
   /**
-   * Maps `[[Name]]` aliases to canvas ids for the preview (canvas-codec's
+   * The document's name, shown as the Read-mode heading. Separate from
+   * `meta` because the workspace owns it (ADR-0009 decision 2).
+   */
+  title?: string
+  /**
+   * Maps `[[Name]]` aliases to canvas ids for the preview (codec's
    * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
    */
   resolveAlias?: AliasResolver
@@ -51,7 +56,7 @@ export interface MarkdownEditorProps {
    * in the preview. The host owns navigation; without it, wikiLink anchors
    * are inert (their href is a bare ULID, not a URL).
    */
-  onOpenCanvas?: (canvasId: string) => void
+  onOpenCanvas?: (documentId: string) => void
   /**
    * Resolves `![[embed]]` targets' parsed bodies so block embeds render
    * inline (canvas-render's layout seam; the host pre-fetches, see
@@ -135,12 +140,12 @@ function countWords(value: string): number {
 /**
  * Whether an anchor href is a bare canvas id rather than a URL. Two id
  * grammars coexist by construction: the daemon mints ULIDs
- * (`canvasIdSchema`), the browser-local store mints `crypto.randomUUID()`
+ * (`documentIdSchema`), the browser-local store mints `crypto.randomUUID()`
  * v4 UUIDs — both reach the preview through the alias resolver.
  */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isCanvasIdHref(href: string): boolean {
-  return canvasIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
+  return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
 function totalSourceLines(value: string): number {
@@ -197,6 +202,7 @@ export function MarkdownEditor({
   autoFocus = false,
   theme = 'light',
   meta,
+  title,
   resolveAlias,
   onOpenCanvas,
   resolveEmbed,
@@ -413,7 +419,9 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div className="mx-auto px-6 py-8" style={{ maxWidth: previewWidth + 48 }}>
-              {effectiveMode === 'read' && meta !== undefined && <DocumentHeader meta={meta} />}
+              {effectiveMode === 'read' && meta !== undefined && (
+                <DocumentHeader title={title} meta={meta} />
+              )}
               {previewEmpty ? (
                 <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
               ) : (

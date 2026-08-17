@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
+import { apiErrorBodySchema, apiErrorReason } from '../../shared/api-contracts/errors.js'
 import { withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('branches-route-test-')
@@ -18,7 +19,7 @@ const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
 type PerformMergeFn = (
   sid: string,
-  slug: string,
+  path: string,
   args: { source: string; into: string; dryRun: boolean },
 ) => Promise<{
   previewElementCount: number
@@ -28,7 +29,7 @@ type PerformMergeFn = (
 
 type RenameInVersionsFn = (
   sid: string,
-  slug: string,
+  path: string,
   oldName: string,
   newName: string,
 ) => Promise<number>
@@ -36,12 +37,12 @@ type RenameInVersionsFn = (
 function makeApp(
   opts: {
     resolveFromVersionFrontiers?: (sid: string, id: string) => Promise<string | null>
-    getCurrentFrontiers?: (sid: string, slug: string) => Promise<string | null>
-    checkoutTo?: (sid: string, slug: string, tipFrontiersBase64: string) => Promise<void>
-    notifyHeadChanged?: (sid: string, slug: string, head: string) => void
+    getCurrentFrontiers?: (sid: string, path: string) => Promise<string | null>
+    checkoutTo?: (sid: string, path: string, tipFrontiersBase64: string) => Promise<void>
+    notifyHeadChanged?: (sid: string, path: string, head: string) => void
     performMerge?: PerformMergeFn
     renameInVersions?: RenameInVersionsFn
-    countVersionsOnBranch?: (sid: string, slug: string, branch: string) => Promise<number>
+    countVersionsOnBranch?: (sid: string, path: string, branch: string) => Promise<number>
   } = {},
 ) {
   const app = new Hono()
@@ -49,7 +50,7 @@ function makeApp(
   return app
 }
 
-describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
+describe('POST /api/workspaces/:sid/canvases/:path/branches', () => {
   it('creates a new branch and returns 201 with the branch', async () => {
     const app = makeApp()
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -77,6 +78,23 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
     expect(body.message).toMatch(/already exists/i)
   })
 
+  it('emits a 409 body the shared error contract parses, with the reason recoverable', async () => {
+    // The client reads every daemon error through apiErrorBodySchema /
+    // apiErrorReason. A route emitting a shape outside the contract would
+    // strand its reason behind the generic fallback — which is exactly how
+    // "A variation named X already exists" was discarded for months.
+    const app = makeApp()
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'main' }),
+    })
+    expect(res.status).toBe(409)
+    const body: unknown = await res.json()
+    expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
+    expect(apiErrorReason(body)).toMatch(/already exists/i)
+  })
+
   it('returns 400 for an invalid name', async () => {
     const app = makeApp()
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -91,7 +109,7 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
     })
   })
 
-  it('returns structured 400 responses for invalid sid and slug', async () => {
+  it('returns structured 400 responses for invalid sid and path', async () => {
     const app = makeApp()
 
     const badSession = await app.request('/api/workspaces/bad.sid/canvases/canvas-a/branches', {
@@ -105,16 +123,16 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.slug/branches', {
+    const badPath = await app.request('/api/workspaces/s1/canvases/bad.path/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature-x' }),
     })
-    expect(badSlug.status).toBe(400)
-    await expect(badSlug.json()).resolves.toEqual({
-      error: 'invalid_slug',
+    expect(badPath.status).toBe(400)
+    await expect(badPath.json()).resolves.toEqual({
+      error: 'invalid_document_path',
       message:
-        'Invalid slug "bad.slug": segment "bad.slug" contains \'.\' (only letters, digits, and \'-\' are allowed)',
+        'Invalid path "bad.path": segment "bad.path" contains \'.\' (only letters, digits, and \'-\' are allowed)',
     })
   })
 
@@ -210,7 +228,7 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
   })
 })
 
-describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
+describe('GET /api/workspaces/:sid/canvases/:path/branches', () => {
   it('returns main as the only branch with head="main" in the initial lazy-default state', async () => {
     const app = makeApp()
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
@@ -223,7 +241,7 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
     expect(body.branches.map((b) => b.name)).toEqual(['main'])
   })
 
-  it('returns structured 400 responses for invalid sid and slug', async () => {
+  it('returns structured 400 responses for invalid sid and path', async () => {
     const app = makeApp()
 
     const badSession = await app.request('/api/workspaces/bad.sid/canvases/canvas-a/branches')
@@ -233,20 +251,20 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.slug/branches')
-    expect(badSlug.status).toBe(400)
-    await expect(badSlug.json()).resolves.toEqual({
-      error: 'invalid_slug',
+    const badPath = await app.request('/api/workspaces/s1/canvases/bad.path/branches')
+    expect(badPath.status).toBe(400)
+    await expect(badPath.json()).resolves.toEqual({
+      error: 'invalid_document_path',
       message:
-        'Invalid slug "bad.slug": segment "bad.slug" contains \'.\' (only letters, digits, and \'-\' are allowed)',
+        'Invalid path "bad.path": segment "bad.path" contains \'.\' (only letters, digits, and \'-\' are allowed)',
     })
   })
 })
 
-describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
+describe('GET /api/workspaces/:sid/canvases/:path/branches/:name/stats', () => {
   it('returns unmergedCommits from the injected countVersionsOnBranch', async () => {
     const countVersionsOnBranch = vi
-      .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
+      .fn<(sid: string, path: string, branch: string) => Promise<number>>()
       .mockResolvedValue(7)
     const app = makeApp({ countVersionsOnBranch })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -292,7 +310,7 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
   it('returns structured 500 instead of 200 + 0 when countVersionsOnBranch reports corruption', async () => {
     const app = makeApp({
       countVersionsOnBranch: vi
-        .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
+        .fn<(sid: string, path: string, branch: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -311,7 +329,7 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
   })
 })
 
-describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
+describe('DELETE /api/workspaces/:sid/canvases/:path/branches/:name', () => {
   it('deletes an existing non-HEAD branch with 200', async () => {
     const app = makeApp()
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -330,7 +348,7 @@ describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns a real unmergedCommits count when countVersionsOnBranch is injected', async () => {
     const countVersionsOnBranch = vi
-      .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
+      .fn<(sid: string, path: string, branch: string) => Promise<number>>()
       .mockResolvedValue(3)
     const app = makeApp({ countVersionsOnBranch })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -364,7 +382,7 @@ describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
   it('returns 500 and keeps the branch when countVersionsOnBranch reports corruption after delete', async () => {
     const app = makeApp({
       countVersionsOnBranch: vi
-        .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
+        .fn<(sid: string, path: string, branch: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -429,18 +447,18 @@ describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns 400 for an invalid branch name', async () => {
     const app = makeApp()
-    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/bad.slug', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/bad.path', {
       method: 'DELETE',
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({
       error: 'invalid_branch_name',
-      message: 'Invalid branch name "bad.slug": kebab-case ASCII only',
+      message: 'Invalid branch name "bad.path": kebab-case ASCII only',
     })
   })
 })
 
-describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
+describe('PUT /api/workspaces/:sid/canvases/:path/head', () => {
   it('switches to an existing branch and returns 200 with head and previousHead', async () => {
     const app = makeApp()
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -483,12 +501,12 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ branch: 'bad.slug' }),
+      body: JSON.stringify({ branch: 'bad.path' }),
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({
       error: 'invalid_branch_name',
-      message: 'Invalid branch name "bad.slug": kebab-case ASCII only',
+      message: 'Invalid branch name "bad.path": kebab-case ASCII only',
     })
   })
 
@@ -496,9 +514,9 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
   describe('checkout integration', () => {
     it('calls getCurrentFrontiers and updates the previous HEAD tipFrontiers with the current frontiers', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue('CURRENTFR==')
-      const checkoutTo = vi.fn<(sid: string, slug: string, tip: string) => Promise<void>>()
+      const checkoutTo = vi.fn<(sid: string, path: string, tip: string) => Promise<void>>()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
       await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -525,9 +543,9 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 
     it('does not call checkoutTo when the new HEAD tipFrontiers is an empty string', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue('X==')
-      const checkoutTo = vi.fn<(sid: string, slug: string, tip: string) => Promise<void>>()
+      const checkoutTo = vi.fn<(sid: string, path: string, tip: string) => Promise<void>>()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
       // feature is created without initialTipFrontiers, so tipFrontiers="".
@@ -546,12 +564,12 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
       expect(checkoutTo).not.toHaveBeenCalled()
     })
 
-    it('calls checkoutTo(sid, slug, tip) when the new HEAD tipFrontiers is non-empty', async () => {
+    it('calls checkoutTo(sid, path, tip) when the new HEAD tipFrontiers is non-empty', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue('CUR==')
       const checkoutTo = vi
-        .fn<(sid: string, slug: string, tip: string) => Promise<void>>()
+        .fn<(sid: string, path: string, tip: string) => Promise<void>>()
         .mockResolvedValue()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
@@ -579,7 +597,7 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 
     it('skips previous-tip updates when getCurrentFrontiers returns null', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue(null)
       const checkoutTo = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
@@ -606,7 +624,7 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 
     it('returns 500 without changing head or tips when getCurrentFrontiers throws corruption', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockRejectedValue(corruptStoredData('/tmp/canvas-a.loro', 'invalid canvas snapshot'))
       const checkoutTo = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
@@ -637,10 +655,10 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 
     it('returns 500 without changing head or tips when checkoutTo throws corruption', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue('CURRENT==')
       const checkoutTo = vi
-        .fn<(sid: string, slug: string, tip: string) => Promise<void>>()
+        .fn<(sid: string, path: string, tip: string) => Promise<void>>()
         .mockRejectedValue(corruptStoredData('/tmp/branches.json', 'target tip is invalid'))
       const notifyHeadChanged = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo, notifyHeadChanged })
@@ -676,7 +694,7 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 
     it('short-circuits idempotently when setting head to the same branch', async () => {
       const getCurrentFrontiers = vi
-        .fn<(sid: string, slug: string) => Promise<string | null>>()
+        .fn<(sid: string, path: string) => Promise<string | null>>()
         .mockResolvedValue('X==')
       const checkoutTo = vi.fn()
       const notifyHeadChanged = vi.fn()
@@ -693,8 +711,8 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
       expect(notifyHeadChanged).not.toHaveBeenCalled()
     })
 
-    it('calls notifyHeadChanged(sid, slug, newHead) after head switching completes', async () => {
-      const notifyHeadChanged = vi.fn<(sid: string, slug: string, head: string) => void>()
+    it('calls notifyHeadChanged(sid, path, newHead) after head switching completes', async () => {
+      const notifyHeadChanged = vi.fn<(sid: string, path: string, head: string) => void>()
       const app = makeApp({ notifyHeadChanged })
 
       await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -714,10 +732,10 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
   })
 })
 
-describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
+describe('PATCH /api/workspaces/:sid/canvases/:path/branches/:name', () => {
   it('renames an existing branch and returns 200 with branch and renamedVersionCount', async () => {
     const renameInVersions = vi
-      .fn<(sid: string, slug: string, oldName: string, newName: string) => Promise<number>>()
+      .fn<(sid: string, path: string, oldName: string, newName: string) => Promise<number>>()
       .mockResolvedValue(3)
     const app = makeApp({ renameInVersions })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -831,7 +849,7 @@ describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
   it('returns 500 and rolls back the branch rename when renameInVersions reports corruption', async () => {
     const app = makeApp({
       renameInVersions: vi
-        .fn<(sid: string, slug: string, oldName: string, newName: string) => Promise<number>>()
+        .fn<(sid: string, path: string, oldName: string, newName: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -859,13 +877,13 @@ describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
   })
 })
 
-describe('POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge', () => {
+describe('POST /api/workspaces/:sid/canvases/:path/branches/:source/merge', () => {
   it('calls performMerge with dryRun=true and returns preview + badges without changing tips', async () => {
     const performMerge = vi
       .fn<
         (
           sid: string,
-          slug: string,
+          path: string,
           args: { source: string; into: string; dryRun: boolean },
         ) => Promise<{
           previewElementCount: number
@@ -945,7 +963,7 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge', () =
 
   it('returns 400 when source has an invalid name', async () => {
     const app = makeApp({ performMerge: vi.fn() })
-    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/bad.slug/merge', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/bad.path/merge', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ into: 'main' }),

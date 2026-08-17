@@ -1,4 +1,4 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
 import { layoutSpatialCanvas, layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'

@@ -1,7 +1,7 @@
 // Resize handles around a MULTI-selection. Before this they surrounded only
 // the primary node, so a selection of three offered one node's handles and
 // resizing acted on that node alone — the other two just watched.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

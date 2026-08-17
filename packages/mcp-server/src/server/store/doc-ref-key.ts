@@ -1,4 +1,4 @@
-import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
+import type { DocRef } from '@kamiazya/whiteboard-ports'
 
 /**
  * Canonical map key for a DocRef. Encodes `kind` into the key so a
@@ -8,7 +8,7 @@ import type { DocRef } from '@kamiazya/whiteboard-canvas-ports'
 export function docRefKey(docRef: DocRef): string {
   switch (docRef.kind) {
     case 'canvas':
-      return `canvas:${docRef.canvasId}`
+      return `canvas:${docRef.documentId}`
     case 'workspace-tree':
       return `workspace-tree:${docRef.workspaceId}`
   }

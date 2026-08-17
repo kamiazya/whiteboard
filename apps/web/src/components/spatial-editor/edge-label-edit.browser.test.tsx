@@ -3,7 +3,7 @@
 // follow), instead of falling through to double-click node creation. The
 // canvas model's edges carry an optional `label`; before this, the editor
 // had no way to author one.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

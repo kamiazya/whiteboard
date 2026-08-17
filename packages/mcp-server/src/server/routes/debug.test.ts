@@ -17,7 +17,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { clearCache, getDoc } = await import('../store/doc-cache.js')
-const { saveCanvas } = await import('../store/canvas-store.js')
+const { saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
 
 function makeDocWithElements(visible: number, tombstones: number): LoroDoc {
@@ -59,8 +59,8 @@ describe('GET /api/debug', () => {
 
   it('returns session and canvas element counts for visible and tombstoned elements', async () => {
     await mkdir(join(tempDir, 'sess-a'), { recursive: true })
-    await saveCanvas('sess-a', 'canvas-1', makeDocWithElements(3, 2))
-    await saveCanvas('sess-a', 'canvas-2', makeDocWithElements(1, 0))
+    await saveDocument('sess-a', 'canvas-1', makeDocWithElements(3, 2))
+    await saveDocument('sess-a', 'canvas-2', makeDocWithElements(1, 0))
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -69,7 +69,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -81,11 +81,11 @@ describe('GET /api/debug', () => {
 
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-a')
     expect(session).toBeDefined()
-    const c1 = session!.canvases.find((c) => c.slug === 'canvas-1')
-    const c2 = session!.canvases.find((c) => c.slug === 'canvas-2')
+    const c1 = session!.canvases.find((c) => c.path === 'canvas-1')
+    const c2 = session!.canvases.find((c) => c.path === 'canvas-2')
     expect(c1).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 5,
         visibleElements: 3,
         tombstones: 2,
@@ -93,7 +93,7 @@ describe('GET /api/debug', () => {
     )
     expect(c2).toEqual(
       expect.objectContaining({
-        slug: 'canvas-2',
+        path: 'canvas-2',
         totalElements: 1,
         visibleElements: 1,
         tombstones: 0,
@@ -110,7 +110,7 @@ describe('GET /api/debug', () => {
       ],
       edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
     })
-    await saveCanvas('sess-nodes', 'canvas-1', doc)
+    await saveDocument('sess-nodes', 'canvas-1', doc)
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -118,7 +118,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -126,10 +126,10 @@ describe('GET /api/debug', () => {
       }>
     }
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-nodes')
-    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    const canvas = session?.canvases.find((c) => c.path === 'canvas-1')
     expect(canvas).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 2,
         visibleElements: 2,
         tombstones: 0,
@@ -149,7 +149,7 @@ describe('GET /api/debug', () => {
     map.set('type', 'rectangle')
     map.set('isDeleted', true)
     doc.commit()
-    await saveCanvas('sess-mixed', 'canvas-1', doc)
+    await saveDocument('sess-mixed', 'canvas-1', doc)
 
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
@@ -157,7 +157,7 @@ describe('GET /api/debug', () => {
       workspaces: Array<{
         workspaceId: string
         canvases: Array<{
-          slug: string
+          path: string
           totalElements: number
           visibleElements: number
           tombstones: number
@@ -165,10 +165,10 @@ describe('GET /api/debug', () => {
       }>
     }
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-mixed')
-    const canvas = session?.canvases.find((c) => c.slug === 'canvas-1')
+    const canvas = session?.canvases.find((c) => c.path === 'canvas-1')
     expect(canvas).toEqual(
       expect.objectContaining({
-        slug: 'canvas-1',
+        path: 'canvas-1',
         totalElements: 1,
         visibleElements: 1,
         tombstones: 0,
@@ -178,8 +178,8 @@ describe('GET /api/debug', () => {
 
   it('marks only canvases touched through getDoc as cached in the cache section', async () => {
     await mkdir(join(tempDir, 'sess-cache'), { recursive: true })
-    await saveCanvas('sess-cache', 'touched', makeDocWithElements(1, 0))
-    await saveCanvas('sess-cache', 'untouched', makeDocWithElements(1, 0))
+    await saveDocument('sess-cache', 'touched', makeDocWithElements(1, 0))
+    await saveDocument('sess-cache', 'untouched', makeDocWithElements(1, 0))
 
     // Only touched canvases should appear in cache.
     await getDoc('sess-cache', 'touched')
@@ -187,7 +187,7 @@ describe('GET /api/debug', () => {
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; canvases: Array<{ slug: string; cached: boolean }> }>
+      workspaces: Array<{ workspaceId: string; canvases: Array<{ path: string; cached: boolean }> }>
       cache: { size: number; keys: string[] }
     }
 
@@ -195,8 +195,8 @@ describe('GET /api/debug', () => {
     expect(json.cache.keys).not.toContain('sess-cache/untouched')
 
     const session = json.workspaces.find((s) => s.workspaceId === 'sess-cache')!
-    expect(session.canvases.find((c) => c.slug === 'touched')?.cached).toBe(true)
-    expect(session.canvases.find((c) => c.slug === 'untouched')?.cached).toBe(false)
+    expect(session.canvases.find((c) => c.path === 'touched')?.cached).toBe(true)
+    expect(session.canvases.find((c) => c.path === 'untouched')?.cached).toBe(false)
   })
 
   it('returns workspaces: [] when no sessions exist', async () => {

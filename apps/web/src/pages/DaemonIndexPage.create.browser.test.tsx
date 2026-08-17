@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function stubFetch(onCreateCanvas: (workspaceId: string, slug: string) => void) {
+function stubFetch(onCreateCanvas: (workspaceId: string, path: string) => void) {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -41,16 +41,16 @@ function stubFetch(onCreateCanvas: (workspaceId: string, slug: string) => void) 
       const canvasesMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases$/)
       if (canvasesMatch && init?.method === 'POST') {
         const workspaceId = decodeURIComponent(canvasesMatch[1])
-        const body = JSON.parse(String(init.body)) as { slug: string }
-        onCreateCanvas(workspaceId, body.slug)
-        return Promise.resolve(jsonResponse({ slug: body.slug }))
+        const body = JSON.parse(String(init.body)) as { path: string }
+        onCreateCanvas(workspaceId, body.path)
+        return Promise.resolve(jsonResponse({ path: body.path }))
       }
       if (canvasesMatch) {
         // Non-empty: the toolbar (search + the New canvas menu trigger) only
         // renders when the list has rows — an empty list shows the empty
         // state instead.
         return Promise.resolve(
-          jsonResponse({ canvases: [{ slug: 'existing', updatedAt: '2026-01-01T00:00:00Z' }] }),
+          jsonResponse({ canvases: [{ path: 'existing', updatedAt: '2026-01-01T00:00:00Z' }] }),
         )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
@@ -73,7 +73,7 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
 
   it('reveals the tooltip on real keyboard focus, and Enter opens the kind menu whose entry creates', async () => {
     const created: Array<[string, string]> = []
-    stubFetch((workspaceId, slug) => created.push([workspaceId, slug]))
+    stubFetch((workspaceId, path) => created.push([workspaceId, path]))
     const onOpenCanvas = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)

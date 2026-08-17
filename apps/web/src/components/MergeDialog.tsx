@@ -47,7 +47,7 @@ export interface MergeDialogProps {
   onClose: () => void
   runMerge: (source: string, args: MergeRequest) => Promise<MergeResponse>
   workspaceId?: string
-  slug?: string
+  path?: string
 }
 
 interface BadgeView {
@@ -124,7 +124,7 @@ interface CompareCardProps {
   count: number | undefined
   delta?: number
   workspaceId?: string
-  slug?: string
+  path?: string
   thumbVersionId: string | null
   loading: boolean
 }
@@ -135,7 +135,7 @@ function CompareCard({
   count,
   delta,
   workspaceId,
-  slug,
+  path,
   thumbVersionId,
   loading,
 }: CompareCardProps): JSX.Element {
@@ -166,10 +166,10 @@ function CompareCard({
           <div className="flex h-full items-center justify-center">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
-        ) : thumbVersionId && workspaceId && slug ? (
+        ) : thumbVersionId && workspaceId && path ? (
           <VersionThumbnail
             workspaceId={workspaceId}
-            slug={slug}
+            path={path}
             versionId={thumbVersionId}
             hasThumbnail
             className="h-full w-full object-contain"
@@ -213,7 +213,7 @@ export function MergeDialog({
   onClose,
   runMerge,
   workspaceId,
-  slug,
+  path,
 }: MergeDialogProps): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -254,7 +254,7 @@ export function MergeDialog({
   // by CompareCard below) handles the authorized fetch + objectURL in daemon
   // mode, so this effect only needs the version id, never a raw <img> URL.
   useEffect(() => {
-    if (!open || !source || !target || !workspaceId || !slug) {
+    if (!open || !source || !target || !workspaceId || !path) {
       setThumbs({ target: null, source: null })
       return
     }
@@ -262,7 +262,7 @@ export function MergeDialog({
     setThumbsLoading(true)
     ;(async () => {
       try {
-        const res = await fetchFn(canvasesApiUrl(workspaceId, slug, 'versions'))
+        const res = await fetchFn(canvasesApiUrl(workspaceId, path, 'versions'))
         if (!res.ok) {
           if (!cancelled) setThumbs({ target: null, source: null })
           return
@@ -296,7 +296,7 @@ export function MergeDialog({
     return () => {
       cancelled = true
     }
-  }, [open, source, target, workspaceId, slug, fetchFn])
+  }, [open, source, target, workspaceId, path, fetchFn])
 
   const handleMerge = async () => {
     if (!source || !target) return
@@ -305,11 +305,11 @@ export function MergeDialog({
     try {
       const res = await runMerge(source.name, { into: target.name, dryRun: false })
       setPreview(res)
-      // Broadcast merge results for the toast and highlight layers when session/slug are available.
-      if (typeof window !== 'undefined' && workspaceId && slug) {
+      // Broadcast merge results for the toast and highlight layers when session/path are available.
+      if (typeof window !== 'undefined' && workspaceId && path) {
         dispatchMergeCommitted({
           workspaceId,
-          slug,
+          path,
           sourceName: source.name,
           targetName: target.name,
           newCount: res.newElementIds?.length ?? 0,
@@ -394,7 +394,7 @@ export function MergeDialog({
               count={sourceCount}
               delta={sourceDelta}
               workspaceId={workspaceId}
-              slug={slug}
+              path={path}
               thumbVersionId={thumbs.source}
               loading={thumbsLoading}
             />
@@ -403,7 +403,7 @@ export function MergeDialog({
               branch={target}
               count={targetCount}
               workspaceId={workspaceId}
-              slug={slug}
+              path={path}
               thumbVersionId={thumbs.target}
               loading={thumbsLoading}
             />
@@ -438,11 +438,11 @@ export function MergeDialog({
                   <Loader2 className="size-4 animate-spin" />
                   Calculating preview…
                 </div>
-              ) : thumbs.source && workspaceId && slug ? (
+              ) : thumbs.source && workspaceId && path ? (
                 // Show the latest source-branch thumbnail as a practical preview fallback.
                 <VersionThumbnail
                   workspaceId={workspaceId}
-                  slug={slug}
+                  path={path}
                   versionId={thumbs.source}
                   hasThumbnail
                   className="h-full w-full object-contain"

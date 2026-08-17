@@ -35,7 +35,7 @@ vi.mock('../config.js', () => ({
 vi.mock('./runtime-storage.js', () => ({
   computeStorageReport: (dir: string) => mockComputeStorageReport(dir),
 }))
-vi.mock('../store/canvas-store.js', () => ({
+vi.mock('../store/document-store.js', () => ({
   readLatestCompactedAt: () => mockReadLatestCompactedAt(),
 }))
 vi.mock('../../daemon/log-rotation.js', () => ({

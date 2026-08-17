@@ -7,25 +7,24 @@ import {
 import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/doc-cache.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
-import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { defaultHumanDisplayName, handleCorruptStoredData } from './_shared.js'
 import { onCanvasesRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
-  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>
+  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
 }
 
-// GET /api/workspaces/:workspaceId/canvases/:slug/versions
-// POST /api/workspaces/:workspaceId/canvases/:slug/versions
+// GET /api/workspaces/:workspaceId/canvases/:path/versions
+// POST /api/workspaces/:workspaceId/canvases/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
 
   // List versions for one canvas in reverse chronological order.
-  onCanvasesRoute(app, 'get', ['versions'], async (c, workspaceId, slug) => {
+  onCanvasesRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
     try {
-      const versions = await versionStore.list(workspaceId, slug)
+      const versions = await versionStore.list(workspaceId, path)
       const response: ListVersionsResponse = { versions }
       return c.json(response)
     } catch (err) {
@@ -36,7 +35,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   })
 
   // Save a manual version with body { label?: string; operator?: OperatorInfo }. auto is false.
-  onCanvasesRoute(app, 'post', ['versions'], async (c, workspaceId, slug) => {
+  onCanvasesRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
     // Empty body is valid (no label / operator); a non-empty body must parse as
     // JSON and pass schema validation, otherwise return invalid_body.
     const rawText = await c.req.text()
@@ -61,12 +60,12 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       operator = parsed.data.operator
     }
     try {
-      const doc = await getDoc(workspaceId, slug)
+      const doc = await getDoc(workspaceId, path)
       // Include the current HEAD branch name in manual saves too.
       let branchName: string | undefined
       if (options.getHeadBranch) {
         try {
-          const head = await options.getHeadBranch(workspaceId, slug)
+          const head = await options.getHeadBranch(workspaceId, path)
           if (typeof head === 'string' && head.length > 0) branchName = head
         } catch (err) {
           if (isCorruptStoredDataError(err)) {
@@ -80,7 +79,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
         peerId: doc.peerIdStr,
         displayName: defaultHumanDisplayName(),
       }
-      const entry = await versionStore.save(workspaceId, slug, doc, {
+      const entry = await versionStore.save(workspaceId, path, doc, {
         auto: false,
         ...(label !== undefined ? { label } : {}),
         ...(branchName !== undefined ? { branchName } : {}),

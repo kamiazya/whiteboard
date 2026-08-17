@@ -33,7 +33,7 @@ export interface WorkspaceTopBarCapabilities {
 
 interface Props {
   workspaceId: string
-  slug: string
+  path: string
   canvases: CanvasInfo[]
   getThumbnailBlob?: () => Promise<Blob | null>
   // apps/web has no react-router-dom; the page owns navigation and passes it
@@ -41,7 +41,7 @@ interface Props {
   // the host page has no "back" destination (e.g. a daemon page with no
   // canvas-list route) — the button is hidden rather than rendered inert.
   onNavigateBack?: () => void
-  onNavigateToCanvas: (slug: string) => void
+  onNavigateToCanvas: (path: string) => void
   // Defaults to 'daemon' so every existing caller keeps fetching /names and
   // POSTing renames/new-canvas unchanged. 'local' is for hosts with no
   // daemon data layer (browser-local): the names fetch never fires and
@@ -98,7 +98,7 @@ interface Props {
 
 export default function WorkspaceTopBar({
   workspaceId,
-  slug,
+  path,
   canvases,
   onToggleFullscreen,
   isFullscreen,
@@ -140,10 +140,10 @@ export default function WorkspaceTopBar({
   // "haven't named a manual version yet"; warning the user about it via the
   // browser's leave-confirmation dialog is misleading and was getting in the
   // way of automation (e.g. Playwright workflows).
-  const { isDirty } = useDirtyState(workspaceId, slug)
+  const { isDirty } = useDirtyState(workspaceId, path)
   const { saving, saveVersion } = useSaveVersion({
     workspaceId,
-    slug,
+    path,
     daemonFetch,
     getThumbnailBlob,
     log,
@@ -167,13 +167,13 @@ export default function WorkspaceTopBar({
     }
   }, [])
 
-  const canvasCustomName = effectiveNames.canvases[slug]
-  // Prefer the custom name when present; otherwise split the slug into prefix and leaf.
+  const canvasCustomName = effectiveNames.canvases[path]
+  // Prefer the custom name when present; otherwise split the path into prefix and leaf.
   // Muting the prefix helps show that nearby canvases belong to the same group.
-  const slashIndex = slug.indexOf('/')
-  const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? slug.slice(0, slashIndex) : null
-  const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? slug.slice(slashIndex + 1) : null
-  const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? slug : null)
+  const slashIndex = path.indexOf('/')
+  const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? path.slice(0, slashIndex) : null
+  const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? path.slice(slashIndex + 1) : null
+  const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? path : null)
 
   const {
     renamingCanvas,
@@ -184,7 +184,7 @@ export default function WorkspaceTopBar({
     commitCanvasName,
     cancelRename,
   } = useCanvasRename({
-    slug,
+    path,
     isLocalMode,
     currentName: canvasCustomName,
     onRenameCanvas,
@@ -195,7 +195,7 @@ export default function WorkspaceTopBar({
   const { newCanvasError, newCanvasBusy, openNewCanvas } = useCreateCanvas({
     workspaceId,
     canvases,
-    slug,
+    path,
     isLocalMode,
     onCreateCanvas,
     onNavigateToCanvas,
@@ -205,7 +205,7 @@ export default function WorkspaceTopBar({
 
   // Kept outside copyCanvasUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
-  const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, slug)}`
+  const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, path)}`
   const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(
     canvasUrl,
     log,
@@ -213,8 +213,8 @@ export default function WorkspaceTopBar({
   )
 
   // A trailing slash-segment (the canvas leaf) makes the safest download
-  // filename; falling back to the raw slug covers the ungrouped case.
-  const exportFilenameBase = sanitizeExportFilenameBase(canvasFlat ?? canvasLeaf ?? slug)
+  // filename; falling back to the raw path covers the ungrouped case.
+  const exportFilenameBase = sanitizeExportFilenameBase(canvasFlat ?? canvasLeaf ?? path)
   const { exportError, handleExport } = useSceneExport({
     onExport,
     filenameBase: exportFilenameBase,
@@ -243,7 +243,7 @@ export default function WorkspaceTopBar({
 
         <CanvasDropdown
           workspaceId={workspaceId}
-          slug={slug}
+          path={path}
           canvases={canvases}
           effectiveNames={effectiveNames}
           isLocalMode={isLocalMode}
@@ -287,7 +287,7 @@ export default function WorkspaceTopBar({
                 else if (e.key === 'Escape') cancelRename()
               }}
               onKeyUp={(e) => e.stopPropagation()}
-              placeholder={slug}
+              placeholder={path}
               className="h-7 max-w-[220px] text-sm"
             />
             {renameError && (
@@ -342,7 +342,7 @@ export default function WorkspaceTopBar({
             <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
             <HeaderBranchChip
               workspaceId={workspaceId}
-              slug={slug}
+              path={path}
               refreshSignal={branchRefreshSignal}
               mergeEnabled={mergeEnabled}
             />

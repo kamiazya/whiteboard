@@ -1,6 +1,6 @@
 import type { WorkspaceNames } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
-import { validateSlug, validateWorkspaceId } from '../validators.js'
+import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -9,7 +9,7 @@ export type { WorkspaceNames }
 
 // Workspace + canvas display names and pin order. Backed by:
 //   workspaces.displayName       -> WorkspaceNames.workspace
-//   canvases.displayName         -> WorkspaceNames.canvases[slug]
+//   canvases.displayName         -> WorkspaceNames.canvases[path]
 //   canvases.isPinned + pinOrder -> WorkspaceNames.pinned (sorted by pinOrder)
 //
 // loadWorkspaceNames returns an empty state for workspaces with no rows. The
@@ -30,24 +30,24 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
     .where('id', '=', workspaceId)
     .executeTakeFirst()
   const canvasRows = await db
-    .selectFrom('canvases')
-    .select(['slug', 'displayName', 'isPinned', 'pinOrder'])
+    .selectFrom('documents')
+    .select(['path', 'displayName', 'isPinned', 'pinOrder'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   const canvases: Record<string, string> = {}
-  const pinned: Array<{ slug: string; order: number }> = []
+  const pinned: Array<{ path: string; order: number }> = []
   for (const row of canvasRows) {
     if (row.displayName !== null) {
-      canvases[row.slug] = row.displayName
+      canvases[row.path] = row.displayName
     }
     if (row.isPinned === 1) {
-      pinned.push({ slug: row.slug, order: row.pinOrder ?? Number.MAX_SAFE_INTEGER })
+      pinned.push({ path: row.path, order: row.pinOrder ?? Number.MAX_SAFE_INTEGER })
     }
   }
   pinned.sort((a, b) => a.order - b.order)
   const out: WorkspaceNames = {
     canvases,
-    pinned: pinned.map((p) => p.slug),
+    pinned: pinned.map((p) => p.path),
   }
   if (wsRow?.displayName) {
     out.workspace = wsRow.displayName
@@ -74,23 +74,23 @@ export async function setWorkspaceName(workspaceId: string, name: string): Promi
 
 export async function setCanvasName(
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const trimmed = name.trim()
   const db = await dbReady()
-  await upsertCanvasRow(db, workspaceId, slug)
+  await upsertCanvasRow(db, workspaceId, path)
   const now = Date.now()
   await db
-    .updateTable('canvases')
+    .updateTable('documents')
     .set({
       displayName: trimmed.length > 0 ? trimmed : null,
       updatedAt: now,
     })
     .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('path', '=', path)
     .execute()
   return loadWorkspaceNames(workspaceId)
 }
@@ -101,42 +101,42 @@ export async function setCanvasName(
 //   - pinned=false: clear isPinned + pinOrder
 export async function setCanvasPinned(
   workspaceId: string,
-  slug: string,
+  path: string,
   pinned: boolean,
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
-  await upsertCanvasRow(db, workspaceId, slug)
+  await upsertCanvasRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
     const row = await trx
-      .selectFrom('canvases')
+      .selectFrom('documents')
       .select(['isPinned', 'pinOrder'])
       .where('workspaceId', '=', workspaceId)
-      .where('slug', '=', slug)
+      .where('path', '=', path)
       .executeTakeFirst()
     if (!row) return
     const isPinnedNow = row.isPinned === 1
     if (pinned && !isPinnedNow) {
       const max = await trx
-        .selectFrom('canvases')
+        .selectFrom('documents')
         .select((eb) => eb.fn.max('pinOrder').as('maxOrder'))
         .where('workspaceId', '=', workspaceId)
         .where('isPinned', '=', 1)
         .executeTakeFirst()
       const nextOrder = (max?.maxOrder ?? -1) + 1
       await trx
-        .updateTable('canvases')
+        .updateTable('documents')
         .set({ isPinned: 1, pinOrder: nextOrder, updatedAt: Date.now() })
         .where('workspaceId', '=', workspaceId)
-        .where('slug', '=', slug)
+        .where('path', '=', path)
         .execute()
     } else if (!pinned && isPinnedNow) {
       await trx
-        .updateTable('canvases')
+        .updateTable('documents')
         .set({ isPinned: 0, pinOrder: null, updatedAt: Date.now() })
         .where('workspaceId', '=', workspaceId)
-        .where('slug', '=', slug)
+        .where('path', '=', path)
         .execute()
     }
   })

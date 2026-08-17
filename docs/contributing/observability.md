@@ -82,7 +82,7 @@ await window.__whiteboardEnableTracing({ otlpEndpoint: '…' })
 ## WS instrumentation
 
 Each binary Loro update opens an `ws.message.binary` span on the server
-with `whiteboard.workspace_id` / `whiteboard.slug` / `whiteboard.update_bytes`
+with `whiteboard.workspace_id` / `whiteboard.path` / `whiteboard.update_bytes`
 attributes.
 
 If the client sends a `ws_trace` text frame (shape:

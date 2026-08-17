@@ -5,7 +5,7 @@
 // can lie once obstacles force the L into a staircase. Crossing-free,
 // overlap-free canvases are still never reshuffled: the optimizer's
 // short-circuit ignores the bend term on purpose.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

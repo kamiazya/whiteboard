@@ -1,12 +1,12 @@
-import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
-  FakeCanvasDocStore,
+  FakeDocumentStore,
   registerCanvasInWorkspace,
   seedDoc,
-} from '../test-utils/fake-canvas-doc-store.js'
+} from '../test-utils/fake-document-store.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
@@ -15,12 +15,12 @@ import { createVersionSaveTool } from './version-save.js'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, blobStore: {} as never, documentIndex: canvasDocStore.documentIndex }
+function makeDeps(documentStore: FakeDocumentStore) {
+  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
 }
 
-async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
-  const snapshot = await store.loadSnapshot({ docRef: { kind: 'canvas', canvasId } })
+async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
+  const snapshot = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId } })
   const doc = new LoroDoc()
   if (snapshot !== null) {
     doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
@@ -30,11 +30,11 @@ async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<Lor
 
 describe('wb_version_save tool', () => {
   test('saves a version and returns metadata', async () => {
-    const tool = createVersionSaveTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
-    const result = await tool.execute({ canvasId: CANVAS_ID, label: 'v1' })
+    const result = await tool.execute({ documentId: CANVAS_ID, label: 'v1' })
 
-    expect(result.canvasId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(CANVAS_ID)
     expect(result.label).toBe('v1')
     expect(result.versionId).toBeTruthy()
     expect(result.timestamp).toBeTruthy()
@@ -42,10 +42,10 @@ describe('wb_version_save tool', () => {
   })
 
   test('each save produces a unique versionId', async () => {
-    const tool = createVersionSaveTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
-    const r1 = await tool.execute({ canvasId: CANVAS_ID, label: 'v1' })
-    const r2 = await tool.execute({ canvasId: CANVAS_ID, label: 'v2' })
+    const r1 = await tool.execute({ documentId: CANVAS_ID, label: 'v1' })
+    const r2 = await tool.execute({ documentId: CANVAS_ID, label: 'v2' })
 
     expect(r1.versionId).not.toBe(r2.versionId)
   })
@@ -61,25 +61,25 @@ describe('wb_version_list tool', () => {
   })
 
   test('returns empty list for a canvas with no versions', async () => {
-    const tool = createVersionListTool(makeDeps(new FakeCanvasDocStore()))
+    const tool = createVersionListTool(makeDeps(new FakeDocumentStore()))
 
-    const result = await tool.execute({ canvasId: CANVAS_ID })
+    const result = await tool.execute({ documentId: CANVAS_ID })
 
-    expect(result).toEqual({ canvasId: CANVAS_ID, versions: [] })
+    expect(result).toEqual({ documentId: CANVAS_ID, versions: [] })
   })
 
   test('lists saved versions newest-first', async () => {
-    const deps = makeDeps(new FakeCanvasDocStore())
+    const deps = makeDeps(new FakeDocumentStore())
     const saveTool = createVersionSaveTool(deps)
     const listTool = createVersionListTool(deps)
 
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
-    await saveTool.execute({ canvasId: CANVAS_ID, label: 'first' })
+    await saveTool.execute({ documentId: CANVAS_ID, label: 'first' })
 
     vi.setSystemTime(new Date('2026-01-02T00:00:00Z'))
-    await saveTool.execute({ canvasId: CANVAS_ID, label: 'second' })
+    await saveTool.execute({ documentId: CANVAS_ID, label: 'second' })
 
-    const result = await listTool.execute({ canvasId: CANVAS_ID })
+    const result = await listTool.execute({ documentId: CANVAS_ID })
 
     expect(result.versions).toHaveLength(2)
     expect(result.versions[0].label).toBe('second')
@@ -87,26 +87,26 @@ describe('wb_version_list tool', () => {
   })
 
   test('skips a stored record that fails schema validation', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const listTool = createVersionListTool(deps)
 
-    await saveTool.execute({ canvasId: CANVAS_ID, label: 'valid' })
+    await saveTool.execute({ documentId: CANVAS_ID, label: 'valid' })
 
     const doc = await loadDoc(store, CANVAS_ID)
     doc.getMap('versions').set('corrupt-version', JSON.stringify({ label: 'bad', frontier: 123 }))
     doc.commit()
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-canvas-ports')
+    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      docRef: { kind: 'canvas', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
     })
 
-    const result = await listTool.execute({ canvasId: CANVAS_ID })
+    const result = await listTool.execute({ documentId: CANVAS_ID })
 
     expect(result.versions).toHaveLength(1)
     expect(result.versions[0].label).toBe('valid')
@@ -115,7 +115,7 @@ describe('wb_version_list tool', () => {
 
 describe('wb_version_restore tool', () => {
   test('restores spatial canvas content from a saved version', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
@@ -128,7 +128,7 @@ describe('wb_version_restore tool', () => {
       })
     })
 
-    const saved = await saveTool.execute({ canvasId: CANVAS_ID, label: 'before-edit' })
+    const saved = await saveTool.execute({ documentId: CANVAS_ID, label: 'before-edit' })
 
     const doc = await loadDoc(store, CANVAS_ID)
     writeSpatialCanvas(doc, {
@@ -136,10 +136,10 @@ describe('wb_version_restore tool', () => {
       edges: [],
     })
     doc.commit()
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-canvas-ports')
+    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      docRef: { kind: 'canvas', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -153,7 +153,7 @@ describe('wb_version_restore tool', () => {
 
     const result = await restoreTool.execute({
       workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
+      documentId: CANVAS_ID,
       versionId: saved.versionId,
     })
 
@@ -168,7 +168,7 @@ describe('wb_version_restore tool', () => {
   })
 
   test('throws VersionNotFoundError for unknown versionId', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
@@ -176,14 +176,14 @@ describe('wb_version_restore tool', () => {
     await expect(
       restoreTool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         versionId: 'nonexistent',
       }),
     ).rejects.toThrow(VersionNotFoundError)
   })
 
   test('throws VersionNotFoundError for a stored record that fails schema validation', async () => {
-    const store = new FakeCanvasDocStore()
+    const store = new FakeDocumentStore()
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
@@ -197,24 +197,24 @@ describe('wb_version_restore tool', () => {
     await expect(
       restoreTool.execute({
         workspaceId: WORKSPACE_ID,
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         versionId: 'corrupt-version',
       }),
     ).rejects.toThrow(VersionNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
-    const store = new FakeCanvasDocStore()
+  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+    const store = new FakeDocumentStore()
     await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
-    const saved = await saveTool.execute({ canvasId: CANVAS_ID, label: 'v1' })
+    const saved = await saveTool.execute({ documentId: CANVAS_ID, label: 'v1' })
 
     await expect(
       restoreTool.execute({
         workspaceId: 'ws-other',
-        canvasId: CANVAS_ID,
+        documentId: CANVAS_ID,
         versionId: saved.versionId,
       }),
     ).rejects.toThrow(CanvasNotFoundError)

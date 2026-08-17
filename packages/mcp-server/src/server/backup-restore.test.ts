@@ -5,7 +5,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // DATA_DIR is read-through a getter so tests can swap the dir mid-run.
-// This is the same pattern canvas-store.test.ts uses.
+// This is the same pattern document-store.test.ts uses.
 let dataDir: string
 
 vi.mock('./config.js', () => ({
@@ -18,7 +18,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { backupDataDir, restoreDataDir, BackupError } = await import('./backup-restore.js')
-const { saveCanvas, listCanvases, loadCanvas } = await import('./store/canvas-store.js')
+const { saveDocument, listDocuments, loadDocument } = await import('./store/document-store.js')
 const { FileVersionStore } = await import('./store/version-store.js')
 const { clearDbCache } = await import('./store/db/index.js')
 const { clearPrepareCache } = await import('./store/db/prepare.js')
@@ -61,7 +61,7 @@ async function seedDataDir(dir: string): Promise<{
   map.set('id', 'elem-001')
   map.set('type', 'rectangle')
   doc.commit()
-  await saveCanvas('session1', 'canvas-a', doc)
+  await saveDocument('session1', 'canvas-a', doc)
 
   // File blob (image attachment) at <ws>/files/<fileId>.<ext>.
   const fileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -108,10 +108,10 @@ describe('backup-restore drill', () => {
 
       // Re-point DATA_DIR at the restored copy and verify.
       dataDir = roots.target
-      const canvases = await listCanvases('session1')
-      expect(canvases.map((c) => c.slug)).toContain('canvas-a')
+      const canvases = await listDocuments('session1')
+      expect(canvases.map((c) => c.path)).toContain('canvas-a')
 
-      const restoredDoc = await loadCanvas('session1', 'canvas-a')
+      const restoredDoc = await loadDocument('session1', 'canvas-a')
       const restoredElements = restoredDoc.getMovableList('elements').toJSON() as {
         id: string
         type: string
@@ -141,8 +141,8 @@ describe('backup-restore drill', () => {
 
       // Source canvas blob must still be present.
       dataDir = roots.src
-      const srcList = await listCanvases('session1')
-      expect(srcList.map((c) => c.slug)).toContain('canvas-a')
+      const srcList = await listDocuments('session1')
+      expect(srcList.map((c) => c.path)).toContain('canvas-a')
 
       // Canary outside src/backup/target is preserved.
       const canary = await readFile(roots.canary, 'utf8')

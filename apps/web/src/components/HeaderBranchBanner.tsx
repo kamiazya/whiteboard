@@ -21,14 +21,14 @@ import { MergeDialog } from './MergeDialog'
 
 export interface HeaderBranchBannerProps {
   workspaceId: string
-  slug: string
+  path: string
 }
 
 export function HeaderBranchBanner({
   workspaceId,
-  slug,
+  path,
 }: HeaderBranchBannerProps): JSX.Element | null {
-  const { state, getBranchStats, merge: runMerge } = useBranches(workspaceId, slug)
+  const { state, getBranchStats, merge: runMerge } = useBranches(workspaceId, path)
   const head = state.head
   const targetBranch = state.branches.find((b) => b.name === 'main')
   const sourceBranch = state.branches.find((b) => b.name === head)
@@ -60,7 +60,7 @@ export function HeaderBranchBanner({
     const onMergeCommitted = (event: Event) => {
       const detail = parseMergeCommittedEvent(event)
       if (!detail) return
-      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.path !== path) return
       void refresh()
     }
     window.addEventListener(MERGE_COMMITTED_EVENT, onMergeCommitted)
@@ -68,7 +68,7 @@ export function HeaderBranchBanner({
       cancelled = true
       window.removeEventListener(MERGE_COMMITTED_EVENT, onMergeCommitted)
     }
-  }, [head, getBranchStats, workspaceId, slug])
+  }, [head, getBranchStats, workspaceId, path])
 
   const visible = head !== 'main' && unmergedCommits > 0 && !!targetBranch && !!sourceBranch
 
@@ -105,7 +105,7 @@ export function HeaderBranchBanner({
         onClose={() => setMergeOpen(false)}
         runMerge={(src, args) => runMerge(src, args) as Promise<MergeResult>}
         workspaceId={workspaceId}
-        slug={slug}
+        path={path}
       />
     </>
   )

@@ -3,7 +3,7 @@
 // from the drop result (derived sides + anchor fan-out). The preview now
 // routes a tentative edge through the same producer the drop uses, so what
 // travels with the pointer IS what lands.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

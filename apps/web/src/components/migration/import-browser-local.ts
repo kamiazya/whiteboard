@@ -1,22 +1,22 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
 import {
+  apiErrorReason,
   canvasApiUrl,
   createCanvasRequestSchema,
   createCanvasResponseSchema,
-  problemDetailsErrorSchema,
   updateCanvasResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 
 const MAX_CREATE_ATTEMPTS = 3
 
 /**
- * Converts a canvas display name into a slug matching the server's
- * validateSlug charset (ASCII letters/digits/hyphen, no leading/trailing
+ * Converts a canvas display name into a path matching the server's
+ * validateDocumentPath charset (ASCII letters/digits/hyphen, no leading/trailing
  * hyphen, non-empty). Falls back to 'canvas' when nothing survives.
  */
-export function slugifyCanvasName(name: string): string {
+export function toPathSegment(name: string): string {
   const collapsed = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -37,7 +37,7 @@ export function mergeToSnapshot(snapshot: Uint8Array, deltas: Uint8Array[]): Uin
 }
 
 export type ImportOneCanvasResult =
-  | { kind: 'ok'; slug: string }
+  | { kind: 'ok'; path: string }
   | { kind: 'failed'; reason: string }
 
 interface ImportOneCanvasOptions {
@@ -45,7 +45,7 @@ interface ImportOneCanvasOptions {
   daemonBaseUrl: string
   workspaceId: string
   canvasName: string
-  canvasKind: CanvasKind
+  documentKind: DocumentKind
   loroLoad: LoroLoadResult
 }
 
@@ -64,9 +64,8 @@ function loroLoadFailureReason(kind: Exclude<LoroLoadResult['kind'], 'ok'>): str
 
 async function parseErrorTitle(res: Response): Promise<string> {
   try {
-    const json: unknown = await res.json()
-    const parsed = problemDetailsErrorSchema.safeParse(json)
-    if (parsed.success && parsed.data.title) return parsed.data.title
+    const reason = apiErrorReason(await res.json())
+    if (reason !== undefined) return reason
   } catch {
     // fall through to the generic message below
   }
@@ -75,7 +74,7 @@ async function parseErrorTitle(res: Response): Promise<string> {
 
 /**
  * Copy-first import of a single browser-local canvas: create it on the
- * daemon (retrying with a numeric slug suffix on a name collision, bounded
+ * daemon (retrying with a numeric path suffix on a name collision, bounded
  * to MAX_CREATE_ATTEMPTS), then push the merged snapshot. Never mutates or
  * deletes the source browser-local data — the caller owns that lifecycle.
  */
@@ -95,18 +94,18 @@ export async function importOneCanvas(
 async function importOneCanvasUnsafe(
   options: ImportOneCanvasOptions,
 ): Promise<ImportOneCanvasResult> {
-  const { fetch, daemonBaseUrl, workspaceId, canvasName, canvasKind, loroLoad } = options
+  const { fetch, daemonBaseUrl, workspaceId, canvasName, documentKind, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {
     return { kind: 'failed', reason: loroLoadFailureReason(loroLoad.kind) }
   }
 
-  const baseSlug = slugifyCanvasName(canvasName)
-  let createdSlug: string | null = null
+  const baseSegment = toPathSegment(canvasName)
+  let createdPath: string | null = null
 
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
-    const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
-    const body = createCanvasRequestSchema.parse({ slug: candidateSlug, kind: canvasKind })
+    const candidatePath = attempt === 0 ? baseSegment : `${baseSegment}-${attempt + 1}`
+    const body = createCanvasRequestSchema.parse({ path: candidatePath, kind: documentKind })
     const res = await fetch(
       `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
       {
@@ -127,11 +126,11 @@ async function importOneCanvasUnsafe(
     if (!parsed.success) {
       return { kind: 'failed', reason: 'Create response failed schema validation.' }
     }
-    createdSlug = parsed.data.slug
+    createdPath = parsed.data.path
     break
   }
 
-  if (createdSlug === null) {
+  if (createdPath === null) {
     return {
       kind: 'failed',
       reason: `Could not find an available name after ${MAX_CREATE_ATTEMPTS} attempts.`,
@@ -141,7 +140,7 @@ async function importOneCanvasUnsafe(
   const mergedSnapshot = mergeToSnapshot(loroLoad.snapshot, loroLoad.deltas ?? [])
 
   const updateRes = await fetch(
-    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdSlug, 'update')}`,
+    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdPath, 'update')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -159,5 +158,5 @@ async function importOneCanvasUnsafe(
     return { kind: 'failed', reason: 'Update response failed schema validation.' }
   }
 
-  return { kind: 'ok', slug: createdSlug }
+  return { kind: 'ok', path: createdPath }
 }

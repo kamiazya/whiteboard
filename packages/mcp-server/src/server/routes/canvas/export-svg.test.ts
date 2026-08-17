@@ -19,14 +19,14 @@ const mockExportCanvasHeadlessSvg =
   vi.fn<
     (args: {
       workspaceId: string
-      slug: string
+      path: string
       options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
     }) => Promise<{ svg: string }>
   >()
 vi.mock('../../export/headless-export.js', () => ({
   exportCanvasHeadlessSvg: (args: {
     workspaceId: string
-    slug: string
+    path: string
     options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
   }) => mockExportCanvasHeadlessSvg(args),
 }))
@@ -39,7 +39,7 @@ function makeApp() {
   return app
 }
 
-describe('POST /api/w/:workspaceId/canvas/:slug/export-svg', () => {
+describe('POST /api/w/:workspaceId/canvas/:path/export-svg', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-svg-test-'))
     mockExportCanvasHeadlessSvg.mockReset()
@@ -59,14 +59,14 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export-svg', () => {
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toMatch(/canvas-a-.*\.svg$/)
     expect(mockExportCanvasHeadlessSvg).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 's1', slug: 'canvas-a' }),
+      expect.objectContaining({ workspaceId: 's1', path: 'canvas-a' }),
     )
     const written = await readFile(body.filePath, 'utf-8')
     expect(written.trim().startsWith('<svg')).toBe(true)
   })
 
   it('generates distinct default filePaths for two exports in the same millisecond', async () => {
-    // The default path used to be slug + millisecond timestamp only, so two
+    // The default path used to be path + millisecond timestamp only, so two
     // exports issued fast enough to land in the same millisecond would
     // collide and the second write would silently clobber the first.
     const app = makeApp()
@@ -98,13 +98,13 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export-svg', () => {
     expect(mockExportCanvasHeadlessSvg).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 's1',
-        slug: 'canvas-a',
+        path: 'canvas-a',
         options: expect.objectContaining({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
       }),
     )
   })
 
-  it('rejects invalid workspaceId or slug with 400', async () => {
+  it('rejects invalid workspaceId or path with 400', async () => {
     const app = makeApp()
     const res = await app.request('/api/w/bad.sid/canvas/canvas-a/export-svg', { method: 'POST' })
     expect(res.status).toBe(400)

@@ -18,8 +18,8 @@ import { join, sep } from 'node:path'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
-import { listWorkspaces } from './canvas-store.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
+import { listWorkspaces } from './document-store.js'
 import { purgeDanglingFiles } from './file-gc.js'
 import type { VersionStore } from './version-store.js'
 import { FileVersionStore } from './version-store.js'
@@ -118,7 +118,7 @@ async function discoverFsWorkspaces(): Promise<string[]> {
     }
 
     // 'blobs' is a valid workspace id (validateWorkspaceId permits it) and
-    // canvas-store.ts also uses <dataDir>/blobs as the snapshot root
+    // document-store.ts also uses <dataDir>/blobs as the snapshot root
     // (<dataDir>/blobs/<workspaceId>/canvas/...), so this directory serves
     // double duty. The snapshot layout has no files/ child of its own, so
     // this containment check alone already tells the two apart: only an
@@ -339,7 +339,7 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
       void tick()
     }, intervalMs)
     // Do not keep the daemon process alive just to run a background sweep —
-    // matches the unref pattern in canvas-store.ts's auto-compact debounce.
+    // matches the unref pattern in document-store.ts's auto-compact debounce.
     timer.unref()
   }
 

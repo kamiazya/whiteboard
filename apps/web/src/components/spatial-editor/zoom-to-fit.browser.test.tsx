@@ -2,7 +2,7 @@
 // the viewport framing the editor could already compute. Shift+1 frames
 // everything, Shift+2 frames the selection; the hand-mode dock's framing
 // button is the touch path.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

@@ -1,9 +1,9 @@
 import {
-  canvasIdSchema,
-  canvasKindSchema,
+  documentIdSchema,
+  documentKindSchema,
   documentPathSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const createCanvasInputSchema = z
@@ -12,14 +12,14 @@ export const createCanvasInputSchema = z
     path: documentPathSchema.describe(
       'Where the document goes, as a slash-separated path from the workspace root. Hierarchy is the path: `plan/sub` sits under `plan`, and no separate parent id is involved.',
     ),
-    kind: canvasKindSchema.describe(
+    kind: documentKindSchema.describe(
       'What the document is. `markdown` serialises as OKF, `spatial` as JSON Canvas. Required: the format follows from the document rather than from a read parameter, so a document created without one cannot be read back.',
     ),
     name: z
       .string()
       .optional()
       .describe(
-        'What a human reads. Free text, unlike `path`, which is a slug and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the slug as a title.',
+        'What a human reads. Free text, unlike `path`, which is a path and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the path as a title.',
       ),
     // Workspaces are never materialized implicitly: a typo'd or hallucinated
     // workspaceId must fail loudly instead of silently writing data into a
@@ -34,7 +34,7 @@ export const createCanvasInputSchema = z
 
 export const createCanvasOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     path: documentPathSchema,
   })
   .strict()
@@ -42,17 +42,17 @@ export const createCanvasOutputSchema = z
 export const getCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
   })
   .strict()
 
 const canvasDetailSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     path: documentPathSchema,
     // Absent rather than defaulted to the path's last segment: a reader that
     // wants that fallback can choose it, and a listing that invents one reads
-    // as if somebody typed the slug as the title.
+    // as if somebody typed the path as the title.
     name: z.string().optional(),
   })
   .strict()
@@ -74,7 +74,7 @@ export const listCanvasesOutputSchema = z
 export const deleteCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
   })
   .strict()
 

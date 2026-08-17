@@ -25,16 +25,16 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
 })
 
 // Captures constructor options without opening a real socket.
-const constructed: { workspaceId: string; slug: string; wsToken: string | undefined }[] = []
+const constructed: { workspaceId: string; path: string; wsToken: string | undefined }[] = []
 vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
   DaemonBackend: class {
     constructor(
       workspaceId: string,
-      slug: string,
+      path: string,
       _locationHref: string,
       apiTransport?: { wsToken?: () => string | undefined },
     ) {
-      constructed.push({ workspaceId, slug, wsToken: apiTransport?.wsToken?.() })
+      constructed.push({ workspaceId, path, wsToken: apiTransport?.wsToken?.() })
     }
     connect(): void {}
     disconnect(): void {}
@@ -63,7 +63,7 @@ describe('DaemonCanvasPage default backend wiring', () => {
     constructed.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
-      canvases: [{ slug: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 
@@ -82,7 +82,7 @@ describe('DaemonCanvasPage default backend wiring', () => {
     await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
     expect(constructed[0]).toMatchObject({
       workspaceId: 'w1',
-      slug: 'main',
+      path: 'main',
       wsToken: 'pairing-session-token',
     })
   })

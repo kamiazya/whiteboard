@@ -5,7 +5,7 @@
  * same-instance guard, URL revocation) are subtle enough that a second
  * hand-written copy is exactly what should not happen.
  */
-import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type CanvasFileAdapter, toFacetCard, useCanvasFileSeams } from './use-canvas-file-seams.js'
@@ -52,9 +52,9 @@ describe('useCanvasFileSeams', () => {
 
     // The editor's seam is synchronous, so nothing is available on the first
     // render — the point of the pre-fetch.
-    expect(result.current.resolveFileCanvas('other')).toBeUndefined()
-    await waitFor(() => expect(result.current.resolveFileCanvas('other')).toBeDefined())
-    expect(result.current.resolveFileCanvas('other')).toEqual(embedded('other'))
+    expect(result.current.resolveReference('other')?.canvas).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
+    expect(result.current.resolveReference('other')?.canvas).toEqual(embedded('other'))
   })
 
   it('routes image refs to the image loader and canvas refs to the canvas loader', async () => {
@@ -67,8 +67,8 @@ describe('useCanvasFileSeams', () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileImage('asset:pic')).toBeDefined())
-    expect(result.current.resolveFileImage('asset:pic')).toEqual({ href: 'blob:asset:pic' })
+    await waitFor(() => expect(result.current.resolveReference('asset:pic')?.image).toBeDefined())
+    expect(result.current.resolveReference('asset:pic')?.image).toEqual({ href: 'blob:asset:pic' })
     expect(adapter.loadDocument).toHaveBeenCalledWith('sibling')
     expect(adapter.loadDocument).not.toHaveBeenCalledWith('asset:pic')
     expect(adapter.loadImageUrl).not.toHaveBeenCalledWith('sibling')
@@ -82,7 +82,7 @@ describe('useCanvasFileSeams', () => {
         useCanvasFileSeams({ canvas, adapter, stampOf }),
       { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
     )
-    await waitFor(() => expect(result.current.resolveFileCanvas('other')).toBeDefined())
+    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
 
     // Same stamp, new map identity: a re-render must not re-fetch.
@@ -115,7 +115,7 @@ describe('useCanvasFileSeams', () => {
     const { result, unmount } = renderHook(() =>
       useCanvasFileSeams({ canvas: canvasWith('asset:pic'), adapter, stampOf: new Map() }),
     )
-    await waitFor(() => expect(result.current.resolveFileImage('asset:pic')).toBeDefined())
+    await waitFor(() => expect(result.current.resolveReference('asset:pic')?.image).toBeDefined())
 
     unmount()
 
@@ -159,8 +159,8 @@ describe('toFacetCard', () => {
     })
   })
 
-  it('prefers the facet title over the type for the heading', () => {
-    expect(toFacetCard('spec-a1b2c3', { type: 'note', title: 'Spec' })).toEqual({
+  it('uses the workspace name for the heading when the adapter supplies one', () => {
+    expect(toFacetCard('spec-a1b2c3', { type: 'note' }, 'Spec')).toEqual({
       title: 'Spec',
       rows: [{ label: 'type', value: 'note' }],
     })
@@ -196,16 +196,17 @@ describe('useCanvasFileSeams facets', () => {
     const adapter = makeAdapter({
       loadDocument: vi.fn(async (ref: string) => ({
         canvas: embedded(ref),
-        facets: { type: 'note', title: 'Spec', tags: ['x'] },
+        facets: { type: 'note', tags: ['x'] },
+        name: 'Spec',
       })),
     })
     const { result } = renderHook(() =>
       useCanvasFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    expect(result.current.resolveFileFacets('other')).toBeUndefined()
-    await waitFor(() => expect(result.current.resolveFileFacets('other')).toBeDefined())
-    expect(result.current.resolveFileFacets('other')?.title).toBe('Spec')
+    expect(result.current.resolveReference('other')?.facets).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('other')?.facets).toBeDefined())
+    expect(result.current.resolveReference('other')?.facets?.title).toBe('Spec')
   })
 
   it('keeps a facet-only document cached even though it has no canvas', async () => {
@@ -216,8 +217,8 @@ describe('useCanvasFileSeams facets', () => {
       useCanvasFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileFacets('doc')).toBeDefined())
-    expect(result.current.resolveFileCanvas('doc')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('doc')?.facets).toBeDefined())
+    expect(result.current.resolveReference('doc')?.canvas).toBeUndefined()
   })
 
   it('has no card for a document that loads without facets', async () => {
@@ -228,8 +229,8 @@ describe('useCanvasFileSeams facets', () => {
       useCanvasFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileCanvas('other')).toBeDefined())
-    expect(result.current.resolveFileFacets('other')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
+    expect(result.current.resolveReference('other')?.facets).toBeUndefined()
   })
 
   it('settles at one load for a reference that has no staleness stamp', async () => {
@@ -248,6 +249,23 @@ describe('useCanvasFileSeams facets', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
   })
+
+  it('settles at one load for a reference that resolves to nothing', async () => {
+    // The sibling above covers a reference the adapter ANSWERS for. This is
+    // the one it cannot: a deleted document, an imported ref into a store
+    // that never had it. Its result is dropped from the cache, so the next
+    // staleness pass finds it absent and asks again — while the drop itself
+    // published a new map instance and scheduled that pass. The image loop
+    // in the same hook already guards this exact shape by returning the SAME
+    // instance when nothing was added; this loop did not.
+    const adapter = makeAdapter({ loadDocument: vi.fn(async () => undefined) })
+    const canvas = canvasWith('gone')
+    renderHook(() => useCanvasFileSeams({ canvas, adapter, stampOf: new Map() }))
+
+    await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('useCanvasFileSeams empty canvases', () => {
@@ -264,8 +282,8 @@ describe('useCanvasFileSeams empty canvases', () => {
       useCanvasFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveFileFacets('note')).toBeDefined())
-    expect(result.current.resolveFileCanvas('note')).toBeUndefined()
+    await waitFor(() => expect(result.current.resolveReference('note')?.facets).toBeDefined())
+    expect(result.current.resolveReference('note')?.canvas).toBeUndefined()
   })
 })
 
@@ -274,15 +292,15 @@ describe('toFacetCard heading when the document has no stored title', () => {
     // The name moved to the workspace, so a document written through
     // wb_document_set no longer stores a `title` facet. Falling back to
     // `type` made every such card read "note" or "issue" — the same word on
-    // every card, identifying nothing. The reference is the slug, which is
+    // every card, identifying nothing. The reference is the path, which is
     // the fallback this model uses everywhere a name is absent.
     expect(toFacetCard('release-plan', { type: 'note' })?.title).toBe('release-plan')
   })
 
-  it('a stored title still wins, so browser-local documents are unaffected', () => {
-    // Browser-local canvases keep writing `title` into core facets; only the
-    // daemon path stopped. Both must keep working from this one function.
-    expect(toFacetCard('release-plan', { type: 'note', title: 'Release plan' })?.title).toBe(
+  it('a name from the workspace replaces that fallback', () => {
+    // Naming is the workspace's job for BOTH backends, so the name arrives
+    // beside the facets rather than inside them.
+    expect(toFacetCard('release-plan', { type: 'note' }, 'Release plan')?.title).toBe(
       'Release plan',
     )
   })

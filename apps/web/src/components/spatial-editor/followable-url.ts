@@ -1,7 +1,7 @@
 /**
  * Whether a link node's URL is safe to FOLLOW from the editor.
  *
- * The canvas-model schema deliberately stays at `z.url()` (JSON Canvas puts
+ * The model schema deliberately stays at `z.url()` (JSON Canvas puts
  * no scheme restriction on the field), but following a reference is this
  * editor's own action — and a `javascript:` or `data:` URL handed to
  * `window.open` executes in the app's origin. Canvases arrive via sync and

@@ -11,7 +11,7 @@
  *
  * `applyCommand` is total: a command whose target id is missing, or whose
  * kind does not apply to the target node's type, returns the INPUT canvas
- * unchanged rather than throwing. `create-node` carries a full canvas-model
+ * unchanged rather than throwing. `create-node` carries a full model
  * `SpatialNode` (rather than a flattened x/y/w/h/text tuple) so a later node
  * kind needs no command-shape change; a colliding id is likewise a no-op.
  * `delete-node` cascades: it also removes every edge whose `fromNode`/
@@ -26,7 +26,7 @@ import type {
   LineJumps,
   SpatialCanvas,
   SpatialNode,
-} from '@kamiazya/whiteboard-canvas-model'
+} from '@kamiazya/whiteboard-model'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import type { Point } from './viewport.js'
 
@@ -157,6 +157,16 @@ export type EditorLeafCommand =
 export type EditorCommand =
   | EditorLeafCommand
   | { readonly kind: 'batch'; readonly commands: readonly EditorLeafCommand[] }
+  /**
+   * A markdown document's whole body, written to the doc's `body` text
+   * container. Deliberately NOT an `EditorLeafCommand`: it targets no node
+   * and no edge, leaves the `SpatialCanvas` value untouched, and can never
+   * appear inside a batch — the spatial editor does not issue it. It rides
+   * the command path anyway so a body edit gets the same debounce, undo step
+   * and local-update push as every other change, instead of a second write
+   * pipeline beside them.
+   */
+  | { readonly kind: 'set-body'; readonly text: string }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -245,7 +255,7 @@ function createNode(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
 /**
  * Removes the node with `id` plus every edge that references it as
  * `fromNode`/`toNode` — the command-layer half of the edge-referential-
- * integrity invariant `deleteSpatialNode` (canvas-workspace) also enforces
+ * integrity invariant `deleteSpatialNode` (workspace) also enforces
  * on the Loro side. A no-op (returns the input) when `id` is missing.
  */
 function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
@@ -462,6 +472,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return resizeNode(canvas, command.id, command.x, command.y, command.width, command.height)
     case 'set-text':
       return setText(canvas, command.id, command.text)
+    case 'set-body':
+      // The body is not IN the canvas — it is the doc's own `body` text
+      // container — so applying one leaves the canvas value identical.
+      // Returning the same reference is what keeps a keystroke in the
+      // markdown editor from re-rendering the spatial scene.
+      return canvas
     case 'connect-nodes':
       return connectNodes(canvas, command.edgeId, command.fromNode, command.toNode)
     case 'create-node':

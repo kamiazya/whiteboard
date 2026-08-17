@@ -1,6 +1,7 @@
 /**
- * The editor's four file seams — referenced-canvas embeds (J5a) and image
- * nodes (J5b) — with the backend factored out behind `CanvasFileAdapter`.
+ * The editor's file-reference seam — referenced-canvas embeds (J5a), image
+ * nodes (J5b), markdown bodies and facet cards — with the backend factored
+ * out behind `CanvasFileAdapter`.
  *
  * This exists because the logic was written inline in one page, so the other
  * page shipped without any of it: canvas embeds and image nodes worked in
@@ -8,15 +9,16 @@
  * rules here (staleness stamps, the same-instance guard, URL revocation) are
  * subtle enough that a second hand-written copy is the wrong answer.
  *
- * `resolveFileCanvas`/`resolveFileImage` are SYNCHRONOUS by the editor's
- * contract, so both are cache lookups over content this hook pre-fetches.
- * Totality mirrors the layout seam: any load failure resolves to `undefined`
- * and the editor keeps the card — a broken reference never takes down a page.
+ * `resolveReference` is SYNCHRONOUS by the editor's contract, so it is a
+ * cache lookup over content this hook pre-fetches. Totality mirrors the
+ * layout seam: any load failure resolves to `undefined` and the editor keeps
+ * the card — a broken reference never takes down a page.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
-import type { FacetCardData } from '@kamiazya/whiteboard-canvas-render'
+
+import type { FacetCardData, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { collectFileRefs } from '../lib/canvas-embed-content.js'
@@ -30,7 +32,13 @@ const log = getAppLogger('canvas-file-seams')
  */
 export interface LoadedFileDocument {
   readonly canvas?: SpatialCanvas
-  readonly facets?: CoreFacets
+  readonly facets?: StoredCoreFacets
+  /**
+   * The referenced document's NAME, which the workspace owns rather than the
+   * content (ADR-0009 decision 2) — so an adapter reads it from wherever its
+   * backend keeps placement, not from the facets it loaded alongside.
+   */
+  readonly name?: string
   /**
    * A markdown document's raw body. Raw rather than parsed, because an
    * adapter's job is to reach the backend — parsing is this hook's, done
@@ -68,10 +76,12 @@ export interface UseCanvasFileSeamsOptions {
 }
 
 export interface CanvasFileSeams {
-  resolveFileCanvas: (file: string) => SpatialCanvas | undefined
-  resolveFileMarkdown: (file: string) => MdastRoot | undefined
-  resolveFileFacets: (file: string) => FacetCardData | undefined
-  resolveFileImage: (file: string) => { href: string } | undefined
+  /**
+   * Everything this hook has loaded for one reference, in canvas-render's
+   * own record. The layout ranks the fields; this hook only says which of
+   * them it can answer.
+   */
+  resolveReference: (ref: string) => ResolvedReference | undefined
   onAddImage: (file: File) => Promise<string | undefined>
   isImageFileRef: (file: string) => boolean
 }
@@ -81,7 +91,13 @@ export function useCanvasFileSeams({
   adapter,
   stampOf,
 }: UseCanvasFileSeamsOptions): CanvasFileSeams {
-  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, LoadedFileDocument>>(
+  // `null` = the adapter answered "there is nothing here". It has to OCCUPY
+  // the slot rather than leave it absent: absent means "not fetched yet", so
+  // dropping the result made the next staleness pass ask again — while the
+  // drop itself published a new map instance and scheduled that pass. The
+  // image loop below already guards this exact shape by returning the SAME
+  // instance when nothing was added.
+  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, LoadedFileDocument | null>>(
     new Map(),
   )
   const embedStampsRef = useRef<Map<string, string>>(new Map())
@@ -125,9 +141,9 @@ export function useCanvasFileSeams({
         const next = new Map(prev)
         for (const [ref, document] of loaded) {
           // A document with facets but no canvas is still a cache HIT — it is
-          // what renders the facet card.
-          if (document !== undefined) next.set(ref, document)
-          else next.delete(ref)
+          // what renders the facet card. So is one that resolved to nothing;
+          // the stamp is what brings it back if the target later appears.
+          next.set(ref, document ?? null)
           embedStampsRef.current.set(ref, stampOf.get(ref) ?? '')
         }
         return next
@@ -168,23 +184,24 @@ export function useCanvasFileSeams({
     }
   }, [canvas, imageUrls])
 
-  const resolveFileCanvas = useCallback(
-    (file: string) => {
-      const document = embedContent.get(file)
-      // A markdown document is not a canvas to embed, whichever way it was
-      // stored — and the two storage shapes differ, so a node-count test
-      // alone is not enough. Browser-local it reads back as a canvas with
-      // NO nodes; through the daemon it reads back as one holding a single
-      // text node (`okf-body`, which IS the body). Left to the canvas seam
-      // the first draws an empty frame and the second the same prose
-      // crushed to thumbnail size, both outranking the markdown seam and
-      // both showing strictly less. Having a body is what says "markdown
-      // document" independently of which side wrote it.
-      if (document?.body !== undefined) return undefined
-      const canvas = document?.canvas
+  /**
+   * A markdown document is not a canvas to embed, whichever way it was
+   * stored — and the two storage shapes differ, so a node-count test alone
+   * is not enough. Written through the container it reads back as a canvas
+   * with NO nodes; a document predating that reads back as one holding a
+   * single text node (`okf-body`, which IS the body). Offered as a canvas,
+   * the first draws an empty frame and the second the same prose crushed to
+   * thumbnail size — both outrank the markdown rank and both show strictly
+   * less. Having a body is what says "markdown document" independently of
+   * which side wrote it.
+   */
+  const embeddableCanvas = useCallback(
+    (document: LoadedFileDocument): SpatialCanvas | undefined => {
+      if (document.body !== undefined) return undefined
+      const canvas = document.canvas
       return canvas === undefined || canvas.nodes.length === 0 ? undefined : canvas
     },
-    [embedContent],
+    [],
   )
   // Parsed here rather than in the resolver, and memoized on the loaded
   // content rather than per call: canvas-render invokes the seam during
@@ -193,7 +210,7 @@ export function useCanvasFileSeams({
   const markdownBodies = useMemo(() => {
     const parsed = new Map<string, MdastRoot>()
     for (const [ref, document] of embedContent) {
-      const body = document.body
+      const body = document?.body
       if (body === undefined || body.trim().length === 0) continue
       try {
         parsed.set(ref, parseMarkdownBody(body))
@@ -206,32 +223,31 @@ export function useCanvasFileSeams({
     return parsed
   }, [embedContent])
 
-  const resolveFileMarkdown = useCallback(
-    (file: string) => markdownBodies.get(file),
-    [markdownBodies],
-  )
-  const resolveFileFacets = useCallback(
-    (file: string) => toFacetCard(file, embedContent.get(file)?.facets),
-    [embedContent],
-  )
-  const resolveFileImage = useCallback(
-    (file: string) => {
-      const href = imageUrls.get(file)
-      return href === undefined ? undefined : { href }
+  const resolveReference = useCallback(
+    (ref: string): ResolvedReference | undefined => {
+      // Checked first and returned alone: an image reference is never loaded
+      // as a document, so there is nothing else to carry, and the layout
+      // ranks an image above everything anyway.
+      const href = imageUrls.get(ref)
+      if (href !== undefined) return { image: { href } }
+
+      const document = embedContent.get(ref)
+      if (document === undefined || document === null) return undefined
+      const canvas = embeddableCanvas(document)
+      const markdown = markdownBodies.get(ref)
+      const facets = toFacetCard(ref, document.facets, document.name)
+      return {
+        ...(canvas !== undefined ? { canvas } : {}),
+        ...(markdown !== undefined ? { markdown } : {}),
+        ...(facets !== undefined ? { facets } : {}),
+      }
     },
-    [imageUrls],
+    [embedContent, embeddableCanvas, imageUrls, markdownBodies],
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
 
-  return {
-    resolveFileCanvas,
-    resolveFileMarkdown,
-    resolveFileFacets,
-    resolveFileImage,
-    onAddImage,
-    isImageFileRef,
-  }
+  return { resolveReference, onAddImage, isImageFileRef }
 }
 
 /**
@@ -245,24 +261,20 @@ export function useCanvasFileSeams({
  */
 export function toFacetCard(
   ref: string,
-  facets: CoreFacets | undefined,
+  facets: StoredCoreFacets | undefined,
+  name?: string,
 ): FacetCardData | undefined {
   if (facets === undefined) return undefined
   const rows = [{ label: 'type', value: facets.type }]
   if (facets.tags !== undefined && facets.tags.length > 0) {
     rows.push({ label: 'tags', value: facets.tags.join(', ') })
   }
-  // The heading falls back to the REFERENCE, not to `type`. A document's name
-  // lives in the workspace now (ADR-0009 decision 2), so one written through
-  // wb_document_set stores no `title` facet at all — and `type` as a heading
-  // made every such card read "note", identifying nothing. `ref` is the slug,
-  // which is the fallback this model uses wherever a name is absent.
+  // The heading is the document's NAME, which the workspace owns (ADR-0009
+  // decision 2) — never `type`, which made every card read "note" and
+  // identified nothing.
   //
-  // A stored `title` still wins: browser-local canvases keep writing one, and
-  // both paths come through this function.
-  //
-  // ponytail: the slug, because the daemon's canvas summary carries no
-  // display name yet (see DaemonCanvasPage's note). Once it does, the real
-  // name goes here and this fallback moves behind it.
-  return { title: facets.title ?? ref, rows }
+  // ponytail: `ref` — the id or path — when the adapter cannot supply a name,
+  // because the daemon's canvas summary carries no display name yet (see
+  // DaemonCanvasPage's note). Once it does, that fallback goes.
+  return { title: name ?? ref, rows }
 }

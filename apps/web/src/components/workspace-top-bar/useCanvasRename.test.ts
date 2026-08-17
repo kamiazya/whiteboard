@@ -6,7 +6,7 @@ describe('useCanvasRename', () => {
   it('startRename seeds the draft with the current name and opens the input', () => {
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'foo',
+        path: 'foo',
         isLocalMode: false,
         currentName: 'My Canvas',
         onRenameCanvas: undefined,
@@ -25,7 +25,7 @@ describe('useCanvasRename', () => {
     const onRenameCanvas = vi.fn().mockResolvedValue(undefined)
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'foo',
+        path: 'foo',
         isLocalMode: true,
         currentName: 'old',
         onRenameCanvas,
@@ -50,7 +50,7 @@ describe('useCanvasRename', () => {
     const onRenameCanvas = vi.fn().mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'foo',
+        path: 'foo',
         isLocalMode: true,
         currentName: 'old',
         onRenameCanvas,
@@ -70,11 +70,11 @@ describe('useCanvasRename', () => {
     expect(result.current.renameError).toBe('Failed to rename canvas.')
   })
 
-  it('daemon mode commit calls renameCanvas with the slug and trimmed name, then closes the input', async () => {
+  it('daemon mode commit calls renameCanvas with the path and trimmed name, then closes the input', async () => {
     const renameCanvas = vi.fn().mockResolvedValue(true)
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'design/foo',
+        path: 'design/foo',
         isLocalMode: false,
         currentName: 'old',
         onRenameCanvas: undefined,
@@ -97,7 +97,7 @@ describe('useCanvasRename', () => {
   it('cancelRename resets the input and clears any renameError', () => {
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'foo',
+        path: 'foo',
         isLocalMode: false,
         currentName: 'old',
         onRenameCanvas: undefined,
@@ -127,7 +127,7 @@ describe('useCanvasRename', () => {
     )
     const { result } = renderHook(() =>
       useCanvasRename({
-        slug: 'foo',
+        path: 'foo',
         isLocalMode: true,
         currentName: 'old',
         onRenameCanvas,

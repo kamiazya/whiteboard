@@ -12,7 +12,7 @@ import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
-import { readLatestCompactedAt } from '../store/canvas-store.js'
+import { readLatestCompactedAt } from '../store/document-store.js'
 import { isAuthorizedOAuthGrant, isAuthorizedPairingOrigin } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
 

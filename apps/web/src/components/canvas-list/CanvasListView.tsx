@@ -1,4 +1,4 @@
-import type { CanvasKind } from '@kamiazya/whiteboard-canvas-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { FileBox, FileText, Plus } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import {
@@ -12,13 +12,13 @@ import EmptyMark from '../../brand/empty-mark.svg?react'
 import { filterCanvasesBySearch } from '../workspace-top-bar/canvas-list.js'
 
 export interface CanvasListRow {
-  slug: string
+  path: string
   displayName: string
-  // The muted second line: the daemon page passes the slug, browser-local
-  // passes the derived display slug — the same visual slot either way.
+  // The muted second line: the daemon page passes the path, browser-local
+  // passes the derived display path — the same visual slot either way.
   secondary?: string
   updatedAt: string
-  kind: CanvasKind
+  kind: DocumentKind
 }
 
 // Clock drift between client and daemon can make (now - t) negative; clamp
@@ -35,11 +35,11 @@ export function formatRelative(iso: string): string {
 
 export interface CanvasListViewProps {
   rows: readonly CanvasListRow[]
-  onOpen: (slug: string) => void
+  onOpen: (path: string) => void
   // Immediate create per ADR-0006: no name is collected up front. The menu
-  // picks which CanvasKind the caller creates; everything else about the
-  // creation (slug derivation, the POST) is the caller's.
-  onCreate: (kind: CanvasKind) => void
+  // picks which DocumentKind the caller creates; everything else about the
+  // creation (path derivation, the POST) is the caller's.
+  onCreate: (kind: DocumentKind) => void
   // Capability slot: the daemon page passes CanvasThumb; browser-local omits
   // it and gets the label-only card. A render prop, NOT a scene render —
   // this component never imports canvas-render/canvas-viewer.
@@ -70,11 +70,11 @@ export function CanvasListView({
   // browser-local page sorts by recency, and a component-side re-sort would
   // silently discard whichever policy the caller chose.
   const visible = useMemo(() => {
-    const infos = rows.map((r) => ({ slug: r.slug, updatedAt: r.updatedAt, name: r.displayName }))
-    const names = Object.fromEntries(rows.map((r) => [r.slug, r.displayName]))
+    const infos = rows.map((r) => ({ path: r.path, updatedAt: r.updatedAt, name: r.displayName }))
+    const names = Object.fromEntries(rows.map((r) => [r.path, r.displayName]))
     const filtered = filterCanvasesBySearch(infos, search, names)
-    const bySlug = new Map(rows.map((r) => [r.slug, r]))
-    return filtered.map((c) => bySlug.get(c.slug)).filter((r): r is CanvasListRow => !!r)
+    const byPath = new Map(rows.map((r) => [r.path, r]))
+    return filtered.map((c) => byPath.get(c.path)).filter((r): r is CanvasListRow => !!r)
   }, [rows, search])
 
   if (rows.length === 0) {
@@ -164,16 +164,16 @@ export function CanvasListView({
           // biome-ignore lint/a11y/noStaticElementInteractions: enlarges the click target only; the nested <button> below already provides keyboard access to the same action
           // biome-ignore lint/a11y/useKeyWithClickEvents: enlarges the click target only; the nested <button> below already provides keyboard access to the same action
           <div
-            key={row.slug}
+            key={row.path}
             data-testid="canvas-list-card"
-            onClick={() => onOpen(row.slug)}
+            onClick={() => onOpen(row.path)}
             className="group relative rounded-lg border hover:bg-accent"
           >
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                onOpen(row.slug)
+                onOpen(row.path)
               }}
               className="flex w-full flex-col gap-2 p-2 text-left"
             >

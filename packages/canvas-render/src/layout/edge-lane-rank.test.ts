@@ -2,7 +2,7 @@
 // its side must run deeper than their exit segments, or it crosses them
 // right at the node — a crossing that exists only because of lane
 // assignment, not because the two connections actually have to cross.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 

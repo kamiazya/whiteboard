@@ -61,7 +61,7 @@ export function getDb(dataDir: string = getDataDir()): Promise<Database> {
 
 // ── dispose-hook registry ─────────────────────────────────────────────
 // Modules that own state keyed off a live DB connection (e.g. the
-// canvas-store auto-compact debouncer) register a hook here so their
+// document-store auto-compact debouncer) register a hook here so their
 // pending timers / in-flight work are drained before the driver is
 // destroyed. db/index.ts cannot import those modules directly (they import
 // getDb from here, so importing back would create a cycle) — the registry

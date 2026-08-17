@@ -38,6 +38,10 @@ describe('api-contracts barrel scope', () => {
       // builds request URLs through the same function the daemon's own
       // clients use instead of re-deriving the shape by hand.
       './canvas-url.js',
+      // errors: the ONE daemon error-body contract (title | error+message),
+      // exported so every client error surface reads through the same
+      // parser instead of hand-rolled per-file field checks.
+      './errors.js',
       './pairing.js',
       './runtime.js',
     ])

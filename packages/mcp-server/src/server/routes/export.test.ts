@@ -18,11 +18,11 @@ vi.mock('../config.js', () => ({
 // Mock ws.ts purely to observe that export never talks to it. getClientCount
 // is kept as a spy so the metamorphic test can vary it; it must have no
 // effect on export behavior post-headless-only.
-const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
+const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
 const mockSendExportRequest = vi.fn<(...args: unknown[]) => void>()
 
 vi.mock('./ws.js', () => ({
-  getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
+  getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
   sendExportRequest: (...args: unknown[]) => mockSendExportRequest(...args),
 }))
 
@@ -30,7 +30,7 @@ vi.mock('./ws.js', () => ({
 // every run.
 type MockHeadlessArgs = {
   workspaceId: string
-  slug: string
+  path: string
   options?: {
     padding?: number
     scale?: number
@@ -46,15 +46,15 @@ vi.mock('../export/headless-export.js', () => ({
   exportCanvasHeadless: (args: MockHeadlessArgs) => mockExportCanvasHeadless(args),
 }))
 
-// Default canvasExists to true so existing tests that already construct a
+// Default documentExists to true so existing tests that already construct a
 // route + mock the headless renderer keep passing without each having to
 // stub the metadata-DB lookup. Missing-canvas tests opt out by overriding
 // the mock per-case.
-const mockCanvasExists = vi.fn<(workspaceId: string, slug: string) => Promise<boolean>>(
+const mockCanvasExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
   async () => true,
 )
-vi.mock('../store/canvas-store.js', () => ({
-  canvasExists: (workspaceId: string, slug: string) => mockCanvasExists(workspaceId, slug),
+vi.mock('../store/document-store.js', () => ({
+  documentExists: (workspaceId: string, path: string) => mockCanvasExists(workspaceId, path),
 }))
 
 // Spies on the real implementation so most tests exercise genuine random
@@ -75,7 +75,7 @@ function makeApp() {
 const SAMPLE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
-describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => {
+describe('POST /api/w/:workspaceId/canvas/:path/export - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
@@ -104,7 +104,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
     expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 's1', slug: 'canvas-a' }),
+      expect.objectContaining({ workspaceId: 's1', path: 'canvas-a' }),
     )
     expect(mockSendExportRequest).not.toHaveBeenCalled()
 
@@ -162,7 +162,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
   })
 
   it('returns 404 with canvas_not_found when the canvas does not exist', async () => {
-    // Headless rendering does NOT verify the canvas exists: getDoc / loadCanvas
+    // Headless rendering does NOT verify the canvas exists: getDoc / loadDocument
     // return an empty LoroDoc on cache miss, so a typo would otherwise
     // silently produce a blank PNG. Surfaced as 404 unconditionally now that
     // there is only one rendering path.
@@ -259,7 +259,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 's1',
-        slug: 'canvas-a',
+        path: 'canvas-a',
         options: expect.objectContaining({ theme: 'dark', padding: 16 }),
       }),
     )
@@ -357,7 +357,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     }
   })
 
-  it('writes nested slash-containing slugs without ENOENT', async () => {
+  it('writes nested slash-containing paths without ENOENT', async () => {
     mockExportCanvasHeadless.mockResolvedValue({
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
@@ -365,7 +365,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     })
     const app = makeApp()
 
-    // MCP sends the slug through encodeURIComponent, so it arrives as one segment with `%2F`.
+    // MCP sends the path through encodeURIComponent, so it arrives as one segment with `%2F`.
     const res = await app.request('/api/w/s1/canvas/architecture%2Foverview/export', {
       method: 'POST',
     })
@@ -374,7 +374,7 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     expect(body.filePath).toMatch(/exports\/architecture\/overview-.*\.png$/)
   })
 
-  it('returns 400 for invalid workspaceId or slug without reaching the headless renderer', async () => {
+  it('returns 400 for invalid workspaceId or path without reaching the headless renderer', async () => {
     const app = makeApp()
 
     const badSession = await app.request('/api/w/bad.sid/canvas/canvas-a/export', {
@@ -382,10 +382,10 @@ describe('POST /api/w/:workspaceId/canvas/:slug/export - error handling', () => 
     })
     expect(badSession.status).toBe(400)
 
-    const badSlug = await app.request('/api/w/s1/canvas/bad.slug/export', {
+    const badPath = await app.request('/api/w/s1/canvas/bad.path/export', {
       method: 'POST',
     })
-    expect(badSlug.status).toBe(400)
+    expect(badPath.status).toBe(400)
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 

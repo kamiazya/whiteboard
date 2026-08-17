@@ -12,7 +12,7 @@ const VALID_CANVAS_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 describe('versionSaveInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: 'Initial draft',
     })
     expect(result.success).toBe(true)
@@ -20,7 +20,7 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects empty label', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: '',
     })
     expect(result.success).toBe(false)
@@ -28,7 +28,7 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects label exceeding 200 characters', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: 'x'.repeat(201),
     })
     expect(result.success).toBe(false)
@@ -36,15 +36,15 @@ describe('versionSaveInputSchema', () => {
 
   it('accepts label at exactly 200 characters', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: 'x'.repeat(200),
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects invalid canvasId', () => {
+  it('rejects invalid documentId', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: 'not-a-ulid',
+      documentId: 'not-a-ulid',
       label: 'draft',
     })
     expect(result.success).toBe(false)
@@ -52,7 +52,7 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = versionSaveInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: 'draft',
       extra: true,
     })
@@ -63,7 +63,7 @@ describe('versionSaveInputSchema', () => {
 describe('versionSaveOutputSchema', () => {
   it('accepts valid output', () => {
     const result = versionSaveOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: 'ver-1',
       label: 'Initial draft',
       timestamp: '2026-07-30T00:00:00.000Z',
@@ -74,7 +74,7 @@ describe('versionSaveOutputSchema', () => {
 
   it('rejects missing frontier', () => {
     const result = versionSaveOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: 'ver-1',
       label: 'draft',
       timestamp: '2026-07-30T00:00:00.000Z',
@@ -86,14 +86,14 @@ describe('versionSaveOutputSchema', () => {
 describe('versionListInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionListInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
     })
     expect(result.success).toBe(true)
   })
 
   it('rejects extra keys (strict)', () => {
     const result = versionListInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       limit: 10,
     })
     expect(result.success).toBe(false)
@@ -103,7 +103,7 @@ describe('versionListInputSchema', () => {
 describe('versionListOutputSchema', () => {
   it('accepts empty versions array', () => {
     const result = versionListOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versions: [],
     })
     expect(result.success).toBe(true)
@@ -111,7 +111,7 @@ describe('versionListOutputSchema', () => {
 
   it('accepts versions with valid entries', () => {
     const result = versionListOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versions: [
         { versionId: 'v1', label: 'first', timestamp: '2026-01-01T00:00:00Z', frontier: 'aa' },
         { versionId: 'v2', label: 'second', timestamp: '2026-01-02T00:00:00Z', frontier: 'bb' },
@@ -122,7 +122,7 @@ describe('versionListOutputSchema', () => {
 
   it('rejects version entry missing label', () => {
     const result = versionListOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versions: [{ versionId: 'v1', timestamp: '2026-01-01T00:00:00Z', frontier: 'aa' }],
     })
     expect(result.success).toBe(false)
@@ -133,7 +133,7 @@ describe('versionRestoreInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionRestoreInputSchema.safeParse({
       workspaceId: 'default',
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: 'ver-1',
     })
     expect(result.success).toBe(true)
@@ -142,7 +142,7 @@ describe('versionRestoreInputSchema', () => {
   it('rejects empty versionId', () => {
     const result = versionRestoreInputSchema.safeParse({
       workspaceId: 'default',
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: '',
     })
     expect(result.success).toBe(false)
@@ -150,7 +150,7 @@ describe('versionRestoreInputSchema', () => {
 
   it('rejects missing workspaceId', () => {
     const result = versionRestoreInputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: 'ver-1',
     })
     expect(result.success).toBe(false)
@@ -159,7 +159,7 @@ describe('versionRestoreInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = versionRestoreInputSchema.safeParse({
       workspaceId: 'default',
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       versionId: 'ver-1',
       force: true,
     })
@@ -170,7 +170,7 @@ describe('versionRestoreInputSchema', () => {
 describe('versionRestoreOutputSchema', () => {
   it('accepts valid output', () => {
     const result = versionRestoreOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       restoredVersionId: 'ver-1',
       label: 'Initial draft',
       frontier: 'abcdef0123',
@@ -180,7 +180,7 @@ describe('versionRestoreOutputSchema', () => {
 
   it('rejects missing restoredVersionId', () => {
     const result = versionRestoreOutputSchema.safeParse({
-      canvasId: VALID_CANVAS_ID,
+      documentId: VALID_CANVAS_ID,
       label: 'draft',
       frontier: 'aa',
     })
@@ -189,11 +189,11 @@ describe('versionRestoreOutputSchema', () => {
 })
 
 describe('VersionNotFoundError', () => {
-  it('carries canvasId and versionId', () => {
+  it('carries documentId and versionId', () => {
     const err = new VersionNotFoundError(VALID_CANVAS_ID, 'ver-99')
     expect(err).toBeInstanceOf(Error)
     expect(err.name).toBe('VersionNotFoundError')
-    expect(err.canvasId).toBe(VALID_CANVAS_ID)
+    expect(err.documentId).toBe(VALID_CANVAS_ID)
     expect(err.versionId).toBe('ver-99')
     expect(err.message).toContain('ver-99')
   })

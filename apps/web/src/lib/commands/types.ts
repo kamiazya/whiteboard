@@ -3,7 +3,7 @@ import type { ProviderState } from '../provider.js'
 
 export interface WhiteboardCommandCanvasIdentity {
   workspaceId?: string
-  canvasId: string
+  documentId: string
   name: string
 }
 
@@ -68,13 +68,13 @@ export const getAppContextResultSchema = z
           .object({
             kind: z.literal('daemon'),
             workspaceId: z.string(),
-            slug: z.string(),
+            path: z.string(),
           })
           .strict(),
         z
           .object({
             kind: z.literal('browser-local'),
-            canvasId: z.string(),
+            documentId: z.string(),
           })
           .strict(),
       ])

@@ -8,7 +8,7 @@
  * timing — which is the whole point of the suites that use them.
  */
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 
@@ -57,8 +57,10 @@ export async function loroCanvasesKeys(): Promise<string[]> {
 }
 
 /** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
-export async function persistedNodeIds(canvasId: string): Promise<string[]> {
-  const envelope = await withCanvasStore<CanvasEnvelope | undefined>((store) => store.get(canvasId))
+export async function persistedNodeIds(documentId: string): Promise<string[]> {
+  const envelope = await withCanvasStore<CanvasEnvelope | undefined>((store) =>
+    store.get(documentId),
+  )
   if (!envelope) {
     return []
   }
@@ -71,8 +73,8 @@ export async function persistedNodeIds(canvasId: string): Promise<string[]> {
   for (const delta of envelope.deltas ?? []) {
     doc.import(delta)
   }
-  // canvas-workspace's LoroDoc spatial layout: doc.getMap('nodes') keyed by
-  // nodeId (see package-canvas-workspace.md).
+  // crdt's LoroDoc spatial layout: doc.getMap('nodes') keyed by
+  // nodeId (see package-crdt.md).
   return Object.keys(doc.getMap('nodes').toJSON() as Record<string, unknown>)
 }
 

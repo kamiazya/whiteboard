@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/canvas-store.js'
+import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/document-store.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas/_shared.js'
 import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './canvas/auto-version.js'
@@ -21,7 +21,7 @@ export interface CanvasRouterOptions {
   autoVersionIntervalMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
-  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>
+  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -45,14 +45,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     setAutoVersionTrigger?.(triggerAutoVersion)
   })
 
-  // Auto-compact debounce: every successful saveCanvas reschedules a per-
+  // Auto-compact debounce: every successful saveDocument reschedules a per-
   // canvas compaction. The 30s default lets active editing sessions burst
   // without thrashing the op-log; once the user pauses, the shallow-snapshot
   // runs in the background. Tests can override the trigger via
   // setAutoCompactTrigger(null) before assertions if they want to isolate
   // the save path from the compact path.
-  setAutoCompactTrigger((workspaceId, slug) => {
-    scheduleAutoCompact(workspaceId, slug, versionStore)
+  setAutoCompactTrigger((workspaceId, path) => {
+    scheduleAutoCompact(workspaceId, path, versionStore)
   })
 
   app.route('/', createWorkspacesRouter())

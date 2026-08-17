@@ -58,7 +58,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     appendElement(doc, 'e3')
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     expect(entry.id).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(entry.slug).toBe('canvas-a')
+    expect(entry.path).toBe('canvas-a')
     expect(entry.elementCount).toBe(3)
     expect(entry.auto).toBe(true)
     expect(entry.label).toBeUndefined()
@@ -178,7 +178,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(past).toBeNull()
   })
 
-  it('filters list by slug and returns newest first', async () => {
+  it('filters list by path and returns newest first', async () => {
     const a = new LoroDoc()
     appendElement(a, 'a1')
     await store.save('sess-1', 'canvas-a', a, { auto: true })
@@ -322,7 +322,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       expect(entry.branchName).toBe('main')
     })
 
-    it('renameBranchInVersions rewrites branchName for every version on the target slug', async () => {
+    it('renameBranchInVersions rewrites branchName for every version on the target path', async () => {
       const a = new LoroDoc()
       appendElement(a, 'a1')
       const v1 = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'feature' })
@@ -372,7 +372,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     await expect(store.earliestFrontiers('sess-1', 'canvas-a')).resolves.toBeNull()
   })
 
-  it('earliestFrontiers returns the oldest stored frontiers for the slug', async () => {
+  it('earliestFrontiers returns the oldest stored frontiers for the path', async () => {
     const a = new LoroDoc()
     appendElement(a, 'a1')
     await store.save('sess-1', 'canvas-a', a, { auto: true })
@@ -389,7 +389,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     // Save a version while pinning Date.now() so chronological order is
     // deterministic regardless of how fast the test runs.
     async function saveAt(
-      slug: string,
+      path: string,
       kind: 'auto' | 'manual',
       tMs: number,
     ): Promise<{ id: string }> {
@@ -401,7 +401,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       // into later assertions instead of restoring the original.
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => tMs)
       try {
-        const entry = await store.save('sess-1', slug, doc, {
+        const entry = await store.save('sess-1', path, doc, {
           auto: kind === 'auto',
           label: kind === 'manual' ? `manual-${tMs}` : undefined,
         })

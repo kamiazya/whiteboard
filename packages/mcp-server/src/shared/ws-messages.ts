@@ -17,7 +17,7 @@ const operatorInfoSchema = z.object({
 
 const versionCreatedPayloadSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  path: z.string(),
   createdAt: z.string(),
   elementCount: z.number().finite(),
   auto: z.boolean(),

@@ -141,18 +141,18 @@ describe('listCanvases', () => {
   it('parses a valid response body', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] }))
+      .mockResolvedValue(jsonResponse({ canvases: [{ path: 'main', updatedAt: '2026-01-01' }] }))
     const result = await listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')
     // kind is absent from the mocked daemon response (pre-change shape) and
     // defaults to 'spatial' — the back-compat rule that lets a new client
     // parse an old daemon's kind-less list.
     expect(result).toEqual({
-      canvases: [{ slug: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      canvases: [{ path: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ canvases: [{ slug: 1 }] }))
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ canvases: [{ path: 1 }] }))
     await expect(listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
   })
 
@@ -164,9 +164,9 @@ describe('listCanvases', () => {
 
 describe('createCanvas', () => {
   it('parses a valid response body', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ slug: 'new-canvas' }))
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'new-canvas' }))
     const result = await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas')
-    expect(result).toEqual({ slug: 'new-canvas' })
+    expect(result).toEqual({ path: 'new-canvas' })
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
@@ -184,13 +184,13 @@ describe('createCanvas', () => {
       const init = fetchFn.mock.calls[0]![1] as RequestInit
       return JSON.parse(init.body as string)
     }
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ slug: 'x' }))
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'x' }))
     await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
-    expect(sentBody(fetchFn)).toEqual({ slug: 'x', kind: 'markdown' })
+    expect(sentBody(fetchFn)).toEqual({ path: 'x', kind: 'markdown' })
     fetchFn.mockClear()
-    fetchFn.mockResolvedValue(jsonResponse({ slug: 'y' }))
+    fetchFn.mockResolvedValue(jsonResponse({ path: 'y' }))
     await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
-    expect(sentBody(fetchFn)).toEqual({ slug: 'y' })
+    expect(sentBody(fetchFn)).toEqual({ path: 'y' })
   })
 })
 

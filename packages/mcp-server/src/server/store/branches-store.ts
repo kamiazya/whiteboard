@@ -1,16 +1,16 @@
 import { getDataDir } from '../config.js'
-import { validateBranchName, validateSlug, validateWorkspaceId } from '../validators.js'
+import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertCanvasRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
-//   branches table         -> one row per branch keyed on (canvasId, name)
+//   branches table         -> one row per branch keyed on (documentId, name)
 //   canvases.currentBranch -> HEAD pointer per canvas row
 //
-// All accessors take (workspaceId, slug) so the public API stays stable
-// across the slug → canvasId migration. Internally the slug is resolved to
+// All accessors take (workspaceId, path) so the public API stays stable
+// across the path → documentId migration. Internally the path is resolved to
 // the stable canvas id before any branches/canvases write.
 
 export interface BranchMeta {
@@ -45,16 +45,16 @@ async function dbReady() {
 
 export async function loadCanvasBranches(
   workspaceId: string,
-  slug: string,
+  path: string,
 ): Promise<CanvasBranches> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   const db = await dbReady()
   const canvasRow = await db
-    .selectFrom('canvases')
+    .selectFrom('documents')
     .select(['id', 'currentBranch'])
     .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('path', '=', path)
     .executeTakeFirst()
   if (!canvasRow) {
     return { branches: [defaultMain()], head: 'main' }
@@ -62,7 +62,7 @@ export async function loadCanvasBranches(
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('canvasId', '=', canvasRow.id)
+    .where('documentId', '=', canvasRow.id)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -92,7 +92,7 @@ export async function loadCanvasBranches(
 // guaranteed.
 async function saveCanvasBranchesLocked(
   workspaceId: string,
-  slug: string,
+  path: string,
   state: CanvasBranches,
 ): Promise<void> {
   for (const branch of state.branches) {
@@ -100,15 +100,15 @@ async function saveCanvasBranchesLocked(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+  const documentId = await upsertCanvasRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
-    await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
+    await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
     if (state.branches.length > 0) {
       await trx
         .insertInto('branches')
         .values(
           state.branches.map((b) => ({
-            canvasId,
+            documentId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -120,9 +120,9 @@ async function saveCanvasBranchesLocked(
         .execute()
     }
     await trx
-      .updateTable('canvases')
+      .updateTable('documents')
       .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('id', '=', canvasId)
+      .where('id', '=', documentId)
       .execute()
   })
 }
@@ -136,13 +136,13 @@ async function saveCanvasBranchesLocked(
 // referenced fileIds and its unlink pass.
 export async function saveCanvasBranches(
   workspaceId: string,
-  slug: string,
+  path: string,
   state: CanvasBranches,
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   await withWorkspaceWriteLock(workspaceId, () =>
-    saveCanvasBranchesLocked(workspaceId, slug, state),
+    saveCanvasBranchesLocked(workspaceId, path, state),
   )
 }
 
@@ -162,16 +162,16 @@ export async function saveCanvasBranches(
 // (e.g. a doc checkout) between the read and the write.
 async function mutateCanvasBranches<T>(
   workspaceId: string,
-  slug: string,
+  path: string,
   mutate: (state: CanvasBranches) => { next: CanvasBranches | null; result: T },
 ): Promise<T> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const state = await loadCanvasBranches(workspaceId, slug)
+    const state = await loadCanvasBranches(workspaceId, path)
     const { next, result } = mutate(state)
     if (next) {
-      await saveCanvasBranchesLocked(workspaceId, slug, next)
+      await saveCanvasBranchesLocked(workspaceId, path, next)
     }
     return result
   })
@@ -190,14 +190,14 @@ async function mutateCanvasBranches<T>(
 // tipFrontiers has not been persisted yet.
 export async function withCanvasBranchesLock<T>(
   workspaceId: string,
-  slug: string,
+  path: string,
   fn: (state: CanvasBranches, save: (next: CanvasBranches) => Promise<void>) => Promise<T>,
 ): Promise<T> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const state = await loadCanvasBranches(workspaceId, slug)
-    return fn(state, (next) => saveCanvasBranchesLocked(workspaceId, slug, next))
+    const state = await loadCanvasBranches(workspaceId, path)
+    return fn(state, (next) => saveCanvasBranchesLocked(workspaceId, path, next))
   })
 }
 
@@ -232,7 +232,7 @@ function nextColor(existing: BranchMeta[]): string {
 
 export async function createBranch(
   workspaceId: string,
-  slug: string,
+  path: string,
   opts: {
     name: string
     initialTipFrontiers?: string
@@ -242,13 +242,13 @@ export async function createBranch(
   },
 ): Promise<BranchMeta> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(opts.name)
 
-  return mutateCanvasBranches(workspaceId, slug, (state) => {
+  return mutateCanvasBranches(workspaceId, path, (state) => {
     if (state.branches.some((b) => b.name === opts.name)) {
       throw new BranchConflictError(
-        `Branch "${opts.name}" already exists on ${workspaceId}/${slug}`,
+        `Branch "${opts.name}" already exists on ${workspaceId}/${path}`,
       )
     }
     const branch: BranchMeta = {
@@ -266,18 +266,18 @@ export async function createBranch(
 
 export async function deleteBranch(
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
 ): Promise<{ ok: true; unmergedCommits: number }> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(name)
   if (name === 'main') {
     throw new BranchConflictError('Cannot delete main branch')
   }
-  return mutateCanvasBranches(workspaceId, slug, (state) => {
+  return mutateCanvasBranches(workspaceId, path, (state) => {
     if (!state.branches.some((b) => b.name === name)) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
     }
     if (state.head === name) {
       throw new BranchConflictError(
@@ -294,15 +294,15 @@ export async function deleteBranch(
 
 export async function setHead(
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
 ): Promise<{ head: string; previousHead: string }> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(name)
-  return mutateCanvasBranches(workspaceId, slug, (state) => {
+  return mutateCanvasBranches(workspaceId, path, (state) => {
     if (!state.branches.some((b) => b.name === name)) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
     }
     const previousHead = state.head
     if (previousHead === name) {
@@ -314,27 +314,27 @@ export async function setHead(
 
 export async function renameBranch(
   workspaceId: string,
-  slug: string,
+  path: string,
   oldName: string,
   newName: string,
 ): Promise<BranchMeta> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(oldName)
   validateBranchName(newName)
   if (oldName === 'main') {
     throw new BranchConflictError('Cannot rename main branch')
   }
-  return mutateCanvasBranches(workspaceId, slug, (state) => {
+  return mutateCanvasBranches(workspaceId, path, (state) => {
     const current = state.branches.find((b) => b.name === oldName)
     if (!current) {
-      throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${slug}`)
+      throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${path}`)
     }
     if (oldName === newName) {
       return { next: null, result: current }
     }
     if (state.branches.some((b) => b.name === newName)) {
-      throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${slug}`)
+      throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${path}`)
     }
     const renamed: BranchMeta = { ...current, name: newName }
     const nextBranches = state.branches.map((b) => {
@@ -349,30 +349,30 @@ export async function renameBranch(
 
 export async function getBranchTipBase64(
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
 ): Promise<string | null> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(name)
-  const state = await loadCanvasBranches(workspaceId, slug)
+  const state = await loadCanvasBranches(workspaceId, path)
   const branch = state.branches.find((b) => b.name === name)
   return branch ? branch.tipFrontiers : null
 }
 
 export async function updateBranchTip(
   workspaceId: string,
-  slug: string,
+  path: string,
   name: string,
   tipFrontiers: string,
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
-  validateSlug(slug)
+  validateDocumentPath(path)
   validateBranchName(name)
-  await mutateCanvasBranches(workspaceId, slug, (state) => {
+  await mutateCanvasBranches(workspaceId, path, (state) => {
     const idx = state.branches.findIndex((b) => b.name === name)
     if (idx === -1) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
     }
     const current = state.branches[idx]!
     if (current.tipFrontiers === tipFrontiers) {

@@ -7,15 +7,15 @@ paths:
 
 ## What belongs here
 
-- `scene.ts`: `ViewerScene` (canvas-model's `SpatialCanvas`, re-exported —
+- `scene.ts`: `ViewerScene` (model's `SpatialCanvas`, re-exported —
   never redeclared), the total `parseViewerScene`/`serializeViewerScene`
-  pair delegating to canvas-codec's `parseSpatial`/`serializeSpatial`.
+  pair delegating to codec's `parseSpatial`/`serializeSpatial`.
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
   canvas-render's `createSpatialTheme({ mode: 'light' })` directly (the
   viewer is read-only with no theme switch of its own), alongside
-  canvas-codec's `parseMarkdownBody` and no `onDegrade` (this package
+  codec's `parseMarkdownBody` and no `onDegrade` (this package
   degrades silently by choice).
 - `measure-text.ts`: `createBrowserMeasureText()` — the browser half of
   canvas-render's injected `MeasureText` seam (Canvas 2D `measureText`,
@@ -24,7 +24,7 @@ paths:
 - `font.ts`: `VIEWER_FONT_FAMILY` — the single constant feeding both the
   browser measurer and the widget's build-time font embedding.
 - `CanvasViewer.tsx`: builds a scene via canvas-render's shared
-  `layoutSpatialCanvas` (with `VIEWER_APPEARANCE` and canvas-codec's
+  `layoutSpatialCanvas` (with `VIEWER_APPEARANCE` and codec's
   `parseMarkdownBody` injected) and renders it via canvas-render's
   `renderSceneToSvg`, injecting the resulting string with
   `dangerouslySetInnerHTML`.
@@ -40,7 +40,7 @@ paths:
 - Scene graph types, layout, or the SVG serializer itself — those are
   `canvas-render`'s job; this package only calls `renderSceneToSvg`.
 - OKF/JSON Canvas parsing internals — this package calls into
-  `canvas-codec`'s `parseSpatial`/`serializeSpatial`, it does not
+  `codec`'s `parseSpatial`/`serializeSpatial`, it does not
   reimplement them.
 - Any editing affordance — this is a read-only viewer. Editing lives in
   `apps/web`'s editor surfaces.
@@ -48,8 +48,8 @@ paths:
 
 ## Dependency rules
 
-- Runtime dependencies: `@kamiazya/whiteboard-canvas-model`,
-  `@kamiazya/whiteboard-canvas-codec`, `@kamiazya/whiteboard-canvas-render`
+- Runtime dependencies: `@kamiazya/whiteboard-model`,
+  `@kamiazya/whiteboard-codec`, `@kamiazya/whiteboard-canvas-render`
   (all `workspace:*`), `@modelcontextprotocol/ext-apps`, `react`,
   `react-dom`, `zod`.
 - Forbidden imports: `node:*`, `inversify`. DOM globals are this package's
@@ -109,6 +109,6 @@ paths:
 ## Common mistakes (append as review finds them)
 
 - Redeclaring a spatial-canvas schema here instead of re-exporting
-  canvas-model's `spatialCanvasSchema` as `viewerSceneSchema`.
+  model's `spatialCanvasSchema` as `viewerSceneSchema`.
 - Reaching for a DOM-based HTML sanitizer instead of relying on
   canvas-render's own escaping guarantee.

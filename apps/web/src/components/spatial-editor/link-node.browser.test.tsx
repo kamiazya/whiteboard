@@ -3,7 +3,7 @@
 // Edit URL. Real pointer input where the double-press pairing matters —
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -187,7 +187,6 @@ it('a javascript: URL is neither followable nor accepted by the dialog', async (
         y: 100,
         width: 200,
         height: 60,
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal fixture
         url: 'javascript:alert(1)',
       },
     ],

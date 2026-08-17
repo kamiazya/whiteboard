@@ -1,13 +1,13 @@
-import type { WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
-import type { DocumentIndex } from '@kamiazya/whiteboard-canvas-ports'
+import type { WorkspaceId } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 
 /**
  * Guards a mutation tool against a caller-supplied `workspaceId` that does
- * not actually own `canvasId` (stale cached id, copy-paste across two open
+ * not actually own `documentId` (stale cached id, copy-paste across two open
  * canvases, client bug). Without this check a mismatched pair would still
- * pass every canvas-doc-level validation — `loadCanvasDoc`/
- * `loadOrCreateCanvasDoc` address the doc purely by `canvasId`, with no
+ * pass every canvas-doc-level validation — `loadDocument`/
+ * `loadOrCreateDocument` address the doc purely by `documentId`, with no
  * cross-check against placement. Call this before any mutation so the caller
  * gets an explicit, typed rejection instead of silently writing into the
  * wrong workspace's canvas.
@@ -15,8 +15,8 @@ import { CanvasNotFoundError } from './canvas-crud.errors.js'
 export async function assertCanvasInWorkspace(
   documentIndex: DocumentIndex,
   workspaceId: WorkspaceId,
-  canvasId: string,
+  documentId: string,
 ): Promise<void> {
-  const entry = await documentIndex.resolveDocumentById({ workspaceId, canvasId })
-  if (entry === null) throw new CanvasNotFoundError(workspaceId, canvasId)
+  const entry = await documentIndex.resolveDocumentById({ workspaceId, documentId })
+  if (entry === null) throw new CanvasNotFoundError(workspaceId, documentId)
 }

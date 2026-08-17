@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 
 /**
  * The canvases that reached a human before they reached the suite. Each one

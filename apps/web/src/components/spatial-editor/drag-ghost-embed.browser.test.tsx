@@ -2,7 +2,7 @@
 // expanded canvas embed. Omitting the embed resolvers from the ghost's
 // one-shot render made an inline miniature drag as a plain card and snap
 // back to a miniature on drop.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -51,7 +51,7 @@ it('drags an expanded embed with its miniature content in the ghost', async () =
         onChange={() => {}}
         theme="light"
         fileRefOptions={[{ file: 'child', label: 'child canvas' }]}
-        resolveFileCanvas={(file) => (file === 'child' ? inner : undefined)}
+        resolveReference={(ref) => (ref === 'child' ? { canvas: inner } : undefined)}
       />
     </div>,
   )

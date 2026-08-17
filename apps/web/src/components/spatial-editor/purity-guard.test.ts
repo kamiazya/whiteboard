@@ -104,7 +104,7 @@ describe('file seams reach every render path', () => {
     expect(callsWithoutSeams, 'scene-building calls not given the shared seam object').toEqual([])
     // A seam named at a call site instead of inside the shared object is the
     // regression this pins.
-    expect(source).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveFileCanvas,/)
+    expect(source).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveReference,/)
   })
 })
 

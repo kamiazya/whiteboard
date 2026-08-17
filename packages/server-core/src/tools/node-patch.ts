@@ -1,16 +1,16 @@
+import { readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   canvasColorSchema,
-  canvasIdSchema,
+  documentIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-} from '@kamiazya/whiteboard-canvas-model'
-import { readNodeLocks } from '@kamiazya/whiteboard-canvas-workspace'
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
+import { loadDocument, saveCanvasDoc } from './document-io.js'
 import { NodeLockedError, NodeNotFoundError, PatchValidationError } from './errors.js'
 
 /**
@@ -38,7 +38,7 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
 export const nodePatchInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     nodeId: nodeIdSchema,
     patch: nodePatchFieldsSchema,
   })
@@ -47,7 +47,7 @@ export type NodePatchInput = z.infer<typeof nodePatchInputSchema>
 
 export const nodePatchOutputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    documentId: documentIdSchema,
     node: spatialNodeSchema,
   })
   .strict()
@@ -61,15 +61,15 @@ export function createNodePatchTool(deps: ServerDeps) {
     inputSchema: nodePatchInputSchema,
     outputSchema: nodePatchOutputSchema,
     execute: async (input: NodePatchInput): Promise<NodePatchOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.canvasId)
-      const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
+      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
-      if (node === undefined) throw new NodeNotFoundError(input.canvasId, input.nodeId)
+      if (node === undefined) throw new NodeNotFoundError(input.documentId, input.nodeId)
       // The lock binds agents too — refuse BEFORE any write so a rejected
       // patch leaves the doc byte-identical.
       if (readNodeLocks(doc).has(input.nodeId)) {
-        throw new NodeLockedError(input.canvasId, input.nodeId)
+        throw new NodeLockedError(input.documentId, input.nodeId)
       }
 
       const mergedRaw = { ...node, ...input.patch }
@@ -85,12 +85,12 @@ export function createNodePatchTool(deps: ServerDeps) {
 
       const updatedNode = parsed.data.nodes.find((existing) => existing.id === input.nodeId)
       if (updatedNode === undefined) {
-        throw new NodeNotFoundError(input.canvasId, input.nodeId)
+        throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
-      await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
 
-      return { canvasId: input.canvasId, node: updatedNode }
+      return { documentId: input.documentId, node: updatedNode }
     },
   }
 }

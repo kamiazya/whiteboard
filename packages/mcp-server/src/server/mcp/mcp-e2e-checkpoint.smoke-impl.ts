@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
-/** Workspace slug used for every canvas the smoke creates. */
+/** Workspace path used for every canvas the smoke creates. */
 const WORKSPACE_ID = 'e2e'
 
 interface RunOptions {
@@ -252,31 +252,31 @@ export async function runE2eCheckpointSmoke({
       retryDaemonStartup: shouldRetryDaemonStartup,
       maxDaemonStartupRetries,
     })
-    if (typeof created.canvasId !== 'string' || created.path !== 'e2e-src') {
+    if (typeof created.documentId !== 'string' || created.path !== 'e2e-src') {
       throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
     }
-    const canvasId = created.canvasId
-    console.log(`[e2e] wb_document_create → ${canvasId}`)
+    const documentId = created.documentId
+    console.log(`[e2e] wb_document_create → ${documentId}`)
 
     // wb_facet_set seeds extension-facet state on the created document so the
     // version saved below has content to round-trip through restore.
     const facets = await callTool('wb_facet_set', {
       workspaceId: WORKSPACE_ID,
-      canvasId,
+      documentId,
       facets: { 'e2e/1': { note: 'before-save' } },
     })
-    if (facets.canvasId !== canvasId) {
+    if (facets.documentId !== documentId) {
       throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
     }
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
     const saved = await callTool('wb_version_save', {
-      canvasId,
+      documentId,
       label: 'e2e-version-1',
     })
     if (
       !saved.versionId ||
-      saved.canvasId !== canvasId ||
+      saved.documentId !== documentId ||
       saved.label !== 'e2e-version-1' ||
       !saved.timestamp ||
       !saved.frontier
@@ -285,8 +285,8 @@ export async function runE2eCheckpointSmoke({
     }
     console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
-    const versions = await callTool('wb_version_list', { canvasId })
-    if (versions.canvasId !== canvasId || !Array.isArray(versions.versions)) {
+    const versions = await callTool('wb_version_list', { documentId })
+    if (versions.documentId !== documentId || !Array.isArray(versions.versions)) {
       throw new Error(`wb_version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
     const versionEntries = versions.versions as Array<{ versionId: string }>
@@ -297,11 +297,11 @@ export async function runE2eCheckpointSmoke({
 
     const restored = await callTool('wb_version_restore', {
       workspaceId: WORKSPACE_ID,
-      canvasId,
+      documentId,
       versionId: saved.versionId,
     })
     if (
-      restored.canvasId !== canvasId ||
+      restored.documentId !== documentId ||
       restored.restoredVersionId !== saved.versionId ||
       restored.label !== saved.label ||
       restored.frontier !== saved.frontier
