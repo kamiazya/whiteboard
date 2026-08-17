@@ -27,19 +27,41 @@ export interface PerformBranchMergeArgs {
   dryRun: boolean
 }
 
-export interface PerformBranchMergeResult {
+// The wire-safe shape routes/branches.ts's pluggable `performMerge` hook
+// expects: routes/branches.ts only forwards these fields into the JSON
+// response and never reads a badge's discriminant, so its contract stays
+// structurally loose (any implementation, not just this one, can satisfy
+// it) instead of hand-duplicating this file's stricter shape. Declared here
+// — not in branches.ts — because this file is the one production caller;
+// branches.ts imports the type rather than re-declaring it by hand, so the
+// two cannot silently drift the way a second hand-written interface would.
+export type PerformMergeHookResult = {
   previewElementCount: number
-  targetElementCount: number
-  sourceElementCount: number
-  badges: MergeBadge[]
+  // Optional target/source counts for the three MergeDialog columns.
+  targetElementCount?: number
+  sourceElementCount?: number
+  badges: Array<Record<string, unknown>>
   committed: boolean
+  // For dry runs, include alive elements so MergeDialog can render a read-only preview.
   previewElements?: unknown[]
+  // Element ids for post-merge UI highlighting.
   newElementIds?: string[]
   changedElementIds?: string[]
   conflictElementIds?: string[]
+  // Version id of the pre-merge snapshot used for undo after commit.
   preMergeVersionId?: string
+  // Post-merge cleanup metadata.
   switchedHead?: { from: string; to: string }
   deletedSource?: string
+}
+
+// performBranchMerge always fills target/source counts and returns typed
+// badges, so its own return type narrows the hook contract above rather
+// than repeating it.
+export interface PerformBranchMergeResult extends PerformMergeHookResult {
+  targetElementCount: number
+  sourceElementCount: number
+  badges: MergeBadge[]
 }
 
 // Merge source into target.

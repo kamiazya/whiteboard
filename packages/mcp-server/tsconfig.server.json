@@ -14,6 +14,7 @@
     "types": ["node"]
   },
   "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "src/cli/**/*.ts"],
+  "files": ["src/server/store/branch-merge.types.test.ts"],
   "exclude": [
     "src/server/**/*.test.ts",
     "src/server/**/*.test.mjs",
