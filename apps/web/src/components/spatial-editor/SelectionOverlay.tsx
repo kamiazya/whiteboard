@@ -22,14 +22,13 @@ export interface SelectionOverlayProps {
   /** Enter/Space on the focused connect handle — the keyboard equivalent of a pointer connect-drag. */
   readonly onConnectKeyDown?: (e: React.KeyboardEvent) => void
   /**
-   * Opens the object's action menu, anchored at the control. Rendered only
-   * when provided
-   * (non-text nodes have no text to edit). Fired on CLICK, not pointerdown:
-   * the editor mount (autofocus included) flushes synchronously inside a
-   * discrete event, and mousedown's default focus action would then blur
-   * the just-mounted textarea and instantly close it — the same fight the
-   * double-press path suppresses with preventDefault. Click fires after
-   * those defaults, so it needs no suppression at all.
+   * Opens the object's action menu, anchored at the control. Offered for
+   * every selection (multi included). Fired on POINTERUP, not click: the
+   * editor root preventDefaults native touchstart (its iOS long-press
+   * suppression), which cancels the synthetic mouse-compatibility events,
+   * so a touch tap never produces a click here — and pointerup still lands
+   * after mousedown's default focus action, so a menu action that mounts
+   * an editor has no focus fight to lose.
    */
   readonly onMoreActions?: (anchor: Point) => void
 }

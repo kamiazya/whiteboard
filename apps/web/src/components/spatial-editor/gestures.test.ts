@@ -479,7 +479,7 @@ describe('cancel-text-edit on a freshly created node', () => {
     const result = reduceGesture(created.state, c, { type: 'cancel-text-edit' })
     // Escape closes the editor; it does not eat the box someone placed to
     // sketch a layout. Discard-with-the-node stays reserved for the case
-    // where text WAS typed (pinned in escape-cancels-new-note.browser).
+    // where text WAS typed.
     expect(result.commands).toEqual([])
     expect(result.state).toEqual({ kind: 'idle' })
     expect(result.selectedId).toBe('fresh')
@@ -488,8 +488,8 @@ describe('cancel-text-edit on a freshly created node', () => {
   it('a real pointercancel still discards the untouched new node — OS-broken is not "done here"', () => {
     // The keep-the-box rule is for the EXPLICIT cancel (Escape): a person
     // saying "done here". pointercancel is the platform tearing the gesture
-    // down mid-flight; the half-made node it strands is debris, and #821's
-    // capture fix relies on this staying a discard.
+    // down mid-flight; the half-made node it strands is debris, and the
+    // lost-capture handling relies on this staying a discard.
     const c = canvas()
     const created = reduceGesture(
       createIdleState(),

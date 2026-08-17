@@ -254,7 +254,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
                       'flex items-center justify-center rounded transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
                       // Thumb-zone targets in the sheet, compact in the popover.
                       sheet ? 'size-12' : 'size-11',
-                      action.danger ? 'text-red-600' : 'text-foreground',
+                      action.danger ? 'text-destructive' : 'text-foreground',
                     )}
                     onClick={() => {
                       onClose()
@@ -353,7 +353,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
         type="button"
         role="menuitem"
         className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
-          item.danger ? 'text-red-600' : ''
+          item.danger ? 'text-destructive' : ''
         }`}
         onClick={() => {
           onClose()

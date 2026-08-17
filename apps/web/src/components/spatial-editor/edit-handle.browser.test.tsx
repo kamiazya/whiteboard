@@ -39,8 +39,8 @@ it('selecting a node shows one More-actions control; it opens the object menu HE
   const { container } = render(<Host />)
   await userEvent.click(rootOf(container), { position: { x: 200, y: 150 } })
 
-  // C from the discoverability analysis: the pencil promoted ONE verb and
-  // left ten invisible. The ⋯ is the visible doorway to all of them.
+  // One visible control exposes the FULL object-action catalog — the menu
+  // that opens here is the same one the right-click path shows.
   const more = page.getByTestId('more-actions-handle')
   await expect.element(more).toBeInTheDocument()
   expect(container.querySelector('[data-testid="edit-handle"]')).toBeNull()
