@@ -195,6 +195,20 @@ export function performBranchMerge(
       )
     }
 
+    // Reconcile the live doc to the preview, persist it, and broadcast the
+    // (possibly empty) delta. Shared by the HEAD===into commit path and the
+    // HEAD===source cleanup path below.
+    const reconcileLiveDocToPreview = async () => {
+      const prevVV = liveDoc.version()
+      liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
+      liveDoc.commit()
+      await saveDocument(sid, path, liveDoc, { overwrite: true })
+      const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+      if (update.byteLength > 0) {
+        broadcastLoroUpdate(sid, path, update)
+      }
+    }
+
     // Commit by moving the target tipFrontiers to the source tip, unless the source
     // branch is still uninitialized.
     if (typeof sourceTip === 'string' && sourceTip.length > 0) {
@@ -205,14 +219,7 @@ export function performBranchMerge(
     // rewrite the stored tip.
     const latest = await loadCanvasBranches(sid, path)
     if (latest.head === into && sourceTip && sourceTip.length > 0) {
-      const prevVV = liveDoc.version()
-      liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
-      liveDoc.commit()
-      await saveDocument(sid, path, liveDoc, { overwrite: true })
-      const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
-      if (update.byteLength > 0) {
-        broadcastLoroUpdate(sid, path, update)
-      }
+      await reconcileLiveDocToPreview()
       sendHeadChanged(sid, path, into)
     }
 
@@ -228,16 +235,8 @@ export function performBranchMerge(
         await setHeadPersist(sid, path, into)
         switchedHead = { from: source, to: into }
         sendHeadChanged(sid, path, into)
-        // Reconcile and broadcast the live doc to match the target preview.
-        // This is already done when HEAD===target, but HEAD===source needs it here.
-        const prevVV = liveDoc.version()
-        liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
-        liveDoc.commit()
-        await saveDocument(sid, path, liveDoc, { overwrite: true })
-        const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
-        if (update.byteLength > 0) {
-          broadcastLoroUpdate(sid, path, update)
-        }
+        // Already done when HEAD===target, but HEAD===source needs it here.
+        await reconcileLiveDocToPreview()
       }
     } catch (err) {
       getLogger('merge').warning(
