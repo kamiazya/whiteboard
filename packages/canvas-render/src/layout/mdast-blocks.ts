@@ -294,7 +294,13 @@ function layoutPhrasing(
     // measured them ("`code` and" painting as "codeand"). Atomic runs above
     // are exempt: their source text is verbatim by contract.
     const collapsed = text.trim().replace(/\s+/g, ' ')
-    const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
+    const spaceWidth = measureRunWidth(
+      options.measure,
+      options.fontFamily,
+      ' ',
+      fontSizePx,
+      runStyle,
+    )
     // A boundary space at the start of a line is dropped, not advanced —
     // the same rule wrapAndPush applies to its separators.
     if (/^\s/.test(text) && line.x > 0) {

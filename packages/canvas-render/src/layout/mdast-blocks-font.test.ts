@@ -215,4 +215,39 @@ describe('emphasis flags reach the measurer — bold is wider, so it must be mea
     expect(seen.find((s) => s.text === 'lean')?.style).toBe('italic')
     expect(seen.find((s) => s.text === 'plain')?.style).toBe('normal')
   })
+
+  it('a boundary space inside a styled span is measured with that style too', () => {
+    const seen: { text: string; weight: number }[] = []
+    const spy: typeof measure = (text, font) => {
+      seen.push({ text, weight: font.weight })
+      return measure(text, font)
+    }
+    // **a *i* b** — the ' b' chunk starts with a boundary space and is
+    // walked under { strong: true }; its space ADVANCE must be bold-width,
+    // or the gap next to a styled run comes out regular-sized.
+    layoutMdastBlocks(
+      {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'strong',
+                children: [
+                  { type: 'text', value: 'a ' },
+                  { type: 'emphasis', children: [{ type: 'text', value: 'i' }] },
+                  { type: 'text', value: ' b' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { measure: spy, maxWidth: 600, fontFamily: 'Test' },
+    )
+    const spaceMeasurements = seen.filter((s) => s.text === ' ')
+    expect(spaceMeasurements.length).toBeGreaterThan(0)
+    expect(spaceMeasurements.every((s) => s.weight === 700)).toBe(true)
+  })
 })

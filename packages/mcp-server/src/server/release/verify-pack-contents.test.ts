@@ -82,6 +82,8 @@ describe('verifyPackContents (pure core)', () => {
     'dist/widget/canvas-viewer.html',
     'dist/assets/fonts/Roboto/Roboto-Regular.ttf',
     'dist/assets/fonts/Roboto/Roboto-Bold.ttf',
+    'dist/assets/fonts/Roboto/Roboto-Italic.ttf',
+    'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf',
   ]) {
     it(`flags ${required} as missing when it is absent`, async () => {
       const { verifyPackContents } = await importModule()

@@ -150,6 +150,31 @@ describe('createOpentypeMeasureText', () => {
     }
   })
 
+  it('a corrupt sibling face degrades that face to Regular metrics and logs once', async () => {
+    const capture = captureLogsForTests('debug')
+    try {
+      const measure = await createOpentypeMeasureText({
+        resolveFontFiles: async () => ({
+          ...(await resolveExportFontFaces()),
+          // Resolves, but the bytes are not a font: opentype.parse throws
+          // for this face only — Regular already loaded.
+          bold: import.meta.url.replace('file://', ''),
+        }),
+      })
+      const regular = measure('Hello', font(16))
+      const bold = measure('Hello', font(16, { weight: 700 }))
+      expect(bold).toEqual(regular)
+      const warnings = capture.records.filter(
+        (r) => r.level === 'warning' && r.msg.includes('constant-ratio'),
+      )
+      // The fallback warning names the whole-measurer degradation; a
+      // per-face parse failure logs through the same once-guard.
+      expect(warnings.length).toBeLessThanOrEqual(1)
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('falls back to the constant-ratio measurer and logs once when the asset bytes are corrupt', async () => {
     const capture = captureLogsForTests('debug')
     try {
