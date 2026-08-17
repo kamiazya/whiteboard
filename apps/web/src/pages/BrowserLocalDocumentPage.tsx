@@ -52,7 +52,7 @@ import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
   type LoroStoreLike,
@@ -217,7 +217,7 @@ export function BrowserLocalDocumentPage({
   // create-then-switch, and edits to the current row reflecting in the list).
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
-  const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
+  const [canvases, setCanvases] = useState<DocumentSnapshot[]>([])
   const listGenerationRef = useRef(0)
   // A ref that matches no live canvas id points at a deleted canvas: the
   // editor renders a quiet "Missing reference" and hides the follow

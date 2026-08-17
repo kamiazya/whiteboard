@@ -26,7 +26,7 @@ import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import {
   clearWhiteboardDb,
-  loroCanvasesKeys,
+  loroDocumentsKeys,
   persistedNodeIds,
   setTextCommand,
   textNodeCanvas,
@@ -86,7 +86,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
       async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -102,7 +102,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
         act(() => {
           latestOnChange!(nodeA, setTextCommand('multi-canvas-node-a'))
         })
-        const keys = await loroCanvasesKeys()
+        const keys = await loroDocumentsKeys()
         expect(keys).toContain(idA)
       },
       { timeout: 10000, interval: 600 },
@@ -118,7 +118,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBe(idA)
         return id as string
       },
@@ -131,7 +131,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
     expect(await persistedNodeIds(idB)).not.toContain('multi-canvas-node-a')
 
     // No stray placeholder row from the backend re-key.
-    expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
+    expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
 
     // The switcher's menu is still dismissing from the "New canvas" click
     // above, and it is non-modal — so re-opening the trigger while it is
@@ -172,7 +172,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
       { timeout: 5000 },
     )
 
-    expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
+    expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
   })
 
   it('persists an edit made immediately (within the 300ms debounce window) before switching to a new canvas', async () => {
@@ -190,7 +190,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
       async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -207,7 +207,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
         act(() => {
           latestOnChange!(warmupNode, setTextCommand('multi-canvas-warmup-a'))
         })
-        const keys = await loroCanvasesKeys()
+        const keys = await loroDocumentsKeys()
         expect(keys).toContain(idA)
       },
       { timeout: 10000, interval: 600 },
@@ -246,7 +246,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBe(idA)
         return id as string
       },

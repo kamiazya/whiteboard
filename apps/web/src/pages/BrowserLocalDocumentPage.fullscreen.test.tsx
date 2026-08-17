@@ -7,7 +7,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (the lazy-race
@@ -36,7 +36,7 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-const snap: CanvasSnapshot = {
+const snap: DocumentSnapshot = {
   id: 'c1',
   name: 'Canvas A',
   kind: 'spatial',
@@ -54,7 +54,7 @@ function setFullscreenElement(el: Element | null) {
 
 async function renderLoaded() {
   const store = new MemoryStore()
-  await store.setDefaultCanvasId('c1')
+  await store.setDefaultDocumentId('c1')
   await store.save(snap)
   await act(async () => {
     render(<BrowserLocalDocumentPage store={store} />)

@@ -86,7 +86,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
 
     const idA = await waitFor(
       async () => {
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -114,7 +114,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultCanvasId()
+        const id = await store.getDefaultDocumentId()
         expect(id).not.toBe(idA)
         return id as string
       },
@@ -148,7 +148,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
     })
     await waitFor(
       async () => {
-        expect(await store.getDefaultCanvasId()).toBe(idA)
+        expect(await store.getDefaultDocumentId()).toBe(idA)
       },
       { timeout: 5000 },
     )
@@ -169,7 +169,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
     })
     await waitFor(
       async () => {
-        expect(await store.getDefaultCanvasId()).toBe(idB)
+        expect(await store.getDefaultDocumentId()).toBe(idB)
       },
       { timeout: 5000 },
     )

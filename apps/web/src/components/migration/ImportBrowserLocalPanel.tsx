@@ -4,7 +4,7 @@ import type { BrowserLocalStore } from '../../lib/browser-local-store.js'
 import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
-import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
 import { importOneCanvas } from './import-browser-local.js'
 
 const log = getAppLogger('import-browser-local-panel')
@@ -43,7 +43,7 @@ export function ImportBrowserLocalPanel({
   loroStore,
   settingsStore,
 }: ImportBrowserLocalPanelProps) {
-  const [canvases, setCanvases] = useState<CanvasSnapshot[] | null>(null)
+  const [canvases, setCanvases] = useState<DocumentSnapshot[] | null>(null)
   const [results, setResults] = useState<Record<string, RowResult>>({})
   const [isImporting, setIsImporting] = useState(false)
 

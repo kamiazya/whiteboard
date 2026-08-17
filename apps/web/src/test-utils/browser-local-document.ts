@@ -13,9 +13,9 @@ import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 
 const DB_NAME = 'whiteboard'
-const CANVAS_STORE = 'loroCanvases'
+const CANVAS_STORE = 'loroDocuments'
 
-type CanvasEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
+type DocumentEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
 
 /** Deletes the app's IndexedDB database. */
 export async function clearWhiteboardDb(): Promise<void> {
@@ -31,7 +31,7 @@ export async function clearWhiteboardDb(): Promise<void> {
 }
 
 /** Runs `read` against the canvas object store of the real IndexedDB database. */
-async function withCanvasStore<T>(read: (store: IDBObjectStore) => IDBRequest): Promise<T> {
+async function withDocumentStore<T>(read: (store: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
     const openReq = indexedDB.open(DB_NAME)
     openReq.onerror = () => reject(openReq.error)
@@ -52,13 +52,13 @@ async function withCanvasStore<T>(read: (store: IDBObjectStore) => IDBRequest): 
 }
 
 /** Raw keys of the canvas object store, real IndexedDB. */
-export async function loroCanvasesKeys(): Promise<string[]> {
-  return withCanvasStore<string[]>((store) => store.getAllKeys())
+export async function loroDocumentsKeys(): Promise<string[]> {
+  return withDocumentStore<string[]>((store) => store.getAllKeys())
 }
 
 /** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
 export async function persistedNodeIds(documentId: string): Promise<string[]> {
-  const envelope = await withCanvasStore<CanvasEnvelope | undefined>((store) =>
+  const envelope = await withDocumentStore<DocumentEnvelope | undefined>((store) =>
     store.get(documentId),
   )
   if (!envelope) {

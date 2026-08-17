@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { openWhiteboardDb } from './browser-idb.js'
 
 /**
- * Versioned envelope for image file records persisted in the 'canvasFiles'
+ * Versioned envelope for image file records persisted in the 'documentFiles'
  * IndexedDB object store. Single parse boundary — every IDB read for
  * canvasFiles goes through this. Type is derived via z.infer; no parallel
  * hand-written interface (mirrors loro-store.ts's loroRecordEnvelopeSchema).
@@ -11,14 +11,14 @@ import { openWhiteboardDb } from './browser-idb.js'
  *    changes in a backward-incompatible way; old/unknown-version records are
  *    treated as a cache miss (get() resolves null) rather than crashing.
  */
-export const canvasFileRecordSchema = z.object({
+export const documentFileRecordSchema = z.object({
   v: z.literal(1),
   mimeType: z.string(),
   created: z.number(),
   blob: z.instanceof(Blob),
 })
 
-type CanvasFileRecord = z.infer<typeof canvasFileRecordSchema>
+type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 
 /**
  * Decode a data: URL into a Blob. Prefers the MIME type embedded in the
@@ -55,9 +55,9 @@ export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
 }
 
 /**
- * CanvasFileStore: persists uploaded image Blobs in the 'canvasFiles'
+ * DocumentFileStore: persists uploaded image Blobs in the 'documentFiles'
  * IndexedDB object store, keyed by the caller-supplied fileId. Isolated from
- * 'loroCanvases'/'canvases' so a schema issue in one store never corrupts
+ * 'loroDocuments'/'documents' so a schema issue in one store never corrupts
  * reads of the others.
  *
  * Keying is global (not scoped per-canvas): Excalidraw fileIds are
@@ -65,14 +65,14 @@ export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
  * intentional trade-off. Records are never deleted here, so the store grows
  * unbounded — GC / refcounting is a deliberate follow-up, not an oversight.
  */
-export class CanvasFileStore {
+export class DocumentFileStore {
   async put(
     fileId: string,
     entry: { mimeType: string; blob: Blob; created: number },
   ): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const record: CanvasFileRecord = {
+      const record: DocumentFileRecord = {
         v: 1,
         mimeType: entry.mimeType,
         created: entry.created,
@@ -83,13 +83,13 @@ export class CanvasFileStore {
       // must be closed here too, not only in the async lifecycle callbacks.
       let tx: IDBTransaction
       try {
-        tx = db.transaction('canvasFiles', 'readwrite')
+        tx = db.transaction('documentFiles', 'readwrite')
       } catch (err) {
         db.close()
         reject(err)
         return
       }
-      tx.objectStore('canvasFiles').put(record, fileId)
+      tx.objectStore('documentFiles').put(record, fileId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -125,19 +125,19 @@ export class CanvasFileStore {
       // contract.
       let tx: IDBTransaction
       try {
-        tx = db.transaction('canvasFiles', 'readonly')
+        tx = db.transaction('documentFiles', 'readonly')
       } catch {
         db.close()
         resolve(null)
         return
       }
-      const req = tx.objectStore('canvasFiles').get(fileId)
+      const req = tx.objectStore('documentFiles').get(fileId)
       req.onsuccess = () => {
         if (req.result === undefined) {
           resolve(null)
           return
         }
-        const parsed = canvasFileRecordSchema.safeParse(req.result)
+        const parsed = documentFileRecordSchema.safeParse(req.result)
         resolve(parsed.success ? parsed.data.blob : null)
       }
       req.onerror = (e) => {

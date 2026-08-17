@@ -111,13 +111,13 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
       await result.current.switchDocument(idB)
     })
     expect(result.current.snapshot?.id).toBe(idB)
-    expect(await store.getDefaultCanvasId()).toBe(idB)
+    expect(await store.getDefaultDocumentId()).toBe(idB)
 
     await act(async () => {
       await result.current.switchDocument(idA)
     })
     expect(result.current.snapshot?.id).toBe(idA)
-    expect(await store.getDefaultCanvasId()).toBe(idA)
+    expect(await store.getDefaultDocumentId()).toBe(idA)
   })
 
   it('duplicateDocument deep-copies the real IndexedDB-backed Loro doc: later edits to the source never appear in the copy', async () => {

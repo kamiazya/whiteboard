@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 import type { LoroStoreLike } from './use-browser-local-document-controller.js'
@@ -72,7 +72,7 @@ vi.mock('../lib/browser-local-backend.js', () => ({
 // loro-crdt is WASM; mock at module level so BrowserLocalBackend mock above can require it.
 // The actual LoroDoc is used via the real loro-crdt installed in the workspace.
 
-const snap: CanvasSnapshot = {
+const snap: DocumentSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
@@ -112,7 +112,7 @@ describe('BrowserLocalDocumentPage', () => {
 
   it('renders editor view once canvas is loaded', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -123,8 +123,8 @@ describe('BrowserLocalDocumentPage', () => {
   it('renders load-degraded banner when store load fails', async () => {
     const base = new MemoryStore()
     const failingStore: BrowserLocalStore = {
-      getDefaultCanvasId: async () => 'c1',
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      getDefaultDocumentId: async () => 'c1',
+      setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: async () => ({ kind: 'corrupted' }),
       save: base.save.bind(base),
       del: base.del.bind(base),
@@ -144,8 +144,8 @@ describe('BrowserLocalDocumentPage', () => {
   it('offers a Start fresh recovery action in the load-degraded banner', async () => {
     const base = new MemoryStore()
     const failingStore: BrowserLocalStore = {
-      getDefaultCanvasId: async () => 'c1',
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      getDefaultDocumentId: async () => 'c1',
+      setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: async () => ({ kind: 'corrupted' }),
       save: base.save.bind(base),
       del: base.del.bind(base),
@@ -167,8 +167,8 @@ describe('BrowserLocalDocumentPage', () => {
   it('shows a recovery-failed message when Start fresh cannot save', async () => {
     const base = new MemoryStore()
     const failingFreshStore: BrowserLocalStore = {
-      getDefaultCanvasId: async () => 'c1',
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      getDefaultDocumentId: async () => 'c1',
+      setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: async () => ({ kind: 'corrupted' }),
       save: async () => {
         throw new Error('idb write failed')
@@ -194,7 +194,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('renders cleanup-completed view after delete button click and confirm', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -214,7 +214,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('does not delete the canvas when the confirmation dialog is cancelled', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -235,7 +235,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('duplicates the canvas and switches to the copy when Duplicate is clicked', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const loro = new FakeLoroStore()
     const seed = new Loro()
@@ -254,7 +254,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('disables the Duplicate button while a duplicate is in flight, and double-clicking produces exactly one copy', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const loro = new FakeLoroStore()
     const seed = new Loro()
@@ -298,7 +298,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('shows an alert and re-enables the Duplicate button when duplicateDocument fails', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const loro = new FakeLoroStore()
     await loro.save('c1', new Loro().export({ mode: 'snapshot' }))
@@ -322,7 +322,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('Copy as JSON Canvas puts the extended document on the clipboard', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const written: string[] = []
     Object.assign(navigator, {
@@ -347,7 +347,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('export lives in the canvas row kebab, not the top bar menu', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -369,7 +369,7 @@ describe('BrowserLocalDocumentPage', () => {
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -382,7 +382,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('the canvas row carries state, settings and operations in ONE row (no separate strip)', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -416,11 +416,11 @@ describe('BrowserLocalDocumentPage', () => {
 
   it('surfaces the degraded save message in the header when a save fails', async () => {
     const base = new MemoryStore()
-    await base.setDefaultCanvasId('c1')
+    await base.setDefaultDocumentId('c1')
     await base.save(snap)
     const failingSaveStore: BrowserLocalStore = {
-      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
+      setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: base.load.bind(base),
       save: async () => {
         throw new Error('idb write failed')
@@ -441,7 +441,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('offers a Start fresh action in the cleanup-completed view', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -467,7 +467,7 @@ describe('BrowserLocalDocumentPage', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('', { status: 200 }))
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -487,7 +487,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('keeps a heading landmark distinct from the Delete button and the canvas actions control', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -503,7 +503,7 @@ describe('BrowserLocalDocumentPage', () => {
   it("renaming through the top bar's canvas actions updates the heading and flushes a save", async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -527,7 +527,7 @@ describe('BrowserLocalDocumentPage', () => {
 
   it('does not render an "Add rectangle" button — scene writes flow through SpatialEditor gestures', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -538,7 +538,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('lists all canvases in the switcher dropdown', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await store.save({
       id: 'c2',
@@ -561,7 +561,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('switching the switcher selection calls switchDocument exactly once', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await store.save({
       id: 'c2',
@@ -579,7 +579,7 @@ describe('BrowserLocalDocumentPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
     })
-    expect(await store.getDefaultCanvasId()).toBe('c2')
+    expect(await store.getDefaultDocumentId()).toBe('c2')
   })
 
   it('honors an explicit initialCanvasId prop over the store default canvas', async () => {
@@ -590,7 +590,7 @@ describe('BrowserLocalDocumentPage', () => {
     // test for that boundary.
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await store.save({
       id: 'c2',
@@ -612,7 +612,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('updates the URL to /local/:documentId when the switcher opens a different canvas', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await store.save({
       id: 'c2',
@@ -644,7 +644,7 @@ describe('BrowserLocalDocumentPage', () => {
   it('creating a canvas through the top bar switches to a fresh untitled canvas', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     // A distinctly-named current canvas so the switch to the new 'untitled' one
     // is observable in the heading, not just an inert re-render.
     await store.save({
@@ -665,7 +665,7 @@ describe('BrowserLocalDocumentPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
     })
-    const newId = await store.getDefaultCanvasId()
+    const newId = await store.getDefaultDocumentId()
     expect(newId).not.toBe('c1')
     const list = await store.listCanvases()
     expect(list.map((c) => c.id)).toEqual(expect.arrayContaining(['c1', newId]))
@@ -674,14 +674,14 @@ describe('BrowserLocalDocumentPage', () => {
   it('surfaces an error and stays on the current canvas when creating a new canvas fails', async () => {
     vi.useRealTimers()
     const base = new MemoryStore()
-    await base.setDefaultCanvasId('c1')
+    await base.setDefaultDocumentId('c1')
     await base.save(snap)
     // Fail the metadata save that createCanvas performs first, so createCanvas()
     // rejects before ever calling switchDocument.
     let failNextSave = false
     const failingCreateStore: BrowserLocalStore = {
-      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
+      setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: base.load.bind(base),
       save: async (s) => {
         if (failNextSave) throw new Error('idb write failed')
@@ -705,12 +705,12 @@ describe('BrowserLocalDocumentPage', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Failed to create canvas.')
     // The current canvas is untouched — no switch happened.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
-    expect(await failingCreateStore.getDefaultCanvasId()).toBe('c1')
+    expect(await failingCreateStore.getDefaultDocumentId()).toBe('c1')
   })
 
   it('drops a stale listCanvases resolution that would otherwise clobber a newer refresh from a fast switch', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     vi.useRealTimers()
     await store.save(snap)
     await store.save({
@@ -720,10 +720,10 @@ describe('BrowserLocalDocumentPage', () => {
       kind: 'spatial' as const,
     })
 
-    const resolvers: Array<(list: CanvasSnapshot[]) => void> = []
+    const resolvers: Array<(list: DocumentSnapshot[]) => void> = []
     const controllableStore: BrowserLocalStore = {
-      getDefaultCanvasId: store.getDefaultCanvasId.bind(store),
-      setDefaultCanvasId: store.setDefaultCanvasId.bind(store),
+      getDefaultDocumentId: store.getDefaultDocumentId.bind(store),
+      setDefaultDocumentId: store.setDefaultDocumentId.bind(store),
       load: store.load.bind(store),
       save: store.save.bind(store),
       del: store.del.bind(store),
@@ -771,7 +771,7 @@ describe('BrowserLocalDocumentPage', () => {
     // generation guard exists to handle.
     // The fresh marker rides a row OTHER than the open canvas: the open
     // canvas's own label comes from the loaded snapshot, not from the list.
-    const freshList: CanvasSnapshot[] = [
+    const freshList: DocumentSnapshot[] = [
       snap,
       {
         id: 'c3',
@@ -780,7 +780,7 @@ describe('BrowserLocalDocumentPage', () => {
         kind: 'spatial' as const,
       },
     ]
-    const staleList: CanvasSnapshot[] = [
+    const staleList: DocumentSnapshot[] = [
       {
         id: 'c2',
         name: 'Other canvas (stale)',
@@ -806,13 +806,13 @@ describe('BrowserLocalDocumentPage', () => {
   it('shows the renamed canvas in the switcher even when the list read wins the race against the save', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
 
-    const resolvers: Array<(list: CanvasSnapshot[]) => void> = []
+    const resolvers: Array<(list: DocumentSnapshot[]) => void> = []
     const controllableStore: BrowserLocalStore = {
-      getDefaultCanvasId: store.getDefaultCanvasId.bind(store),
-      setDefaultCanvasId: store.setDefaultCanvasId.bind(store),
+      getDefaultDocumentId: store.getDefaultDocumentId.bind(store),
+      setDefaultDocumentId: store.setDefaultDocumentId.bind(store),
       load: store.load.bind(store),
       save: store.save.bind(store),
       del: store.del.bind(store),
@@ -860,7 +860,7 @@ describe('BrowserLocalDocumentPage', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
+      await store.setDefaultDocumentId('c1')
       await store.save(snap)
       await store.save({
         id: 'c2',
@@ -903,7 +903,7 @@ describe('BrowserLocalDocumentPage', () => {
 
     it('moves the capability CTA into the Local connection chip popover (D1: no standing copy)', async () => {
       const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
+      await store.setDefaultDocumentId('c1')
       await store.save(snap)
       await act(async () => {
         render(<BrowserLocalDocumentPage store={store} />)
@@ -925,7 +925,7 @@ describe('BrowserLocalDocumentPage', () => {
 
     it('does not render any mode-switch control — mode stays a read-only status', async () => {
       const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
+      await store.setDefaultDocumentId('c1')
       await store.save(snap)
       await act(async () => {
         render(<BrowserLocalDocumentPage store={store} />)
@@ -939,7 +939,7 @@ describe('BrowserLocalDocumentPage', () => {
 
     it('keeps the existing Delete button and canvas actions control working alongside the CTA line', async () => {
       const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
+      await store.setDefaultDocumentId('c1')
       await store.save(snap)
       await act(async () => {
         render(<BrowserLocalDocumentPage store={store} />)
@@ -953,7 +953,7 @@ describe('BrowserLocalDocumentPage', () => {
     it('mounting and opening the canvas switcher renders no daemon thumbnail <img>', async () => {
       vi.useRealTimers()
       const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
+      await store.setDefaultDocumentId('c1')
       await store.save(snap)
       await store.save({
         id: 'c2',
@@ -978,7 +978,7 @@ describe('?new=canvas launch shortcut', () => {
     // An existing profile: auto-create is skipped, so the count isolates
     // the shortcut's own create.
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     window.history.replaceState(null, '', '/?new=canvas')
     rtlRender(
@@ -1011,7 +1011,7 @@ describe('?new=canvas launch shortcut', () => {
       }
     }
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     window.history.replaceState(null, '', '/?new=canvas')
     rtlRender(
@@ -1034,7 +1034,7 @@ describe('BrowserLocalDocumentPage — initial tool follows the canvas shape', (
 
   it('an empty canvas opens in Select — the user came to place, not to pan', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} loro={new FakeLoroStore()} />)
@@ -1047,7 +1047,7 @@ describe('BrowserLocalDocumentPage — initial tool follows the canvas shape', (
   it("this tab's last choice outranks the canvas-shape guess", async () => {
     sessionStorage.setItem('wb.lastTool', 'hand')
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} loro={new FakeLoroStore()} />)

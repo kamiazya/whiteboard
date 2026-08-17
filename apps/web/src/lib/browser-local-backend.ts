@@ -4,17 +4,17 @@ import type {
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
-import { CanvasFileStore, dataUrlToBlob } from './canvas-file-store.js'
+import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 /**
  * BrowserLocalBackend: CanvasBackend implementation for fully offline,
  * browser-local use. Persists Loro CRDT snapshots and incremental deltas
- * in IndexedDB via LoroStore (DB v2 'loroCanvases' store), and uploaded
- * image files via CanvasFileStore (DB v4 'canvasFiles' store).
+ * in IndexedDB via LoroStore (DB v2 'loroDocuments' store), and uploaded
+ * image files via DocumentFileStore (DB v4 'documentFiles' store).
  *
  * getFile/putFile: images are persisted to IndexedDB (not OPFS — see the
- * class-level design note in canvas-file-store.ts for the rationale).
+ * class-level design note in document-file-store.ts for the rationale).
  * putFile stores each entry keyed by its tuple fileId (never
  * BinaryFileDataLike.id, which callers must not rely on for keying) and
  * calls onFileSuccess once per successfully stored entry; it rejects on a
@@ -38,16 +38,16 @@ import { LoroStore } from './loro-store.js'
 export class BrowserLocalBackend implements CanvasBackend {
   private readonly documentId: string
   private readonly store: LoroStore
-  private readonly fileStore: CanvasFileStore
+  private readonly fileStore: DocumentFileStore
   private handlers: CanvasBackendHandlers | null = null
   private disconnected = false
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(documentId: string, store?: LoroStore, fileStore?: CanvasFileStore) {
+  constructor(documentId: string, store?: LoroStore, fileStore?: DocumentFileStore) {
     this.documentId = documentId
     this.store = store ?? new LoroStore()
-    this.fileStore = fileStore ?? new CanvasFileStore()
+    this.fileStore = fileStore ?? new DocumentFileStore()
   }
 
   connect(handlers: CanvasBackendHandlers): void {
@@ -102,7 +102,7 @@ export class BrowserLocalBackend implements CanvasBackend {
   /**
    * Returns the persisted Blob for fileId, or null for an unknown id and for
    * a corrupt/unknown-version record — never calls onError, since a read-path
-   * miss is not a storage failure (see CanvasFileStore.get).
+   * miss is not a storage failure (see DocumentFileStore.get).
    */
   async getFile(fileId: string): Promise<Blob | null> {
     return this.fileStore.get(fileId)

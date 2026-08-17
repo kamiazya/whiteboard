@@ -46,8 +46,8 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
 }
 
 /**
- * LoroStore: persists Loro CRDT snapshot+delta records in the 'loroCanvases'
- * IndexedDB object store. Isolated from the 'canvases' JSON metadata store
+ * LoroStore: persists Loro CRDT snapshot+delta records in the 'loroDocuments'
+ * IndexedDB object store. Isolated from the 'documents' JSON metadata store
  * so legacy records are never misread as Loro bytes.
  *
  * load() deep-validates bytes by importing them into a throwaway LoroDoc so
@@ -68,8 +68,8 @@ export class LoroStore {
   async load(documentId: string): Promise<LoroLoadResult> {
     const db = await openWhiteboardDb()
     return new Promise((resolve) => {
-      const tx = db.transaction('loroCanvases', 'readonly')
-      const req = tx.objectStore('loroCanvases').get(documentId)
+      const tx = db.transaction('loroDocuments', 'readonly')
+      const req = tx.objectStore('loroDocuments').get(documentId)
       req.onsuccess = () => {
         if (req.result === undefined) {
           resolve({ kind: 'not-found' })
@@ -139,8 +139,8 @@ export class LoroStore {
         snapshot,
         updatedAt: new Date().toISOString(),
       }
-      const tx = db.transaction('loroCanvases', 'readwrite')
-      tx.objectStore('loroCanvases').put(envelope, documentId)
+      const tx = db.transaction('loroDocuments', 'readwrite')
+      tx.objectStore('loroDocuments').put(envelope, documentId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -167,8 +167,8 @@ export class LoroStore {
   async appendDelta(documentId: string, delta: Uint8Array): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction('loroCanvases', 'readwrite')
-      const store = tx.objectStore('loroCanvases')
+      const tx = db.transaction('loroDocuments', 'readwrite')
+      const store = tx.objectStore('loroDocuments')
       const getReq = store.get(documentId)
       getReq.onsuccess = () => {
         const raw = getReq.result

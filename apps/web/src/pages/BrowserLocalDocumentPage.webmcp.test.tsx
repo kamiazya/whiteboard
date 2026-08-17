@@ -6,7 +6,7 @@ import { MemoryStore } from '../lib/browser-local-store.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 
 function render(ui: ReactElement) {
@@ -35,7 +35,7 @@ vi.mock('../lib/browser-local-backend.js', () => ({
   },
 }))
 
-const snap: CanvasSnapshot = {
+const snap: DocumentSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
@@ -69,7 +69,7 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
 
     await act(async () => {
@@ -95,7 +95,7 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
 
     await act(async () => {

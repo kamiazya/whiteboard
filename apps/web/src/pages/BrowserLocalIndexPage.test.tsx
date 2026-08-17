@@ -3,12 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
 
 afterEach(cleanup)
 
-async function seededStore(snapshots: CanvasSnapshot[]) {
+async function seededStore(snapshots: DocumentSnapshot[]) {
   const store = new MemoryStore()
   for (const s of snapshots) await store.save(s)
   return store
@@ -74,7 +74,7 @@ describe('BrowserLocalIndexPage', () => {
     const all = await store.listCanvases()
     const created = all.find((s) => s.id === newId)
     expect(created?.kind).toBe('markdown')
-    expect(await store.getDefaultCanvasId()).toBe(newId)
+    expect(await store.getDefaultDocumentId()).toBe(newId)
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {

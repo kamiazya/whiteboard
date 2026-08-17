@@ -1,7 +1,7 @@
 /**
  * The editor's file-reference seam — referenced-canvas embeds (J5a), image
  * nodes (J5b), markdown bodies and facet cards — with the backend factored
- * out behind `CanvasFileAdapter`.
+ * out behind `DocumentFileAdapter`.
  *
  * This exists because the logic was written inline in one page, so the other
  * page shipped without any of it: canvas embeds and image nodes worked in
@@ -49,7 +49,7 @@ export interface LoadedFileDocument {
 }
 
 /** What a backend must supply for the seams to work against it. */
-export interface CanvasFileAdapter {
+export interface DocumentFileAdapter {
   /** Distinguishes a stored image asset from a reference to another canvas. */
   isImageRef(file: string): boolean
   /**
@@ -66,7 +66,7 @@ export interface CanvasFileAdapter {
 
 export interface UseDocumentFileSeamsOptions {
   readonly canvas: SpatialCanvas
-  readonly adapter: CanvasFileAdapter
+  readonly adapter: DocumentFileAdapter
   /**
    * Reference -> an opaque revision marker (the referenced canvas's
    * `updatedAt`). A moved marker is what makes an edit made elsewhere show up

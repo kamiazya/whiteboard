@@ -9,7 +9,7 @@ import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  type CanvasFileAdapter,
+  type DocumentFileAdapter,
   toFacetCard,
   useDocumentFileSeams,
 } from './use-document-file-seams.js'
@@ -32,8 +32,8 @@ const embedded = (text: string): SpatialCanvas => ({
   edges: [],
 })
 
-function makeAdapter(overrides: Partial<CanvasFileAdapter> = {}) {
-  const adapter: CanvasFileAdapter = {
+function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
+  const adapter: DocumentFileAdapter = {
     isImageRef: (file) => file.startsWith('asset:'),
     loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),

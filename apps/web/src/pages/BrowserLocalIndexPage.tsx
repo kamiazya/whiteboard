@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
   store: BrowserLocalStore
@@ -15,7 +15,7 @@ export interface BrowserLocalIndexPageProps {
 // selector). Rows come straight from the store; the editor page owns
 // everything after onOpenDocument fires.
 export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalIndexPageProps) {
-  const [snapshots, setSnapshots] = useState<CanvasSnapshot[] | null>(null)
+  const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // The `disabled` attribute (via createDisabled) is the whole double-press
   // mechanism: React flushes this state before a second click can dispatch,
@@ -82,7 +82,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       setCreating(true)
       try {
         const id = store.generateId()
-        const fresh: CanvasSnapshot = {
+        const fresh: DocumentSnapshot = {
           id,
           name: 'untitled',
           updatedAt: new Date().toISOString(),
@@ -91,7 +91,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
         await store.save(fresh)
         // Repointed so a later plain load resumes in the new canvas — the
         // same contract the editor's own create/switch flows keep.
-        await store.setDefaultCanvasId(id)
+        await store.setDefaultDocumentId(id)
         onOpenDocument(id)
       } catch {
         setError('Failed to create a canvas in this browser.')

@@ -17,10 +17,10 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import type { CanvasFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
+import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
 import { IndexedDBStore } from './browser-local-store.js'
-import { CanvasFileStore } from './canvas-file-store.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('document-embed-content')
@@ -105,7 +105,7 @@ export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
 async function storeImageAsset(file: File): Promise<string | undefined> {
   try {
     const ref = newImageRef(crypto.randomUUID())
-    await new CanvasFileStore().put(ref, {
+    await new DocumentFileStore().put(ref, {
       mimeType: file.type,
       blob: file,
       created: Date.now(),
@@ -119,7 +119,7 @@ async function storeImageAsset(file: File): Promise<string | undefined> {
 
 /** Loads a stored image asset as an object URL, or undefined when missing. */
 async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
-  const blob = await new CanvasFileStore().get(ref)
+  const blob = await new DocumentFileStore().get(ref)
   if (blob === null) return undefined
   return URL.createObjectURL(blob)
 }
@@ -130,7 +130,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  * of its own — the daemon page supplies its own adapter over the daemon's
  * `/api/w/:workspaceId/canvas/:path/file/:fileId` endpoints.
  */
-export const BROWSER_LOCAL_FILE_ADAPTER: CanvasFileAdapter = {
+export const BROWSER_LOCAL_FILE_ADAPTER: DocumentFileAdapter = {
   isImageRef,
   loadDocument: loadEmbeddedDocument,
   loadImageUrl: loadImageAssetUrl,

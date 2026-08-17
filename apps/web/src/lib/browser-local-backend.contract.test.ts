@@ -10,7 +10,7 @@ import type { CanvasBackendHarness } from '@kamiazya/whiteboard-mcp/canvas-backe
 import { canvasBackendContract } from '@kamiazya/whiteboard-mcp/canvas-backend-contract-suite'
 import { describe } from 'vitest'
 import { BrowserLocalBackend } from './browser-local-backend.js'
-import type { CanvasFileStore } from './canvas-file-store.js'
+import type { DocumentFileStore } from './document-file-store.js'
 import type { LoroStore } from './loro-store.js'
 
 function createStores(written: Uint8Array[]) {
@@ -38,7 +38,7 @@ function createStores(written: Uint8Array[]) {
     put: async (fileId: string, record: { mimeType: string; blob: Blob }) => {
       files.set(fileId, record)
     },
-  } as unknown as CanvasFileStore
+  } as unknown as DocumentFileStore
 
   return { store, fileStore }
 }

@@ -54,7 +54,7 @@ afterEach(cleanup)
 describe('stale /local/:id deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('real-1')
+    await store.setDefaultDocumentId('real-1')
     await store.save({
       id: 'real-1',
       name: 'Real canvas',

@@ -1,11 +1,11 @@
 /**
- * CanvasFileStore — real IndexedDB round-trip tests.
+ * DocumentFileStore — real IndexedDB round-trip tests.
  *
  * Real browser context required for IndexedDB.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openWhiteboardDb } from './browser-idb.js'
-import { CanvasFileStore, canvasFileRecordSchema } from './canvas-file-store.js'
+import { DocumentFileStore, documentFileRecordSchema } from './document-file-store.js'
 
 // Rejects on failure: silently keeping stale fixed-key records would let
 // these persistence tests pass without exercising the current write.
@@ -27,12 +27,12 @@ async function clearDb(): Promise<void> {
   })
 }
 
-describe('CanvasFileStore', () => {
+describe('DocumentFileStore', () => {
   beforeEach(clearDb)
   afterEach(clearDb)
 
   it('put then get round-trips a Blob with identical bytes and mimeType', async () => {
-    const store = new CanvasFileStore()
+    const store = new DocumentFileStore()
     const bytes = new Uint8Array([1, 2, 3, 4, 5])
     const blob = new Blob([bytes], { type: 'image/png' })
 
@@ -46,19 +46,19 @@ describe('CanvasFileStore', () => {
   })
 
   it('stored record carries v:1', async () => {
-    const store = new CanvasFileStore()
+    const store = new DocumentFileStore()
     const blob = new Blob([new Uint8Array([1])], { type: 'image/png' })
     await store.put('file-1', { mimeType: 'image/png', blob, created: 123 })
 
     const db = await openWhiteboardDb()
     const raw = await new Promise<unknown>((resolve, reject) => {
-      const tx = db.transaction('canvasFiles', 'readonly')
-      const req = tx.objectStore('canvasFiles').get('file-1')
+      const tx = db.transaction('documentFiles', 'readonly')
+      const req = tx.objectStore('documentFiles').get('file-1')
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
       tx.oncomplete = () => db.close()
     })
-    const parsed = canvasFileRecordSchema.safeParse(raw)
+    const parsed = documentFileRecordSchema.safeParse(raw)
     expect(parsed.success).toBe(true)
     if (parsed.success) {
       expect(parsed.data.v).toBe(1)
@@ -66,7 +66,7 @@ describe('CanvasFileStore', () => {
   })
 
   it('get returns null for an unknown fileId', async () => {
-    const store = new CanvasFileStore()
+    const store = new DocumentFileStore()
     expect(await store.get('does-not-exist')).toBeNull()
   })
 })

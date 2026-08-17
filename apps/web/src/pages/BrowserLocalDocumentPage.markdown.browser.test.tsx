@@ -347,7 +347,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
     const store = new IndexedDBStore()
-    await store.setDefaultCanvasId('spatial-1')
+    await store.setDefaultDocumentId('spatial-1')
     await store.save({
       id: 'spatial-1',
       name: 'Diagram A',
@@ -396,7 +396,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is
     // unambiguous (the fresh markdown note is also 'untitled').
-    await store.setDefaultCanvasId('spatial-1')
+    await store.setDefaultDocumentId('spatial-1')
     await store.save({
       id: 'spatial-1',
       name: 'Diagram A',
@@ -460,7 +460,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       updatedAt: '2026-05-24T00:00:01.000Z',
       kind: 'markdown' as const,
     })
-    await store.setDefaultCanvasId(SOURCE_ID)
+    await store.setDefaultDocumentId(SOURCE_ID)
     // The router's pathname is the navigation contract under test; the page
     // itself shows no raw id anywhere a query could reach.
     function LocationProbe() {
@@ -530,7 +530,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     const targetDoc = new Loro()
     targetDoc.getText('body').insert(0, 'unmistakable embedded body text')
     await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
-    await store.setDefaultCanvasId(SOURCE_ID)
+    await store.setDefaultDocumentId(SOURCE_ID)
     render(<BrowserLocalDocumentPage store={store} />)
 
     const editable = await waitFor(
@@ -611,7 +611,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       // on screen unless it really was converted and persisted.
       const store = new IndexedDBStore()
       await seedLegacyNote(store, 'Legacy note')
-      await store.setDefaultCanvasId(LEGACY_ID)
+      await store.setDefaultDocumentId(LEGACY_ID)
       const first = render(<BrowserLocalDocumentPage store={store} />)
 
       const editable = await waitFor(
@@ -652,7 +652,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
         updatedAt: '2026-05-24T00:00:01.000Z',
         kind: 'markdown' as const,
       })
-      await store.setDefaultCanvasId(SOURCE_ID)
+      await store.setDefaultDocumentId(SOURCE_ID)
       render(<BrowserLocalDocumentPage store={store} />)
 
       const editable = await waitFor(

@@ -10,7 +10,7 @@ import { forwardRef } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 const capturedThemes: unknown[] = []
 
@@ -54,7 +54,7 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-const snap: CanvasSnapshot = {
+const snap: DocumentSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
@@ -74,7 +74,7 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
   it('threads resolvedTheme=dark into SpatialEditor when the stored preference is dark', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -86,7 +86,7 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
   it('threads resolvedTheme=light into SpatialEditor when the stored preference is light', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
     const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
+    await store.setDefaultDocumentId('c1')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)

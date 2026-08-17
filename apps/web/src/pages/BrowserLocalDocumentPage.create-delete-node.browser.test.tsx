@@ -20,7 +20,7 @@ import {
   clearWhiteboardDb,
   createNodeCommand,
   deleteNodeCommand,
-  loroCanvasesKeys,
+  loroDocumentsKeys,
   persistedNodeIds,
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
@@ -142,12 +142,12 @@ describe('BrowserLocalDocumentPage create/delete-node reload persistence (browse
         act(() => {
           latestOnChange!(created, createCmd)
         })
-        const keys = await loroCanvasesKeys()
+        const keys = await loroDocumentsKeys()
         expect(keys.length).toBeGreaterThan(0)
       },
       { timeout: 10000, interval: 600 },
     )
-    const keys = await loroCanvasesKeys()
+    const keys = await loroDocumentsKeys()
     documentId = keys.find((k) => k !== '__placeholder__')!
     expect(documentId).toBeDefined()
     await waitFor(

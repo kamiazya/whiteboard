@@ -10,7 +10,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { type CanvasFileAdapter, useDocumentFileSeams } from './use-document-file-seams.js'
+import { type DocumentFileAdapter, useDocumentFileSeams } from './use-document-file-seams.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 
@@ -27,17 +27,17 @@ const canvasWith = (...files: string[]): SpatialCanvas => ({
   edges: [],
 })
 
-function makeAdapter(overrides: Partial<CanvasFileAdapter> = {}) {
+function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
   return {
     isImageRef: (file: string) => file.startsWith('asset:'),
     loadDocument: vi.fn(async () => undefined),
     loadImageUrl: vi.fn(async () => undefined),
     storeImage: vi.fn(async () => undefined),
     ...overrides,
-  } satisfies CanvasFileAdapter
+  } satisfies DocumentFileAdapter
 }
 
-function mount(canvas: SpatialCanvas, adapter: CanvasFileAdapter) {
+function mount(canvas: SpatialCanvas, adapter: DocumentFileAdapter) {
   return renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map() }))
 }
 

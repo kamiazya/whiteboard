@@ -132,7 +132,7 @@ describe('LoroStore (real IndexedDB)', () => {
 
   it('structurally-corrupt record in IDB (unknown v) returns corrupt-snapshot', async () => {
     const db = await openLoroDb()
-    await writeRaw(db, 'loroCanvases', 'bad-canvas', { v: 99, garbage: true })
+    await writeRaw(db, 'loroDocuments', 'bad-canvas', { v: 99, garbage: true })
     db.close()
 
     const store = new LoroStore()
@@ -143,7 +143,7 @@ describe('LoroStore (real IndexedDB)', () => {
   it('structurally-valid envelope with invalid Loro snapshot bytes returns corrupt-snapshot', async () => {
     const db = await openLoroDb()
     // v:1 envelope with bytes that are NOT valid Loro data
-    await writeRaw(db, 'loroCanvases', 'bad-bytes-canvas', {
+    await writeRaw(db, 'loroDocuments', 'bad-bytes-canvas', {
       v: 1,
       snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
       updatedAt: new Date().toISOString(),
@@ -161,7 +161,7 @@ describe('LoroStore (real IndexedDB)', () => {
     const snapshot = doc.export({ mode: 'snapshot' })
 
     const db = await openLoroDb()
-    await writeRaw(db, 'loroCanvases', 'bad-delta-canvas', {
+    await writeRaw(db, 'loroDocuments', 'bad-delta-canvas', {
       v: 1,
       snapshot,
       deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
@@ -175,9 +175,9 @@ describe('LoroStore (real IndexedDB)', () => {
   })
 
   it('legacy v1 JSON record in canvases store is not-found for LoroStore', async () => {
-    // Seed a v1 JSON record into the legacy 'canvases' store
+    // Seed a v1 JSON record into the legacy 'documents' store
     const db = await openLoroDb()
-    await writeRaw(db, 'canvases', 'legacy-canvas', {
+    await writeRaw(db, 'documents', 'legacy-canvas', {
       id: 'legacy-canvas',
       name: 'Legacy',
       scene: { elements: [] },
@@ -186,7 +186,7 @@ describe('LoroStore (real IndexedDB)', () => {
     db.close()
 
     const store = new LoroStore()
-    // LoroStore reads from 'loroCanvases', not 'canvases' — must return not-found
+    // LoroStore reads from 'loroDocuments', not 'documents' — must return not-found
     const result = await store.load('legacy-canvas')
     expect(result.kind).toBe('not-found')
   })
@@ -204,7 +204,7 @@ describe('LoroStore (real IndexedDB)', () => {
   it('appendDelta with a corrupt existing record throws so the caller can surface storage-failure', async () => {
     // Seed a corrupt envelope
     const db = await openLoroDb()
-    await writeRaw(db, 'loroCanvases', 'corrupt-canvas', { v: 99, garbage: true })
+    await writeRaw(db, 'loroDocuments', 'corrupt-canvas', { v: 99, garbage: true })
     db.close()
 
     const store = new LoroStore()
@@ -223,8 +223,8 @@ function openLoroDb(): Promise<IDBDatabase> {
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
+      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)

@@ -4,14 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
-import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 
 function makeCanvas(
   id: string,
   name: string,
-  kind: CanvasSnapshot['kind'] = 'spatial',
-): CanvasSnapshot {
+  kind: DocumentSnapshot['kind'] = 'spatial',
+): DocumentSnapshot {
   return { id, name, updatedAt: new Date().toISOString(), kind }
 }
 

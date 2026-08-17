@@ -4,7 +4,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { LoroStore } from '../lib/loro-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 // Narrow surface used by the controller to seed a new canvas's Loro doc (and,
 // for duplicateDocument, to read one back). Injectable so node/jsdom tests can
@@ -30,7 +30,7 @@ export interface BrowserLocalDocumentController {
    * spatial and markdown persistence across two stores.
    */
   loro: LoroStoreLike
-  snapshot: CanvasSnapshot | null
+  snapshot: DocumentSnapshot | null
   persistence: BrowserLocalPersistenceState
   cleanupCompleted: boolean
   cleanupError: string | null
@@ -40,8 +40,8 @@ export interface BrowserLocalDocumentController {
   renameCanvas(name: string): Promise<void>
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
-  listCanvases(): Promise<CanvasSnapshot[]>
-  createCanvas(name?: string, kind?: CanvasSnapshot['kind']): Promise<CanvasSnapshot>
+  listCanvases(): Promise<DocumentSnapshot[]>
+  createCanvas(name?: string, kind?: DocumentSnapshot['kind']): Promise<DocumentSnapshot>
   /** Resolves true when the switch landed; false when superseded, when the
    *  target is missing (recoverable — e.g. a stale deep link), or when the
    *  store degraded. */
@@ -49,14 +49,14 @@ export interface BrowserLocalDocumentController {
   // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
   // then switches to it — matching the create-then-open flow the UI expects.
-  duplicateDocument(): Promise<CanvasSnapshot>
+  duplicateDocument(): Promise<DocumentSnapshot>
 }
 
 function createCanvasSnapshot(
   id: string,
   name?: string,
-  kind: CanvasSnapshot['kind'] = 'spatial',
-): CanvasSnapshot {
+  kind: DocumentSnapshot['kind'] = 'spatial',
+): DocumentSnapshot {
   return { id, name: name?.trim() || 'untitled', updatedAt: new Date().toISOString(), kind }
 }
 
@@ -71,7 +71,7 @@ export function useBrowserLocalDocumentController(
   // than showing an error: a dead bookmark must not dead-end the user.
   initialCanvasId?: string,
 ): BrowserLocalDocumentController {
-  const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
+  const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
     kind: 'saved',
     lastSavedAt: null,
@@ -90,7 +90,7 @@ export function useBrowserLocalDocumentController(
   persistenceRef.current = persistence
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
-  const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
+  const pendingSnapshotRef = useRef<DocumentSnapshot | null>(null)
   // Guards overlapping switchDocument calls (a fast switcher double-click, or a
   // burst of browser Back/Forward): only the call that is still the latest
   // requested one when its async load settles is allowed to commit state, so
@@ -158,7 +158,7 @@ export function useBrowserLocalDocumentController(
         const requested = await storeRef.current.load(initialCanvasId)
         if (cancelled) return
         if (requested.kind === 'ok') {
-          await storeRef.current.setDefaultCanvasId(initialCanvasId)
+          await storeRef.current.setDefaultDocumentId(initialCanvasId)
           if (!cancelled) setSnapshot(requested.snapshot)
           return
         }
@@ -167,13 +167,13 @@ export function useBrowserLocalDocumentController(
         // a stale bookmark must not dead-end the user.
       }
 
-      let id = await storeRef.current.getDefaultCanvasId()
+      let id = await storeRef.current.getDefaultDocumentId()
       if (cancelled) return
 
       if (id === null) {
         id = storeRef.current.generateId()
         const newSnapshot = createCanvasSnapshot(id)
-        await storeRef.current.setDefaultCanvasId(id)
+        await storeRef.current.setDefaultDocumentId(id)
         await storeRef.current.save(newSnapshot)
         if (!cancelled) setSnapshot(newSnapshot)
         return
@@ -221,7 +221,7 @@ export function useBrowserLocalDocumentController(
       const base = pendingSnapshotRef.current ?? snapshotRef.current
       if (base === null) return Promise.resolve()
       const normalized = name.trim() || 'untitled'
-      const updated: CanvasSnapshot = {
+      const updated: DocumentSnapshot = {
         ...base,
         name: normalized,
         updatedAt: new Date().toISOString(),
@@ -254,7 +254,7 @@ export function useBrowserLocalDocumentController(
       setCleanupError('The canvas could not be safely removed. Your copy has been kept.')
       return
     }
-    const id = await storeRef.current.getDefaultCanvasId()
+    const id = await storeRef.current.getDefaultDocumentId()
     if (id === null) return
     try {
       const result = await storeRef.current.del(id)
@@ -275,10 +275,10 @@ export function useBrowserLocalDocumentController(
       // Save the new canvas BEFORE repointing the default id, so a failed write never
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
       await storeRef.current.save(fresh)
-      const existingId = await storeRef.current.getDefaultCanvasId()
+      const existingId = await storeRef.current.getDefaultDocumentId()
       // del() only removes the canvas the default pointer currently aims at (and clears
       // the pointer as it goes), so the old canvas must be dropped BEFORE repointing —
-      // calling it after setDefaultCanvasId(id) always pointer-mismatches and leaks the row.
+      // calling it after setDefaultDocumentId(id) always pointer-mismatches and leaks the row.
       if (existingId !== null && existingId !== id) {
         try {
           await storeRef.current.del(existingId)
@@ -286,9 +286,9 @@ export function useBrowserLocalDocumentController(
           // Dropping the old canvas is best-effort; failure must not abort recovery.
         }
       }
-      await storeRef.current.setDefaultCanvasId(id)
+      await storeRef.current.setDefaultDocumentId(id)
     } catch {
-      // Recovery itself failed. If the failure landed on the final setDefaultCanvasId, the
+      // Recovery itself failed. If the failure landed on the final setDefaultDocumentId, the
       // freshly-saved canvas is written but never pointed to — del() can't reach it (it only
       // removes the current default), so drop the orphan via the pointer-independent
       // removeDocument. Best-effort: cleanup failure must not mask the degraded view, which
@@ -311,12 +311,15 @@ export function useBrowserLocalDocumentController(
     setCleanupCompleted(false)
   }, [])
 
-  const listCanvases = useCallback((): Promise<CanvasSnapshot[]> => {
+  const listCanvases = useCallback((): Promise<DocumentSnapshot[]> => {
     return storeRef.current.listCanvases()
   }, [])
 
   const createCanvas = useCallback(
-    async (name?: string, kind: CanvasSnapshot['kind'] = 'spatial'): Promise<CanvasSnapshot> => {
+    async (
+      name?: string,
+      kind: DocumentSnapshot['kind'] = 'spatial',
+    ): Promise<DocumentSnapshot> => {
       const id = storeRef.current.generateId()
       const fresh = createCanvasSnapshot(id, name, kind)
       // Metadata first, then the Loro doc: if the Loro write fails, the
@@ -369,7 +372,7 @@ export function useBrowserLocalDocumentController(
           }))
           return false
         }
-        await storeRef.current.setDefaultCanvasId(id)
+        await storeRef.current.setDefaultDocumentId(id)
         if (generation !== switchGenerationRef.current) return false // superseded while persisting the pointer
         snapshotRef.current = result.snapshot
         setSnapshot(result.snapshot)
@@ -400,7 +403,7 @@ export function useBrowserLocalDocumentController(
   // daemon copy-first import path already uses) so the duplicate is a true
   // deep copy: a fresh Uint8Array with no shared reference to the source's
   // bytes, deltas, or underlying LoroDoc.
-  const duplicateDocument = useCallback(async (): Promise<CanvasSnapshot> => {
+  const duplicateDocument = useCallback(async (): Promise<DocumentSnapshot> => {
     const flushed = await flushSave()
     if (!flushed) throw new Error('Failed to save pending changes before duplicating.')
     const source = snapshotRef.current

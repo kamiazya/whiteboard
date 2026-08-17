@@ -24,7 +24,7 @@ import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import {
   clearWhiteboardDb,
-  loroCanvasesKeys,
+  loroDocumentsKeys,
   setTextCommand,
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
@@ -90,13 +90,13 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
         act(() => {
           latestOnChange!(next, setTextCommand('reload-regression-node'))
         })
-        const keys = await loroCanvasesKeys()
+        const keys = await loroDocumentsKeys()
         expect(keys.length).toBeGreaterThan(0)
       },
       { timeout: 10000, interval: 600 },
     )
 
-    const keysAfterDraw = await loroCanvasesKeys()
+    const keysAfterDraw = await loroDocumentsKeys()
     expect(keysAfterDraw).not.toContain('__placeholder__')
 
     cleanup()
@@ -118,7 +118,7 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
       { timeout: 5000 },
     )
 
-    const keysAfterRemount = await loroCanvasesKeys()
+    const keysAfterRemount = await loroDocumentsKeys()
     expect(keysAfterRemount).not.toContain('__placeholder__')
   })
 })
