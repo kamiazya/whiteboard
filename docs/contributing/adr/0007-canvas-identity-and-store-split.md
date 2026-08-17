@@ -21,13 +21,6 @@
 > exists: a reader arriving here would otherwise meet a banned word in an
 > Accepted decision. See `.claude/rules/vocabulary.md`.
 
-> **Vocabulary note (2026-08-17):** the blob layout this ADR describes as
-> `blobs/<workspaceId>/canvas/` is now `blobs/<workspaceId>/document/`, moved
-> by migration `0011-document-blob-dir`. The split this ADR decides is
-> unchanged — only the segment's name. A reader tracing a stored blob should
-> expect the new spelling on disk and the old one inside migrations up to
-> `0011`, which name the layout as it stood at their point in the log.
-
 ## Context
 
 The daemon holds "canvases" in two representations that are co-located in

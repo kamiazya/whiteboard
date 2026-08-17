@@ -20,13 +20,6 @@
 > retired and fails `tools/arch-lint/src/vocabulary-check.test.ts`; this ADR is
 > history and keeps it. See `.claude/rules/vocabulary.md`.
 
-> **Vocabulary note (2026-08-17):** the blob layout this ADR describes as
-> `blobs/<workspaceId>/canvas/` is now `blobs/<workspaceId>/document/`, moved
-> by migration `0011-document-blob-dir`. The split this ADR decides is
-> unchanged — only the segment's name. A reader tracing a stored blob should
-> expect the new spelling on disk and the old one inside migrations up to
-> `0011`, which name the layout as it stood at their point in the log.
-
 ## Context
 
 [ADR-0007](0007-canvas-identity-and-store-split.md) fixed `(workspaceId,
