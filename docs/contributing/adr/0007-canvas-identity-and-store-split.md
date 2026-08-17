@@ -156,3 +156,38 @@ from a name. The derivation this point said "needs no re-derivation on
 promotion" has been deleted; browser-local rows show the display name
 alone until browser-local canvases have real slugs. Point 3's first
 sentence — one always-present workspace, UUID identity — stands.
+
+## Addendum (2026-08-18): as-built — the split is closed
+
+Decision 4 named the convergence direction (converge on the user-facing
+world) and deliberately left the mechanism open. This records what was
+actually built, so a reader does not have to infer it from the migration
+log.
+
+**Mechanism chosen: replace the legacy store's internals under the same
+identity.** Neither surface moved to the other's identity scheme, and no
+sync bridge was built (the ADR rejects that above, and it stays rejected).
+
+- **The tree document is retired.** Migration `0007` adopted every
+  `workspace-tree:<workspaceId>` document into the shared `documents`
+  table.
+- **One id space.** Migration `0008` re-minted every legacy nanoid row as a
+  ULID; `0012` swept the rows a third minting site (the version/name/branch
+  stores' `upsertCanvasRow`) kept producing until it was fixed to mint
+  ULIDs too. Rows created by that site had been invisible to the agent
+  surface, which skips non-ULID ids.
+- **One byte store.** `document-store.ts`'s `loadDocument`/`saveDocument`
+  now read and write the same Libsql snapshot rows the MCP tools use;
+  filesystem blobs are no longer a storage location. Migration `0011`
+  imports pre-existing blobs additively (divergences are logged, never
+  auto-resolved), the daemon re-runs that import at startup to close the
+  window between the migration and this change, and a blob file is deleted
+  only after its bytes are proven byte-identical to the stored rows.
+- **Write locking is unified.** The HTTP/WS save path nests the per-document
+  lock the MCP tools take, inside the workspace lock it already held, and a
+  save merges the stored snapshot into the outgoing document first — a
+  long-lived editing session can no longer overwrite a tool call that landed
+  while it was open.
+
+What decision 4 asked for is therefore done; decisions 1–3 and 5 stand
+unchanged, and path rename (decision 2) is still open.
