@@ -9,6 +9,7 @@ import { migration as adoptWorkspaceTree } from './0007-adopt-workspace-tree.js'
 import { migration as ulidLegacyCanvasIds } from './0008-ulid-legacy-canvas-ids.js'
 import { migration as documentVocabulary } from './0009-document-vocabulary.js'
 import { migration as documentPath } from './0010-document-path.js'
+import { migration as importFsBlobs } from './0011-import-fs-blobs.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -29,4 +30,5 @@ export const migrations: Record<string, Migration> = {
   '0008-ulid-legacy-canvas-ids': ulidLegacyCanvasIds,
   '0009-document-vocabulary': documentVocabulary,
   '0010-document-path': documentPath,
+  '0011-import-fs-blobs': importFsBlobs,
 }

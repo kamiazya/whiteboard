@@ -175,6 +175,18 @@ A fresh `WHITEBOARD_DATA_DIR` always works as a quick sanity check:
 WHITEBOARD_DATA_DIR=/tmp/wb-test WHITEBOARD_DEV=1 pnpm mcp:http:dev
 ```
 
+If instead the daemon fails to start with:
+
+```
+Database migration failed: permission denied reading the data directory. Check filesystem
+permissions on the workspace blob directories under <data dir>/blobs and restart.
+```
+
+a migration hit a permission error walking the data dir's filesystem tree (not the SQLite file
+itself) — typically an externally-changed owner/mode on `<data dir>/blobs/<workspaceId>/canvas`,
+or a restrictive umask. Fix the directory's permissions (or ownership) and restart; this is not a
+disposable-database case, so do not delete `whiteboard.db`.
+
 ## MCP Tools Not Visible After Starting Daemon
 
 If you start the daemon **after** opening a Claude Code (or Codex) session, the whiteboard
