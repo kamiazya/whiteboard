@@ -11,7 +11,7 @@ Prompt set for Stage 3, where the goal is to break the diagram and see whether i
 
 ## Fresh-Viewer Testing Prompt
 
-Use this after exporting the diagram to PNG.
+Use this after rendering the diagram to SVG with `wb_scene_render`.
 
 ```text
 You are a fresh viewer. You do not know the prior chat.
@@ -21,7 +21,7 @@ Audience:
 What the diagram is supposed to help decide:
 Known constraints:
 
-Review this exported whiteboard / frame only.
+Review this rendered whiteboard document only.
 
 Tasks:
 1. In one sentence, say what you think this diagram is about.
@@ -59,7 +59,7 @@ Output format:
 Use this when the issue is geometry, not meaning.
 
 ```text
-Review this exported whiteboard / frame for geometry issues only.
+Review this rendered whiteboard document for geometry issues only.
 
 Tasks:
 1. list overlaps
@@ -67,7 +67,7 @@ Tasks:
 3. list arrows or connectors that do not visually connect cleanly
 4. list edges that pass through unrelated boxes
 5. list parallel edges that collapse into one visible path
-6. list stray elements that look detached from the intended frame
+6. list stray elements that look detached from the rest of the diagram
 7. recommend the smallest local edits to fix each issue
 
 Rules:
