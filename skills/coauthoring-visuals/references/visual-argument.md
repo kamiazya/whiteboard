@@ -1,6 +1,6 @@
 # Visual Argument
 
-The key idea borrowed from `excalidraw-diagram-skill` is to treat a diagram not as a display of information, but as a **visual argument**.
+The key idea is to treat a diagram not as a display of information, but as a **visual argument**.
 
 ## Two Tests
 
@@ -52,7 +52,7 @@ Large technical diagrams should not stop at a single explanatory layer.
 - section boundary: the main grouping
 - detail / evidence: concrete examples inside a section
 
-When you split frames, decide which of these levels each frame is responsible for.
+When you split regions or documents, decide which of these levels each one is responsible for.
 
 ## Containers
 

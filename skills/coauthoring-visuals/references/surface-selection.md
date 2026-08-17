@@ -47,12 +47,12 @@ Keep overview on the canvas and push dense detail into a companion artifact.
 
 The most common case is hybrid:
 
-- frame 1: overview / system shape
-- frame 2: key flow or boundary
+- region 1: overview / system shape
+- region 2: key flow or boundary
 - companion mermaid: canonical flowchart / sequence / state / ER / C4 / timeline
 - companion table/page: detailed comparison, audit, command inventory, file map
 
-Validate the Mermaid companion before export, then include its PNG/SVG in the fresh-viewer test.
+Validate the Mermaid companion before sharing it, then include its rendered SVG in the fresh-viewer test.
 
 Let the diagram carry structure and the companion artifact carry detail.
 
@@ -71,7 +71,7 @@ If you choose slides, also open [`./slide-deck-patterns.md`](./slide-deck-patter
 
 Re-cut the surface if any of these appear:
 
-- frames are full of paragraphs
+- regions are full of paragraphs
 - the viewer needs excessive zoom just to read detail
 - a comparison is really a table recreated as a cluster of boxes
 - a file list or command list has become a wall of boxes

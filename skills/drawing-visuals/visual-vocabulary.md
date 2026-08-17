@@ -1,4 +1,4 @@
-# Excalidraw Visual Vocabulary
+# Visual Vocabulary
 
 What a diagram should deliver is not "a picture" but **decision support**.
 This document helps choose the right diagram family and the right words so that people align faster.
@@ -12,7 +12,7 @@ Before drawing, answer only one question:
 - what should the reader understand in **5 seconds**?
 - is this about structure, flow, comparison, a problem, or a proposal?
 
-Do not make one board answer multiple questions at once.
+Do not make one document answer multiple questions at once.
 
 Examples that should usually be separated:
 - structural explanation
@@ -20,7 +20,7 @@ Examples that should usually be separated:
 - improvement proposal
 - before / after comparison
 
-Default rule: **1 question per frame or canvas**.
+Default rule: **1 question per document**.
 
 ## Choose Visual Direction Early
 
@@ -48,37 +48,37 @@ Cases where you can skip it:
 Named themes are easier to reuse.
 Examples: `systems`, `review`, `proposal`, `executive`.
 
-## Split Across Canvases Or Frames?
+## Split Across Documents Or Group Nodes?
 
-Excalidraw's infinite canvas is strongest when related questions are organized **as multiple frames on one canvas**.
-That does not mean every board belongs on one canvas.
+There is no frame or membership feature on this tool surface — a document is one flat canvas of
+nodes and edges, and `wb_scene_render` always renders all of it. A `group` node (label + optional
+background) can loosely mark a region, but nothing tracks which other nodes are "inside" it, and
+there is no way to render or export just that region.
 
-Use multiple frames on one canvas when:
-- you want to move between `current / problem / proposal` in one discussion
+That leaves two real choices when a discussion has multiple related questions:
+
+- **One document, multiple visually-separated regions**: use a `group` node per region and keep
+  each region's nodes physically clustered together on the grid. Cheap, but the whole SVG renders
+  every time — there is no way to inspect one region in isolation.
+- **Separate documents** (`wb_document_create` per question): each renders independently, can be
+  shared or exported on its own, and keeps unrelated revision history apart.
+
+Use one document with visually-separated regions when:
+- you want to move between `current / problem / proposal` in one glance
 - you want side-by-side or stacked comparison
-- you want section-level inspection through viewport or `export_canvas({ format: "png", frameId })`
-- you may later add cross-frame arrows or supporting notes
+- you expect to add cross-region edges or supporting notes later
 
-When using frames:
-- treat the frame name as the section heading
-- do not duplicate `Current`, `Problem`, or `Proposal` inside the frame
-- use the first large text inside the frame for the section conclusion or claim
-- even related frames should differ slightly by role
-  - `current`: neutral and easy to read
-  - `problem`: stronger callouts and hotspots
-  - `proposal`: calmer with more whitespace
-
-Split into separate canvases when:
+Use separate documents when:
 - each board should be shared or exported independently
 - putting everything on one canvas makes the subject unreadable within 5 seconds
 - the audience or usage context differs
 - revision history should stay separate
 
 If unsure:
-- for **chapters of the same discussion**, prefer 1 canvas + multiple frames
-- for **separate artifacts**, prefer separate canvases
+- for **chapters of the same discussion**, prefer one document with visually-separated regions
+- for **separate artifacts**, prefer separate documents
 
-In either case, do not mix multiple questions inside one frame / canvas.
+In either case, do not mix multiple questions inside one region.
 
 ## Choose The Diagram From The Question
 
@@ -91,7 +91,7 @@ In either case, do not mix multiple questions inside one frame / canvas.
 | what changed | before / after comparison | `float only the change` |
 | what should be compared | comparison matrix | `align the comparison axis` |
 | where the problem is | hotspot annotation | `point to the problem area` |
-| what is still unresolved | note / dashed grouping / neutral box | `make uncertainty explicit` |
+| what is still unresolved | note / dashed grouping / neutral node | `make uncertainty explicit` |
 | what boundary something belongs to and how it connects | infrastructure / network topology | `fix boundaries and connection type` |
 
 ## Intent -> Diagram Mapping
@@ -118,7 +118,7 @@ Example labels:
 - `Owned by Browser`
 
 Avoid:
-- mixing time-sequence arrows into a structural board
+- mixing time-sequence edges into a structural board
 - drawing structure and problem callouts in the same visual language
 
 For infrastructure diagrams, decide boundary vocabulary first:
@@ -145,18 +145,12 @@ Useful words:
 - `output`
 - `side effect`
 
-Arrow labels should usually prioritize **verbs over nouns**.
+Edge labels should usually prioritize **verbs over nouns**.
 
-Keep arrow labels sparse:
-- 1-2 labeled arrows per frame is often enough
-- if the box title or callout already explains the relation, omit the arrow label
-- put causes and evaluative language into the box title / subText instead of on the arrow
-- keep only the minimum relationship verb on the arrow
-
-Good split of labor:
-- box: `Dense scan`
-- subText: `The form lacks hierarchy, so everything competes`
-- arrow label: `buries`
+Keep edge labels sparse:
+- 1-2 labeled edges per document region is often enough
+- if the node text already explains the relation, omit the edge label
+- keep only the minimum relationship verb on the edge
 
 Good arrow-label examples:
 - `validate`
@@ -170,7 +164,7 @@ Weak examples:
 - `thing`
 
 Infrastructure diagrams are a partial exception:
-there, arrow labels may prioritize **protocol / transport over verbs**.
+there, edge labels may prioritize **protocol / transport over verbs**.
 
 Good examples:
 - `HTTPS`
@@ -181,9 +175,9 @@ Good examples:
 
 Avoid:
 - long descriptive sentences as connection labels
-- representing a bus only as arrow-label text
+- representing a bus only as edge-label text
 
-If an async path matters, give the bus / queue / topic a standalone box such as `Kafka`, `SQS`, or `EventBridge`, then split the flow into two arrows around it.
+If an async path matters, give the bus / queue / topic a standalone node such as `Kafka`, `SQS`, or `EventBridge`, then split the flow into two edges around it.
 
 ### Show Boundaries
 
@@ -203,8 +197,8 @@ Useful words:
 - `trust boundary`
 
 Rules:
-- show the boundary as an enclosing shell, not as the background of a box
-- keep boundary labels short in the top-left
+- show the boundary as a `group` node sized to enclose its members, not as a background fill on the components themselves
+- keep boundary labels short — the `group.label` field, not a separate node
 - move legends and helper notes outside boundaries
 - components are the main subject; boundaries provide context
 
@@ -261,7 +255,7 @@ Rules:
 ### Point To A Problem Area
 
 Good fits:
-- screenshot annotation
+- screenshot annotation via a `file` node plus overlaid `text` nodes
 - existing-screen review
 - local explanation of a failure point
 
@@ -278,8 +272,8 @@ Rules:
 - do not cram both the problem and the proposal into one label
 
 Good split:
-- `Problem: primary CTA is buried`
-- `Proposal: isolate CTA into top band`
+- one node: `Problem: primary CTA is buried`
+- a second node nearby: `Proposal: isolate CTA into top band`
 
 ### Make Uncertainty Explicit
 
@@ -370,57 +364,58 @@ Prefer compact vocabulary that still carries meaning.
 
 ## Differentiate State Visually
 
-Fix the appearance by meaning so explanation becomes lighter.
+Fix the appearance by meaning so explanation becomes lighter. There is no semantic color name in the
+tool itself — pick your own hex-to-role mapping once (see [`style-reference.md`](./style-reference.md#colors)) and apply it consistently.
 
 | State | Recommended Treatment |
 | --- | --- |
-| main path | `primary` / `success`, centered |
-| supporting information | `neutral` / `info`, toward the edge |
-| problem | `danger` / `warning`, local annotation |
-| proposal | separate zone such as before/after or a `Proposal` frame |
-| uncertainty | `neutral` and note-like treatment, kept away from settled facts |
-| out of scope | faint support box or pushed outside the section |
-| boundary | faint enclosure in `warning` / `info`, weaker than components |
-| async path | standalone event-bus box plus supporting color distinct from the main path |
+| main path | primary / success hex, centered |
+| supporting information | neutral / info hex, toward the edge |
+| problem | danger / warning hex, local annotation |
+| proposal | separate region such as before/after, or its own document |
+| uncertainty | neutral hex and note-like treatment, kept away from settled facts |
+| out of scope | faint support node or pushed outside the section |
+| boundary | faint `group` node in warning / info hex, weaker than components |
+| async path | standalone event-bus node plus a color distinct from the main path |
 
 ## Anti-patterns
 
 ### 1. Do Everything In One Board
 
 Warning signs:
-- a structural diagram contains both problem callouts and proposal arrows
+- a structural diagram contains both problem callouts and proposal edges
 - the reader loses track of which conversation they are in
 
 Fix:
-split into separate frames such as:
+split into separate regions or documents such as:
 - `Current state`
 - `Problem`
 - `Proposal`
 
-### 2. Arrow Labels Eat The Main Subject
+### 2. Edge Labels Eat The Main Subject
 
 Warning signs:
-- the board is noisy from arrow labels alone
-- callouts and arrow labels explain the same thing twice
-- the viewer reads arrow words before box meaning
+- the board is noisy from edge labels alone
+- callouts and edge labels explain the same thing twice
+- the viewer reads edge words before node meaning
 
 Fix:
-- keep labeled arrows to 1-2 per frame
-- move causes and intent into box title / subText
-- leave only short relation verbs such as `move`, `attach`, `split` on arrows
+- keep labeled edges to 1-2 per region
+- move causes and intent into the node's own `text`
+- leave only short relation verbs such as `move`, `attach`, `split` on edges
 
-### 3. Frame Header And Inner Title Duplicate Each Other
+### 3. Section Header And Inner Node Duplicate Each Other
 
 Warning signs:
-- the frame is named `Current`, and there is also a large `Current` inside it
+- a `group` node is labeled `Current`, and there is also a large `text` node saying `Current` inside it
 - the section label can be read twice before any real claim
 
 Fix:
-- let the frame name act as the section heading
-- assign the large inner text to the conclusion or question
-- do not repeat the same word as both frame label and inner heading
+- let the `group.label` act as the section heading
+- assign the large inner text node to the conclusion or question
+- do not repeat the same word as both the group label and an inner node
 
-### 4. The Arrow Has No Meaning
+### 4. The Edge Has No Meaning
 
 Bad examples:
 - `data`
@@ -429,7 +424,7 @@ Bad examples:
 
 Fix:
 - write the action as a verb
-- if only a noun comes to mind, the box responsibility is often still too vague
+- if only a noun comes to mind, the node's responsibility is often still too vague
 
 ### 5. The Comparison Axis Drifts
 
@@ -452,7 +447,7 @@ Fix:
 ### 7. Problem And Proposal Look The Same
 
 Warning signs:
-- red boxes and blue boxes are mixed without any explicit meaning
+- two colors are mixed without any explicit meaning
 
 Fix:
 - label problem areas as `Problem`
@@ -461,38 +456,38 @@ Fix:
 ### 8. Placeholders Remain
 
 Warning signs:
-- a box was removed but its empty frame still remains
-- template headings or helper lines survive after losing their meaning
-- an empty container sits in the section doing nothing
+- a node was patched down to near-nothing but its empty `group` boundary still remains
+- template headings or helper text survive after losing their meaning
 
 Fix:
-- delete unused elements instead of leaving them blank
-- do not force template slot count to match source-item count mechanically
-- if multiple items are getting crammed into one box, add more boxes and reorganize instead
+- there is no delete tool, so an unwanted node has to be repurposed with `wb_node_patch` (shrink it,
+  relabel it as a stray note) rather than left as dead placeholder text
+- do not force a fixed node count to match a source-item count mechanically
+- if multiple items are getting crammed into one node, add more nodes and reorganize instead
 
 ### 9. Legend Or Notes Slip Inside A Boundary
 
 Warning signs:
-- a legend sits inside an `AWS Region` or `Cluster`
+- a legend sits inside an `AWS Region` or `Cluster` `group` node
 - a helper note remains inside a private subnet and looks like part of the actual topology
 
 Fix:
-- keep legends / glossaries / support notes outside the boundary
-- use boundaries only to show membership, not to host explanatory text
+- keep legends / glossaries / support notes visually outside the boundary's `group`
+- use a `group` only to show membership by proximity, not to host explanatory text
 
-### 10. Async Paths Disappear Into Arrow Labels
+### 10. Async Paths Disappear Into Edge Labels
 
 Warning signs:
-- `events` or `Kafka` exists only as arrow text
+- `events` or `Kafka` exists only as edge text
 - the responsibility cut between services is unreadable
 
 Fix:
-- make bus / queue / topic a standalone box
+- make bus / queue / topic a standalone node
 - split the flow into producer -> bus -> consumer
 
 ## 5-Second Review
 
-After export, check:
+After rendering with `wb_scene_render`, check:
 
 - can the main subject be read in 5 seconds?
 - can the main path be traced as a single continuous reading path?
@@ -500,8 +495,8 @@ After export, check:
 - can problem / proposal / uncertainty be distinguished visually?
 - are labels short while still keeping relationships readable?
 - is supporting information quieter than the main subject?
-- does the claim survive without reading every arrow label?
-- are frame names and body headings doing different jobs?
+- does the claim survive without reading every edge label?
+- are section labels and inner node text doing different jobs?
 - are there any leftover placeholders or forgotten template fragments?
 - are the roles of boundary and legend still separate?
 - can async paths be read as independent elements?

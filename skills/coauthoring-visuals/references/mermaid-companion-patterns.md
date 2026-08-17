@@ -41,7 +41,7 @@ Mermaid companions should follow **validate before export / share**.
 - arrow style stays internally consistent
 - labels with special characters are quoted if needed
 - subgraph / boundary / layer names are not over-compressed
-- exported PNG/SVG can be used in fresh-viewer testing
+- the rendered SVG can be used in fresh-viewer testing
 
 Even if a future workflow imports Mermaid into the whiteboard, assume the Mermaid grammar must be stable first.
 
@@ -91,4 +91,4 @@ At minimum, import should preserve:
 - edge labels and edge style
 - direction (`LR`, `TD`)
 
-Those semantics should survive in the imported frame shell.
+Those semantics should survive in the imported shell.

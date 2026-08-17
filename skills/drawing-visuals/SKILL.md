@@ -1,21 +1,33 @@
 ---
 name: drawing-visuals
-description: Draw and annotate visuals with your AI agent on a shared canvas. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone.
+description: Draw diagrams with your AI agent on a shared JSON Canvas whiteboard. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone. Covers node/edge placement and SVG rendering only — no icon libraries, no other export formats, no per-element delete.
 ---
 
 # drawing-visuals
 
 Like a whiteboard on the wall of a meeting room, this is a tool for AI and humans to **align by drawing on the same workspace**.
 Use it when drawing and pointing is faster than iterating in prose.
-What you draw stays on the canvas and can be revisited and refined later.
+What you draw stays on the document and can be revisited and refined later.
 
-Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `annotate` / `annotate_batch` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG or SVG.
-Open exported PNGs with the Read tool and inspect them visually.
+**Coverage note.** The whiteboard MCP surface is deliberately small: place nodes and edges,
+tidy the layout, render SVG, save/restore versions. There is no icon or template library, no
+align/distribute, no viewport control, and — today — no way to delete a single node or edge once
+added. Plan the diagram with that ceiling in mind rather than assuming a full-featured drawing-app
+tool set.
+
+Use these tools:
+
+- `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
+- `wb_node_add` / `wb_node_patch` / `wb_node_lock` — place and adjust nodes
+- `wb_edge_add` / `wb_edge_patch` / `wb_edge_lock` — connect nodes
+- `wb_canvas_tidy` — auto re-layout
+- `wb_scene_render` — render the laid-out scene as SVG (the only export format)
+- `wb_scene_digest` — a text summary of the scene, for when you cannot see the rendered image
+- `wb_version_save` / `wb_version_list` / `wb_version_restore` — checkpoint and roll back
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
 - `references/reading-map.md`: the routing note that tells you which guidance to open for which kind of diagram
-- `references/library-first-workflow.md`: how to work library-first for icon-heavy diagrams; open only when needed
-- `style-reference.md`: the deep reference for coordinates, color, frames, and layout recipes; open only when needed
+- `style-reference.md`: the deep reference for coordinates, color, and layout recipes; open only when needed
 - `visual-vocabulary.md`: the deep reference for labeling, diagram choice, and anti-patterns; open only when needed
 
 Do not read `style-reference.md` and `visual-vocabulary.md` end-to-end every time.
@@ -23,7 +35,7 @@ Choose the diagram type through the reading map, then open only 1-2 relevant not
 
 If you need **the collaborative workflow for tightening the visual together while talking with the user**, also open [`../coauthoring-visuals/SKILL.md`](../coauthoring-visuals/SKILL.md).
 This `drawing-visuals` skill covers canvas operations, diagram vocabulary, and drawing mechanics.
-`coauthoring-visuals` covers context gathering, frame-by-frame refinement, and fresh-viewer testing.
+`coauthoring-visuals` covers context gathering, iterative refinement, and fresh-viewer testing.
 
 ---
 
@@ -49,11 +61,6 @@ The moment it feels like "drawing would be faster than prose," propose it and us
 - showing before / after, current / proposal, or option A / option B side by side
 - showing an N x M comparison matrix such as environment-by-feature coverage
 
-### Directing Change On Existing Visuals
-
-- annotating screenshots with "change this here" or "this is the problem"
-- leaving review comments on design comps or existing screens
-
 ### Alignment When Ambiguity Remains
 
 - when a spec or requirement still feels mismatched
@@ -62,38 +69,19 @@ The moment it feels like "drawing would be faster than prose," propose it and us
 
 **When in doubt, draw.**
 The cost of drawing is low; the cost of proceeding under false alignment is high.
-If the diagram turns out unnecessary, a quick `canvas_create` can be discarded.
+If the diagram turns out unnecessary, `wb_document_delete` it.
 
 ### Explicit User Triggers
 
-- `/drawing-visuals` - export the current canvas and consider the next adjustment
-- `/drawing-visuals <canvasId>` - work in the specified canvas
+- `/drawing-visuals` - render the current document and consider the next adjustment
+- `/drawing-visuals <documentId>` - work in the specified document
 - "explain it as a diagram", "use the whiteboard", "share it visually"
 
 ---
 
 ## The Loop After You Decide To Draw
 
-This is the working loop after you pick up the whiteboard.
-Repeat **draw -> inspect -> fix** until the board converges.
-
-### Step 0: Look For Official Or Saved Libraries First
-
-If the domain depends heavily on icons (AWS / GCP / K8s / network / UML / flowchart and similar), **search the official catalog and saved libraries before hand-drawing rectangles**.
-Using established icons improves fidelity and removes needless work around shape and color design.
-
-Open [`references/library-first-workflow.md`](./references/library-first-workflow.md) for the full workflow.
-At minimum:
-
-- inspect `user_library_list` and `library_catalog_list`
-- if a library looks promising, save it with `user_library_save` and inspect contents with `library_list_items`
-- if item names alone are not enough, do a scratch-canvas `trial insert` rather than inserting directly into production
-- judge both **identity** and **visual scale**
-- save useful index / notes / scale knowledge into `user_library_metadata_set`
-- preserve provider icon recognizability and apply brand through labels / frames / legends / palettes instead
-
-You can skip this step for generic rectangle-and-arrow flows, comparison matrices, before/after diffs, and screenshot annotation.
-If you cannot rely on a dedicated Claude Code subagent, hand [`references/library-research-prompt-template.md`](./references/library-research-prompt-template.md) to a General Subagent for library research.
+Repeat **draw -> render -> fix** until the document converges.
 
 ### Step 1: State The Intent
 
@@ -102,199 +90,131 @@ Examples:
 - "data flow for feature A -> B -> C"
 - "metric comparison matrix for previous vs current"
 
-If the intent is fuzzy, open [`visual-vocabulary.md`](./visual-vocabulary.md), look at "Choose the diagram from the question" and the "intent -> diagram" mapping, and narrow it down to **one question this diagram answers**.
-Do not try to solve multiple questions in one **frame or canvas** at once.
+If the intent is fuzzy, open [`visual-vocabulary.md`](./visual-vocabulary.md), look at "Choose the diagram from the question", and narrow it down to **one question this diagram answers**.
+Do not try to answer multiple questions in one document at once — there is no section-level export, so a document either reads as one story or it reads as clutter.
 
-Examples of questions that should be separated:
-- explain structure
-- point out a problem
-- compare proposals
-- show a historical before / after
+Once the intent is fixed, choose the node shape that fits:
 
-The choice of **separate canvases vs multiple frames on one canvas** should follow the guidance in [`visual-vocabulary.md`](./visual-vocabulary.md).
-If the diagrams belong to the same discussion, prefer **1 canvas + multiple frames**.
-Split into separate canvases only when independent export / sharing / audience separation is needed.
-
-Once the intent is fixed, the drawing tool choice usually becomes obvious:
-
-| Intent | Primary Tools |
+| Content | Node type |
 | --- | --- |
-| domain-specific icon diagram (AWS/GCP/K8s/UML) | `library_catalog_list` -> `user_library_save` -> `library_insert_item` |
-| reusable structural components | `template_list` -> `template_insert` |
-| flow with rectangles and arrows | `annotate_batch` with `box_with_label` + `arrow` |
-| comparison matrix (NxM, same-size cells) | `annotate_batch` with `layout` grid + `box_with_label` |
-| comparison table plus extra banner / footer | use **absolute coordinates**, not `layout` grid |
-| grouping existing related elements | `annotate_batch` with `group` |
-| emphasis / filled background | `annotate` with `rectangle` / `highlight` |
-| annotate an existing screenshot | `load_image` -> `annotate` with `coords: relative` |
-| one-off label or emphasis | `annotate` |
+| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting, no auto-wrap) |
+| a reference to another document, image, or file | `file` |
+| a link out to a URL | `link` |
+| a lightweight visual boundary (label + background) | `group` |
 
-Once the diagram type is chosen, open the relevant recipe in [`style-reference.md`](./style-reference.md#layout-patterns).
-It contains the shell, must-have elements, and common failure points for architecture, sequence, decision tree, directory tree, and comparison matrix patterns.
-For vocabulary and visual distinction of main path / exceptions / uncertainty, prefer the guidance in [`visual-vocabulary.md`](./visual-vocabulary.md).
-
-### Step 2: Draw
-
-- **Prefer official libraries for icons**: library items found in Step 0 can be inserted repeatedly anywhere with `library_insert_item`. This often communicates more with less effort than a rectangle-and-text substitute
-- **Prefer templates for reusable parts**: inspect with `template_list`, place with `template_insert`, then adjust the inserted elements with `update_element` / `move_elements`
-- **Fit the viewport after drawing**: call `viewport_set({ mode: "fit", padding: 40 })` so the whole composition is visible instead of leaving the browser on the default origin/zoom
-- **Use `annotate_batch` for multiple elements**: this is cheaper and cleaner than many individual `annotate` calls
-- **Long text wraps automatically by default (`autoFit: true`)**: `box_with_label` wraps long lines on whitespace and expands height as needed. Even if you pass `string[]`, long lines inside each entry can still wrap further. Use `autoFit: false` only when you need strict line control
-- **Colors are hex**: pass `#RRGGBB` for `color` / `backgroundColor` on `annotate` / `annotate_batch`
-- **Use plain `text` with `width` when you want wrapped headings or notes**
-- **Split `box_with_label` content into `title` / `text` / `subText`**: use `title` for emphasis, push supporting detail into `subText`, and use `subTextPosition: "top"` only when the caption truly belongs outside the rect
-- **For uneven matrix columns / rows**: use `layout.colWidths`, `layout.rowHeights`, `rowSpan`, `colSpan`, and inspect `dryRun: true` before committing
-- **Always inspect `annotate_batch` warnings**: `overflow`, `autoExpandedBy`, and overlap warnings are early signals that spacing is too tight
-- **For arrows between boxes**: prefer `startBoxId` / `endBoxId` or the equivalent name-based attachment so the arrow snaps to box edges
-- **For horizontal DAGs with fork/merge diamonds**: long arrows often cut through intermediate boxes. Instead, route them around boxes with a 3-point polyline plus smooth curve:
+### Step 2: Create The Document
 
 ```js
-update_element({
-  elementId: arrowId,
-  patch: {
-    points: [[0, 0], [midX, delta], [endX, 0]],
-    width: endX,
-    height: Math.abs(delta),
-    roundness: { type: 2 }
-  }
+wb_document_create({ workspaceId, path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" })
+```
+
+`kind: "spatial"` is required and cannot change later — a document is either a JSON Canvas (spatial) or OKF Markdown, decided at creation.
+
+### Step 3: Place Nodes And Edges
+
+Every node needs an id, integer `x`/`y`/`width`/`height`, and an optional `color` (either a hex string
+like `#1971c2` or a JSON Canvas preset `"1"`-`"6"` — there is no semantic color name like `"primary"`).
+There is no auto-sizing or auto-wrap: pick a width generous enough for the label up front.
+
+```js
+wb_node_add({
+  workspaceId, documentId,
+  node: { id: "client", type: "text", x: 40, y: 40, width: 160, height: 60, text: "Client", color: "#1971c2" },
+})
+wb_node_add({
+  workspaceId, documentId,
+  node: { id: "server", type: "text", x: 320, y: 40, width: 160, height: 60, text: "Server" },
+})
+wb_edge_add({
+  workspaceId, documentId,
+  edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" },
 })
 ```
 
-  - use `delta = -boxH` for upper-band arrows and `delta = +boxH` for lower-band arrows
-  - keep label width within roughly 110px including margin; if it overflows, shorten or split it to two lines
-  - for large DAG-heavy sections, wrap them in `create_frame` and iterate with `export_canvas({ format: "png", frameId })`
-- **Template variables**: use `template_insert({ variables: { service: "Billing API" } })` to substitute placeholders such as `{{service}}`
-- **Use frames for large diagrams**: if the canvas grows past a few screens, group related content with `create_frame`. This also enables section-level `export_canvas({ format: "png", frameId })`
-- **For related questions such as `current / problem / proposal`, think in frames first**: on an infinite Excalidraw canvas, related frames are easier to compare than separate canvases
-- **Treat frame names as section headings**: if the frame is named `Current` / `Problem` / `Proposal`, do not repeat the same heading inside it. Use the large text inside the frame for the conclusion or claim
-- **For review directions on an existing web UI, use `create_embed`**: embed the URL, then layer arrows / highlights with `annotate`
-- **Use `reorder_elements` for z-order fixes**: push annotations to front when labels disappear behind embeds or other elements
+Edges reference node ids, not coordinates — `wb_edge_add` fails if either endpoint does not already
+exist on the canvas. There is no coordinate math to do for the edge itself: `fromSide`/`toSide`
+(`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd` (`none`/`arrow`) are the only routing hints, and
+`wb_scene_render` computes the actual drawn path.
 
-### Step 3: Export To PNG And Inspect Visually
+**Fails if the id is taken.** `wb_node_add` / `wb_edge_add` never overwrite an existing id — use
+`wb_node_patch` / `wb_edge_patch` to change something already placed.
+
+**Use a rigid grid.** Do not hand-calculate coordinates case by case. Pick `column * 220 + 40` for x
+and `row * 140 + 40` for y (or similar), assign a row/column to every node, then fill in the numbers.
+See [`style-reference.md`](./style-reference.md) for sizing and color guidance.
+
+### Step 4: Tidy And Render
 
 ```js
-export_canvas({ canvasId, format: "png" })
-// For large diagrams where small text gets crushed:
-export_canvas({ canvasId, format: "png", scale: 2, minFontPx: 16, padding: 32 })
-// For inspecting only one section on a large canvas:
-export_canvas({ canvasId, format: "png", frameId: "<frame-id>", padding: 24 })
+wb_canvas_tidy({ workspaceId, documentId })
+// Re-tidy only a subset, leaving everything else as a fixed obstacle:
+wb_canvas_tidy({ workspaceId, documentId, scope: ["client", "server"] })
+
+wb_scene_render({ workspaceId, documentId })
+// Resolve `file` node references (e.g. a node that embeds another document) inline:
+wb_scene_render({ workspaceId, documentId, embedReferences: true })
 ```
 
-`export_canvas` is the single tool for every export format — pass `format: "png"`, `"svg"`, or `"json"`. PNG waits briefly for the browser to settle after opening, but it does **not** automatically open the canvas; SVG and JSON always render headless from the persisted document.
-If you need reliable PNG export for a disconnected canvas, call `canvas_open({ waitForClient: true })` first.
+`wb_canvas_tidy` re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
+parameters — it is a one-shot auto-arrange, not a configurable layout engine. It refuses a markdown
+document (there is nothing spatial to tidy) and treats a locked node (see `wb_node_lock`) as fixed.
 
-Options (PNG/SVG unless noted):
-- `padding`: whitespace around elements in px, default 10
-- `scale`: PNG only. Export DPI multiplier, default 1
-- `minFontPx`: PNG only. Boosts font size only in the export clone
-- `frameId`: exports only the frame plus its child elements
-- `outputPath`: absolute path to write the file to. When omitted, write to the workspace exports dir
-- `overwrite`: replace an existing file at `outputPath`. Default false; without it an existing file rejects with `output_exists`
-- `theme`: `"light"` or `"dark"`. Forces the rendered scene into the chosen theme without mutating persisted state. Pair both runs (`outputPath: ".../foo-light.png"` + `theme: "light"` and `.../foo-dark.png` + `theme: "dark"`) when reviewing dark-mode contrast or shipping diagrams that may live in mixed themes
-- `includeCustomFields`: JSON only. Keep internal custom fields (`parentId` / `relX` / `relY`) in the exported JSON. Default false, which resolves them into absolute x/y — use this to round-trip through excalidraw.com or the desktop app
+`wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format, and
+there is no way to render only one section of the document; the whole canvas renders every time.
+Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
-Inspect the exported PNG visually:
-
-- is text overflowing out of boxes?
-- do arrows connect to the intended targets?
-- does the main subject read without reading every arrow label?
-- are frame names and inner section headings duplicated?
+- is text overflowing out of boxes? (there is no auto-wrap, so this is a real risk)
+- do edges connect to the intended nodes?
+- does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
-- are gaps between cells / blocks wide enough?
+- are gaps between nodes wide enough?
 
-If the PNG is too large and the Read tool would burn too much context, optimize in this order:
-
-1. export only the relevant `frameId`
-2. lower `scale` to `0.5` or `0.7` if text remains legible
-3. switch to a viewport screenshot via browser tooling if needed
-
-To use `frameId`, set up frames in Step 2 with `create_frame({ canvasId, memberIds, name })` so section-level export stays available across iterations.
-
-### Step 4: Use `canvas_inspect` To Check Structure
-
-If the diagram looks wrong but the reason is unclear:
-
-```js
-canvas_inspect({ canvasId })
-```
-
-This returns each element's id / type / x,y / width,height / containerId.
-Use it to inspect things like broken box-label binding or unintended z-order.
+If you cannot see the rendered image, call `wb_scene_digest({ workspaceId, documentId })` instead —
+it summarizes the laid-out scene (node/edge counts, bounding boxes, and similar) as structured data.
 
 ### Step 5: Fine-Tune Or Redraw
 
-The goal is not to minimize edit count.
-The goal is to restore correct shared understanding.
-If the issue is small, fine-tuning is enough.
-If the structure, layout, or intent itself is suspect, **create a new canvas and redraw without hesitation**.
-
 | Situation | Best Action |
 | --- | --- |
-| change text, color, or font size | `update_element({ elementId, patch: { ... } })` |
-| move one or many elements | `move_elements({ elementIds, dx, dy })` |
-| align a few sibling boxes to a shared edge or centre | `align_elements({ elementIds, alignment })` — `left` / `right` / `center` for x; `top` / `bottom` / `middle` for y; orthogonal axis untouched |
-| even out the spacing of three or more elements along a row or column | `distribute_elements({ elementIds, direction })` — `horizontal` along x, `vertical` along y; first and last stay fixed |
-| delete one unnecessary element | `delete_element({ elementId })` |
-| delete many unnecessary elements together | `delete_elements({ elementIds })` |
-| delete and rebuild a whole section | pre-group with `assign_to_group`, then remove with `delete_group` |
-| clear the entire canvas | `canvas_clear({ canvasId })` |
-| overall layout is wrong | rebuild using a corrected `annotate_batch` layout |
-| structure or intent is wrong | redraw from scratch on a new canvas, or recreate intentionally with `canvas_create({ ..., overwrite: true })` when replacing a known target |
-| the real comparison axis changed mid-drawing | redraw on a new canvas instead of force-mutating the old one |
+| change a node's position, size, color, or label | `wb_node_patch({ nodeId, patch: { ... } })` |
+| change an edge's endpoints, sides, arrowheads, color, or label | `wb_edge_patch({ edgeId, patch: { ... } })` |
+| protect a node/edge from further edits (by anyone) | `wb_node_lock` / `wb_edge_lock` |
+| re-run automatic layout | `wb_canvas_tidy` (optionally scoped) |
+| structure or intent is wrong | create a fresh document with `wb_document_create` and redraw |
 
-#### Section Replacement Workflow
+**There is no delete tool for a single node or edge.** Once placed, a node or edge stays on the
+document; the only way to "remove" it today is to `wb_node_patch` it into something harmless (a
+small notice) or to start over with a new document via `wb_document_create`. Plan placement
+conservatively rather than expecting to prune afterward.
 
-In long design canvases with 10+ sections, it is common to rewrite only one section.
-Calling `delete_element` 20-30 times is slow and error-prone.
-Use a logical group instead:
-
-```js
-// 1. After the first draw, assign the returned elementIds to a logical group
-assign_to_group({
-  canvasId,
-  groupId: "sec-11-after",
-  elementIds: [/* ids */]
-})
-
-// 2. Later, delete the whole section in one shot
-delete_group({ canvasId, groupId: "sec-11-after" })
-
-// 3. Redraw the new section and reassign the same groupId
-const { elementIds } = await annotate_batch({ ... })
-assign_to_group({ canvasId, groupId: "sec-11-after", elementIds })
-```
-
-- inspect existing groups with `list_groups({ canvasId })`
-- give `groupId` a meaningful kebab-case name such as `sec-11-before`, `sec-11-after`, or `merge-dialog-wireframe`
-- one element can belong to multiple groups
-- for frames: `create_frame({ memberIds })` auto-fits only at creation time. If you add new elements later, pull them in with `update_frame_members({ frameId, add: [...] })` so the `frameId` stays stable for future `export_canvas({ format: "png", frameId })`
-
-After each fix, go back to Step 3 and export again.
-Redrawing is normal whiteboard behavior, not failure.
+After each fix, go back to Step 4 and render again.
+Redrawing on a fresh document is normal whiteboard behavior when the structure is wrong, not failure.
 
 ---
 
 ## Checklist When You Are Unsure
 
-- [ ] if the domain uses specific icons, did you check `library_catalog_list` / `user_library_list` first?
 - [ ] did you write down the one question the diagram should answer before drawing?
 - [ ] did you choose the diagram family from [`visual-vocabulary.md`](./visual-vocabulary.md)?
-- [ ] if multiple questions belong to the same discussion, did you consider frames before separate canvases?
-- [ ] if the frame name already acts as a section heading, did you avoid duplicating it inside the frame?
-- [ ] did you bundle multiple elements into one `annotate_batch`?
-- [ ] did you pre-split long labels with `string[]` when needed?
-- [ ] did you use semantic color keys?
-- [ ] can the main path / supporting info / problem / proposal / uncertainty be distinguished visually?
-- [ ] are arrow labels duplicating what box titles or callouts already say?
-- [ ] did you visually inspect with `export_canvas` and inspect structure with `canvas_inspect`?
-- [ ] did you use `update_element` / `move_elements` / `delete_element` for local fixes?
-- [ ] if structure or intent needed rethinking, did you redraw on a new canvas instead of forcing the old one to fit?
+- [ ] did you plan a rigid coordinate grid before calling `wb_node_add`?
+- [ ] did you size boxes generously, since there is no auto-wrap?
+- [ ] did you use semantic, consistent colors even though the tool has no named color keys?
+- [ ] can the main path / supporting info / problem / proposal be distinguished visually?
+- [ ] are edge labels duplicating what node text already says?
+- [ ] did you render with `wb_scene_render` (or summarize with `wb_scene_digest`) and inspect it?
+- [ ] if structure or intent needed rethinking, did you redraw on a new document instead of trying to prune the old one?
 
 ---
 
 ## Notes
 
-- **Browser Ctrl+Z / undo buttons only revert GUI edits made in the browser itself**: browser undo delegates to the Loro UndoManager. That is collaboration-safe, but MCP-originated changes arrive as remote changes, so browser undo will not rewind them. If you need to rewind tool-driven work, save a `version_save({ canvasId, label })` before the risky edit and call `version_restore({ canvasId, versionId })` (or `version_restore` with `targetSlug` to fork into a new canvas instead of reconciling in place)
-- **whiteboard MCP is a local dev tool**: outputs under `~/.whiteboard/` are outside git. If you need a PNG in a PR or other artifact, copy the exported file explicitly
-- **Wrapping behavior**: `text` wraps automatically when `width` is provided. `box_with_label` auto-fits by default and keeps explicit `string[]` line breaks. Use `autoFit: false` only when you truly need rigid line control
-- **Known stale-snapshot constraint**: if another client is editing at the same time, `annotate` coordinates can occasionally be based on an older snapshot. In local single-user practice the timing window is short and usually harmless
+- **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
+  separate "commit" step and no local undo. Save a `wb_version_save({ documentId, label })` before a
+  risky batch of edits and call `wb_version_restore({ workspaceId, documentId, versionId })` to roll
+  back if it goes wrong.
+- **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
+  need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
+- **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;
+  `kind: "markdown"` gives you an OKF Markdown body edited through `wb_document_set` / `wb_body_patch`
+  and has no nodes or edges of its own. There is no format parameter on read — `wb_document_get`
+  answers in whichever format the document already is.

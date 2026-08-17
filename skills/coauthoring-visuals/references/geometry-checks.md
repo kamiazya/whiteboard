@@ -1,15 +1,17 @@
 # Geometry Checks
 
-Another useful idea borrowed from `drawio-skill` is to fix **geometry failures separately from meaning failures** after export.
+Fix **geometry failures separately from meaning failures** after rendering. There is no automated
+overlap or overflow warning on this tool surface — the check is entirely visual, against the SVG
+`wb_scene_render` returns.
 
-## What To Check After Export
+## What To Check After Rendering
 
-- overlap: boxes, labels, arrows, and notes do not collide
-- clipped label: text is not cut off inside a box or frame
-- dangling connection: an arrow does not visually touch its box, or appears to connect to the wrong edge
-- edge-through-box: an arrow passes through an unrelated box
+- overlap: nodes, labels, and edges do not collide
+- clipped label: text is not cut off inside a node (there is no auto-wrap, so this is common)
+- dangling connection: an edge does not visually touch its node, or appears to connect to the wrong side
+- edge-through-node: an edge passes through an unrelated node
 - stacked parallel edges: multiple edges visually collapse into one path
-- stray element: something is left outside the frame or far away unintentionally
+- stray element: something is left far from the rest of the diagram unintentionally
 - off-balance shell: the shell is correct, but one side is visibly overcrowded
 
 ## Order Of Fixes
@@ -25,20 +27,21 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 
 ## Local Surgery
 
-- overlap: widen the gap, shift one element down a row, or shorten the label
-- clipped label: widen the box, add height, or split content into `title` and `subText`
-- dangling connection: move start/end closer to the intended target or shift the box slightly
-- edge-through-box: reroute with polyline / curve or widen the lane / zone
-- stacked parallel edges: offset anchors, separate paths vertically, or demote one into a side path
-- stray element: move it back into the frame or delete it if unnecessary
+- overlap: widen the gap, shift one node down a row, or shorten the label — `wb_node_patch`
+- clipped label: widen the node (`width`/`height`) or shorten the text
+- dangling connection: `wb_edge_patch` the `fromSide`/`toSide` hint, or nudge the node it targets
+- edge-through-node: move the intervening node aside, since edges have no manual routing points to bend around it
+- stacked parallel edges: offset the nodes vertically, or demote one edge into a side path
+- stray element: `wb_node_patch` it back near the rest of the diagram (there is no delete tool, so
+  an unwanted node has to be moved or repurposed rather than removed)
 - shell collapse: before rebuilding the shell, re-fix only the outer boundary and reading direction
 
 ## Smells
 
-- Small collisions remain that only become obvious after export
-- `annotate_batch` shows no warning, but the PNG still has labels that are hard to read
-- Edge collision draws more attention than the main path
-- Two parallel paths exist, but only one is visible
+- small collisions remain that only become obvious after rendering
+- there is no warning mechanism, so a label crammed against its neighbor is silent until you look at the SVG
+- edge collision draws more attention than the main path
+- two parallel paths exist, but only one is visible
 
 ## Reminder
 

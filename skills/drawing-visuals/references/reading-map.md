@@ -1,11 +1,11 @@
-# Excalidraw Reading Map
+# Reading Map
 
 Read only this first.
 
 `style-reference.md` and `visual-vocabulary.md` are the deep references.
 Do **not** open them end-to-end every time. Pick the diagram type first, then open only the notes you need.
 
-If the request is really about **how to collaborate on the diagram itself** such as "let's evolve this together," "tighten it frame by frame," or "stress-test it for a fresh viewer," open [`../../coauthoring-visuals/SKILL.md`](../../coauthoring-visuals/SKILL.md) before choosing any notes.
+If the request is really about **how to collaborate on the diagram itself** such as "let's evolve this together," "tighten it together," or "stress-test it for a fresh viewer," open [`../../coauthoring-visuals/SKILL.md`](../../coauthoring-visuals/SKILL.md) before choosing any notes.
 
 ## Which Note To Open
 
@@ -27,9 +27,7 @@ Open:
 - [`infrastructure-diagrams.md`](./infrastructure-diagrams.md)
 - If you need zones / nested boundaries / physical-vs-logical path techniques, also open [`cloud-and-network-zones.md`](./cloud-and-network-zones.md)
 - If trust boundary / authz / audit flow is the main subject, also open [`trust-boundary-and-security.md`](./trust-boundary-and-security.md)
-- If you need dark / light switching guidance or dark-canvas-safe presentation, also open [`dark-mode-techniques.md`](./dark-mode-techniques.md)
-- If the work is icon-heavy and needs library search / trial insert / metadata, also open [`library-first-workflow.md`](./library-first-workflow.md)
-- If you need to research icon indices / scale, also open [`library-research-prompt-template.md`](./library-research-prompt-template.md)
+- If you need dark / light switching guidance or dark-canvas-safe color choices, also open [`dark-mode-techniques.md`](./dark-mode-techniques.md)
 
 Typical requests:
 - AWS / GCP / Kubernetes / VPC / subnet
@@ -74,7 +72,7 @@ Typical requests:
 Open the deep references only when one of these is true:
 
 - you need concrete coordinates or layout recipes
-- you want to confirm detailed rules for fonts / colors / frames / groups
+- you want to confirm detailed rules for colors or `group` node usage
 - you are unsure which diagram type to choose
 - you need to fix a layout that broke after export
 
