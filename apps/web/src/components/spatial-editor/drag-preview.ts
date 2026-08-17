@@ -75,33 +75,44 @@ export function computeDragPreview(
   livePoint: Point | null,
   connect?: ConnectPreviewContext,
 ): DragPreview | undefined {
-  if (livePoint === null) return undefined
   switch (gestureState.kind) {
     case 'moving': {
       const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
       if (box === undefined) return undefined
+      // A box gesture previews from its press, not from its first move: the
+      // committed scene hands the node to the live layers the moment the
+      // press lands, so a preview withheld until a pointer arrives leaves a
+      // window where nothing draws the node at all. With no pointer yet the
+      // gesture's own start point IS the live point — a zero delta, i.e. the
+      // node exactly where it already sits.
+      const point = livePoint ?? gestureState.startPoint
       return {
         kind: 'box',
         box: {
           ...box,
-          x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
-          y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
+          x: gestureState.startX + (point.x - gestureState.startPoint.x),
+          y: gestureState.startY + (point.y - gestureState.startPoint.y),
         },
       }
     }
-    case 'resizing':
+    case 'resizing': {
+      const point = livePoint ?? gestureState.startPoint
       return {
         kind: 'box',
         box: resizeBoxByDelta(
           gestureState.startBox,
           gestureState.handle,
-          livePoint.x - gestureState.startPoint.x,
-          livePoint.y - gestureState.startPoint.y,
+          point.x - gestureState.startPoint.x,
+          point.y - gestureState.startPoint.y,
         ),
       }
+    }
     case 'connecting': {
       const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
-      if (box === undefined || connect === undefined) return undefined
+      // Unlike the box gestures above, a connect has nothing to draw before
+      // the pointer moves: its preview IS the line to the pointer, and the
+      // committed scene keeps drawing every node meanwhile.
+      if (box === undefined || connect === undefined || livePoint === null) return undefined
       // Route the PROSPECTIVE edge through the same producer the drop
       // uses (routeEdge + assignEdgeAnchors over the tentative edge set),
       // so the preview attaches where the committed edge will — the old
