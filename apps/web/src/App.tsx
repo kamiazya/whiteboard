@@ -241,6 +241,11 @@ export function App({ providerState }: AppProps) {
   // consumed and re-visiting it would silently do nothing); every
   // subsequent sync pushes, so browser back/forward has real steps to walk.
   const isFirstUrlSyncRef = useRef(true)
+  // The path this effect last navigated to. StrictMode's effect replay
+  // re-runs the effect with the PRE-navigation location still in its
+  // closure, so without this the replay pushes a duplicate history entry
+  // for the navigation the first run already performed.
+  const lastNavigatedPathRef = useRef<string | null>(null)
   useEffect(() => {
     if (isPairRoute) return
     // /local/:documentId belongs to the browser-local world, not daemonView —
@@ -260,7 +265,12 @@ export function App({ providerState }: AppProps) {
     // it's the first one and wrongly replacing instead of pushing.
     const isFirstSync = isFirstUrlSyncRef.current
     isFirstUrlSyncRef.current = false
-    if (location.pathname === path) return
+    if (location.pathname === path) {
+      lastNavigatedPathRef.current = null
+      return
+    }
+    if (lastNavigatedPathRef.current === path) return
+    lastNavigatedPathRef.current = path
     navigate(path, { replace: isFirstSync })
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
@@ -270,16 +280,21 @@ export function App({ providerState }: AppProps) {
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
-  // through setDaemonView). Skips its own first run so it never overrides
-  // the payload-preferring lazy initializer above with a stale pathname
-  // that hasn't caught up to the #wb= sync effect yet.
-  const isFirstRouteSyncRef = useRef(true)
+  // through setDaemonView).
+  // Guarded by pathname VALUE, not a first-run flag: StrictMode's effect
+  // replay re-runs this effect with the pre-navigation pathname still in
+  // its closure, and a run-count flag let that replay read the stale '/'
+  // as user intent — overwriting the #wb= payload-derived canvas view with
+  // the gallery and, in a live browser, seeding a perpetual navigation
+  // ping-pong that remounted the canvas page (and its WebSocket) ~170
+  // times a second. Only an actual pathname CHANGE is a URL-driven
+  // navigation; the ref seeds from the mount pathname so the mount run and
+  // any replay of it are no-ops.
+  const lastRouteSyncPathRef = useRef(location.pathname)
   useEffect(() => {
     if (isPairRoute) return
-    if (isFirstRouteSyncRef.current) {
-      isFirstRouteSyncRef.current = false
-      return
-    }
+    if (lastRouteSyncPathRef.current === location.pathname) return
+    lastRouteSyncPathRef.current = location.pathname
     const parsed = parseDaemonRoute(location.pathname)
     if (parsed === null) return
     // parseDaemonRoute returns a fresh object every time, and React compares
