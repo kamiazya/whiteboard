@@ -69,4 +69,25 @@ describe('wb_scene_render tool', () => {
       message: expect.stringMatching(/markdown.*wb_document_get/s),
     })
   })
+
+  test('refuses when only the index row records the markdown kind (legacy doc bytes)', async () => {
+    // Pins wb_scene_render's OWN wiring of the index-row fallback — the
+    // shared guard is covered through digest, but a call-site mistake here
+    // (swapped ids, wrong workspace) would otherwise stay green.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeMarkdownBody(doc, 'row-kind only')
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+      path: 'legacy-md',
+      kind: 'markdown',
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, embedReferences: false }),
+    ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
+  })
 })

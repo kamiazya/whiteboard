@@ -6,7 +6,11 @@
 // no store of its own — it receives a snapshot and lays it out itself, so a
 // file node's referenced markdown can only reach it if the server puts it in
 // the payload.
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
@@ -130,5 +134,21 @@ describe('canvas_view tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
 
     expect(result.references).toEqual({})
+  })
+
+  test('refuses a markdown document instead of returning an empty scene to the widget', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, '# Real prose')
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+    ).rejects.toMatchObject({
+      name: 'NotASpatialDocumentError',
+      message: expect.stringMatching(/markdown.*wb_document_get/s),
+    })
   })
 })
