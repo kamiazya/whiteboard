@@ -303,6 +303,54 @@ describe('sweepImportedFsBlobs', () => {
     expect(header).toBeDefined()
   })
 
+  it('(g) a replacement at the original name survives a leftover claim: restore never overwrites it', async () => {
+    // The invariant the rename-then-verify protocol buys: once a candidate
+    // is claimed under `.sweeping`, a writer that lands on the original
+    // pathname owns that name. A crashed pass leaves the claim behind; the
+    // next pass must drop the stale claim rather than rename it back over
+    // the newer file. (Deterministic stand-in for the interleaving itself:
+    // the same two files, in the same state, that the race produces.)
+    const db = await getDb(tempDir)
+    await runMigrations(db)
+    await seedWorkspace(db, 'ws-1')
+
+    const originalBytes = snapshotBytes('claimed by a crashed pass')
+    const blobPath = await writeBlob('ws-1', 'doc-race', originalBytes)
+    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    // Stage the crash: the candidate is claimed, and a writer has since
+    // recreated the original name with different bytes.
+    const claimedPath = `${blobPath}.sweeping`
+    await writeFile(claimedPath, originalBytes)
+    const replacement = snapshotBytes('written by an old process after the claim')
+    await writeFile(blobPath, replacement)
+
+    await sweepImportedFsBlobs(db, tempDir)
+
+    expect(await exists(claimedPath)).toBe(false)
+    expect(await exists(blobPath)).toBe(true)
+    expect(new Uint8Array(await readFile(blobPath))).toEqual(replacement)
+  })
+
+  it('(g2) adopts a leftover claim back when the original name is free, so a crashed pass loses nothing', async () => {
+    const db = await getDb(tempDir)
+    await runMigrations(db)
+    await seedWorkspace(db, 'ws-1')
+
+    // A claim with no import proof: adopted back, then judged (and kept,
+    // because no snapshot row exists for it).
+    const dir = join(tempDir, 'blobs', 'ws-1', 'canvas')
+    await mkdir(dir, { recursive: true })
+    const blobPath = join(dir, 'doc-orphan.loro')
+    const bytes = snapshotBytes('survivor of a crashed sweep')
+    await writeFile(`${blobPath}.sweeping`, bytes)
+
+    await sweepImportedFsBlobs(db, tempDir)
+
+    expect(await exists(`${blobPath}.sweeping`)).toBe(false)
+    expect(await exists(blobPath)).toBe(true)
+    expect(new Uint8Array(await readFile(blobPath))).toEqual(bytes)
+  })
+
   it('(e) a second sweep over an already-swept dataDir is a clean no-op', async () => {
     const db = await getDb(tempDir)
     await runMigrations(db)
