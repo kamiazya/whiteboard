@@ -59,10 +59,13 @@ export interface ConnectPreviewContext {
 
 /**
  * Returns the preview geometry for the gesture currently in flight, or
- * `undefined` when there is nothing to preview (idle/editing-text state, no
- * live pointer yet, or the gesture's target node has since disappeared from
- * `boxes` — e.g. deleted mid-drag by a canvas-replaced event). Total: never
- * throws, never returns non-finite geometry for finite inputs.
+ * `undefined` when there is nothing to preview (idle/editing-text state, a
+ * connect with no live pointer yet, or the gesture's target node has since
+ * disappeared from `boxes` — e.g. deleted mid-drag by a canvas-replaced
+ * event). A box gesture with no live pointer yet previews at its start
+ * geometry rather than returning `undefined`; see the branches below for
+ * why. Total: never throws, never returns non-finite geometry for finite
+ * inputs.
  *
  * The resize branch must keep calling `resizeBoxByDelta` — the SAME function
  * `reducePointerUpResizing` (gestures.ts) commits with at pointerup — rather
@@ -75,33 +78,44 @@ export function computeDragPreview(
   livePoint: Point | null,
   connect?: ConnectPreviewContext,
 ): DragPreview | undefined {
-  if (livePoint === null) return undefined
   switch (gestureState.kind) {
     case 'moving': {
       const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
       if (box === undefined) return undefined
+      // A box gesture previews from its press, not from its first move: the
+      // committed scene hands the node to the live layers the moment the
+      // press lands, so a preview withheld until a pointer arrives leaves a
+      // window where nothing draws the node at all. With no pointer yet the
+      // gesture's own start point IS the live point — a zero delta, i.e. the
+      // node exactly where it already sits.
+      const point = livePoint ?? gestureState.startPoint
       return {
         kind: 'box',
         box: {
           ...box,
-          x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
-          y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
+          x: gestureState.startX + (point.x - gestureState.startPoint.x),
+          y: gestureState.startY + (point.y - gestureState.startPoint.y),
         },
       }
     }
-    case 'resizing':
+    case 'resizing': {
+      const point = livePoint ?? gestureState.startPoint
       return {
         kind: 'box',
         box: resizeBoxByDelta(
           gestureState.startBox,
           gestureState.handle,
-          livePoint.x - gestureState.startPoint.x,
-          livePoint.y - gestureState.startPoint.y,
+          point.x - gestureState.startPoint.x,
+          point.y - gestureState.startPoint.y,
         ),
       }
+    }
     case 'connecting': {
       const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
-      if (box === undefined || connect === undefined) return undefined
+      // Unlike the box gestures above, a connect has nothing to draw before
+      // the pointer moves: its preview IS the line to the pointer, and the
+      // committed scene keeps drawing every node meanwhile.
+      if (box === undefined || connect === undefined || livePoint === null) return undefined
       // Route the PROSPECTIVE edge through the same producer the drop
       // uses (routeEdge + assignEdgeAnchors over the tentative edge set),
       // so the preview attaches where the committed edge will — the old

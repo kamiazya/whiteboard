@@ -3307,6 +3307,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             top: 0,
             transform: viewportTransformCss(viewport),
             transformOrigin: '0 0',
+            // canvas-render's layoutMdastBlocks assigns no appearance to
+            // markdown body text runs (they carry no `fill` attribute at
+            // all), so they inherit it from whichever ancestor sets one —
+            // the seam that keeps body text visible on the dark canvas
+            // surface without editing canvas-render itself. It sits on the
+            // shared ancestor of EVERY canvas-space layer rather than on
+            // the committed one, because the live drag layers host the same
+            // markup: set on the committed layer alone, a dragged node's
+            // body text fell back to the UA default black and read as
+            // vanishing for the length of the gesture. Any element that DOES
+            // carry its own `fill` presentation attribute is unaffected
+            // (presentation attributes win over an inherited value), which
+            // is every shape the selection overlay draws.
+            fill: editorTextFill(theme),
           }}
         >
           <div
@@ -3315,15 +3329,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               position: 'absolute',
               left: (dragStatic?.bounds ?? bounds).x,
               top: (dragStatic?.bounds ?? bounds).y,
-              // canvas-render's layoutMdastBlocks assigns no appearance to
-              // markdown body text runs (they carry no `fill` attribute at
-              // all), so they inherit this host element's SVG `fill`
-              // instead — the seam that keeps body text visible on the dark
-              // canvas surface without editing canvas-render itself. Any
-              // element that DOES carry its own `fill` presentation
-              // attribute is unaffected (presentation attributes win over
-              // an inherited value).
-              fill: editorTextFill(theme),
             }}
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
