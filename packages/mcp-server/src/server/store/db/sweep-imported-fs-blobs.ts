@@ -1,4 +1,4 @@
-import { readFile, rmdir, unlink } from 'node:fs/promises'
+import { access, readFile, rename, rmdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Database } from './index.js'
@@ -15,15 +15,33 @@ import { readDirSafe } from './migrations/0011-import-fs-blobs.js'
 // `up()` never calls it, so the migration's additive-only contract holds
 // structurally, not by convention.
 //
-// ponytail: read-compare-unlink without a lock. A pre-flip writer could
-// replace the blob between the read and the unlink; accepted because the
-// window is single-machine and the next prepare re-imports any survivor.
-// Upgrade to rename-then-verify if concurrent pre-flip writers reappear.
+// Deletion is rename-then-verify, not read-then-unlink: the candidate is
+// first renamed to a private `.sweeping` sibling, and only those renamed
+// bytes are compared and unlinked. Nothing in this codebase writes a blob
+// after the Libsql flip, but a pre-flip process sharing the dataDir could —
+// and with a plain read-compare-unlink it could replace the file between
+// the two, so the sweep would verify bytes A and delete bytes B. After the
+// rename, such a writer lands on the original pathname instead, its file
+// survives untouched, and the next startup import picks it up. Verification
+// failure renames the candidate back, so a divergent or undecodable blob
+// keeps its original name for triage.
+/** Private name a candidate wears while it is being verified. Not `.loro`, so the walk never treats it as a blob. */
+const CLAIM_SUFFIX = '.sweeping'
+
 export async function sweepImportedFsBlobs(db: Database, dataDir: string): Promise<void> {
   const blobsRoot = join(dataDir, 'blobs')
   const workspaceIds = await readDirSafe(blobsRoot)
   for (const workspaceId of workspaceIds) {
     const canvasDir = join(blobsRoot, workspaceId, 'canvas')
+    // A `.sweeping` file is a candidate claimed by a pass that died before
+    // finishing. Put it back first so this pass judges it normally rather
+    // than leaving it invisible to both the walk (it is not `.loro`) and
+    // the next import.
+    for (const leftover of await readDirSafe(canvasDir)) {
+      if (!leftover.endsWith(CLAIM_SUFFIX)) continue
+      const claimed = join(canvasDir, leftover)
+      await restore(claimed, claimed.slice(0, -CLAIM_SUFFIX.length))
+    }
     const files = await readDirSafe(canvasDir)
     for (const file of files) {
       if (!file.endsWith('.loro')) continue
@@ -69,10 +87,26 @@ async function sweepOneBlob(db: Database, documentId: string, blobPath: string):
     .executeTakeFirst()
   if (!frontierRow) return
 
+  // Claim the candidate under a private name BEFORE reading it, so the
+  // bytes compared below are the same bytes unlinked at the end even if a
+  // pre-flip writer replaces the original pathname meanwhile.
+  const claimedPath = `${blobPath}${CLAIM_SUFFIX}`
+  try {
+    await rename(blobPath, claimedPath)
+  } catch (err) {
+    // Gone already (a concurrent delete, or a previous pass) — nothing to
+    // sweep. Any OTHER failure (permissions, read-only mount) is a real
+    // condition the operator should hear about, so it propagates to
+    // prepare's best-effort wrapper rather than being swallowed here.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw err
+  }
+
   let blobBytes: Uint8Array
   try {
-    blobBytes = await readFile(blobPath)
+    blobBytes = await readFile(claimedPath)
   } catch {
+    await restore(claimedPath, blobPath)
     return
   }
 
@@ -102,6 +136,7 @@ async function sweepOneBlob(db: Database, documentId: string, blobPath: string):
   } catch {
     // Structurally inconsistent row/chunks — leave for manual triage,
     // matching importFsBlobs's own gate on the same failure shape.
+    await restore(claimedPath, blobPath)
     return
   }
 
@@ -109,7 +144,33 @@ async function sweepOneBlob(db: Database, documentId: string, blobPath: string):
   // DB already holds this blob's bytes. Row existence alone is not enough —
   // a divergent row (the drift-fork case importFsBlobs warns about and
   // leaves untouched) must never cost the FS copy its only surviving bytes.
-  if (Buffer.compare(reassembled, blobBytes) !== 0) return
+  if (Buffer.compare(reassembled, blobBytes) !== 0) {
+    await restore(claimedPath, blobPath)
+    return
+  }
 
-  await unlink(blobPath)
+  await unlink(claimedPath)
+}
+
+/**
+ * Put a claimed candidate back under its original name. A writer that
+ * recreated the original in the meantime WINS: `rename` would silently
+ * overwrite it (POSIX replaces the destination), so the newer file is left
+ * alone and the claimed copy is dropped instead — its bytes are the older
+ * ones, and they are already in the DB or will be re-imported from
+ * whatever now sits at the original path.
+ */
+async function restore(claimedPath: string, blobPath: string): Promise<void> {
+  try {
+    await access(blobPath)
+    await unlink(claimedPath).catch(() => {})
+    return
+  } catch {
+    // Original absent — the normal case; put the candidate back.
+  }
+  try {
+    await rename(claimedPath, blobPath)
+  } catch {
+    await unlink(claimedPath).catch(() => {})
+  }
 }
