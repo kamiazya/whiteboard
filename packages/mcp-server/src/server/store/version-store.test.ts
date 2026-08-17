@@ -1,9 +1,11 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
+import { SqliteDocumentIndex } from './sqlite-document-index.js'
 
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; thumbnails live as PNG
@@ -64,6 +66,29 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.label).toBeUndefined()
     expect(entry.hasThumbnail).toBe(false)
     expect(entry.branchName).toBe('main')
+  })
+
+  it('save on a fresh path mints a ULID documents row the agent index can see', async () => {
+    // FileVersionStore.save is a third id-minting site (via upsertCanvasRow):
+    // it creates the `documents` row for a path with no prior row, just like
+    // saveDocument/createDocument do. Before this row's id was a nanoid, it
+    // never round-tripped through documentIdSchema, so SqliteDocumentIndex
+    // skipped it — a version saved on an unindexed path was invisible to
+    // every agent-facing listing despite being visible in the user's gallery.
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    await store.save('sess-1', 'canvas-fresh', doc, { auto: true })
+
+    const row = await handle.db
+      .selectFrom('documents')
+      .select(['id'])
+      .where('path', '=', 'canvas-fresh')
+      .executeTakeFirstOrThrow()
+    expect(documentIdSchema.safeParse(row.id).success).toBe(true)
+
+    const index = new SqliteDocumentIndex(handle.db)
+    const entries = await index.listDocuments({ workspaceId: 'sess-1' })
+    expect(entries.map((entry) => entry.path)).toContain('canvas-fresh')
   })
 
   it('save counts nodes-model nodes, not the retired legacy elements list', async () => {

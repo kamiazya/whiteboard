@@ -58,13 +58,15 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
  * canvas list, versions, branches and file GC already hang off, which is what
  * makes an agent-created document one a user can see.
  *
- * New rows are assigned a ULID, not the nanoid `saveDocument` mints for its own
- * rows: ADR-0007 point 5 fixed the ULID as the `documentId` and the nanoid as a
- * storage detail, and `documentIdSchema` in the port's `DocumentEntry` accepts
- * only the former. A row predating this cannot round-trip through the port —
- * a deliberate consequence of converging the two id spaces — so `listDocuments`
- * skips such rows (see its comment) rather than letting one of them fail
- * validation for the whole listing.
+ * Every row-minting site in this codebase (`createDocument` here,
+ * `saveDocument`, and `upsertCanvasRow` shared by the version/name/branch
+ * stores) now assigns a ULID: `documentIdSchema` in the port's
+ * `DocumentEntry` accepts only that shape, and migrations 0008 and 0012 swept
+ * every nanoid row minted before each fix shipped. A non-ULID row reaching
+ * `listDocuments` today is not an expected legacy shape — it is evidence one
+ * of those three guarantees broke — so it is still excluded (one bad row must
+ * not fail output validation for the entire listing) but logged as loudly as
+ * corruption, not as an anticipated skip.
  */
 const log = getLogger('document-index')
 
@@ -177,20 +179,19 @@ export class SqliteDocumentIndex implements DocumentIndex {
     // Sorted here rather than in SQL: segment-wise order is not what any
     // collation gives, and the row count per workspace is a list a human reads.
     //
-    // Rows whose id is not a canonical ULID are SKIPPED, not surfaced:
-    // `saveDocument` minted nanoid row ids before the id spaces converged, and
-    // rows outlive minting policy. The port's DocumentEntry accepts only a
-    // ULID, so mapping such a row does not degrade to one bad entry — it
-    // fails output validation for the ENTIRE listing, and one legacy row per
-    // workspace turns the whole agent surface dark. Skipping keeps those
-    // rows exactly as reachable as they were before the convergence (the
-    // user's gallery), and the log is where the absence is said.
+    // Rows whose id is not a canonical ULID are SKIPPED, not surfaced: the
+    // port's DocumentEntry accepts only a ULID, so mapping such a row does
+    // not degrade to one bad entry — it fails output validation for the
+    // ENTIRE listing, and one bad row per workspace would turn the whole
+    // agent surface dark. Every minting site converged on ULID (see the class
+    // doc comment), so reaching this branch means one of those guarantees
+    // broke — an ERROR, not the anticipated-legacy warning this used to log.
     const entries: DocumentEntry[] = []
     for (const row of rows) {
       if (!documentIdSchema.safeParse(row.id).success) {
-        log.warning(
+        log.error(
           { workspaceId, path: row.path },
-          'skipping a pre-convergence row the port cannot carry',
+          'documents row has a non-ULID id — corruption, not expected legacy data; excluded from this listing',
         )
         continue
       }
