@@ -54,7 +54,7 @@ Dark mode is not about splashing bright colors onto a black background. It is ab
 - Does any neutral text disappear?
 - Are dashed / dotted lines still legible?
 - If you remove the glow, does the meaning remain?
-- Does exported PNG still preserve zone / boundary presence?
+- Does the rendered SVG still preserve zone / boundary presence?
 
 ## If Stuck
 
