@@ -78,4 +78,6 @@ import type {
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { z } from 'zod'
 export declare function _useBranchMeta(b: z.infer<typeof branchMetaSchema>): void
-export declare function _useCreateCanvasRequest(r: z.infer<typeof createCanvasRequestSchema>): void
+export declare function _useCreateDocumentRequest(
+  r: z.infer<typeof createCanvasRequestSchema>,
+): void

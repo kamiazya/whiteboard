@@ -9,7 +9,7 @@ const NotFoundPage = lazy(() =>
   import('./components/status/NotFoundPage.js').then((m) => ({ default: m.NotFoundPage })),
 )
 
-import { CanvasPageSkeleton } from './components/CanvasPageSkeleton.js'
+import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import {
@@ -34,7 +34,7 @@ const SettingsPage = lazy(() =>
 )
 
 import {
-  browserLocalCanvasPath,
+  browserLocalDocumentPath,
   type DaemonRoute,
   daemonRoutePath,
   isKnownAppPath,
@@ -55,17 +55,19 @@ import { createUserSettingsStore } from './lib/user-settings-store.js'
 // sessions with a runtime-config local-daemon provider state pay for it;
 // pure browser-local sessions never import it, keeping that entry under the
 // bundle-size budget.
-const DaemonCanvasPage = lazy(() =>
-  import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
+const DaemonDocumentPage = lazy(() =>
+  import('./pages/DaemonDocumentPage.js').then((m) => ({ default: m.DaemonDocumentPage })),
 )
 
-// Lazy for the same reason: BrowserLocalCanvasPage statically imports
+// Lazy for the same reason: BrowserLocalDocumentPage statically imports
 // useDocumentSync (which imports loro-crdt), and it is the default render
 // path (no daemon, no pairing fragment) — so it was the one making
 // loro-crdt part of every session's initial paint even though
-// DaemonCanvasPage above was already lazy.
-const BrowserLocalCanvasPage = lazy(() =>
-  import('./pages/BrowserLocalCanvasPage.js').then((m) => ({ default: m.BrowserLocalCanvasPage })),
+// DaemonDocumentPage above was already lazy.
+const BrowserLocalDocumentPage = lazy(() =>
+  import('./pages/BrowserLocalDocumentPage.js').then((m) => ({
+    default: m.BrowserLocalDocumentPage,
+  })),
 )
 
 // Lazy so the list stays outside the loro-crdt chunk the editor drags in.
@@ -73,7 +75,7 @@ const BrowserLocalIndexPage = lazy(() =>
   import('./pages/BrowserLocalIndexPage.js').then((m) => ({ default: m.BrowserLocalIndexPage })),
 )
 
-// Same lazy-chunk rationale as DaemonCanvasPage above — the gallery only
+// Same lazy-chunk rationale as DaemonDocumentPage above — the gallery only
 // matters once a daemon connection exists.
 const DaemonIndexPage = lazy(() =>
   import('./pages/DaemonIndexPage.js').then((m) => ({ default: m.DaemonIndexPage })),
@@ -81,7 +83,7 @@ const DaemonIndexPage = lazy(() =>
 
 // Which daemon-mode view is showing: the canvas gallery, or a specific open
 // canvas. A #wb= fragment with a path skips straight to 'canvas'; local-daemon
-// and path-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
+// and path-less pairing start on 'index'. `key` on the DaemonDocumentPage mount
 // forces a clean remount (fresh controller/backend) on every index -> canvas
 // transition instead of reusing a previous canvas's identity. Reuses
 // DaemonRoute's shape (rather than a parallel type) since this state IS the
@@ -92,8 +94,8 @@ interface AppProps {
   providerState?: ProviderState
 }
 
-// Suspense fallback shared by every lazy page chunk (DaemonCanvasPage and
-// BrowserLocalCanvasPage). Reuses the structural CanvasPageSkeleton so the
+// Suspense fallback shared by every lazy page chunk (DaemonDocumentPage and
+// BrowserLocalDocumentPage). Reuses the structural DocumentPageSkeleton so the
 // chunk-load state and the page's own connecting state are one continuous
 // pulse instead of a text line snapping to a skeleton. The height class
 // differs by mount site (root fills the viewport; the in-banner branches
@@ -109,7 +111,7 @@ export function LazyPageFallback({
 }) {
   return (
     <div className={heightClass}>
-      <CanvasPageSkeleton label={message} />
+      <DocumentPageSkeleton label={message} />
     </div>
   )
 }
@@ -234,7 +236,7 @@ export function App({ providerState }: AppProps) {
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
   // State -> URL: fires whenever daemonView changes, whether from in-app
-  // navigation (onOpenCanvas/onNavigateBack below) or from the #wb=
+  // navigation (onOpenDocument/onNavigateBack below) or from the #wb=
   // consume-once fragment establishing the initial view above. The very
   // first sync uses `replace` so the raw pairing URL never lingers as a
   // separate history entry the user could "back" into (it's already been
@@ -451,12 +453,12 @@ export function App({ providerState }: AppProps) {
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
                     initialWorkspaceId={daemonView.workspaceId}
-                    onOpenCanvas={(workspaceId, path) =>
+                    onOpenDocument={(workspaceId, path) =>
                       setDaemonView({ kind: 'canvas', workspaceId, path })
                     }
                   />
                 ) : (
-                  <DaemonCanvasPage
+                  <DaemonDocumentPage
                     key={`${daemonView.workspaceId}:${daemonView.path}`}
                     daemonBaseUrl={payload.baseUrl}
                     workspaceId={daemonView.workspaceId}
@@ -538,12 +540,12 @@ export function App({ providerState }: AppProps) {
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
                   initialWorkspaceId={daemonView.workspaceId}
-                  onOpenCanvas={(workspaceId, path) =>
+                  onOpenDocument={(workspaceId, path) =>
                     setDaemonView({ kind: 'canvas', workspaceId, path })
                   }
                 />
               ) : (
-                <DaemonCanvasPage
+                <DaemonDocumentPage
                   key={`${daemonView.workspaceId}:${daemonView.path}`}
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   workspaceId={daemonView.workspaceId}
@@ -630,10 +632,10 @@ export function App({ providerState }: AppProps) {
               // the URL crosses the list/editor boundary.
               <BrowserLocalIndexPage
                 store={browserLocalStore}
-                onOpenCanvas={(id) => navigate(browserLocalCanvasPath(id))}
+                onOpenDocument={(id) => navigate(browserLocalDocumentPath(id))}
               />
             ) : (
-              <BrowserLocalCanvasPage
+              <BrowserLocalDocumentPage
                 store={browserLocalStore}
                 capabilities={effectiveState.capabilities}
                 initialCanvasId={browserLocalCanvasId}

@@ -36,7 +36,7 @@ const seams = SEAMS
 
 describe('canLayoutInWorker', () => {
   it('offloads a canvas with no file nodes even when the host supplies file seams', () => {
-    // The real pages ALWAYS supply the seams (useCanvasFileSeams returns them
+    // The real pages ALWAYS supply the seams (useDocumentFileSeams returns them
     // unconditionally), so a presence check disables the worker for every
     // production canvas — including the plain text-and-edges ones the seams
     // can never influence. Every seam is keyed on a file reference; a canvas

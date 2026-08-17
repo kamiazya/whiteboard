@@ -103,11 +103,11 @@ import {
   type ContextMenuTarget,
   type LinkDialogState,
 } from './CanvasContextMenu.js'
-import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
+import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
@@ -785,7 +785,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
-    const [canvasPicker, setCanvasPicker] = useState<CanvasPickerState | null>(null)
+    const [canvasPicker, setDocumentPicker] = useState<CanvasPickerState | null>(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -2998,8 +2998,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
-          onCreateCanvasRef={
-            fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
+          onCreateDocumentRef={
+            fileRefOptions === undefined ? undefined : () => setDocumentPicker({ mode: 'create' })
           }
           onCreateImage={
             onAddImage === undefined
@@ -3091,7 +3091,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             createGroupAtViewportCenter={createGroupAtViewportCenter}
             setLinkDialog={setLinkDialog}
             fileRefOptions={fileRefOptions}
-            setCanvasPicker={setCanvasPicker}
+            setDocumentPicker={setDocumentPicker}
             onAddImage={onAddImage}
             pendingImagePointRef={pendingImagePointRef}
             imageInputRef={imageInputRef}
@@ -3113,7 +3113,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           />
         )}
         {canvasPicker !== null && fileRefOptions !== undefined && (
-          <CanvasPickerDialog
+          <DocumentPickerDialog
             title={
               canvasPicker.mode === 'create' ? `Add ${CREATION_LABELS.document}` : 'Change target'
             }
@@ -3135,9 +3135,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
                 })
               }
-              setCanvasPicker(null)
+              setDocumentPicker(null)
             }}
-            onCancel={() => setCanvasPicker(null)}
+            onCancel={() => setDocumentPicker(null)}
           />
         )}
         {linkDialog !== null && (

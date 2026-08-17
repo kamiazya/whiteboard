@@ -55,7 +55,7 @@ describe('MemoryStore', () => {
     expect(await store.del('c1')).toEqual({ deleted: false, reason: 'not-found' })
   })
 
-  it('removeCanvas deletes a record by id without matching the default pointer', async () => {
+  it('removeDocument deletes a record by id without matching the default pointer', async () => {
     const store = new MemoryStore()
     const a: CanvasSnapshot = { ...snap, id: 'c1' }
     const b: CanvasSnapshot = { ...snap, id: 'c2' }
@@ -63,19 +63,19 @@ describe('MemoryStore', () => {
     await store.save(b)
     await store.setDefaultCanvasId('c1')
 
-    await store.removeCanvas('c2')
+    await store.removeDocument('c2')
 
     expect(await store.load('c2')).toEqual({ kind: 'not-found' })
     expect(await store.load('c1')).toEqual({ kind: 'ok', snapshot: a })
     expect(await store.getDefaultCanvasId()).toBe('c1')
   })
 
-  it('removeCanvas on a non-existent id is a no-op', async () => {
+  it('removeDocument on a non-existent id is a no-op', async () => {
     const store = new MemoryStore()
     await store.save(snap)
     await store.setDefaultCanvasId('c1')
 
-    await expect(store.removeCanvas('missing')).resolves.toBeUndefined()
+    await expect(store.removeDocument('missing')).resolves.toBeUndefined()
 
     expect(await store.load('c1')).toEqual({ kind: 'ok', snapshot: snap })
     expect(await store.getDefaultCanvasId()).toBe('c1')

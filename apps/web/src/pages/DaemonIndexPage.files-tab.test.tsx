@@ -71,7 +71,7 @@ describe('DaemonIndexPage tree view', () => {
   it('shows the path tree and previews a canvas OKF on click', async () => {
     installFetchMock()
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
@@ -92,7 +92,7 @@ describe('DaemonIndexPage tree view', () => {
   it('shows a calm no-tree message (not an alert) when the v1 list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
@@ -104,7 +104,7 @@ describe('DaemonIndexPage tree view', () => {
   it('still shows the failure alert when the v1 list fails for a non-404 reason', async () => {
     installFetchMock({ status: 500, body: { error: 'boom' } })
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))

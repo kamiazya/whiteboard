@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  browserLocalCanvasPath,
+  browserLocalDocumentPath,
   browserLocalIndexPath,
   canvasPath,
   daemonRoutePath,
@@ -33,7 +33,7 @@ describe('app-routes', () => {
 
   it('builds browser-local paths', () => {
     expect(browserLocalIndexPath()).toBe('/local')
-    expect(browserLocalCanvasPath('abc-123')).toBe('/local/abc-123')
+    expect(browserLocalDocumentPath('abc-123')).toBe('/local/abc-123')
   })
 })
 

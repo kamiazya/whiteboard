@@ -6,7 +6,7 @@
 import { CanvasViewer } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
-import type { CanvasInfo } from '../components/workspace-top-bar/types.js'
+import type { DocumentInfo } from '../components/workspace-top-bar/types.js'
 
 const TOP_BAR_HEIGHT_PX = 48
 
@@ -14,7 +14,7 @@ interface TopBarFrameProps {
   testId: string
   width: number
   height: number
-  canvases: CanvasInfo[]
+  canvases: DocumentInfo[]
   scene: SpatialCanvas
 }
 
@@ -28,7 +28,7 @@ export function TopBarFrame({ testId, width, height, canvases, scene }: TopBarFr
         workspaceId="ws_main"
         path="design/architecture"
         canvases={canvases}
-        onNavigateToCanvas={() => undefined}
+        onNavigateToDocument={() => undefined}
         onToggleFullscreen={() => undefined}
       />
       <div style={{ height: `calc(100% - ${TOP_BAR_HEIGHT_PX}px)` }}>

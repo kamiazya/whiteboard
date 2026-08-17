@@ -55,7 +55,7 @@ declare global {
  * UI impact.
  *
  * Every tool this app exposes reads canvas state (`no-canvas` is one of
- * every command's documented CommandError codes), so `canvasKey === null`
+ * every command's documented CommandError codes), so `documentKey === null`
  * (no canvas open yet, or none selected) also skips registration entirely
  * rather than advertising tools that would deterministically fail if
  * called.
@@ -73,12 +73,12 @@ declare global {
  */
 export function useBrowserToolRegistry(
   commands: WhiteboardCommands,
-  canvasKey: string | null,
+  documentKey: string | null,
   enabled = true,
 ): void {
   useEffect(() => {
     const modelContext = document.modelContext
-    if (!modelContext || !enabled || canvasKey === null) return
+    if (!modelContext || !enabled || documentKey === null) return
 
     const controller = new AbortController()
     for (const tool of webMcpTools) {
@@ -113,5 +113,5 @@ export function useBrowserToolRegistry(
     // referentially stable across re-renders: listing it here documents the
     // real dependency instead of relying on that stability contract holding
     // forever.
-  }, [commands, canvasKey, enabled])
+  }, [commands, documentKey, enabled])
 }

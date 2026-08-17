@@ -1,5 +1,5 @@
 /**
- * The daemon binding of the editor's file seams (see use-canvas-file-seams.ts
+ * The daemon binding of the editor's file seams (see use-document-file-seams.ts
  * for the backend-agnostic half).
  *
  * Every method is total: a missing file, a rejected upload, or an unreachable
@@ -17,7 +17,7 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import type { CanvasFileAdapter } from '../hooks/use-canvas-file-seams.js'
+import type { CanvasFileAdapter } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
 
 const log = getAppLogger('daemon-file-adapter')

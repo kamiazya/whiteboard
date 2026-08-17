@@ -53,14 +53,14 @@ function createFakeModelContext(): ModelContext & {
 
 function TestHarness({
   commands,
-  canvasKey,
+  documentKey,
   enabled,
 }: {
   commands: WhiteboardCommands
-  canvasKey: string | null
+  documentKey: string | null
   enabled?: boolean
 }) {
-  useBrowserToolRegistry(commands, canvasKey, enabled)
+  useBrowserToolRegistry(commands, documentKey, enabled)
   return null
 }
 
@@ -71,7 +71,7 @@ describe('useBrowserToolRegistry', () => {
 
   it('is a complete no-op when document.modelContext is absent', () => {
     expect(document.modelContext).toBeUndefined()
-    const { unmount } = render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+    const { unmount } = render(<TestHarness commands={fakeCommands()} documentKey="c1" />)
     // No throw, nothing to assert on a registry that never existed — the
     // absence of a crash/registration attempt IS the behavior under test.
     unmount()
@@ -83,13 +83,13 @@ describe('useBrowserToolRegistry', () => {
     document.modelContext = fake
 
     const { rerender, unmount } = render(
-      <TestHarness commands={fakeCommands()} canvasKey="canvas-a" />,
+      <TestHarness commands={fakeCommands()} documentKey="canvas-a" />,
     )
     await Promise.resolve()
     await Promise.resolve()
     expect(fake.liveNames().sort()).toEqual(expectedNames)
 
-    rerender(<TestHarness commands={fakeCommands()} canvasKey="canvas-b" />)
+    rerender(<TestHarness commands={fakeCommands()} documentKey="canvas-b" />)
     await Promise.resolve()
     await Promise.resolve()
     expect(fake.liveNames().sort()).toEqual(expectedNames)
@@ -106,7 +106,7 @@ describe('useBrowserToolRegistry', () => {
       if (descriptor.name === 'whiteboard_get_app_context') captured = descriptor
     }
 
-    render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+    render(<TestHarness commands={fakeCommands()} documentKey="c1" />)
     await Promise.resolve()
 
     expect(captured).toBeDefined()
@@ -125,7 +125,7 @@ describe('useBrowserToolRegistry', () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
-    const { unmount } = render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+    const { unmount } = render(<TestHarness commands={fakeCommands()} documentKey="c1" />)
     expect(fake.liveNames().length).toBeGreaterThan(0)
 
     unmount()
@@ -146,7 +146,7 @@ describe('useBrowserToolRegistry', () => {
       },
     }
 
-    expect(() => render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)).not.toThrow()
+    expect(() => render(<TestHarness commands={fakeCommands()} documentKey="c1" />)).not.toThrow()
     expect(live).toEqual(webMcpTools.map((tool) => tool.name))
   })
 
@@ -161,7 +161,7 @@ describe('useBrowserToolRegistry', () => {
       execute: async () => ({}),
     })
 
-    expect(() => render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)).not.toThrow()
+    expect(() => render(<TestHarness commands={fakeCommands()} documentKey="c1" />)).not.toThrow()
   })
 
   it('a synchronous registration failure is caught and never escapes the effect', async () => {
@@ -174,7 +174,7 @@ describe('useBrowserToolRegistry', () => {
     }
     process.on('unhandledRejection', onUnhandledRejection)
     try {
-      render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+      render(<TestHarness commands={fakeCommands()} documentKey="c1" />)
       await Promise.resolve()
       await Promise.resolve()
     } finally {
@@ -182,11 +182,11 @@ describe('useBrowserToolRegistry', () => {
     }
   })
 
-  it('does not attempt registration when canvasKey is null (no canvas open)', async () => {
+  it('does not attempt registration when documentKey is null (no canvas open)', async () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
-    render(<TestHarness commands={fakeCommands()} canvasKey={null} />)
+    render(<TestHarness commands={fakeCommands()} documentKey={null} />)
     await Promise.resolve()
     await Promise.resolve()
 
@@ -197,7 +197,7 @@ describe('useBrowserToolRegistry', () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
-    render(<TestHarness commands={fakeCommands()} canvasKey="c1" enabled={false} />)
+    render(<TestHarness commands={fakeCommands()} documentKey="c1" enabled={false} />)
     await Promise.resolve()
     await Promise.resolve()
 
@@ -212,7 +212,7 @@ describe('useBrowserToolRegistry', () => {
       captured.push(descriptor)
     }
 
-    render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+    render(<TestHarness commands={fakeCommands()} documentKey="c1" />)
     await Promise.resolve()
 
     expect(captured.length).toBeGreaterThan(0)
@@ -237,7 +237,7 @@ describe('useBrowserToolRegistry', () => {
       },
     }
 
-    render(<TestHarness commands={commands} canvasKey="c1" />)
+    render(<TestHarness commands={commands} documentKey="c1" />)
     await Promise.resolve()
 
     await captured!.execute({ unexpected: true })
@@ -264,7 +264,7 @@ describe('useBrowserToolRegistry', () => {
       },
     })
 
-    render(<TestHarness commands={realCommands} canvasKey="c1" />)
+    render(<TestHarness commands={realCommands} documentKey="c1" />)
     await Promise.resolve()
 
     await expect(captured!.execute({ unexpected: true })).rejects.toMatchObject({

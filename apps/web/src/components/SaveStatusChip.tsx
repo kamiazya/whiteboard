@@ -10,7 +10,7 @@
  * the version dot has no equivalent of.
  */
 import { cn } from '@/lib/utils'
-import type { BrowserLocalPersistenceState } from '../pages/use-browser-local-canvas-controller.js'
+import type { BrowserLocalPersistenceState } from '../pages/use-browser-local-document-controller.js'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'
 

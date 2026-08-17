@@ -1,6 +1,6 @@
-// Page-state derivation for `BrowserLocalCanvasPage`.
+// Page-state derivation for `BrowserLocalDocumentPage`.
 //
-// `useBrowserLocalCanvasController` carries several flat fields that
+// `useBrowserLocalDocumentController` carries several flat fields that
 // the page used to chain into a 3-way `if` cascade (degraded-load /
 // cleanup-completed / loading / editing). The cascade order matters
 // — completion view must beat the load-time placeholder — and the
@@ -22,7 +22,7 @@
 // (no React renderer required).
 
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
-import type { BrowserLocalPersistenceState } from './use-browser-local-canvas-controller.js'
+import type { BrowserLocalPersistenceState } from './use-browser-local-document-controller.js'
 
 export interface BrowserLocalPageStateInput {
   snapshot: CanvasSnapshot | null

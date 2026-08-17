@@ -136,7 +136,7 @@ export function canLayoutInWorker(
   // keyed on a file reference, so a canvas without a file node lays out
   // identically with or without it. This is judged per canvas rather than
   // per host because the real pages supply the seam UNCONDITIONALLY
-  // (useCanvasFileSeams returns it whether or not any file node exists) — a
+  // (useDocumentFileSeams returns it whether or not any file node exists) — a
   // presence check reads as "this host has file support" and silently turns
   // the worker off for every production canvas.
   const hasFileNode = canvas.nodes.some((node) => node.type === 'file')

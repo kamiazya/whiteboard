@@ -1,0 +1,58 @@
+import type { MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AppLogger } from '@/lib/app-logger'
+
+// Copy-URL confirmation: the button itself reports success/failure instead
+// of a separate toast, since the affordance already has a fixed home (the
+// canvas actions menu) and a transient label swap is enough signal.
+//
+// mountedRef is shared with (and re-armed by) the parent — see
+// useCreateDocument's mountedRef doc. A private ref here would only ever be
+// cleared to false on cleanup and never reset to true on setup, so under
+// React StrictMode's dev-only setup->cleanup->setup double-invoke it would
+// stay permanently false and silently stop reporting copy status.
+export function useCopyDocumentUrl(
+  canvasUrl: string,
+  log: AppLogger | undefined,
+  mountedRef: MutableRefObject<boolean>,
+) {
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
+    },
+    [],
+  )
+
+  const scheduleCopyStatusReset = useCallback((delayMs: number) => {
+    if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
+    copyStatusTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopyStatus('idle')
+    }, delayMs)
+  }, [])
+
+  const resetCopyStatus = useCallback(() => setCopyStatus('idle'), [])
+
+  const copyDocumentUrl = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(canvasUrl)
+      if (!mountedRef.current) return
+      setCopyStatus('copied')
+      scheduleCopyStatusReset(2000)
+    } catch (err) {
+      // A silent catch here is exactly the bug this fixes — clipboard access
+      // can be denied (permissions, insecure context, browser refusal) and
+      // must surface as a visible failure, not a false "copied" success.
+      log?.error('failed to copy canvas URL to clipboard:', err)
+      if (!mountedRef.current) return
+      setCopyStatus('error')
+      // Longer than the success state: the user needs time to read the
+      // fallback instructions and select the URL manually.
+      scheduleCopyStatusReset(8000)
+    }
+  }, [canvasUrl, log, scheduleCopyStatusReset])
+
+  return { copyStatus, copyDocumentUrl, resetCopyStatus }
+}

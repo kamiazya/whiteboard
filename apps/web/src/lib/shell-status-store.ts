@@ -1,5 +1,5 @@
 // The AppShell is mounted once per App branch, above the routed pages, so a
-// page that learns something shell-relevant (DaemonCanvasPage's live auth
+// page that learns something shell-relevant (DaemonDocumentPage's live auth
 // error) cannot pass it as a prop. This module store is that one signal's
 // channel; keep it to shell concerns only.
 let daemonAuthError = false

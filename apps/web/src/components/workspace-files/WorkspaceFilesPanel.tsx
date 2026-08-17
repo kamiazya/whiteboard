@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DaemonApiError, getCanvasOkfV1, listCanvasesV1 } from '../../lib/daemon-api-client.js'
-import { WorkspaceFileTree, type WorkspaceFileTreeCanvas } from './WorkspaceFileTree.js'
+import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
   daemonFetch: typeof globalThis.fetch
@@ -26,7 +26,7 @@ export function WorkspaceFilesPanel({
   daemonBaseUrl,
   workspaceId,
 }: WorkspaceFilesPanelProps) {
-  const [canvases, setCanvases] = useState<WorkspaceFileTreeCanvas[] | null>(null)
+  const [canvases, setCanvases] = useState<WorkspaceFileTreeDocument[] | null>(null)
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
@@ -50,7 +50,7 @@ export function WorkspaceFilesPanel({
     }
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
-  const openCanvas = (canvas: WorkspaceFileTreeCanvas) => {
+  const openCanvas = (canvas: WorkspaceFileTreeDocument) => {
     setPreview({ kind: 'loading', path: canvas.path })
     getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.documentId)
       .then((res) => {

@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function stubFetch(onCreateCanvas: (workspaceId: string, path: string) => void) {
+function stubFetch(onCreateDocument: (workspaceId: string, path: string) => void) {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -38,14 +38,14 @@ function stubFetch(onCreateCanvas: (workspaceId: string, path: string) => void) 
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      const canvasesMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases$/)
-      if (canvasesMatch && init?.method === 'POST') {
-        const workspaceId = decodeURIComponent(canvasesMatch[1])
+      const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases$/)
+      if (documentsMatch && init?.method === 'POST') {
+        const workspaceId = decodeURIComponent(documentsMatch[1])
         const body = JSON.parse(String(init.body)) as { path: string }
-        onCreateCanvas(workspaceId, body.path)
+        onCreateDocument(workspaceId, body.path)
         return Promise.resolve(jsonResponse({ path: body.path }))
       }
-      if (canvasesMatch) {
+      if (documentsMatch) {
         // Non-empty: the toolbar (search + the New canvas menu trigger) only
         // renders when the list has rows — an empty list shows the empty
         // state instead.
@@ -61,7 +61,7 @@ function stubFetch(onCreateCanvas: (workspaceId: string, path: string) => void) 
 describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', () => {
   it('reveals the tooltip on real hover', async () => {
     stubFetch(() => {})
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
     const button = await screen.findByRole('button', { name: 'New canvas' })
     await userEvent.hover(button)
@@ -74,9 +74,9 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
   it('reveals the tooltip on real keyboard focus, and Enter opens the kind menu whose entry creates', async () => {
     const created: Array<[string, string]> = []
     stubFetch((workspaceId, path) => created.push([workspaceId, path]))
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
 
     // Tab through the toolbar controls in DOM order until "New canvas" is
     // focused — asserting reachability by keyboard alone, not by a direct
@@ -95,6 +95,6 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
     await expect.element(page.getByRole('menuitem', { name: 'New canvas' })).toBeVisible()
     await userEvent.keyboard('{Enter}')
     await expect.poll(() => created).toEqual([['ws-a', 'untitled']])
-    await expect.poll(() => onOpenCanvas.mock.calls).toEqual([['ws-a', 'untitled']])
+    await expect.poll(() => onOpenDocument.mock.calls).toEqual([['ws-a', 'untitled']])
   })
 })

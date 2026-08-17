@@ -20,7 +20,7 @@ export interface BrowserLocalStore {
   // Unconditional delete of a canvas record by id, independent of the default pointer.
   // Optional capability used for best-effort cleanup of records del() cannot reach
   // (it only removes the canvas the default pointer currently aims at).
-  removeCanvas?(id: string): Promise<void>
+  removeDocument?(id: string): Promise<void>
   generateId(): string
   listCanvases(): Promise<CanvasSnapshot[]>
 }
@@ -55,7 +55,7 @@ export class MemoryStore implements BrowserLocalStore {
     return { deleted: true }
   }
 
-  async removeCanvas(id: string): Promise<void> {
+  async removeDocument(id: string): Promise<void> {
     this.canvases.delete(id)
   }
 
@@ -176,7 +176,7 @@ export class IndexedDBStore implements BrowserLocalStore {
     })
   }
 
-  async removeCanvas(id: string): Promise<void> {
+  async removeDocument(id: string): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('canvases', 'readwrite')

@@ -26,7 +26,7 @@ export function browserLocalIndexPath(): string {
   return '/local'
 }
 
-export function browserLocalCanvasPath(documentId: string): string {
+export function browserLocalDocumentPath(documentId: string): string {
   return `/local/${encodeURIComponent(documentId)}`
 }
 

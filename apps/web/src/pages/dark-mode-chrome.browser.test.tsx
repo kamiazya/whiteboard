@@ -103,7 +103,7 @@ describe('dark-mode chrome (root token application)', () => {
         canvases={[{ path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToCanvas={() => {}}
+        onNavigateToDocument={() => {}}
       />,
     )
 

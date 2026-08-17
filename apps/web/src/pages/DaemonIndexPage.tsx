@@ -3,9 +3,9 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
-import { CanvasThumb } from '../components/CanvasThumb.js'
-import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
-import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
+import { DocumentThumb } from '../components/DocumentThumb.js'
+import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DocumentListView } from '../components/document-list/DocumentListView.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
@@ -20,7 +20,7 @@ import {
 } from '../lib/daemon-api-client.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopyPath } from '../lib/derive-copy-path.js'
-import { deriveNewCanvasPath } from '../lib/derive-new-canvas-path.js'
+import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
@@ -37,7 +37,7 @@ export interface DaemonIndexPageProps {
   // a specific workspace to land on; falls back to the daemon's first-listed
   // workspace when absent, or when the named workspace isn't in the list.
   initialWorkspaceId?: string
-  onOpenCanvas: (workspaceId: string, path: string) => void
+  onOpenDocument: (workspaceId: string, path: string) => void
 }
 
 interface CanvasRow {
@@ -87,7 +87,7 @@ export function DaemonIndexPage({
   daemonBaseUrl,
   token,
   initialWorkspaceId,
-  onOpenCanvas,
+  onOpenDocument,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
@@ -204,9 +204,9 @@ export function DaemonIndexPage({
       setCreating(true)
       setCreateError(null)
       try {
-        const path = deriveNewCanvasPath(rows.map((r) => r.path))
+        const path = deriveNewDocumentPath(rows.map((r) => r.path))
         const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, path, kind)
-        onOpenCanvas(workspaceAtStart, created.path)
+        onOpenDocument(workspaceAtStart, created.path)
       } catch (err) {
         // daemon-api-client errors are already sanitized (Problem Details
         // title or a generic status message) — safe to surface directly.
@@ -220,7 +220,7 @@ export function DaemonIndexPage({
         setCreating(false)
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenCanvas, loadWorkspace],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenDocument, loadWorkspace],
   )
 
   // Client-side copy through EXISTING daemon HTTP endpoints only (read
@@ -415,7 +415,7 @@ export function DaemonIndexPage({
           // Mounts when the skeleton unmounts: the fade carries the
           // skeleton-to-content handoff instead of an instant swap.
           <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
-            <CanvasListView
+            <DocumentListView
               rows={rows.map((row) => ({
                 path: row.path,
                 displayName: row.displayName,
@@ -425,11 +425,11 @@ export function DaemonIndexPage({
                 updatedAt: row.updatedAt,
                 kind: row.kind,
               }))}
-              onOpen={(path) => selectedWorkspace && onOpenCanvas(selectedWorkspace, path)}
+              onOpen={(path) => selectedWorkspace && onOpenDocument(selectedWorkspace, path)}
               onCreate={(kind) => void handleCreate(kind)}
               createDisabled={creating}
               renderThumb={(row) => (
-                <CanvasThumb workspaceId={selectedWorkspace ?? ''} path={row.path} size="card" />
+                <DocumentThumb workspaceId={selectedWorkspace ?? ''} path={row.path} size="card" />
               )}
               renderActions={(row) => (
                 <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -462,7 +462,7 @@ export function DaemonIndexPage({
             />
           </div>
         )}
-        <DeleteCanvasDialog
+        <DeleteDocumentDialog
           pending={pendingDelete}
           busy={deleting}
           error={deleteError}

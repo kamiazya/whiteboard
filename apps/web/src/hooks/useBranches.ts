@@ -239,10 +239,10 @@ export function useBranches(
   // in the source makes every tool treat this file as binary — grep reports
   // "binary file matches" and prints nothing, which is how a stale name in
   // here survived a repo-wide sweep.
-  const canvasKey = `${workspaceId}\0${path}`
-  const [prevCanvasKey, setPrevCanvasKey] = useState(canvasKey)
-  if (prevCanvasKey !== canvasKey) {
-    setPrevCanvasKey(canvasKey)
+  const documentKey = `${workspaceId}\0${path}`
+  const [prevDocumentKey, setPrevDocumentKey] = useState(documentKey)
+  if (prevDocumentKey !== documentKey) {
+    setPrevDocumentKey(documentKey)
     setState({ branches: [], head: 'main' })
     setError(null)
     setLoading(true)

@@ -94,7 +94,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
         ]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToCanvas={() => {}}
+        onNavigateToDocument={() => {}}
         {...props}
       />
     </div>,
@@ -168,8 +168,8 @@ describe('WorkspaceTopBar browser mode', () => {
     // First activation: immediate POST (no dialog ever appears), derived inside the
     // current group — the 409 title surfaces in the alert line.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Canvas "design/untitled" already exists')).toBeTruthy()
     })
@@ -182,8 +182,8 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // Second activation: 500 without title → generic fallback, internals never shown.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
     })

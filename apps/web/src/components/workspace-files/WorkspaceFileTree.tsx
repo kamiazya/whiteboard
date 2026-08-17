@@ -2,14 +2,14 @@ import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
-export interface WorkspaceFileTreeCanvas {
+export interface WorkspaceFileTreeDocument {
   readonly documentId: string
   readonly path: string
 }
 
 export interface WorkspaceFileTreeProps {
-  canvases: readonly WorkspaceFileTreeCanvas[]
-  onOpen: (canvas: WorkspaceFileTreeCanvas) => void
+  canvases: readonly WorkspaceFileTreeDocument[]
+  onOpen: (canvas: WorkspaceFileTreeDocument) => void
   className?: string
 }
 
@@ -18,17 +18,17 @@ interface TreeNode {
   readonly path: string
   /** Set when this exact path is a canvas; an intermediate segment that no
    *  canvas claims renders as a plain directory. */
-  readonly canvas: WorkspaceFileTreeCanvas | null
+  readonly canvas: WorkspaceFileTreeDocument | null
   readonly children: TreeNode[]
 }
 
 // A document path is its full slash-joined placement: splitting on '/'
 // reconstructs the tree without a second source of truth.
-function buildTree(canvases: readonly WorkspaceFileTreeCanvas[]): TreeNode[] {
+function buildTree(canvases: readonly WorkspaceFileTreeDocument[]): TreeNode[] {
   interface MutableNode {
     name: string
     path: string
-    canvas: WorkspaceFileTreeCanvas | null
+    canvas: WorkspaceFileTreeDocument | null
     children: Map<string, MutableNode>
   }
   const root = new Map<string, MutableNode>()
@@ -61,7 +61,7 @@ function TreeItem({
   onOpen,
 }: {
   node: TreeNode
-  onOpen: (canvas: WorkspaceFileTreeCanvas) => void
+  onOpen: (canvas: WorkspaceFileTreeDocument) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0

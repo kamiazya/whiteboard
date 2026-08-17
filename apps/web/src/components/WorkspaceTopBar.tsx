@@ -10,15 +10,15 @@ import { getAppLogger } from '@/lib/app-logger'
 import { canvasPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
-import { CanvasActionsMenu } from './workspace-top-bar/CanvasActionsMenu'
-import { CanvasDropdown } from './workspace-top-bar/CanvasDropdown'
+import { DocumentActionsMenu } from './workspace-top-bar/DocumentActionsMenu'
+import { DocumentDropdown } from './workspace-top-bar/DocumentDropdown'
 import { sanitizeExportFilenameBase } from './workspace-top-bar/export-filename'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
-import type { CanvasInfo } from './workspace-top-bar/types'
-import { useCanvasNames } from './workspace-top-bar/useCanvasNames'
-import { useCanvasRename } from './workspace-top-bar/useCanvasRename'
-import { useCopyCanvasUrl } from './workspace-top-bar/useCopyCanvasUrl'
-import { useCreateCanvas } from './workspace-top-bar/useCreateCanvas'
+import type { DocumentInfo } from './workspace-top-bar/types'
+import { useCopyDocumentUrl } from './workspace-top-bar/useCopyDocumentUrl'
+import { useCreateDocument } from './workspace-top-bar/useCreateDocument'
+import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
+import { useDocumentRename } from './workspace-top-bar/useDocumentRename'
 import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
 import { useSceneExport } from './workspace-top-bar/useSceneExport'
 
@@ -26,7 +26,7 @@ import { useSceneExport } from './workspace-top-bar/useSceneExport'
 // default), every capability behaves as if it were `true` — this keeps every
 // pre-existing caller (all of which never pass `capabilities`) byte-identical.
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
-export interface CanvasIdentity {
+export interface DocumentIdentity {
   /** The workspace's display name, falling back to the path when none is stored. */
   readonly name: string
   /**
@@ -45,23 +45,23 @@ export interface WorkspaceTopBarCapabilities {
 interface Props {
   workspaceId: string
   path: string
-  canvases: CanvasInfo[]
+  canvases: DocumentInfo[]
   getThumbnailBlob?: () => Promise<Blob | null>
   // apps/web has no react-router-dom; the page owns navigation and passes it
   // in as callbacks instead of the original Link/useNavigate. Omitted when
   // the host page has no "back" destination (e.g. a daemon page with no
   // canvas-list route) — the button is hidden rather than rendered inert.
   onNavigateBack?: () => void
-  onNavigateToCanvas: (path: string) => void
+  onNavigateToDocument: (path: string) => void
   // Defaults to 'daemon' so every existing caller keeps fetching /names and
   // POSTing renames/new-canvas unchanged. 'local' is for hosts with no
   // daemon data layer (browser-local): the names fetch never fires and
-  // rename/create route through onRenameCanvas/onCreateCanvas instead.
+  // rename/create route through onRenameDocument/onCreateDocument instead.
   dataMode?: 'daemon' | 'local'
   // Required in local mode; ignored in daemon mode. Awaited internally with
   // an unmount guard — rejections are not swallowed.
-  onRenameCanvas?: (name: string) => void | Promise<void>
-  onCreateCanvas?: () => void | Promise<void>
+  onRenameDocument?: (name: string) => void | Promise<void>
+  onCreateDocument?: () => void | Promise<void>
   /** Local mode only for now: creates a markdown-kind canvas and opens it. */
   onCreateMarkdownCanvas?: () => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
@@ -99,8 +99,8 @@ interface Props {
    * what lets `apps/web`'s two pages agree that a document is named by its
    * workspace (ADR-0009 decision 2) rather than by its content.
    */
-  titleSlot?: (identity: CanvasIdentity) => ReactNode
-  // Pass-through to CanvasDropdown's optional Workspaces section — both
+  titleSlot?: (identity: DocumentIdentity) => ReactNode
+  // Pass-through to DocumentDropdown's optional Workspaces section — both
   // omitted (every pre-existing caller) keeps this byte-identical.
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
@@ -122,10 +122,10 @@ export default function WorkspaceTopBar({
   isFullscreen,
   getThumbnailBlob,
   onNavigateBack,
-  onNavigateToCanvas,
+  onNavigateToDocument,
   dataMode = 'daemon',
-  onRenameCanvas,
-  onCreateCanvas,
+  onRenameDocument,
+  onCreateDocument,
   onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
@@ -142,14 +142,14 @@ export default function WorkspaceTopBar({
   const log = getAppLogger('workspace-top-bar')
   const daemonFetch = useDaemonApi()
 
-  const { effectiveNames, renameCanvas, togglePin } = useCanvasNames({
+  const { effectiveNames, renameCanvas, togglePin } = useDocumentNames({
     workspaceId,
     canvases,
     isLocalMode,
     daemonFetch,
   })
 
-  const [canvasSearch, setCanvasSearch] = useState('')
+  const [documentSearch, setDocumentSearch] = useState('')
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -170,10 +170,10 @@ export default function WorkspaceTopBar({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
-  // Guards async callbacks (onRenameCanvas/onCreateCanvas/clipboard writes)
+  // Guards async callbacks (onRenameDocument/onCreateDocument/clipboard writes)
   // against setState-after-unmount when a canvas switch/delete resolves
-  // mid-flight. Shared by useCanvasRename, useCreateCanvas, and
-  // useCopyCanvasUrl below.
+  // mid-flight. Shared by useDocumentRename, useCreateDocument, and
+  // useCopyDocumentUrl below.
   const mountedRef = useRef(true)
   useEffect(() => {
     // Re-arm on every setup so React StrictMode's dev-only double-invoke
@@ -194,37 +194,37 @@ export default function WorkspaceTopBar({
   const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? path : null)
 
   const {
-    renamingCanvas,
+    renamingDocument,
     draft,
     setDraft,
     renameError,
     startRename,
-    commitCanvasName,
+    commitDocumentName,
     cancelRename,
-  } = useCanvasRename({
+  } = useDocumentRename({
     path,
     isLocalMode,
     currentName: canvasCustomName,
-    onRenameCanvas,
+    onRenameDocument,
     renameCanvas,
     mountedRef,
   })
 
-  const { newCanvasError, newCanvasBusy, openNewCanvas } = useCreateCanvas({
+  const { newDocumentError, newDocumentBusy, openNewDocument } = useCreateDocument({
     workspaceId,
     canvases,
     path,
     isLocalMode,
-    onCreateCanvas,
-    onNavigateToCanvas,
+    onCreateDocument,
+    onNavigateToDocument,
     daemonFetch,
     mountedRef,
   })
 
-  // Kept outside copyCanvasUrl so the failure-path fallback can render the
+  // Kept outside copyDocumentUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
   const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, path)}`
-  const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(
+  const { copyStatus, copyDocumentUrl, resetCopyStatus } = useCopyDocumentUrl(
     canvasUrl,
     log,
     mountedRef,
@@ -259,17 +259,17 @@ export default function WorkspaceTopBar({
           </Tooltip>
         )}
 
-        <CanvasDropdown
+        <DocumentDropdown
           workspaceId={workspaceId}
           path={path}
           canvases={canvases}
           effectiveNames={effectiveNames}
           isLocalMode={isLocalMode}
-          canvasSearch={canvasSearch}
-          onCanvasSearchChange={setCanvasSearch}
-          onNavigateToCanvas={onNavigateToCanvas}
+          documentSearch={documentSearch}
+          onCanvasSearchChange={setDocumentSearch}
+          onNavigateToDocument={onNavigateToDocument}
           onTogglePin={togglePin}
-          onOpenNewCanvas={openNewCanvas}
+          onOpenNewCanvas={openNewDocument}
           onCreateMarkdown={
             onCreateMarkdownCanvas === undefined ? undefined : () => void onCreateMarkdownCanvas()
           }
@@ -278,30 +278,30 @@ export default function WorkspaceTopBar({
         />
 
         {/* Canvas-specific actions such as rename and copy URL. */}
-        <CanvasActionsMenu
+        <DocumentActionsMenu
           canvasUrl={canvasUrl}
           copyStatus={copyStatus}
-          onCopyCanvasUrl={() => void copyCanvasUrl()}
+          onCopyCanvasUrl={() => void copyDocumentUrl()}
           onResetCopyStatus={resetCopyStatus}
           onStartRename={startRename}
           onExport={onExport ? (format) => void handleExport(format) : undefined}
         />
 
         {/* Inline canvas rename input. */}
-        {renamingCanvas && (
+        {renamingDocument && (
           <div className="flex min-w-0 flex-col gap-0.5">
             <Input
               autoFocus
               aria-label="Canvas title"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitCanvasName}
+              onBlur={commitDocumentName}
               // Excalidraw registers document-level keyboard shortcuts (Delete,
               // Backspace, etc.) that must never fire while the user is typing
               // a canvas name here.
               onKeyDown={(e) => {
                 e.stopPropagation()
-                if (e.key === 'Enter') commitCanvasName()
+                if (e.key === 'Enter') commitDocumentName()
                 else if (e.key === 'Escape') cancelRename()
               }}
               onKeyUp={(e) => e.stopPropagation()}
@@ -331,13 +331,13 @@ export default function WorkspaceTopBar({
           aria-live="polite"
           role="status"
           aria-label="New canvas status"
-          className={newCanvasBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
+          className={newDocumentBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
         >
-          {newCanvasBusy ? 'Creating canvas…' : ''}
+          {newDocumentBusy ? 'Creating canvas…' : ''}
         </span>
-        {newCanvasError && (
+        {newDocumentError && (
           <span className="truncate text-xs text-destructive" role="alert">
-            {newCanvasError}
+            {newDocumentError}
           </span>
         )}
 

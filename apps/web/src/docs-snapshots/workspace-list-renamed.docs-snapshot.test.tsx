@@ -13,7 +13,7 @@ import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
-// CanvasThumb fires its own daemonFetch(.../latest-thumbnail) per card and
+// DocumentThumb fires its own daemonFetch(.../latest-thumbnail) per card and
 // calls setFailed(true) once the 404 response resolves. That render commit
 // happens on a microtask hop AFTER this counter increments, so waitFor
 // below also needs a settle tick (see the rAF loop) — counting requests
@@ -94,7 +94,7 @@ describe('docs snapshot — workspace list (renamed)', () => {
           <DaemonIndexPage
             daemonBaseUrl="http://127.0.0.1:3099"
             initialWorkspaceId="ws_main"
-            onOpenCanvas={() => undefined}
+            onOpenDocument={() => undefined}
           />
         </div>
       </MemoryRouter>,
@@ -105,7 +105,7 @@ describe('docs snapshot — workspace list (renamed)', () => {
       if (!titleText.includes('Auth signup flow')) {
         throw new Error('renamed canvas display name not yet rendered')
       }
-      const cards = container.querySelectorAll('[data-testid="canvas-list-card"]')
+      const cards = container.querySelectorAll('[data-testid="document-list-card"]')
       if (cards.length !== 3) throw new Error('canvas grid not yet rendered')
       if (thumbnailFetchCount < 3) throw new Error('thumbnail fetches not yet started')
     })
