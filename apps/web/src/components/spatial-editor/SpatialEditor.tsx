@@ -159,6 +159,7 @@ import {
   resolveSpawnPoint,
   textNodeDefaults,
 } from './node-factories.js'
+import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import {
@@ -1825,6 +1826,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the press; a DOUBLE one creates a node here (resolved at the
           // release, consistent with the node-edit double-press rule).
           if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          // Tap-to-place (touch only): while a cut is pending, a stationary
+          // empty tap answers it HERE — one tap instead of long-press →
+          // menu → Paste here. Mice keep the explicit paste: an empty click
+          // is the deselect reflex, and hijacking it would misplace nodes.
+          // A tap that landed on an EDGE also starts a marquee (the press
+          // handler selects the edge and falls through here), so truly
+          // empty means no edge got selected — an edge tap keeps its normal
+          // meaning, and the hold survives it like any other interaction.
+          // Resetting the press memory keeps the NEXT tap from reading as a
+          // double press (which would also mint a note at the same spot).
+          else if (e.pointerType === 'touch' && pendingCut !== null && selectedEdgeId === null) {
+            lastPressRef.current = null
+            pasteClipboard(marquee.start)
+          }
           // Double press ON an edge line edits the OBJECT under the pointer
           // (the label), mirroring the node double-press-edits rule; node
           // creation stays the empty-space double press above.
@@ -3099,6 +3114,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
+        {pendingCut !== null && (
+          <PendingCutChip
+            count={pendingCut.snapshot.size}
+            coarse={typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches}
+            onCancel={() => setPendingCut(null)}
+          />
+        )}
         <ToolPalette
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged

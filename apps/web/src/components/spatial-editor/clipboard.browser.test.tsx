@@ -410,3 +410,116 @@ it("an anchored 'Paste here' moves the held selection so its center lands on the
   expect(Math.round(moved.y + moved.height / 2)).toBe(400)
   expect(latest.canvas.edges).toEqual(initial.edges)
 })
+
+// --- Tap-to-place + the pending chip --------------------------------------
+
+function tapEmpty(root: HTMLElement, x: number, y: number, pointerType = 'touch') {
+  const r = root.getBoundingClientRect()
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 9,
+    pointerType,
+    isPrimary: true,
+    clientX: r.left + x,
+    clientY: r.top + y,
+  })
+  fireEvent.pointerUp(root, {
+    pointerId: 9,
+    pointerType,
+    isPrimary: true,
+    clientX: r.left + x,
+    clientY: r.top + y,
+  })
+}
+
+it('a touch tap on empty canvas places the held selection there — no menu needed', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  tapEmpty(root, 600, 400)
+
+  // Same node, moved so its center lands on the tap (identity viewport).
+  expect(latest.canvas.nodes.map((n) => n.id).sort()).toEqual(['a', 'b'])
+  const moved = latest.canvas.nodes.find((n) => n.id === 'a')
+  if (moved === undefined) throw new Error('unreachable')
+  expect(Math.round(moved.x + moved.width / 2)).toBe(600)
+  expect(Math.round(moved.y + moved.height / 2)).toBe(400)
+  expect(latest.canvas.edges).toEqual(initial.edges)
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).toBeNull()
+})
+
+it('a mouse click on empty canvas does NOT place — desktop keeps the explicit paste', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  tapEmpty(root, 600, 400, 'mouse')
+
+  // Deselect happened, the hold stays, nothing moved.
+  const a = latest.canvas.nodes.find((n) => n.id === 'a')
+  expect(a).toMatchObject({ x: 40, y: 40 })
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
+})
+
+it('the pending chip announces the hold and its ✕ cancels it — touch finally has an exit', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  expect(container.querySelector('[data-testid="pending-cut-chip"]')).toBeNull()
+
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+  const chip = container.querySelector('[data-testid="pending-cut-chip"]') as HTMLElement
+  expect(chip).not.toBeNull()
+
+  const cancel = chip.querySelector('[aria-label="Cancel cut"]') as HTMLElement
+  expect(cancel).not.toBeNull()
+  fireEvent.click(cancel)
+  expect(container.querySelector('[data-testid="pending-cut-chip"]')).toBeNull()
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).toBeNull()
+  expect(latest.canvas.nodes).toHaveLength(2)
+
+  // The envelope still works as a plain copy afterwards.
+  clip(root, 'paste')
+  expect(latest.canvas.nodes).toHaveLength(3)
+})
+
+it('a touch tap on an EDGE during the hold selects the edge — placement is for empty space only', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  // (260, 80) sits on the straight a→b edge line, away from both boxes.
+  tapEmpty(root, 260, 80)
+
+  // The tap behaved as an edge tap, not a placement: nothing moved and the
+  // hold survives (edge interaction is not "done with the cut").
+  const a = latest.canvas.nodes.find((n) => n.id === 'a')
+  expect(a).toMatchObject({ x: 40, y: 40 })
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
+})
+
+it('a second rapid tap after placing does not mint a note — the press memory resets', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  tapEmpty(root, 600, 400)
+  // A second quick tap at ANOTHER empty spot: the double-press key is
+  // 'empty' regardless of position, so without the reset these two taps
+  // pair up and mint a note there.
+  tapEmpty(root, 200, 400)
+
+  // Two nodes still: the placement tap must not pair with the next tap as
+  // an empty double press (which creates a note).
+  expect(latest.canvas.nodes).toHaveLength(2)
+})
