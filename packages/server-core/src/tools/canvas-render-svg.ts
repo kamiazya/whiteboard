@@ -3,7 +3,7 @@ import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
-import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -40,7 +40,8 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      const { canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'wb_scene_render')
       const references = input.embedReferences
         ? await resolveFileReferences(deps, input.workspaceId, canvas)
         : undefined

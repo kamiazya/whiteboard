@@ -1,5 +1,9 @@
 import { sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -55,6 +59,59 @@ describe('wb_scene_digest tool', () => {
     })
     expect(result.overlaps.length).toBeGreaterThan(0)
     expect(() => sceneDigestSchema.parse(result)).not.toThrow()
+  })
+
+  test('refuses a markdown document instead of digesting its empty spatial containers', async () => {
+    // A markdown document's body lives outside the nodes/edges containers,
+    // so digesting them silently answered { nodes: [], edges: [] } — which
+    // an auditor cannot tell apart from a genuinely empty spatial canvas.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, '# Real prose\n\nThis document is not empty.')
+    })
+    const tool = createCanvasDigestTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+    ).rejects.toMatchObject({
+      name: 'NotASpatialDocumentError',
+      message: expect.stringMatching(/markdown.*wb_document_get/s),
+    })
+  })
+
+  test('refuses when only the index row records the markdown kind (legacy doc bytes)', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeMarkdownBody(doc, 'row-kind only')
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: CANVAS_ID,
+      path: 'legacy-md',
+      kind: 'markdown',
+    })
+    const tool = createCanvasDigestTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+    ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
+  })
+
+  test('still digests a document with no recorded kind anywhere (legacy spatial)', async () => {
+    // Pre-kind spatial documents must keep digesting — the guard refuses
+    // only a KNOWN markdown document, never an unknown one.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'group' as const, x: 0, y: 0, width: 10, height: 10 }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasDigestTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    expect(result.nodes).toHaveLength(1)
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {

@@ -1,4 +1,8 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -48,5 +52,21 @@ describe('wb_scene_render tool', () => {
         embedReferences: false,
       }),
     ).rejects.toThrow(CanvasNotFoundError)
+  })
+
+  test('refuses a markdown document instead of rendering an empty SVG', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, '# Real prose')
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, embedReferences: false }),
+    ).rejects.toMatchObject({
+      name: 'NotASpatialDocumentError',
+      message: expect.stringMatching(/markdown.*wb_document_get/s),
+    })
   })
 })
