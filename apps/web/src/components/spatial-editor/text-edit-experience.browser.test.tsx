@@ -9,6 +9,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { nodeEditor, nodeEditorContent, nodeEditorText } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -36,10 +37,12 @@ function rootOf(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
-async function openEditor(container: HTMLElement): Promise<HTMLTextAreaElement> {
+async function openEditor(container: HTMLElement): Promise<HTMLElement> {
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 150 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
-  return container.querySelector('textarea') as HTMLTextAreaElement
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  // The WRAPPER carries the parity styles (background, typography); the
+  // CodeMirror surface inside it inherits them.
+  return nodeEditor(container) as HTMLElement
 }
 
 it('covers the rendered text: opaque background matching the node, same typography', async () => {
@@ -58,10 +61,13 @@ it('covers the rendered text: opaque background matching the node, same typograp
 
 it('opens with the caret at the end of the existing text', async () => {
   const { container } = render(<Host />)
-  const editor = await openEditor(container)
+  await openEditor(container)
 
-  expect(editor.selectionStart).toBe('hello world'.length)
-  expect(editor.selectionEnd).toBe('hello world'.length)
+  // Behavioral pin (CodeMirror keeps its selection internal): typing
+  // immediately APPENDS — a caret left at position 0 would prepend and
+  // read as "my text got replaced".
+  await userEvent.keyboard('!')
+  expect(nodeEditorText(container)).toBe('hello world!')
 })
 
 it('uses the dark node fill when the theme is dark', async () => {

@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { nodeEditorText } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -51,8 +52,8 @@ it('selecting a node shows one More-actions control; it opens the object menu HE
   await expect.element(page.getByRole('menuitem', { name: 'Edit text' })).toBeInTheDocument()
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Edit text' }))
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
-  expect(container.querySelector('textarea')?.value).toBe('hello world')
+  await vi.waitFor(() => expect(nodeEditorText(container)).not.toBeNull())
+  expect(nodeEditorText(container)).toBe('hello world')
 })
 
 it('the More-actions control is keyboard-operable (Enter opens the menu)', async () => {

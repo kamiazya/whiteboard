@@ -5,6 +5,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -95,9 +96,9 @@ it('never fires from a text-entry surface or with a browser modifier held', () =
   fireEvent.pointerUp(root, { pointerId: 2, clientX: 320, clientY: 140 })
   fireEvent.pointerDown(root, { button: 0, pointerId: 3, clientX: 320, clientY: 140 })
   fireEvent.pointerUp(root, { pointerId: 3, clientX: 320, clientY: 140 })
-  const textarea = container.querySelector('textarea')
-  if (textarea !== null) {
-    fireEvent.keyDown(textarea, { code: 'BracketRight', key: ']' })
+  const editorContent = nodeEditorContent(container)
+  if (editorContent !== null) {
+    fireEvent.keyDown(editorContent, { code: 'BracketRight', key: ']' })
     expect(orderOf(latest.canvas)).toEqual(['a', 'b', 'c'])
   }
 })

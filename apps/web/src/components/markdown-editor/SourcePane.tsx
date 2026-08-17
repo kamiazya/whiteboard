@@ -36,7 +36,14 @@ function wrapSelectionWith(delimiter: string): StateCommand {
   }
 }
 
-const styleKeymap = [
+/**
+ * Shared with the spatial node editor (markdown-editor and spatial-editor
+ * are sibling features of one app): the same wrap shortcuts everywhere a
+ * markdown source is edited. Note Mod-Enter (task toggle) is deliberately
+ * OUTRANKED by the node editor's commit binding — the overlay's exit verb
+ * wins there; the document editor keeps the toggle.
+ */
+export const markdownStyleKeymap = [
   { key: 'Mod-b', run: wrapSelectionWith('**') },
   { key: 'Mod-i', run: wrapSelectionWith('*') },
   { key: 'Mod-e', run: wrapSelectionWith('`') },
@@ -60,7 +67,7 @@ const styleKeymap = [
  * rule — so `.cm-md-marker` has to win on the shared properties by order in
  * the stylesheet, not by being the only match.
  */
-const markdownHighlightStyle = HighlightStyle.define([
+export const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, class: 'cm-md-heading' },
   { tag: tags.strong, class: 'cm-md-strong' },
   { tag: tags.emphasis, class: 'cm-md-emphasis' },
@@ -174,7 +181,7 @@ export function SourcePane({
         // default binding; indentWithTab keeps Tab in the editor (Escape
         // then Tab remains the keyboard escape hatch, per CodeMirror's
         // own accessibility guidance).
-        keymap.of([...styleKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         // Prose, not code: long paragraphs soft-wrap instead of growing a
         // horizontal scrollbar.
         EditorView.lineWrapping,

@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CREATION_LABELS } from './creation-labels.js'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -60,7 +61,7 @@ it('right-clicking a text node opens its action menu; Edit text opens the editor
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   await userEvent.click(page.getByRole('menuitem', { name: 'Edit text' }))
 
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
   expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
 })
 
@@ -87,7 +88,7 @@ it('right-clicking empty space offers creation at that point', async () => {
   await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
 
   expect(commands).toContain('create-node')
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 })
 
 it('empty space offers the full creation set, anchored at the click point', async () => {

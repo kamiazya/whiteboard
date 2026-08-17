@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { createEditorAppearance } from './editor-appearance.js'
+import { nodeEditor } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -39,16 +40,16 @@ it('the edit overlay box styling equals the rendered chrome (shared theme produc
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
-  const textarea = await vi.waitFor(() => {
-    const el = container.querySelector('textarea')
+  const editor = await vi.waitFor(() => {
+    const el = nodeEditor(container)
     expect(el).not.toBeNull()
-    return el as HTMLTextAreaElement
+    return el as HTMLElement
   })
   const resolved = createEditorAppearance('light').resolveNode(node)
-  expect(textarea.style.borderRadius).toBe(`${resolved.radius}px`)
-  expect(textarea.style.padding).toBe(`${SPATIAL_THEME_GEOMETRY.paddingPx}px`)
+  expect(editor.style.borderRadius).toBe(`${resolved.radius}px`)
+  expect(editor.style.padding).toBe(`${SPATIAL_THEME_GEOMETRY.paddingPx}px`)
   // The rendered layout advances one font-size per line (mdast-blocks);
   // the overlay's line height restates that invariant.
-  expect(textarea.style.lineHeight).toBe(`${BODY_FONT_SIZE_PX}px`)
-  expect(textarea.style.fontSize).toBe(`${BODY_FONT_SIZE_PX}px`)
+  expect(editor.style.lineHeight).toBe(`${BODY_FONT_SIZE_PX}px`)
+  expect(editor.style.fontSize).toBe(`${BODY_FONT_SIZE_PX}px`)
 })
