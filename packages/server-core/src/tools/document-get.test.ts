@@ -30,16 +30,6 @@ function withResolveOverride(
   }
 }
 
-/** Strips `kind` from a real index's resolveDocumentById answer. */
-function withKindStrippedFromResolve(index: DocumentIndex): DocumentIndex {
-  return withResolveOverride(index, async (input) => {
-    const entry = await index.resolveDocumentById(input)
-    if (entry === null) return entry
-    const { kind: _dropped, ...rest } = entry
-    return rest
-  })
-}
-
 function makeDeps(): ServerDeps {
   return {
     documentStore: createInMemoryDocumentStore(),
@@ -155,7 +145,13 @@ describe('wb_document_get reads a document in its own format', () => {
     await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
-      documentIndex: withKindStrippedFromResolve(deps.documentIndex),
+      // strips `kind` from the real index's answer
+      documentIndex: withResolveOverride(deps.documentIndex, async (input) => {
+        const entry = await deps.documentIndex.resolveDocumentById(input)
+        if (entry === null) return entry
+        const { kind: _dropped, ...rest } = entry
+        return rest
+      }),
     }
 
     await expect(
