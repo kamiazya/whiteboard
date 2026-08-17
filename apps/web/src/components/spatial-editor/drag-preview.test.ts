@@ -151,9 +151,19 @@ describe('computeDragPreview — totality on degenerate states', () => {
     expect(computeDragPreview(state, [], { x: 1, y: 1 })).toBeUndefined()
   })
 
-  it('returns undefined when livePoint is null, regardless of gesture kind', () => {
-    expect(computeDragPreview(movingState(), [], null)).toBeUndefined()
-    expect(computeDragPreview(resizingState(), [], null)).toBeUndefined()
+  it('previews a pointerless box gesture at its start geometry', () => {
+    const boxes: readonly NodeBox[] = [{ id: 'n1', box: { x: 10, y: 20, width: 200, height: 80 } }]
+    expect(computeDragPreview(movingState(), boxes, null)).toEqual({
+      kind: 'box',
+      box: { x: 10, y: 20, width: 200, height: 80 },
+    })
+    expect(computeDragPreview(resizingState(), boxes, null)).toEqual({
+      kind: 'box',
+      box: { x: 0, y: 0, width: 200, height: 100 },
+    })
+  })
+
+  it('returns undefined for a pointerless connect — its preview IS the pointer', () => {
     expect(computeDragPreview(connectingState(), [], null)).toBeUndefined()
   })
 })

@@ -1,4 +1,4 @@
-import { nanoid } from 'nanoid'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { Database } from './index.js'
 
 // Upsert helpers for the FK targets that downstream stores write to. Each one
@@ -49,7 +49,10 @@ export async function upsertDocumentRow(
   await upsertWorkspaceRow(db, workspaceId)
   const existing = await getDocumentIdByPath(db, workspaceId, path)
   if (existing) return existing
-  const id = nanoid(12)
+  // ULID, matching every other documents-row minting site (createDocument,
+  // saveDocument): the port's documentIdSchema accepts only a canonical
+  // ULID, and a nanoid row here is invisible to SqliteDocumentIndex.
+  const id = generateDocumentId()
   const now = Date.now()
   await db
     .insertInto('documents')

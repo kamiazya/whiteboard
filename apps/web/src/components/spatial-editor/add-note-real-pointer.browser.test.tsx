@@ -41,7 +41,7 @@ it('a real pointer click on "Note" creates a node and opens its editor', async (
 
   expect(commands).toEqual(['create-node'])
   expect(container.querySelectorAll('svg rect').length).toBeGreaterThan(0)
-  expect(container.querySelectorAll('textarea').length).toBe(1)
+  expect(container.querySelectorAll('[data-testid="text-node-editor"]').length).toBe(1)
 })
 
 it('committing the new note untouched keeps a visible empty node, not a blank canvas', async () => {
@@ -60,6 +60,6 @@ it('committing the new note untouched keeps a visible empty node, not a blank ca
   })
 
   expect(commands[0]).toBe('create-node')
-  expect(container.querySelectorAll('textarea').length).toBe(0)
+  expect(container.querySelectorAll('[data-testid="text-node-editor"]').length).toBe(0)
   expect(container.querySelectorAll('svg rect').length).toBeGreaterThan(0)
 })

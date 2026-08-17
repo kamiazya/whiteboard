@@ -82,7 +82,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     }
   })
 
-  it('sets the host element fill to the theme text color, the seam markdown body runs inherit', () => {
+  it('paints body text in the theme text color, the seam markdown body runs inherit', () => {
     const { container } = render(
       <SpatialEditor
         defaultTool="select"
@@ -92,9 +92,12 @@ describe('SpatialEditor theme chrome (real browser)', () => {
         theme="dark"
       />,
     )
-    const svg = container.querySelector('[data-testid="viewport-transform"] svg')
-    const host = svg?.parentElement
-    expect(host?.style.fill).toBe(hexToRgb(EDITOR_DARK_PALETTE.textFill))
+    // Asserted on the RESOLVED color rather than on whichever ancestor
+    // carries the style: the fill sits on the shared canvas-space ancestor
+    // so the live drag layers inherit it too (see SpatialEditor).
+    const text = container.querySelector('[data-testid="canvas-content"] text')
+    expect(text).not.toBeNull()
+    expect(getComputedStyle(text as Element).fill).toBe(hexToRgb(EDITOR_DARK_PALETTE.textFill))
   })
 
   it('does not change scene geometry between themes — only color attributes differ', () => {

@@ -9,6 +9,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -49,11 +50,11 @@ function rootOf(container: HTMLElement): HTMLElement {
 async function editNodeText(container: HTMLElement, text: string) {
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 130 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
-  await userEvent.fill(container.querySelector('textarea') as HTMLTextAreaElement, text)
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  fillNodeEditor(container, text)
   // Click far outside the node to blur-commit.
   await userEvent.click(root, { position: { x: 700, y: 500 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
 }
 
 it('committing a tall body grows the node height to contain it', async () => {

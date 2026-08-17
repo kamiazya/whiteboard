@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { documentEntrySchema } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
+import { captureLogsForTests } from '../log.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { SqliteDocumentIndex } from './sqlite-document-index.js'
 
@@ -124,6 +125,22 @@ describe('rows written before canvasIds were ULIDs', () => {
       const entries = await index.listDocuments({ workspaceId: 'ws-legacy' })
       expect(entries.map((entry) => entry.path)).not.toContain('pre-ulid-doc')
     })
+  })
+
+  it('logs the exclusion at error level — every minting site converges on ULID now, so this is corruption', async () => {
+    // 0008 and 0012 (plus the ULID fix in every minting site) mean a non-ULID
+    // row reaching this branch is no longer an anticipated legacy shape, so
+    // it is loud rather than a routine warning.
+    const captured = captureLogsForTests('debug')
+    try {
+      await withLegacyRow(async (index) => {
+        await index.listDocuments({ workspaceId: 'ws-legacy' })
+      })
+      const record = captured.records.find((r) => r.data?.path === 'pre-ulid-doc')
+      expect(record?.level).toBe('error')
+    } finally {
+      captured.restore()
+    }
   })
 })
 

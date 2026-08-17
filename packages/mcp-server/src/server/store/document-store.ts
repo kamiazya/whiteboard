@@ -7,7 +7,10 @@
  * bytes a `wb_document_*` tool call would — the FS `.loro` blob tree
  * `documentBlobPath` still computes is no longer read or written here; it
  * survives only as an identity label for corrupt-data error messages and as
- * the legacy-migration backup path.
+ * the legacy-migration backup path. Any blob file still on disk is swept
+ * away by `sweep-imported-fs-blobs.ts` once its bytes are proven to live in
+ * Libsql, so `deleteDocument`'s unlink below is a straggler cleanup, not the
+ * primary deletion path.
  *
  * `listDocuments`/`deleteDocument` here are NOT `DocumentIndex`'s methods of
  * the same names — that is the agent-facing side of the same split, reached
@@ -56,15 +59,18 @@ export class ConflictError extends Error {
 }
 
 // ── blob path helpers ──
-// Snapshots live under {dataDir}/blobs/{workspaceId}/document/{documentId}.loro.
+// Legacy snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
 // The documentId is the stable row PK from the `documents` table, so renaming
 // a document's path does not move blobs around.
 //
-// The segment used to be `canvas/`, the CONTAINER noun ADR-0009 calls a
-// Document. Correcting it meant walking every workspace's blob tree at boot,
-// so it is its own migration rather than part of a rename:
-// `0012-document-blob-dir` moves an existing tree across, and `0011-import-fs-blobs`
-// runs first and still reads the OLD segment as a frozen literal.
+// The `canvas/` segment names the CONTAINER, which ADR-0009 calls a Document,
+// and it deliberately stays: this tree is being RETIRED, not corrected.
+// `0011-import-fs-blobs` reads it as a frozen literal and
+// `sweep-imported-fs-blobs.ts` deletes each file — then the directory — once
+// its bytes are proven to live in Libsql. A migration that renamed the
+// segment would move every legacy blob out from under that sweep, leaving it
+// neither verified nor cleaned up. There is nothing here to rename once the
+// last file is gone.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
@@ -72,7 +78,7 @@ function blobsRoot(): string {
 function documentBlobPath(workspaceId: string, documentId: string): string {
   validateWorkspaceId(workspaceId)
   validateDocumentId(documentId)
-  return join(blobsRoot(), workspaceId, 'document', `${documentId}.loro`)
+  return join(blobsRoot(), workspaceId, 'canvas', `${documentId}.loro`)
 }
 
 function errorMessage(error: unknown): string {

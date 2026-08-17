@@ -11,6 +11,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { fillNodeEditor, nodeEditorContent, nodeEditorText } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -45,8 +46,8 @@ it('a real double-click on a text node opens its editor with the existing text',
   const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 150 } })
 
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
-  expect(container.querySelector('textarea')?.value).toBe('hello world')
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  expect(nodeEditorText(container)).toBe('hello world')
 })
 
 it('a real double-click on an already-selected node still opens the editor', async () => {
@@ -56,7 +57,7 @@ it('a real double-click on an already-selected node still opens the editor', asy
   expect(container.querySelectorAll('[data-testid="selection-overlay"]').length).toBe(1)
 
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 })
 
 it('a real double-click on empty space creates exactly one node and opens it', async () => {
@@ -65,7 +66,7 @@ it('a real double-click on empty space creates exactly one node and opens it', a
   await userEvent.dblClick(rootOf(container), { position: { x: 600, y: 450 } })
 
   expect(commands.filter((kind) => kind === 'create-node')).toHaveLength(1)
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 })
 
 it('typing into the opened editor and committing persists the text', async () => {
@@ -73,13 +74,12 @@ it('typing into the opened editor and committing persists the text', async () =>
   const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
-  const textarea = container.querySelector('textarea')
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
-  await userEvent.fill(textarea as HTMLTextAreaElement, 'edited body')
+  fillNodeEditor(container, 'edited body')
   // Click far outside the node to blur-commit.
   await userEvent.click(root, { position: { x: 700, y: 500 } })
 
   expect(commands).toContain('set-text')
-  expect(container.querySelector('textarea')).toBeNull()
+  expect(nodeEditorContent(container)).toBeNull()
 })

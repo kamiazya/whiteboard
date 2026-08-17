@@ -360,7 +360,7 @@ describe('legacy LoroList -> MovableList migration reads and persists through Li
       tempDir,
       'blobs',
       'session1',
-      'document',
+      'canvas',
       `${documentId}.loro.pre-migrate-bak`,
     )
     await expect(access(bakPath)).resolves.toBeUndefined()
@@ -1303,7 +1303,7 @@ describe('deleteDocument', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'migrated')
       .executeTakeFirstOrThrow()
-    const bakPath = join(tempDir, 'blobs', 'session1', 'document', `${row.id}.loro.pre-migrate-bak`)
+    const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
     // saveDocument no longer creates the blob directory (no FS blob is
     // written on the happy path), so the bak file's parent has to be made
     // explicitly here.
@@ -1344,6 +1344,61 @@ describe('deleteDocument', () => {
       .where('id', '=', row.id)
       .executeTakeFirst()
     expect(after).toBeUndefined()
+  })
+
+  it('deletes cleanly a document whose FS blob was already removed by sweepImportedFsBlobs', async () => {
+    const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
+    const { importFsBlobs } = await import('./db/migrations/0011-import-fs-blobs.js')
+    const { sweepImportedFsBlobs } = await import('./db/sweep-imported-fs-blobs.js')
+    const { mkdir, writeFile, access } = await import('node:fs/promises')
+    const { getDb } = await import('./db/index.js')
+    const { upsertWorkspaceRow } = await import('./db/upsert-workspace.js')
+
+    const db = await getDb(tempDir)
+    await upsertWorkspaceRow(db, 'session1')
+    const documentId = generateDocumentId()
+    const now = Date.now()
+    await db
+      .insertInto('documents')
+      .values({
+        id: documentId,
+        workspaceId: 'session1',
+        path: 'swept-then-deleted',
+        displayName: null,
+        isPinned: 0,
+        pinOrder: null,
+        currentBranch: 'main',
+        createdAt: now,
+        updatedAt: now,
+        kind: null,
+      })
+      .execute()
+
+    const blobDoc = new LoroDoc()
+    blobDoc.getText('content').insert(0, 'legacy FS blob, later imported and swept')
+    blobDoc.commit()
+    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
+    await mkdir(blobDir, { recursive: true })
+    const blobPath = join(blobDir, `${documentId}.loro`)
+    await writeFile(blobPath, blobDoc.export({ mode: 'snapshot' }))
+
+    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await sweepImportedFsBlobs(db, tempDir)
+    await expect(access(blobPath)).rejects.toThrow() // pins the sweep precondition itself
+
+    await expect(deleteDocument('session1', 'swept-then-deleted')).resolves.toBe(true)
+
+    const after = await db
+      .selectFrom('documents')
+      .selectAll()
+      .where('id', '=', documentId)
+      .executeTakeFirst()
+    expect(after).toBeUndefined()
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const libsqlStore = new LibsqlDocumentStore(db)
+    await expect(
+      libsqlStore.loadSnapshot({ docRef: { kind: 'document', documentId } }),
+    ).resolves.toBeNull()
   })
 })
 

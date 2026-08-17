@@ -14,7 +14,7 @@ interface WorkspacesTable {
 }
 
 interface DocumentsTable {
-  // Stable nanoid that survives path renames. PK so child tables can FK on it.
+  // Stable ULID that survives path renames. PK so child tables can FK on it.
   id: string
   workspaceId: string
   // Mutable display path; UNIQUE within (workspaceId, path).

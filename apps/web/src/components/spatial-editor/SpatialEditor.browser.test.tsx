@@ -12,6 +12,7 @@ import { page, userEvent } from 'vitest/browser'
 // unstyled-DOM defaults.
 import '../../index.css'
 import type { EditorCommand } from './commands.js'
+import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
 
 function fakeMeasure() {
@@ -474,9 +475,8 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 90 }),
       )
 
-    const textEditor = page.getByTestId('text-node-editor')
-    await textEditor.fill('edited')
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    fillNodeEditor(document, 'edited')
+    ;(nodeEditorContent(document) as HTMLElement).blur()
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
@@ -526,7 +526,7 @@ describe('SpatialEditor (browser)', () => {
       )
 
     const textEditor = page.getByTestId('text-node-editor')
-    await textEditor.fill('edited')
+    fillNodeEditor(document, 'edited')
     // Placing the caret inside the already-open textarea must not bubble to
     // the root's hit-test and hijack the gesture into a node move — that
     // would unmount the editor and silently drop the in-progress edit.
@@ -543,7 +543,7 @@ describe('SpatialEditor (browser)', () => {
     expect(page.getByTestId('text-node-editor').element()).toBeTruthy()
     expect(onChange).not.toHaveBeenCalled()
 
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    ;(nodeEditorContent(document) as HTMLElement).blur()
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
     expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
@@ -1266,10 +1266,10 @@ describe('SpatialEditor (browser)', () => {
 
     const textEditor = page.getByTestId('text-node-editor')
     expect(textEditor.element()).toBeTruthy()
-    expect(document.activeElement).toBe(textEditor.element())
+    expect(document.activeElement).toBe(nodeEditorContent(document))
 
-    await textEditor.fill('my first note')
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    fillNodeEditor(document, 'my first note')
+    ;(nodeEditorContent(document) as HTMLElement).blur()
 
     expect(onChange).toHaveBeenCalledTimes(2)
     const [firstNext, firstCommand] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
@@ -1412,7 +1412,7 @@ describe('SpatialEditor (browser)', () => {
     expect(command).toEqual({ kind: 'delete-node', id: 'a' })
   })
 
-  it('while the text editor is open, Backspace edits the textarea and does NOT delete the node', async () => {
+  it('while the text editor is open, Backspace edits the text and does NOT delete the node', async () => {
     const onChange = vi.fn()
     render(
       <div style={{ width: 600, height: 400 }}>
@@ -1454,22 +1454,21 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 90 }),
       )
 
-    const textEditor = page.getByTestId('text-node-editor')
-    await textEditor.fill('hell')
-    await textEditor
-      .element()
-      .dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
-      )
+    fillNodeEditor(document, 'hell')
+    nodeEditorContent(document)?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
+    )
 
     // The node must still exist — the reducer's editing-text guard means no
     // delete-node command was ever emitted from this keystroke.
     expect(onChange).not.toHaveBeenCalled()
     expect(page.getByTestId('text-node-editor').element()).toBeTruthy()
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    ;(nodeEditorContent(document) as HTMLElement).blur()
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
-    expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'hell' })
+    // CodeMirror handles the keystroke itself: the character came off the
+    // TEXT ('hell' → 'hel'), and no delete-node command ever fired.
+    expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'hel' })
   })
 
   it('creating two nodes, connecting them, then deleting one leaves no dangling edge in the canvas or the rendered SVG', async () => {
@@ -1515,8 +1514,7 @@ describe('SpatialEditor (browser)', () => {
       .dispatchEvent(
         new PointerEvent('pointerup', { bubbles: true, clientX: 100, clientY: 100, pointerId: 92 }),
       )
-    let textEditor = page.getByTestId('text-node-editor')
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    ;(nodeEditorContent(document) as HTMLElement).blur()
     let canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
     expect(canvas.nodes).toHaveLength(1)
     // Wait for ControlledEditor's setCanvas to actually flush and re-render
@@ -1557,8 +1555,7 @@ describe('SpatialEditor (browser)', () => {
       .dispatchEvent(
         new PointerEvent('pointerup', { bubbles: true, clientX: 400, clientY: 100, pointerId: 93 }),
       )
-    textEditor = page.getByTestId('text-node-editor')
-    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    ;(nodeEditorContent(document) as HTMLElement).blur()
     canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
     expect(canvas.nodes).toHaveLength(2)
     await waitFor(() => {
@@ -1928,8 +1925,7 @@ describe('node placement and affordances', () => {
     const editor = page.getByTestId('spatial-editor')
     await addNoteViaMenu()
 
-    const textEditor = page.getByTestId('text-node-editor')
-    await textEditor.fill('typed before clicking away')
+    fillNodeEditor(document, 'typed before clicking away')
 
     // Click far-away empty canvas space rather than blurring the textarea
     // directly — this is the pointerdown-empty path the reducer must commit
@@ -1972,11 +1968,10 @@ describe('node placement and affordances', () => {
     )
     await addNoteViaMenu()
 
-    const textEditor = page.getByTestId('text-node-editor')
-    await textEditor.fill('should be discarded')
-    await textEditor
-      .element()
-      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    fillNodeEditor(document, 'should be discarded')
+    nodeEditorContent(document)?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    )
 
     // The note existed only to hold this edit, so cancelling takes it too —
     // an empty box the user has to clean up is debris, not a discarded edit.

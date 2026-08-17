@@ -7,12 +7,13 @@
 // (see text-edit-style-parity.browser.test.tsx's header, which names the
 // same divergence and defers pinning it to here).
 
-import { BODY_FONT_SIZE_PX, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import { BODY_FONT_SIZE_PX } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -66,10 +67,10 @@ it('pins the CSS-vs-injected-measure wrap-line-count relationship for a canonica
 
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   await userEvent.dblClick(root, { position: { x: 200, y: 110 } })
-  const textarea = await vi.waitFor(() => {
-    const el = container.querySelector('textarea')
+  const cmContent = await vi.waitFor(() => {
+    const el = nodeEditorContent(container)
     expect(el).not.toBeNull()
-    return el as HTMLTextAreaElement
+    return el as HTMLElement
   })
 
   // CSS engine: derive the wrapped line count from scrollHeight using the
@@ -77,7 +78,14 @@ it('pins the CSS-vs-injected-measure wrap-line-count relationship for a canonica
   // own computed lineHeight/fontSize — that would make the mutation check
   // below vacuous, since a lineHeight/fontSize change would just silently
   // relabel itself).
-  const contentHeight = textarea.scrollHeight - 2 * SPATIAL_THEME_GEOMETRY.paddingPx
+  // Measure the line boxes themselves (first line top to last line
+  // bottom): .cm-content's scrollHeight carries a stray extra pixel from
+  // the contenteditable itself, which would break the whole-line check.
+  const lines = [...cmContent.querySelectorAll('.cm-line')]
+  const first = lines[0]?.getBoundingClientRect()
+  const last = lines[lines.length - 1]?.getBoundingClientRect()
+  if (!first || !last) throw new Error('expected at least one rendered line')
+  const contentHeight = last.bottom - first.top
   const cssLineCountRaw = contentHeight / BODY_FONT_SIZE_PX
   // Non-vacuity: must divide out to a whole number of lines using the
   // shared constants, or the arithmetic itself is wrong for this fixture.

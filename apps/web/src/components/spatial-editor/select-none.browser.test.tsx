@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -44,9 +45,9 @@ it('keeps the text a node is being edited with selectable', async () => {
   }
 
   await vi.waitFor(() => {
-    const editor = container.querySelector('textarea')
+    const editor = nodeEditorContent(container)
     expect(editor).not.toBeNull()
     // Inherited `none` would leave the caret unable to select its own text.
-    expect(getComputedStyle(editor as HTMLTextAreaElement).userSelect).toBe('text')
+    expect(getComputedStyle(editor as HTMLElement).userSelect).toBe('text')
   })
 })

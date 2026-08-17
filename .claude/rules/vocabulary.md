@@ -222,17 +222,28 @@ will trust the next time it fires. Same reason `canvas` will never qualify.
 (The 178 `onOpenCanvas` handlers this note once listed as the OTHER carve-out
 are gone — they are `onOpenDocument` now.)
 
-The blob tree's path segment is DONE: `{dataDir}/blobs/{workspaceId}/canvas/`
-is now `.../document/`, moved by migration `0012-document-blob-dir`. Two
-things about it are worth knowing. It was recorded here as hardcoded by
-"`document-store.ts` and `file-gc-sweeper.ts` both", and that was wrong —
-the sweeper only mentions the layout in a comment and never joins the
-segment, so the production surface was ONE line. And a migration can move
-bytes on disk here, not just columns: `0008` already did, which is the
-precedent `0011` follows. The end-to-end guard is
-`migrator.legacy-upgrade.test.ts`, which seeds the OLD layout (that is what a
-pre-0008 data dir looks like) and asserts the blob arrives under the new one,
-so it proves the 0008 re-key and the 0011 move both ran, in order.
+**The blob tree's path segment is the one entry here that was WITHDRAWN, and
+why is the useful part.** `{dataDir}/blobs/{workspaceId}/canvas/` names the
+container, so it read like an ordinary stored-shape fix: a migration that
+walks each workspace and renames the child directory. One was written,
+tested, and carried through three merges as `0011` -> `0012` -> `0013`.
+
+Then the identity-convergence work landed and made the whole tree LEGACY.
+`prepareDataDir` now runs, on every boot: migrations, then
+`importFsBlobs` (reads `blobs/*/canvas/*.loro`, a frozen literal), then
+`sweepImportedFsBlobs`, which deletes each file — and then the `canvas/`
+directory, the workspace directory, and `blobs/` itself — once its bytes are
+proven to live in Libsql. Migrations run BEFORE the sweep in that same call,
+so the rename would have moved every legacy blob to a directory the sweeper
+never looks in: neither verified nor cleaned up, orphaned for good, and a
+`document/` tree nothing owns.
+
+The rule that generalises: **before correcting the name of a stored shape,
+check whether that shape is on its way out.** A name you are deleting does
+not need to be right, and moving it can break the deletion. Nothing about the
+vocabulary argument was wrong — it just stopped being worth anything.
+`document-store.ts` records the reason at `documentBlobPath` so the next
+reader does not re-open it.
 
 `slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
 is what keeps it retired — the one part of this rule that could stop being
