@@ -91,6 +91,17 @@ async function readDirSafe(dir: string): Promise<string[]> {
   }
 }
 
+/** Decode `bytes` as a LoroDoc snapshot and encode its current frontier, or the decode error. */
+function decodeFrontier(bytes: Uint8Array): { frontier: Uint8Array } | { error: unknown } {
+  const doc = new LoroDoc()
+  try {
+    doc.import(bytes)
+  } catch (error) {
+    return { error }
+  }
+  return { frontier: encodeFrontiers(doc.oplogFrontiers()) }
+}
+
 async function importOneBlob(
   db: Kysely<MigrationSchema>,
   workspaceId: string,
@@ -165,6 +176,38 @@ async function importOneBlob(
         },
         'FS blob diverges from an existing snapshot row — leaving both sides untouched for manual triage',
       )
+      return
+    }
+
+    // Bytes match — already imported by an earlier call. But the three
+    // inserts below (documentSnapshots, documentSnapshotChunks,
+    // documentFrontiers) are not atomic outside the migration's own wrapping
+    // transaction (the standalone export runs without one), so an earlier
+    // call can have been interrupted between the chunk pair landing and the
+    // frontier insert. Backfill the missing row rather than returning
+    // silently: LibsqlDocumentStore.currentFrontier() falls through to an
+    // empty frontier for a docKey with no documentFrontiers row, which would
+    // misreport this document as having no history despite the full
+    // snapshot being present.
+    const frontierExists = await db
+      .selectFrom('documentFrontiers')
+      .select('docKey')
+      .where('docKey', '=', docKey)
+      .executeTakeFirst()
+    if (!frontierExists) {
+      const decoded = decodeFrontier(bytes)
+      if ('error' in decoded) {
+        log.warning(
+          { workspaceId, documentId, err: decoded.error },
+          'existing snapshot matched the FS blob but it failed to decode while backfilling a missing frontier row, skipping',
+        )
+        return
+      }
+      await db
+        .insertInto('documentFrontiers')
+        .values({ docKey, frontier: decoded.frontier })
+        .onConflict((oc) => oc.column('docKey').doNothing())
+        .execute()
     }
     return
   }
@@ -173,17 +216,15 @@ async function importOneBlob(
   // importing through LoroDoc also doubles as the corruption gate — a blob
   // that fails to decode (garbage bytes, a zero-length file) cannot be given
   // a fake frontier, so it is skipped rather than aborting the whole import.
-  const doc = new LoroDoc()
-  try {
-    doc.import(bytes)
-  } catch (err) {
+  const decoded = decodeFrontier(bytes)
+  if ('error' in decoded) {
     log.warning(
-      { workspaceId, documentId, byteLength: bytes.byteLength, err },
+      { workspaceId, documentId, byteLength: bytes.byteLength, err: decoded.error },
       'blob failed to decode as a LoroDoc snapshot, skipping',
     )
     return
   }
-  const frontier = encodeFrontiers(doc.oplogFrontiers())
+  const frontier = decoded.frontier
 
   const { manifest, chunks } = chunkSnapshot(bytes, IMPORT_MAX_CHUNK_BYTES)
 

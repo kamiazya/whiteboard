@@ -42,6 +42,23 @@ export async function runMigrations(db: Database): Promise<void> {
       )
     }
 
-    throw new Error(`Database migration failed${failed ? ` at ${failed}` : ''}: ${detail}`)
+    // A migration that walks the data dir's filesystem tree (e.g.
+    // 0011-import-fs-blobs reading {dataDir}/blobs/**) can hit a permission
+    // error unrelated to the database itself. Point at the fix instead of
+    // surfacing the raw "EACCES ... scandir '<path>'" errno message, which
+    // names an implementation detail no user can act on directly.
+    if ((error as NodeJS.ErrnoException | undefined)?.code === 'EACCES') {
+      throw new Error(
+        `Database migration failed${failed ? ` at ${failed}` : ''}: permission denied reading ` +
+          'the data directory. Check filesystem permissions on the workspace blob directories ' +
+          'under <data dir>/blobs and restart. See docs/contributing/mcp-debugging.md ' +
+          '(Database Migration Errors).',
+        { cause: error },
+      )
+    }
+
+    throw new Error(`Database migration failed${failed ? ` at ${failed}` : ''}: ${detail}`, {
+      cause: error,
+    })
   }
 }

@@ -407,6 +407,78 @@ describe('0011-import-fs-blobs', () => {
     await db.destroy()
   })
 
+  it('backfills a missing documentFrontiers row when the snapshot+chunks pair already matches the FS blob', async () => {
+    const db = await memoryDb()
+    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+    await seedWorkspace(db, 'ws-1')
+
+    // The shape a prior importOneBlob call would leave if interrupted AFTER
+    // its documentSnapshots/documentSnapshotChunks inserts but BEFORE its
+    // documentFrontiers insert: bytes fully present, frontier row missing.
+    const bytes = snapshotBytes('interrupted before the frontier insert')
+    const { manifest, chunks } = chunkSnapshot(bytes, 1_000_000)
+    await db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey: 'canvas:doc-partial',
+        chunkCount: manifest.chunkCount,
+        totalBytes: manifest.totalBytes,
+        maxChunkBytes: manifest.maxChunkBytes,
+        frontier: new Uint8Array([9]),
+      })
+      .execute()
+    await db
+      .insertInto('documentSnapshotChunks')
+      .values(
+        chunks.map((c) => ({ docKey: 'canvas:doc-partial', chunkIndex: c.index, bytes: c.bytes })),
+      )
+      .execute()
+
+    await writeBlob(dataDir, 'ws-1', 'doc-partial', bytes)
+
+    const capture = captureLogsForTests()
+    try {
+      expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
+      expect(capture.records).toHaveLength(0)
+    } finally {
+      capture.restore()
+    }
+
+    const frontierRow = await db
+      .selectFrom('documentFrontiers')
+      .select('frontier')
+      .where('docKey', '=', 'canvas:doc-partial')
+      .executeTakeFirstOrThrow()
+    const frontier =
+      frontierRow.frontier instanceof Uint8Array
+        ? frontierRow.frontier
+        : new Uint8Array(frontierRow.frontier)
+    expect(frontier).toEqual(expectedFrontier(bytes))
+
+    await db.destroy()
+  })
+
+  it('rethrows an unexpected readdir error (e.g. permission denied on a canvas directory) so the whole migration aborts', async () => {
+    const db = await memoryDb()
+    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+    await seedWorkspace(db, 'ws-1')
+
+    const canvasDir = join(dataDir, 'blobs', 'ws-1', 'canvas')
+    await writeBlob(dataDir, 'ws-1', 'doc-a', snapshotBytes('unreachable'))
+    const { chmod } = await import('node:fs/promises')
+    await chmod(canvasDir, 0o000)
+
+    try {
+      const result = await migratorFor(db).migrateTo(THIS_ONE)
+      expect(result.error).toBeInstanceOf(Error)
+      expect((result.error as NodeJS.ErrnoException).code).toBe('EACCES')
+    } finally {
+      await chmod(canvasDir, 0o755)
+    }
+
+    await db.destroy()
+  })
+
   it('exports the migration object wrapping the same routine', () => {
     expect(typeof migration.up).toBe('function')
     expect(typeof migration.down).toBe('function')
