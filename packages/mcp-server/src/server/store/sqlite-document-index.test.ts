@@ -61,7 +61,7 @@ describe('SqliteDocumentIndex', () => {
 })
 
 describe('rows written before canvasIds were ULIDs', () => {
-  // A daemon that predates ADR-0007 decision 5 has nanoid ids in `canvases`.
+  // A daemon that predates ADR-0007 decision 5 has nanoid ids in `documents`.
   // The index reads that table directly now, so such a row reaches every
   // caller — and `wb_document_list` declares an outputSchema the MCP SDK
   // validates at runtime, so ONE of them once made the whole listing fail
@@ -129,7 +129,7 @@ describe('rows written before canvasIds were ULIDs', () => {
 
 describe('rows written before documents had a kind', () => {
   // A document created before `kind` existed has bytes on disk and a row in
-  // `canvases`, but kind IS NULL. Hiding it from every listing while its
+  // `documents`, but kind IS NULL. Hiding it from every listing while its
   // content sits on disk is the same dishonest surface a 200-empty workspace
   // was: the row must surface — without a kind — and the READ path is where
   // "format unknown" is said (wb_document_get already refuses one with

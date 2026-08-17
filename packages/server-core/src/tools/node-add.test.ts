@@ -6,7 +6,7 @@ import {
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { loadDocument } from './document-io.js'
@@ -33,7 +33,7 @@ const RECT = {
 describe('wb_node_add', () => {
   test('adds a node to an empty spatial canvas', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
     })
@@ -54,7 +54,7 @@ describe('wb_node_add', () => {
     // The gap this closes is that the only previous way to get a node in was
     // wb_document_set, which replaced the whole canvas. Adding must add.
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [RECT], edges: [] })
     })
@@ -72,7 +72,7 @@ describe('wb_node_add', () => {
 
   test('refuses an id that is already taken rather than overwriting it', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [RECT], edges: [] })
     })
@@ -96,7 +96,7 @@ describe('wb_node_add', () => {
     // added beside it is content no OKF projection can represent — nodes are
     // JSON Canvas (ADR-0009 decision 3).
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
@@ -112,7 +112,7 @@ describe('wb_node_add', () => {
 
   test('a document predating kinds is recorded as spatial by the write', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
     })

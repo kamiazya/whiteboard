@@ -7,7 +7,7 @@ function options(overrides: Partial<Parameters<typeof useCreateDocument>[0]> = {
   return {
     workspaceId: 'ws_1',
     path: 'canvas-a',
-    canvases: [{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }],
+    documents: [{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }],
     isLocalMode: false,
     onCreateDocument: undefined,
     onNavigateToDocument: vi.fn(),
@@ -84,7 +84,7 @@ describe('useCreateDocument — immediate create', () => {
       useCreateDocument(
         options({
           path: 'design/foo',
-          canvases: [
+          documents: [
             { path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' },
             { path: 'design/untitled', updatedAt: '2026-04-23T00:00:00Z' },
             { path: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },

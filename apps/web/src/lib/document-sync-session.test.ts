@@ -2,7 +2,7 @@
  * document-sync-session unit tests — jsdom layer.
  *
  * Exercises the session module directly (no React, no Excalidraw) against a
- * fake CanvasBackend and SpatialCanvas/EditorCommand fixtures — the
+ * fake DocumentBackend and SpatialCanvas/EditorCommand fixtures — the
  * document-shaped surface this session now owns.
  */
 
@@ -12,8 +12,8 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
@@ -65,7 +65,7 @@ async function flushMicrotasks(turns = 30): Promise<void> {
 }
 
 type FakeBackendControl = {
-  handlers: CanvasBackendHandlers | null
+  handlers: DocumentBackendHandlers | null
   disconnectCalled: boolean
   pushLocalUpdateCalls: Uint8Array[]
   /** Models a transport that is down: pushes are accepted and discarded,
@@ -73,7 +73,7 @@ type FakeBackendControl = {
   transportDown: boolean
 }
 
-function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
+function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
   const ctrl: FakeBackendControl = {
     handlers: null,
     disconnectCalled: false,
@@ -719,7 +719,7 @@ describe('createDocumentSyncSession', () => {
     // arbitrarily long time to settle (network ack), but the *call* itself
     // is what puts bytes on a still-open connection.
     const callOrder: string[] = []
-    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+    const backend: DocumentBackend & { _ctrl: FakeBackendControl } = {
       ...makeFakeBackend(),
       pushLocalUpdate(_bytes) {
         callOrder.push('push-called')

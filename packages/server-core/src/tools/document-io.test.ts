@@ -2,7 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentNotFoundError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -41,7 +41,7 @@ describe('document-io', () => {
     writeSpatialCanvas(seedDoc, canvas)
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
     await documentStore.saveSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -55,7 +55,7 @@ describe('document-io', () => {
       nodes: loaded.canvas.nodes.map((node) => (node.id === 'n1' ? { ...node, x: 99 } : node)),
       edges: loaded.canvas.edges,
     }
-    await saveCanvasDoc(deps, CANVAS_ID, loaded.doc, patched)
+    await saveDocumentBodySnapshot(deps, CANVAS_ID, loaded.doc, patched)
 
     const reloaded = await loadDocument(deps, CANVAS_ID)
     expect(reloaded.canvas.nodes).toHaveLength(2)

@@ -144,7 +144,7 @@ describe('VersionTimeline', () => {
   })
 
   it('closes an open restore dialog when the canvas changes', async () => {
-    // Switching canvases with the dialog open must not leave the previous
+    // Switching documents with the dialog open must not leave the previous
     // canvas's version staged — confirming would POST that version id to the
     // NEW canvas's restore endpoint.
     const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)

@@ -10,7 +10,7 @@ describe('useDocumentRename', () => {
         isLocalMode: false,
         currentName: 'My Canvas',
         onRenameDocument: undefined,
-        renameCanvas: vi.fn().mockResolvedValue(true),
+        renameDocument: vi.fn().mockResolvedValue(true),
         mountedRef: { current: true },
       }),
     )
@@ -29,7 +29,7 @@ describe('useDocumentRename', () => {
         isLocalMode: true,
         currentName: 'old',
         onRenameDocument,
-        renameCanvas: vi.fn(),
+        renameDocument: vi.fn(),
         mountedRef: { current: true },
       }),
     )
@@ -54,7 +54,7 @@ describe('useDocumentRename', () => {
         isLocalMode: true,
         currentName: 'old',
         onRenameDocument,
-        renameCanvas: vi.fn(),
+        renameDocument: vi.fn(),
         mountedRef: { current: true },
       }),
     )
@@ -70,15 +70,15 @@ describe('useDocumentRename', () => {
     expect(result.current.renameError).toBe('Failed to rename canvas.')
   })
 
-  it('daemon mode commit calls renameCanvas with the path and trimmed name, then closes the input', async () => {
-    const renameCanvas = vi.fn().mockResolvedValue(true)
+  it('daemon mode commit calls renameDocument with the path and trimmed name, then closes the input', async () => {
+    const renameDocument = vi.fn().mockResolvedValue(true)
     const { result } = renderHook(() =>
       useDocumentRename({
         path: 'design/foo',
         isLocalMode: false,
         currentName: 'old',
         onRenameDocument: undefined,
-        renameCanvas,
+        renameDocument,
         mountedRef: { current: true },
       }),
     )
@@ -89,7 +89,7 @@ describe('useDocumentRename', () => {
     await act(async () => {
       await result.current.commitDocumentName()
     })
-    expect(renameCanvas).toHaveBeenCalledWith('design/foo', 'new name')
+    expect(renameDocument).toHaveBeenCalledWith('design/foo', 'new name')
     expect(result.current.renamingDocument).toBe(false)
     expect(result.current.draft).toBe('')
   })
@@ -101,7 +101,7 @@ describe('useDocumentRename', () => {
         isLocalMode: false,
         currentName: 'old',
         onRenameDocument: undefined,
-        renameCanvas: vi.fn(),
+        renameDocument: vi.fn(),
         mountedRef: { current: true },
       }),
     )
@@ -131,7 +131,7 @@ describe('useDocumentRename', () => {
         isLocalMode: true,
         currentName: 'old',
         onRenameDocument,
-        renameCanvas: vi.fn(),
+        renameDocument: vi.fn(),
         mountedRef,
       }),
     )

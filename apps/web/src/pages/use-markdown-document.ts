@@ -1,6 +1,6 @@
 /**
  * The whole document state for a markdown-kind canvas — body text plus OKF
- * core facets — persisted through the SAME Loro store the spatial canvases
+ * core facets — persisted through the SAME Loro store the spatial documents
  * use (the snapshot row stays metadata-only per whiteboard-client.ts's
  * rule).
  *
@@ -161,7 +161,7 @@ export function useMarkdownDocument(
       // FLUSH, not cancel. A pending debounce holds edits that are already in
       // the document and already on screen; dropping it loses whatever was
       // typed in the last 500ms before a canvas switch or unmount. For the
-      // title that is worse than lost text: `renameCanvas` writes the
+      // title that is worse than lost text: `renameDocument` writes the
       // snapshot name immediately, so a cancelled facet save leaves the list
       // name and the OKF title disagreeing about what the document is called.
       if (timerRef.current !== null) {

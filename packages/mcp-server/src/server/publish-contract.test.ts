@@ -84,8 +84,8 @@ describe('publish contract', () => {
         import: './dist/server/mcp/index.js',
       },
       './browser-contract': {
-        types: './src/shared/canvas-backend-contract.ts',
-        import: './dist/shared/canvas-backend-contract.js',
+        types: './src/shared/document-backend-contract.ts',
+        import: './dist/shared/document-backend-contract.js',
       },
       './browser-shared': {
         types: './src/shared/browser-shared-index.ts',
@@ -103,9 +103,9 @@ describe('publish contract', () => {
         types: './src/shared/sse-stream-hub.ts',
         import: './dist/shared/sse-stream-hub.js',
       },
-      './select-canvas-transport': {
-        types: './src/shared/select-canvas-transport.ts',
-        import: './dist/shared/select-canvas-transport.js',
+      './select-document-transport': {
+        types: './src/shared/select-document-transport.ts',
+        import: './dist/shared/select-document-transport.js',
       },
       './api-client': {
         types: './src/shared/api-client.ts',
@@ -125,8 +125,8 @@ describe('publish contract', () => {
         import: './dist/server/mcp/index.js',
       },
       './browser-contract': {
-        types: './dist/shared/canvas-backend-contract.d.ts',
-        import: './dist/shared/canvas-backend-contract.js',
+        types: './dist/shared/document-backend-contract.d.ts',
+        import: './dist/shared/document-backend-contract.js',
       },
       './browser-shared': {
         types: './dist/shared/browser-shared-index.d.ts',
@@ -144,9 +144,9 @@ describe('publish contract', () => {
         types: './dist/shared/sse-stream-hub.d.ts',
         import: './dist/shared/sse-stream-hub.js',
       },
-      './select-canvas-transport': {
-        types: './dist/shared/select-canvas-transport.d.ts',
-        import: './dist/shared/select-canvas-transport.js',
+      './select-document-transport': {
+        types: './dist/shared/select-document-transport.d.ts',
+        import: './dist/shared/select-document-transport.js',
       },
       './api-client': {
         types: './dist/shared/api-client.d.ts',

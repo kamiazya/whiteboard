@@ -9,10 +9,10 @@ import type { ServerDeps } from '../server-deps.js'
  * schema — only `.message` crosses the MCP wire via the SDK's existing
  * tool-error path, so this is a plain Error subclass rather than a DTO.
  */
-export class CanvasNotFoundError extends Error {
+export class SnapshotNotFoundError extends Error {
   constructor(readonly documentId: string) {
     super(`canvas not found: ${documentId}`)
-    this.name = 'CanvasNotFoundError'
+    this.name = 'SnapshotNotFoundError'
   }
 }
 
@@ -26,9 +26,9 @@ export async function loadSpatialCanvas(
   deps: ServerDeps,
   documentId: DocumentId,
 ): Promise<{ doc: LoroDoc; canvas: SpatialCanvas }> {
-  const docRef = { kind: 'canvas' as const, documentId }
+  const docRef = { kind: 'document' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
-  if (existing === null) throw new CanvasNotFoundError(documentId)
+  if (existing === null) throw new SnapshotNotFoundError(documentId)
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))

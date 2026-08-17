@@ -16,7 +16,7 @@
  * upgrade, not to gate CI. Read it from the test output.
  *
  * One interaction, one test, same reasoning as
- * worker-scene-responsiveness.browser.test.tsx: heavy canvases measurably
+ * worker-scene-responsiveness.browser.test.tsx: heavy documents measurably
  * raise the parallel project's flake rate, so this file spends its budget
  * once.
  */

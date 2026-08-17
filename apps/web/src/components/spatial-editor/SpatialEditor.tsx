@@ -888,7 +888,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping pointermoves free of text measurement.
      * ponytail: the backdrop render here is ~21ms at 45 nodes (the anchor
      * pass, formerly ~7x that, now arrives with the committed scene); if
-     * start jank reappears on much larger canvases, the next rung is
+     * start jank reappears on much larger documents, the next rung is
      * reusing the committed scene graph for the backdrop instead of
      * re-rendering — drop the carried node runs, truncate at the first
      * edge, re-render the remainder (composeNode is per-node pure, so the
@@ -2733,7 +2733,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
-     * holds HERE (not only in the dialog) because canvases arrive via sync
+     * holds HERE (not only in the dialog) because documents arrive via sync
      * and import — a hostile javascript:/data: URL must never reach
      * window.open. */
     const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {

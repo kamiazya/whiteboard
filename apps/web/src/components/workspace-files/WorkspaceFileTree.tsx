@@ -8,7 +8,7 @@ export interface WorkspaceFileTreeDocument {
 }
 
 export interface WorkspaceFileTreeProps {
-  canvases: readonly WorkspaceFileTreeDocument[]
+  documents: readonly WorkspaceFileTreeDocument[]
   onOpen: (canvas: WorkspaceFileTreeDocument) => void
   className?: string
 }
@@ -24,7 +24,7 @@ interface TreeNode {
 
 // A document path is its full slash-joined placement: splitting on '/'
 // reconstructs the tree without a second source of truth.
-function buildTree(canvases: readonly WorkspaceFileTreeDocument[]): TreeNode[] {
+function buildTree(documents: readonly WorkspaceFileTreeDocument[]): TreeNode[] {
   interface MutableNode {
     name: string
     path: string
@@ -33,7 +33,7 @@ function buildTree(canvases: readonly WorkspaceFileTreeDocument[]): TreeNode[] {
   }
   const root = new Map<string, MutableNode>()
 
-  for (const canvas of canvases) {
+  for (const canvas of documents) {
     const segments = canvas.path.split('/')
     let level = root
     let path = ''
@@ -128,19 +128,19 @@ function TreeItem({
  * from the paths the /api/v1 canvas list already carries — this component
  * never re-derives or stores tree structure of its own.
  */
-export function WorkspaceFileTree({ canvases, onOpen, className }: WorkspaceFileTreeProps) {
-  const tree = useMemo(() => buildTree(canvases), [canvases])
+export function WorkspaceFileTree({ documents, onOpen, className }: WorkspaceFileTreeProps) {
+  const tree = useMemo(() => buildTree(documents), [documents])
 
   if (tree.length === 0) {
     return (
       <p className={cn('text-muted-foreground text-sm', className)}>
-        No canvases in this workspace yet.
+        No documents in this workspace yet.
       </p>
     )
   }
 
   return (
-    <div role="tree" aria-label="Workspace canvases" className={cn('space-y-0.5', className)}>
+    <div role="tree" aria-label="Workspace documents" className={cn('space-y-0.5', className)}>
       {tree.map((node) => (
         <TreeItem key={node.path} node={node} onOpen={onOpen} />
       ))}

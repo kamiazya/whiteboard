@@ -38,7 +38,7 @@ function stubFetch(onCreateDocument: (workspaceId: string, path: string) => void
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases$/)
+      const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
       if (documentsMatch && init?.method === 'POST') {
         const workspaceId = decodeURIComponent(documentsMatch[1])
         const body = JSON.parse(String(init.body)) as { path: string }
@@ -50,7 +50,7 @@ function stubFetch(onCreateDocument: (workspaceId: string, path: string) => void
         // renders when the list has rows — an empty list shows the empty
         // state instead.
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'existing', updatedAt: '2026-01-01T00:00:00Z' }] }),
+          jsonResponse({ documents: [{ path: 'existing', updatedAt: '2026-01-01T00:00:00Z' }] }),
         )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))

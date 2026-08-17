@@ -11,8 +11,8 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   act,
@@ -37,15 +37,15 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
-    createCanvas: vi.fn(),
+    listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
 /**
  * A daemon-held markdown document in the shape `wb_document_set` actually
@@ -69,10 +69,10 @@ function markdownSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements CanvasBackend {
-  handlers: CanvasBackendHandlers | null = null
+class FakeBackend implements DocumentBackend {
+  handlers: DocumentBackendHandlers | null = null
   constructor(private readonly snapshot: () => Uint8Array = markdownSnapshot) {}
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.handlers = handlers
     handlers.onConnected()
     handlers.onSnapshot(this.snapshot())
@@ -97,7 +97,7 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
  * Anything else the page fetches answers 404 so a missing stub shows up as a
  * failed expectation rather than as a hang.
  */
-function stubNames(names: { canvases: Record<string, string>; pinned: string[] }): void {
+function stubNames(names: { documents: Record<string, string>; pinned: string[] }): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
@@ -113,10 +113,10 @@ function stubNames(names: { canvases: Record<string, string>; pinned: string[] }
 describe('DaemonDocumentPage markdown documents', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    stubNames({ canvases: { 'agent-note': 'Agent verification note' }, pinned: [] })
+    stubNames({ documents: { 'agent-note': 'Agent verification note' }, pinned: [] })
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
     })
   })
   afterEach(() => {
@@ -204,10 +204,10 @@ describe('DaemonDocumentPage markdown documents', () => {
   })
 
   it('hides the facets disclosure for a spatial document', async () => {
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
-    stubNames({ canvases: { board: 'A board' }, pinned: [] })
+    stubNames({ documents: { board: 'A board' }, pinned: [] })
     await act(async () => {
       render(
         <DaemonDocumentPage
@@ -224,7 +224,7 @@ describe('DaemonDocumentPage markdown documents', () => {
   })
 
   it('falls back to the path when the workspace has stored no name', async () => {
-    stubNames({ canvases: {}, pinned: [] })
+    stubNames({ documents: {}, pinned: [] })
     await act(async () => {
       render(
         <DaemonDocumentPage

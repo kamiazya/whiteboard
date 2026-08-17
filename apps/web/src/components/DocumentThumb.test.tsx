@@ -12,7 +12,7 @@ describe('DocumentThumb', () => {
     const img = container.querySelector('img') as HTMLImageElement
     expect(img).not.toBeNull()
     expect(img.getAttribute('src')).toBe(
-      '/api/workspaces/ws-1/canvases/my%20canvas/x/latest-thumbnail',
+      '/api/workspaces/ws-1/documents/my%20canvas/x/latest-thumbnail',
     )
     expect(img.getAttribute('loading')).toBe('lazy')
     expect(img.getAttribute('decoding')).toBe('async')
@@ -34,7 +34,9 @@ describe('DocumentThumb', () => {
     rerender(<DocumentThumb workspaceId="ws-1" path="canvas-b" />)
     const imgB = container.querySelector('img') as HTMLImageElement
     expect(imgB).not.toBeNull()
-    expect(imgB.getAttribute('src')).toBe('/api/workspaces/ws-1/canvases/canvas-b/latest-thumbnail')
+    expect(imgB.getAttribute('src')).toBe(
+      '/api/workspaces/ws-1/documents/canvas-b/latest-thumbnail',
+    )
   })
 
   it('applies the card wrapper classes and merges className for size="card"', () => {
@@ -81,7 +83,7 @@ describe('DocumentThumb', () => {
       )
       const img = (await findByRole('presentation')) as HTMLImageElement
       expect(img.getAttribute('src')).toBe('blob:mock-url')
-      expect(daemonFetch).toHaveBeenCalledWith('/api/workspaces/ws-1/canvases/a/latest-thumbnail')
+      expect(daemonFetch).toHaveBeenCalledWith('/api/workspaces/ws-1/documents/a/latest-thumbnail')
       expect(container.querySelector('svg')).toBeNull()
     } finally {
       vi.unstubAllGlobals()

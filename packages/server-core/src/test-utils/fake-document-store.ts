@@ -20,8 +20,8 @@ import { LoroDoc } from 'loro-crdt'
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 function docRefKey(docRef: DocRef): string {
-  return docRef.kind === 'canvas'
-    ? `canvas:${docRef.documentId}`
+  return docRef.kind === 'document'
+    ? `document:${docRef.documentId}`
     : `workspace-tree:${docRef.workspaceId}`
 }
 
@@ -86,7 +86,7 @@ export async function seedDoc(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await store.saveSnapshot({
-    docRef: { kind: 'canvas', documentId },
+    docRef: { kind: 'document', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -95,13 +95,13 @@ export async function seedDoc(
 
 /**
  * Registers `documentId` under `workspaceId`'s workspace tree so
- * `assertCanvasInWorkspace` (the workspace-ownership guard every mutation
+ * `assertDocumentInWorkspace` (the workspace-ownership guard every mutation
  * tool runs before touching a canvas doc) accepts the pair. Tool tests that
  * seed a canvas doc directly via `seedDoc`/`seedCanvas` — bypassing
- * `wbCanvasCreate` — need this to keep exercising the "known, owned canvas"
+ * `wbDocumentCreate` — need this to keep exercising the "known, owned canvas"
  * path rather than tripping the ownership guard by accident.
  */
-export async function registerCanvasInWorkspace(
+export async function registerDocumentInWorkspace(
   store: FakeDocumentStore,
   workspaceId: WorkspaceId,
   documentId: DocumentId,

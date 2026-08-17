@@ -275,7 +275,7 @@ describe('MergeDialog', () => {
     const sourceCard = await screen.findByTestId('merge-branch-card-source')
     await waitFor(() => {
       expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/workspaces/w1/canvases/c1/versions/feature-v1/thumbnail',
+        '/api/workspaces/w1/documents/c1/versions/feature-v1/thumbnail',
       )
     })
     // Switch the source branch so the effect re-runs and the follow-up fetch fails.
@@ -448,11 +448,11 @@ describe('MergeDialog', () => {
     const targetCard = await screen.findByTestId('merge-branch-card-target')
     await waitFor(() => {
       expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/workspaces/w1/canvases/c1/versions/feature-only/thumbnail',
+        '/api/workspaces/w1/documents/c1/versions/feature-only/thumbnail',
       )
     })
     expect(targetCard.querySelector('img')?.getAttribute('src')).toBe(
-      '/api/workspaces/w1/canvases/c1/versions/main-new/thumbnail',
+      '/api/workspaces/w1/documents/c1/versions/main-new/thumbnail',
     )
   })
 

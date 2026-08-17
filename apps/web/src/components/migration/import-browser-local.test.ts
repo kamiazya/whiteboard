@@ -1,7 +1,7 @@
 import { Loro } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
-import { importOneCanvas, mergeToSnapshot, toPathSegment } from './import-browser-local.js'
+import { importOneDocument, mergeToSnapshot, toPathSegment } from './import-browser-local.js'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -76,7 +76,7 @@ function loroOkResult(): LoroLoadResult {
   return { kind: 'ok', snapshot: doc.export({ mode: 'snapshot' }) }
 }
 
-describe('importOneCanvas', () => {
+describe('importOneDocument', () => {
   it('creates the canvas and pushes the merged snapshot via the injected fetch', async () => {
     const fetchMock = vi
       .fn()
@@ -86,11 +86,11 @@ describe('importOneCanvas', () => {
     // workspaceId deliberately needs percent-encoding: the shared api-contracts
     // type it as an unconstrained string, so URL construction must encode it
     // exactly like daemon-api-client.ts does for the same routes.
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws 1#x',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'markdown',
       loroLoad: loroOkResult(),
     })
@@ -100,7 +100,7 @@ describe('importOneCanvas', () => {
 
     const encodedWs = encodeURIComponent('ws 1#x')
     const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(createUrl).toBe(`http://127.0.0.1:3099/api/workspaces/${encodedWs}/canvases`)
+    expect(createUrl).toBe(`http://127.0.0.1:3099/api/workspaces/${encodedWs}/documents`)
     // The created canvas's kind must match the source browser-local
     // snapshot's kind — a markdown canvas migrated with a defaulted
     // 'spatial' kind opens in the wrong editor with no way to correct it.
@@ -110,7 +110,7 @@ describe('importOneCanvas', () => {
     })
 
     const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit]
-    expect(updateUrl).toBe(`http://127.0.0.1:3099/api/w/${encodedWs}/canvas/my-canvas/update`)
+    expect(updateUrl).toBe(`http://127.0.0.1:3099/api/w/${encodedWs}/document/my-canvas/update`)
     expect((updateInit.headers as Record<string, string>)['Content-Type']).toBe(
       'application/octet-stream',
     )
@@ -119,11 +119,11 @@ describe('importOneCanvas', () => {
   it('returns a structured failure instead of rejecting when fetch throws (daemon offline)', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -142,11 +142,11 @@ describe('importOneCanvas', () => {
       .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas-3' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -163,11 +163,11 @@ describe('importOneCanvas', () => {
   it('reports a clean failure with zero update calls when all 3 create attempts 409', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ title: 'exists' }, 409))
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -182,11 +182,11 @@ describe('importOneCanvas', () => {
       .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas' }))
       .mockResolvedValueOnce(new Response('boom', { status: 500 }))
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -194,17 +194,17 @@ describe('importOneCanvas', () => {
     expect(result.kind).toBe('failed')
   })
 
-  it('reports failure when the update response does not parse under updateCanvasResponseSchema', async () => {
+  it('reports failure when the update response does not parse under updateDocumentResponseSchema', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ path: 'my-canvas' }))
       .mockResolvedValueOnce(jsonResponse({ ok: false }))
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -220,11 +220,11 @@ describe('importOneCanvas', () => {
   ])('reports a failure with zero daemon calls for LoroStore.load failure mode %s', async (_label, loroLoad) => {
     const fetchMock = vi.fn()
 
-    const result = await importOneCanvas({
+    const result = await importOneDocument({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      canvasName: 'My Canvas',
+      documentName: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroLoad as LoroLoadResult,
     })

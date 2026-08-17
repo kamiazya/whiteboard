@@ -26,8 +26,8 @@ interface DocumentsTable {
   createdAt: Timestamp
   updatedAt: Timestamp
   // Last time the Loro op-log was successfully compacted via shallow-snapshot.
-  // Null for canvases that have never been compacted; consumed by the auto-
-  // Optimize loop to skip canvases that have not changed since last run.
+  // Null for documents that have never been compacted; consumed by the auto-
+  // Optimize loop to skip documents that have not changed since last run.
   lastCompactedAt: Timestamp | null
   // Which editor opens this canvas. Null for rows created before this column
   // existed; the application layer maps null to 'spatial'.

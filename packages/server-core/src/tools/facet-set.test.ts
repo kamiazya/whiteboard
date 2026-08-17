@@ -8,10 +8,10 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
-import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
@@ -25,7 +25,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 describe('wb_facet_set tool', () => {
   test('sets a facet on a canvas with no prior snapshot', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(documentStore))
 
     const result = await tool.execute({
@@ -42,7 +42,7 @@ describe('wb_facet_set tool', () => {
 
   test('persists the facet so a later load reflects it', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(store))
 
     await tool.execute({
@@ -52,7 +52,7 @@ describe('wb_facet_set tool', () => {
     })
 
     const loaded = await store.loadSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
     })
     expect(loaded).not.toBeNull()
     const doc = new LoroDoc()
@@ -64,7 +64,7 @@ describe('wb_facet_set tool', () => {
 
   test('merges a new facet domain with an existing one instead of replacing it', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(documentStore))
 
     await tool.execute({
@@ -86,7 +86,7 @@ describe('wb_facet_set tool', () => {
 
   test('overwrites an existing facet domain when the same key is set again', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(documentStore))
 
     await tool.execute({
@@ -103,9 +103,9 @@ describe('wb_facet_set tool', () => {
     expect(result.facets).toEqual({ 'kanban/1': { status: 'done' } })
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+  test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createFacetSetTool(makeDeps(documentStore))
 
     await expect(
@@ -114,7 +114,7 @@ describe('wb_facet_set tool', () => {
         documentId: CANVAS_ID,
         facets: { 'kanban/1': { status: 'todo' } },
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   test('rejects a facet key outside the {domain}/{version} pattern', () => {
@@ -134,7 +134,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     // and no frontmatter to put one in, so a facet stored on one is metadata
     // no reader of that format can ever surface.
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
@@ -154,7 +154,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 
   test('a refused write stores nothing', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'spatial'))
 
     await expect(
@@ -165,7 +165,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
-    const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId: CANVAS_ID } })
+    const snap = await store.loadSnapshot({ docRef: { kind: 'document', documentId: CANVAS_ID } })
     const doc = new LoroDoc()
     if (snap) doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
     expect(readFacets(doc)).toEqual({})
@@ -173,7 +173,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 
   test('a markdown document still takes facets', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => writeDocumentKind(doc, 'markdown'))
 
     const result = await createFacetSetTool(makeDeps(store)).execute({

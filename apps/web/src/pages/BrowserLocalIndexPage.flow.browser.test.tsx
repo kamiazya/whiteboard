@@ -1,7 +1,7 @@
 /**
  * Browser-local list landing flow (real IndexedDB + real routing): '/'
  * lands on the canvas list, the empty state and the + menu create real
- * canvases through the same store the editor uses, and browser Back
+ * documents through the same store the editor uses, and browser Back
  * crosses the editor/list boundary with the list reflecting what was just
  * created. SpatialEditor is mocked (the subject is routing + list wiring,
  * not gesture input); the markdown editor and IndexedDB are real.
@@ -49,7 +49,7 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
     const router = renderApp()
 
     // Fresh store: the list's empty state, not an auto-opened editor.
-    await screen.findByText('No canvases yet', undefined, { timeout: 15_000 })
+    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
 
     // Empty-state create opens a spatial canvas at /local/:id.
     await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
@@ -97,7 +97,7 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       timeout: 15_000,
     })
 
-    // Back again: both canvases listed, the note marked as markdown.
+    // Back again: both documents listed, the note marked as markdown.
     await router.navigate(-1)
     const cards = await screen.findAllByTestId('document-list-card', undefined, { timeout: 15_000 })
     expect(cards).toHaveLength(2)
@@ -113,7 +113,7 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       { timeout: 15_000 },
     )
 
-    // Back to the list, then delete both canvases through the real
+    // Back to the list, then delete both documents through the real
     // AlertDialog: the empty state returns.
     await router.navigate(-1)
     await screen.findAllByTestId('document-list-card', undefined, { timeout: 15_000 })
@@ -126,6 +126,6 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
         timeout: 15_000,
       })
     }
-    await screen.findByText('No canvases yet', undefined, { timeout: 15_000 })
+    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
   })
 })

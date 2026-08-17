@@ -11,7 +11,7 @@ import {
   saveSnapshotInputSchema,
 } from './document-store.js'
 
-const docRef = { kind: 'canvas' as const, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
+const docRef = { kind: 'document' as const, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
 const frontier = new Uint8Array([1])
 const manifest = { chunkCount: 0, totalBytes: 0, maxChunkBytes: 4 }
 

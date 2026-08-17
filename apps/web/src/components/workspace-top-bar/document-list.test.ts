@@ -23,21 +23,21 @@ describe('sortDocumentsByRecency', () => {
 })
 
 describe('filterDocumentsBySearch', () => {
-  const canvases = [canvas('team/roadmap', '2024-01-01'), canvas('personal', '2024-01-02')]
+  const documents = [canvas('team/roadmap', '2024-01-01'), canvas('personal', '2024-01-02')]
   const names: Record<string, string> = { personal: 'My Notes' }
 
   it('returns every canvas when the query is empty', () => {
-    expect(filterDocumentsBySearch(canvases, '', names)).toEqual(canvases)
+    expect(filterDocumentsBySearch(documents, '', names)).toEqual(documents)
   })
 
   it('matches by path case-insensitively', () => {
-    expect(filterDocumentsBySearch(canvases, 'ROADMAP', names).map((c) => c.path)).toEqual([
+    expect(filterDocumentsBySearch(documents, 'ROADMAP', names).map((c) => c.path)).toEqual([
       'team/roadmap',
     ])
   })
 
   it('matches by custom display name when the path does not match', () => {
-    expect(filterDocumentsBySearch(canvases, 'notes', names).map((c) => c.path)).toEqual([
+    expect(filterDocumentsBySearch(documents, 'notes', names).map((c) => c.path)).toEqual([
       'personal',
     ])
   })
@@ -45,36 +45,36 @@ describe('filterDocumentsBySearch', () => {
 
 describe('derivePinnedCanvases', () => {
   it('preserves pinned order from names.pinned rather than recency', () => {
-    const canvases = [
+    const documents = [
       canvas('a', '2024-01-01'),
       canvas('b', '2024-01-02'),
       canvas('c', '2024-01-03'),
     ]
-    const result = derivePinnedCanvases(canvases, ['c', 'a'])
+    const result = derivePinnedCanvases(documents, ['c', 'a'])
     expect(result.map((c) => c.path)).toEqual(['c', 'a'])
   })
 
   it('skips pinned paths that no longer exist in the canvas list', () => {
-    const canvases = [canvas('a', '2024-01-01')]
-    const result = derivePinnedCanvases(canvases, ['missing', 'a'])
+    const documents = [canvas('a', '2024-01-01')]
+    const result = derivePinnedCanvases(documents, ['missing', 'a'])
     expect(result.map((c) => c.path)).toEqual(['a'])
   })
 })
 
 describe('groupCanvases', () => {
   it('groups by path prefix, sorts headers alphabetically, and keeps ungrouped last', () => {
-    const canvases = [
+    const documents = [
       canvas('zeta/one', '2024-01-01'),
       canvas('alpha/one', '2024-01-02'),
       canvas('solo', '2024-01-03'),
     ]
-    const groups = groupCanvases(canvases, new Set())
+    const groups = groupCanvases(documents, new Set())
     expect(groups.map(([group]) => group)).toEqual(['alpha', 'zeta', ''])
   })
 
-  it('excludes canvases already shown in the pinned set', () => {
-    const canvases = [canvas('team/a', '2024-01-01'), canvas('team/b', '2024-01-02')]
-    const groups = groupCanvases(canvases, new Set(['team/a']))
+  it('excludes documents already shown in the pinned set', () => {
+    const documents = [canvas('team/a', '2024-01-01'), canvas('team/b', '2024-01-02')]
+    const groups = groupCanvases(documents, new Set(['team/a']))
     expect(groups).toEqual([['team', [canvas('team/b', '2024-01-02')]]])
   })
 })

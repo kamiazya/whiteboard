@@ -6,13 +6,13 @@ interface UseDocumentRenameOptions {
   isLocalMode: boolean
   currentName: string | undefined
   onRenameDocument: ((name: string) => void | Promise<void>) | undefined
-  renameCanvas: (path: string, name: string) => Promise<boolean>
+  renameDocument: (path: string, name: string) => Promise<boolean>
   // Shared with copy/create — see useCreateDocument's mountedRef doc.
   mountedRef: MutableRefObject<boolean>
 }
 
 // Owns the inline canvas-rename input's local UI state. Daemon-mode commits
-// go through `renameCanvas` (useDocumentNames' writer); local mode has no
+// go through `renameDocument` (useDocumentNames' writer); local mode has no
 // workspaceNamesSchema state to update at all — it calls the host page's
 // onRenameDocument instead and surfaces a rejection through `renameError`,
 // which has no daemon-mode equivalent (a failed PUT there just leaves the
@@ -22,7 +22,7 @@ export function useDocumentRename({
   isLocalMode,
   currentName,
   onRenameDocument,
-  renameCanvas,
+  renameDocument,
   mountedRef,
 }: UseDocumentRenameOptions) {
   const [renamingDocument, setRenamingCanvas] = useState(false)
@@ -51,7 +51,7 @@ export function useDocumentRename({
       }
       return
     }
-    await renameCanvas(path, name)
+    await renameDocument(path, name)
     if (mountedRef.current) {
       setRenamingCanvas(false)
       setDraft('')

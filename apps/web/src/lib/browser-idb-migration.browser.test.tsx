@@ -412,7 +412,7 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(5)
   })
 
-  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/canvases/meta contents', async () => {
+  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/documents/meta contents', async () => {
     const documentId = 'canvas-migrate-v5'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
@@ -457,7 +457,7 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(4)
   })
 
-  it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/canvases/meta contents', async () => {
+  it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/documents/meta contents', async () => {
     const documentId = 'canvas-migrate-v4'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })

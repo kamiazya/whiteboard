@@ -212,14 +212,14 @@ export function App({ providerState }: AppProps) {
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
   // (local-daemon's runtime-config path, or a same-origin cold load of a
-  // `/w/:workspaceId/canvas/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // `/w/:workspaceId/document/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
   // mount time are fixed for the life of the mount.
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
     if (daemonConnection.status === 'paired') {
       const { workspaceId, path } = daemonConnection.payload
-      if (workspaceId && path) return { kind: 'canvas', workspaceId, path }
+      if (workspaceId && path) return { kind: 'document', workspaceId, path }
       return { kind: 'index', workspaceId }
     }
     return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
@@ -228,10 +228,10 @@ export function App({ providerState }: AppProps) {
   // Derived per render, not read once at mount: '/' (no id) renders the
   // canvas list, /local/:documentId mounts the editor. Once mounted, the
   // editor owns URL<->canvas-id sync for in-editor switching (it reads
-  // initialCanvasId a single time), so App re-routes only when the URL
+  // initialDocumentId a single time), so App re-routes only when the URL
   // crosses the list/editor boundary — including browser Back from the
   // editor to the list.
-  const browserLocalCanvasId = parseBrowserLocalRoute(location.pathname)?.documentId
+  const browserLocalDocumentId = parseBrowserLocalRoute(location.pathname)?.documentId
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -454,7 +454,7 @@ export function App({ providerState }: AppProps) {
                     token={pairedToken}
                     initialWorkspaceId={daemonView.workspaceId}
                     onOpenDocument={(workspaceId, path) =>
-                      setDaemonView({ kind: 'canvas', workspaceId, path })
+                      setDaemonView({ kind: 'document', workspaceId, path })
                     }
                   />
                 ) : (
@@ -541,7 +541,7 @@ export function App({ providerState }: AppProps) {
                   token={daemonToken}
                   initialWorkspaceId={daemonView.workspaceId}
                   onOpenDocument={(workspaceId, path) =>
-                    setDaemonView({ kind: 'canvas', workspaceId, path })
+                    setDaemonView({ kind: 'document', workspaceId, path })
                   }
                 />
               ) : (
@@ -625,7 +625,7 @@ export function App({ providerState }: AppProps) {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-            {browserLocalCanvasId === undefined ? (
+            {browserLocalDocumentId === undefined ? (
               // '/' (and any non-/local path) lands on the canvas list. The
               // editor mounts only for /local/:documentId, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
@@ -638,7 +638,7 @@ export function App({ providerState }: AppProps) {
               <BrowserLocalDocumentPage
                 store={browserLocalStore}
                 capabilities={effectiveState.capabilities}
-                initialCanvasId={browserLocalCanvasId}
+                initialDocumentId={browserLocalDocumentId}
               />
             )}
           </Suspense>

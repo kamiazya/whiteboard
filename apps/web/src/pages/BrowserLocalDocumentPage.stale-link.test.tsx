@@ -70,7 +70,7 @@ describe('stale /local/:id deep link', () => {
             <BrowserLocalDocumentPage
               store={store}
               loro={new FakeLoroStore()}
-              initialCanvasId="gone-123"
+              initialDocumentId="gone-123"
             />
           ),
         },

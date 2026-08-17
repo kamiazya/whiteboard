@@ -22,12 +22,12 @@ export interface BrowserLocalStore {
   // (it only removes the canvas the default pointer currently aims at).
   removeDocument?(id: string): Promise<void>
   generateId(): string
-  listCanvases(): Promise<DocumentSnapshot[]>
+  listDocuments(): Promise<DocumentSnapshot[]>
 }
 
 export class MemoryStore implements BrowserLocalStore {
   private defaultId: string | null = null
-  private canvases = new Map<string, DocumentSnapshot>()
+  private documents = new Map<string, DocumentSnapshot>()
 
   async getDefaultDocumentId(): Promise<string | null> {
     return this.defaultId
@@ -38,33 +38,33 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   async load(id: string): Promise<LoadResult> {
-    const snapshot = this.canvases.get(id)
+    const snapshot = this.documents.get(id)
     if (!snapshot) return { kind: 'not-found' }
     return { kind: 'ok', snapshot }
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
-    this.canvases.set(snapshot.id, snapshot)
+    this.documents.set(snapshot.id, snapshot)
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
     if (this.defaultId === null) return { deleted: false, reason: 'not-found' }
     if (this.defaultId !== expectedId) return { deleted: false, reason: 'pointer-mismatch' }
-    this.canvases.delete(expectedId)
+    this.documents.delete(expectedId)
     this.defaultId = null
     return { deleted: true }
   }
 
   async removeDocument(id: string): Promise<void> {
-    this.canvases.delete(id)
+    this.documents.delete(id)
   }
 
   generateId(): string {
     return crypto.randomUUID()
   }
 
-  async listCanvases(): Promise<DocumentSnapshot[]> {
-    return [...this.canvases.values()]
+  async listDocuments(): Promise<DocumentSnapshot[]> {
+    return [...this.documents.values()]
   }
 }
 
@@ -200,7 +200,7 @@ export class IndexedDBStore implements BrowserLocalStore {
     return crypto.randomUUID()
   }
 
-  async listCanvases(): Promise<DocumentSnapshot[]> {
+  async listDocuments(): Promise<DocumentSnapshot[]> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readonly')

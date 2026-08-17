@@ -56,7 +56,7 @@ const server = setupServer(
   }),
   // The daemon's snapshot route: what the worker seeds its replica from on
   // first touch of a document. Pre-existing content lives here.
-  http.get(`${BASE}/api/w/:workspaceId/canvas/:path/snapshot`, ({ params }) => {
+  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
     const doc = `${String(params.workspaceId)}/${String(params.path)}`
     const bytes = daemonState.get(doc)
     if (!bytes) return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
@@ -68,7 +68,7 @@ const server = setupServer(
   // The canvas update route: where a push lands, after the worker's replica
   // has merged it. Addressed by workspace and path, which the worker
   // reconstructs from the document key it routes everything else by.
-  http.post(`${BASE}/api/w/:workspaceId/canvas/:path/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
     daemonWrites.push({
       doc: `${String(params.workspaceId)}/${String(params.path)}`,
       body: new Uint8Array(await request.arrayBuffer()),

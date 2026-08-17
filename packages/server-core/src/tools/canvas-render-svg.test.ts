@@ -1,6 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
-import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
+import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasRenderSvgTool } from './canvas-render-svg.js'
 
@@ -47,6 +47,6 @@ describe('wb_scene_render tool', () => {
         documentId: CANVAS_ID,
         embedReferences: false,
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 })

@@ -118,7 +118,7 @@ const migrationSettingsSchema = z
       .object({
         lastExportedAt: z.string().optional(),
         lastImportedAt: z.string().optional(),
-        lastImportedCanvasId: z.string().optional(),
+        lastImportedDocumentId: z.string().optional(),
       })
       .strict()
       .optional(),

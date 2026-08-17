@@ -73,7 +73,7 @@ export function SetupJourney({
           kind: 'action',
           title: 'Protect your data',
           state: persist === 'unknown' ? '…' : 'not granted yet',
-          desc: 'Ask the browser to keep your canvases even when it is running low on space — without this it may delete them to free up room.',
+          desc: 'Ask the browser to keep your documents even when it is running low on space — without this it may delete them to free up room.',
           action:
             persist === 'todo' ? (
               <button
@@ -86,7 +86,7 @@ export function SetupJourney({
               </button>
             ) : undefined,
           hint: protectDeclined
-            ? 'Your browser turned this down for now — it usually grants it once you have used the app a few times. Your canvases still work; keep an export of anything you cannot lose.'
+            ? 'Your browser turned this down for now — it usually grants it once you have used the app a few times. Your documents still work; keep an export of anything you cannot lose.'
             : undefined,
         },
     install === 'installed'
@@ -118,7 +118,7 @@ export function SetupJourney({
           kind: 'action',
           title: 'Connect the companion app',
           state: 'not connected',
-          desc: 'Run the companion app to keep canvases in real files on your computer, with version history.',
+          desc: 'Run the companion app to keep documents in real files on your computer, with version history.',
           action: (
             <Link to={settingsPath('connections')} className={ACTION_CLASS}>
               How to connect

@@ -8,7 +8,7 @@
  * `loro` props are the tempting things to add.
  */
 
-import type { CanvasBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -29,7 +29,7 @@ vi.mock('../lib/browser-local-backend.js', async () => {
       super(documentId)
       constructedFor.push(documentId)
     }
-    connect(handlers: CanvasBackendHandlers) {
+    connect(handlers: DocumentBackendHandlers) {
       connectedFor.push('connect')
       return super.connect(handlers)
     }

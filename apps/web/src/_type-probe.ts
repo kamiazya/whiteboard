@@ -7,7 +7,7 @@
  * Criteria covered:
  * - Copied shadcn ui primitives (Button, Dialog, etc.) resolve under @/components/ui
  * - cn from @/lib/utils resolves
- * - CanvasBackend, CanvasBackendHandlers, and ws-message payload types
+ * - DocumentBackend, DocumentBackendHandlers, and ws-message payload types
  *   resolve from @kamiazya/whiteboard-mcp/browser-contract and compile
  *   against the z.infer-derived payload types.
  * - DaemonBackend resolves from the ./daemon-backend subpath and its
@@ -18,8 +18,8 @@
 // Re-exporting the types proves they resolve; the declared consumers below
 // force tsc to compile against the z.infer-derived payload shapes.
 export type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
@@ -53,13 +53,13 @@ export {
 export { cn } from '@/lib/utils'
 
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
-export declare function _useBackend(b: CanvasBackend): void
-export declare function _useHandlers(h: CanvasBackendHandlers): void
+export declare function _useBackend(b: DocumentBackend): void
+export declare function _useHandlers(h: DocumentBackendHandlers): void
 export declare function _usePayload(p: VersionCreatedPayload): void
 
 // ── api-client from its own subpath ───────────────────────────────────────────
@@ -70,14 +70,17 @@ export declare function _useRuntimeConfig(c: RuntimeConfig): void
 
 // ── api-contracts barrel: proves the branches + canvas Zod schemas resolve
 // and z.infer-derived types compile under this DOM-enabled tsconfig too ─────
-export { branchMetaSchema, createCanvasRequestSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+export {
+  branchMetaSchema,
+  createDocumentRequestSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 
 import type {
   branchMetaSchema,
-  createCanvasRequestSchema,
+  createDocumentRequestSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { z } from 'zod'
 export declare function _useBranchMeta(b: z.infer<typeof branchMetaSchema>): void
 export declare function _useCreateDocumentRequest(
-  r: z.infer<typeof createCanvasRequestSchema>,
+  r: z.infer<typeof createDocumentRequestSchema>,
 ): void

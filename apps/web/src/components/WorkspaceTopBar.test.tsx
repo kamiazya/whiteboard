@@ -18,7 +18,7 @@ import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
 function mkNamesOk() {
-  return new Response(JSON.stringify({ workspace: 'My WS', canvases: {}, pinned: [] }), {
+  return new Response(JSON.stringify({ workspace: 'My WS', documents: {}, pinned: [] }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
@@ -37,7 +37,7 @@ function renderBar(overrides?: {
     <WorkspaceTopBar
       workspaceId="ws_1"
       path="canvas-a"
-      canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+      documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
       onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
       onNavigateToDocument={overrides?.onNavigateToDocument ?? (() => {})}
@@ -110,7 +110,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="design/foo"
-        canvases={[{ path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={onNavigateToDocument}
@@ -128,7 +128,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[
+        documents={[
           { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' },
           { path: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
         ]}
@@ -194,7 +194,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     const baseProps = {
       path: 'shared-path',
-      canvases: [{ path: 'shared-path', updatedAt: '2026-04-23T00:00:00Z' }],
+      documents: [{ path: 'shared-path', updatedAt: '2026-04-23T00:00:00Z' }],
       onToggleFullscreen: () => {},
       onNavigateBack: () => {},
       onNavigateToDocument: () => {},
@@ -207,7 +207,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
     // arrives later and must not clobber it.
     resolveB(
       new Response(
-        JSON.stringify({ workspace: 'B', canvases: { 'shared-path': 'Fresh B' }, pinned: [] }),
+        JSON.stringify({ workspace: 'B', documents: { 'shared-path': 'Fresh B' }, pinned: [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
@@ -223,7 +223,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     resolveA(
       new Response(
-        JSON.stringify({ workspace: 'A', canvases: { 'shared-path': 'Stale A' }, pinned: [] }),
+        JSON.stringify({ workspace: 'A', documents: { 'shared-path': 'Stale A' }, pinned: [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
@@ -236,7 +236,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 })
 
 describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
-  it('wraps the canvas list section in a scrollable max-height container so many canvases remain reachable', async () => {
+  it('wraps the canvas list section in a scrollable max-height container so many documents remain reachable', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
       path: `canvas-${i}`,
       updatedAt: '2026-04-23T00:00:00Z',
@@ -247,7 +247,7 @@ describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-0"
-        canvases={many}
+        documents={many}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -296,7 +296,7 @@ describe('WorkspaceTopBar — saveVersion double-invoke race (RED-first)', () =>
 })
 
 describe('WorkspaceTopBar — new-canvas double activation', () => {
-  it('issues exactly one POST /canvases when New canvas… is activated twice before the first resolves', async () => {
+  it('issues exactly one POST /documents when New canvas… is activated twice before the first resolves', async () => {
     let resolvePost!: (r: Response) => void
     const deferred = new Promise<Response>((resolve) => {
       resolvePost = resolve
@@ -305,7 +305,7 @@ describe('WorkspaceTopBar — new-canvas double activation', () => {
     vi.mocked(apiFetch).mockImplementation(async (url, init) => {
       const u = String(url)
       if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/canvases') && (init as RequestInit | undefined)?.method === 'POST') {
+      if (u.includes('/documents') && (init as RequestInit | undefined)?.method === 'POST') {
         postCount++
         return deferred
       }
@@ -346,7 +346,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToDocument={() => {}}
@@ -383,7 +383,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToDocument={overrides?.onNavigateToDocument ?? (() => {})}
@@ -471,7 +471,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/canvases/canvas-a/name'),
+        expect.stringContaining('/documents/canvas-a/name'),
         expect.objectContaining({ method: 'PUT' }),
       )
     })
@@ -488,7 +488,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/canvases/canvas-a/pin'),
+        expect.stringContaining('/documents/canvas-a/pin'),
         expect.objectContaining({ method: 'PUT' }),
       )
     })
@@ -503,7 +503,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/workspaces/ws_1/canvases'),
+        expect.stringContaining('/api/workspaces/ws_1/documents'),
         expect.objectContaining({ method: 'POST' }),
       )
     })
@@ -537,7 +537,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -570,7 +570,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -598,7 +598,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -620,7 +620,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -643,7 +643,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -667,7 +667,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -718,7 +718,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -760,7 +760,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateToDocument={() => {}}
       />,
       { container: document.body },
@@ -773,7 +773,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
       />,
@@ -787,7 +787,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
@@ -816,7 +816,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
@@ -837,7 +837,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
@@ -859,7 +859,7 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
       <WorkspaceTopBar
         workspaceId="ws 1#x"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}
@@ -904,7 +904,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
       fireEvent.pointerUp(copyItem)
 
       await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/w/ws_1/canvas/canvas-a'))
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/w/ws_1/document/canvas-a'))
       // Screen-reader-visible announcement, independent of the visible label.
       expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
         'Canvas URL copied to clipboard.',
@@ -940,7 +940,7 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
 
     // Fallback: the URL is still available as selectable text.
     const fallbackInput = screen.getByLabelText('Canvas URL') as HTMLInputElement
-    expect(fallbackInput.value).toContain('/w/ws_1/canvas/canvas-a')
+    expect(fallbackInput.value).toContain('/w/ws_1/document/canvas-a')
     expect(fallbackInput.readOnly).toBe(true)
   })
 
@@ -976,7 +976,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[
+        documents={[
           { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
           { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
@@ -996,13 +996,13 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
-  it('uses canvases[].name for display instead of fetching /names', async () => {
+  it('uses documents[].name for display instead of fetching /names', async () => {
     render(
       <WorkspaceTopBar
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1028,7 +1028,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1054,7 +1054,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={onRenameDocument}
@@ -1088,7 +1088,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={onRenameDocument}
@@ -1121,7 +1121,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1147,7 +1147,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1192,7 +1192,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1235,7 +1235,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
         onRenameDocument={() => {}}
@@ -1268,7 +1268,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         dataMode="local"
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[
+        documents={[
           { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
           { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
         ]}
@@ -1294,7 +1294,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
     vi.mocked(apiFetch).mockImplementation(async (url, init) => {
       if (String(url).includes('/names')) return mkNamesOk()
       if (String(url).includes('/name') && init?.method === 'PUT') {
-        return new Response(JSON.stringify({ workspace: 'My WS', canvases: {}, pinned: [] }), {
+        return new Response(JSON.stringify({ workspace: 'My WS', documents: {}, pinned: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -1307,7 +1307,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           onNavigateToDocument={() => {}}
@@ -1342,7 +1342,7 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
     await screen.findByTestId('new-document-menu-item')
   }
 
-  it('renders a Workspaces section above the canvases section, one menuitemradio per workspace, current checked', async () => {
+  it('renders a Workspaces section above the documents section, one menuitemradio per workspace, current checked', async () => {
     renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace: () => {} })
     await openSwitcher()
 
@@ -1352,7 +1352,7 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
     expect(items[0]?.getAttribute('aria-checked')).toBe('true')
     expect(items[1]?.getAttribute('aria-checked')).toBe('false')
 
-    // "Above the canvases section": the label precedes the canvas entry in document order.
+    // "Above the documents section": the label precedes the canvas entry in document order.
     const canvasEntry = screen.getByText('canvas-a')
     expect(
       label.compareDocumentPosition(canvasEntry) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1426,7 +1426,7 @@ describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        canvases={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToDocument={() => {}}

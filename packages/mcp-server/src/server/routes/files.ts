@@ -12,7 +12,7 @@ import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { validateFileId, validateWorkspaceId, validationErrorBody } from '../validators.js'
-import { onCanvasFile } from './canvas/path-route.js'
+import { onDocumentFile } from './document/path-route.js'
 
 // Per-file size limit. Loro thumbnails are around 2 MiB and assets pasted into
 // Excalidraw normally fit inside this range. Return 413 when exceeded to avoid
@@ -56,9 +56,9 @@ export interface FilesRouterOptions {
 export function createFilesRouter(options: FilesRouterOptions = {}) {
   const app = new Hono()
 
-  // PUT /api/w/:workspaceId/canvas/<path>/file/:fileId
+  // PUT /api/w/:workspaceId/document/<path>/file/:fileId
   // Called by MCP load_image. fileId is already generated on the MCP side with nanoid().
-  onCanvasFile(
+  onDocumentFile(
     app,
     'put',
     async (c, workspaceId, _path, fileId) => {
@@ -107,9 +107,9 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
     }),
   )
 
-  // GET /api/w/:workspaceId/canvas/<path>/file/:fileId
+  // GET /api/w/:workspaceId/document/<path>/file/:fileId
   // Browser-facing route. Find a file under files/ whose stem matches fileId exactly.
-  onCanvasFile(app, 'get', async (c, workspaceId, _path, fileId) => {
+  onDocumentFile(app, 'get', async (c, workspaceId, _path, fileId) => {
     try {
       validateFileId(fileId)
     } catch (err) {
@@ -152,7 +152,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
 
   // POST /api/workspaces/:workspaceId/files/purge-dangling
   // Delete files under <workspaceId>/files/ whose stem is not referenced
-  // by any image element in the workspace's live canvases OR any branch
+  // by any image element in the workspace's live documents OR any branch
   // tip (main and every other branch), and — when a versionStore is
   // supplied — any saved version either. Safe and idempotent; a file is
   // only ever removed once nothing across that full reference set points

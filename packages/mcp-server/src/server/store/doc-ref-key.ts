@@ -7,8 +7,8 @@ import type { DocRef } from '@kamiazya/whiteboard-ports'
  */
 export function docRefKey(docRef: DocRef): string {
   switch (docRef.kind) {
-    case 'canvas':
-      return `canvas:${docRef.documentId}`
+    case 'document':
+      return `document:${docRef.documentId}`
     case 'workspace-tree':
       return `workspace-tree:${docRef.workspaceId}`
   }

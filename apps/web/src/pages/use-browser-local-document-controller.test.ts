@@ -94,16 +94,16 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result.current.snapshot).toEqual(snap)
   })
 
-  it('renameCanvas transitions persistence pending -> saved via an immediate flush (no debounce)', async () => {
+  it('renameDocument transitions persistence pending -> saved via an immediate flush (no debounce)', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     act(() => {
-      result.current.renameCanvas('Renamed')
+      result.current.renameDocument('Renamed')
     })
-    // renameCanvas flushes immediately (no setTimeout), so a microtask flush
+    // renameDocument flushes immediately (no setTimeout), so a microtask flush
     // settles it back to 'saved' without advancing any timers.
     await act(async () => {
       await Promise.resolve()
@@ -123,7 +123,7 @@ describe('useBrowserLocalDocumentController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
       save: async () => {
         throw new Error('IndexedDB: secret-key=abc123 transaction aborted')
       },
@@ -131,7 +131,7 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(failingStore))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('Renamed').catch(() => {})
+      result.current.renameDocument('Renamed').catch(() => {})
     })
     expect(result.current.persistence.kind).toBe('degraded')
     if (result.current.persistence.kind === 'degraded') {
@@ -149,7 +149,7 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     act(() => {
-      result.current.renameCanvas('Renamed before cleanup')
+      result.current.renameDocument('Renamed before cleanup')
     })
     await act(async () => {
       await result.current.triggerCleanup()
@@ -171,7 +171,7 @@ describe('useBrowserLocalDocumentController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
       save: async (s) => {
         if (shouldFailSave) throw new Error('secret-credential-xyz leaked error')
         return base.save(s)
@@ -180,13 +180,13 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     shouldFailSave = true
-    // renameCanvas flushes immediately; let that failing save settle to 'degraded'
+    // renameDocument flushes immediately; let that failing save settle to 'degraded'
     // before triggerCleanup runs, matching how a real prior save failure lingers.
     // Its returned promise rejects on this failed save (see the dedicated
     // rejection test below) — catch it here since this test only cares about
     // the resulting persistence/cleanup state, not the rejection itself.
     await act(async () => {
-      result.current.renameCanvas('Renamed').catch(() => {})
+      result.current.renameDocument('Renamed').catch(() => {})
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -199,10 +199,10 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result.current.cleanupError).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
   })
 
-  it('renameCanvas returns a promise that rejects when the underlying save fails', async () => {
+  it('renameDocument returns a promise that rejects when the underlying save fails', async () => {
     // Root cause: callers such as WorkspaceTopBar await onRenameDocument and
     // treat a rejection as "keep the rename input open for retry". Before this
-    // fix renameCanvas's return type was `void`, so a real save failure could
+    // fix renameDocument's return type was `void`, so a real save failure could
     // never surface as a rejection — the caller always saw success.
     const base = new MemoryStore()
     await base.setDefaultDocumentId('c1')
@@ -214,7 +214,7 @@ describe('useBrowserLocalDocumentController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
       save: async (s) => {
         if (shouldFailSave) throw new Error('disk full')
         return base.save(s)
@@ -226,7 +226,7 @@ describe('useBrowserLocalDocumentController', () => {
     let caught: unknown
     await act(async () => {
       try {
-        await result.current.renameCanvas('Renamed')
+        await result.current.renameDocument('Renamed')
       } catch (err) {
         caught = err
       }
@@ -259,7 +259,7 @@ describe('useBrowserLocalDocumentController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
       save: async (s) => {
         if (shouldFailSave) throw new Error('disk full')
         return base.save(s)
@@ -268,12 +268,12 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     shouldFailSave = true
-    // renameCanvas flushes immediately and fails; let it settle to 'degraded'
+    // renameDocument flushes immediately and fails; let it settle to 'degraded'
     // before triggerCleanup runs, so triggerCleanup's own degraded-guard aborts.
     // The returned promise rejects on this failed save — caught here since
     // this test only cares about the resulting cleanup-abort state.
     await act(async () => {
-      result.current.renameCanvas('Renamed').catch(() => {})
+      result.current.renameDocument('Renamed').catch(() => {})
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -295,7 +295,7 @@ describe('useBrowserLocalDocumentController', () => {
       setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
       load: base.load.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
       save: base.save.bind(base),
       del: async () => ({ deleted: false, reason: 'pointer-mismatch' }),
     }
@@ -315,7 +315,7 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     act(() => {
-      result.current.renameCanvas('Renamed')
+      result.current.renameDocument('Renamed')
     })
     await act(async () => {
       await result.current.triggerCleanup()
@@ -357,7 +357,7 @@ describe('useBrowserLocalDocumentController', () => {
       del: base.del.bind(base),
       removeDocument: base.removeDocument.bind(base),
       generateId: () => 'fresh-1',
-      listCanvases: async () => [],
+      listDocuments: async () => [],
       setDefaultDocumentId: async () => {
         throw new Error('IndexedDB: meta write aborted')
       },
@@ -379,14 +379,14 @@ describe('useBrowserLocalDocumentController', () => {
     expect(await base.getDefaultDocumentId()).toBeNull()
   })
 
-  it('renameCanvas updates snapshot.name and persists it', async () => {
+  it('renameDocument updates snapshot.name and persists it', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('New name')
+      result.current.renameDocument('New name')
     })
     expect(result.current.snapshot?.name).toBe('New name')
     const loadResult = await store.load('c1')
@@ -396,7 +396,7 @@ describe('useBrowserLocalDocumentController', () => {
     }
   })
 
-  it('renameCanvas racing with unmount does not warn or clobber a later mount', async () => {
+  it('renameDocument racing with unmount does not warn or clobber a later mount', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
@@ -404,7 +404,7 @@ describe('useBrowserLocalDocumentController', () => {
     const { result, unmount } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     act(() => {
-      result.current.renameCanvas('Racing name')
+      result.current.renameDocument('Racing name')
     })
     unmount()
     // Let the in-flight save promise resolve after unmount.
@@ -421,7 +421,7 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result2.current.snapshot?.name).toBe('Racing name')
   })
 
-  it('renameCanvas with whitespace-only input falls back to "untitled" and persists that, not empty', async () => {
+  it('renameDocument with whitespace-only input falls back to "untitled" and persists that, not empty', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
@@ -429,7 +429,7 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('   ')
+      result.current.renameDocument('   ')
     })
     expect(result.current.snapshot?.name).toBe('untitled')
     const loadResult = await store.load('c1')
@@ -440,7 +440,7 @@ describe('useBrowserLocalDocumentController', () => {
     }
   })
 
-  it('renameCanvas with empty string also falls back to "untitled"', async () => {
+  it('renameDocument with empty string also falls back to "untitled"', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
@@ -448,12 +448,12 @@ describe('useBrowserLocalDocumentController', () => {
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('')
+      result.current.renameDocument('')
     })
     expect(result.current.snapshot?.name).toBe('untitled')
   })
 
-  it('renameCanvas before the initial load resolves is a safe no-op', async () => {
+  it('renameDocument before the initial load resolves is a safe no-op', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
@@ -461,7 +461,7 @@ describe('useBrowserLocalDocumentController', () => {
     // No awaited act() yet — the async load hasn't populated snapshotRef/pendingSnapshotRef.
     expect(result.current.snapshot).toBeNull()
     act(() => {
-      result.current.renameCanvas('Too early')
+      result.current.renameDocument('Too early')
     })
     expect(result.current.snapshot).toBeNull()
     expect(result.current.persistence.kind).toBe('saved')
@@ -474,7 +474,7 @@ describe('useBrowserLocalDocumentController', () => {
     }
   })
 
-  it('renameCanvas after cleanup cleared the snapshot is a safe no-op', async () => {
+  it('renameDocument after cleanup cleared the snapshot is a safe no-op', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
@@ -485,26 +485,26 @@ describe('useBrowserLocalDocumentController', () => {
     })
     expect(result.current.snapshot).toBeNull()
     act(() => {
-      result.current.renameCanvas('After cleanup')
+      result.current.renameDocument('After cleanup')
     })
     expect(result.current.snapshot).toBeNull()
     expect(await store.getDefaultDocumentId()).toBeNull()
   })
 
-  it('renameCanvas refreshes updatedAt and transitions persistence to saved', async () => {
+  it('renameDocument refreshes updatedAt and transitions persistence to saved', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('New name')
+      result.current.renameDocument('New name')
     })
     expect(result.current.snapshot?.updatedAt).not.toBe(snap.updatedAt)
     expect(result.current.persistence.kind).toBe('saved')
   })
 
-  describe('initialCanvasId (deep-linked canvas)', () => {
+  describe('initialDocumentId (deep-linked canvas)', () => {
     const other: DocumentSnapshot = {
       id: 'c2',
       name: 'other canvas',
@@ -541,12 +541,12 @@ describe('useBrowserLocalDocumentController', () => {
       )
       await act(async () => {})
       // No error wall — silently lands on whatever the store's own default
-      // resolves to, exactly like a plain (no initialCanvasId) mount would.
+      // resolves to, exactly like a plain (no initialDocumentId) mount would.
       expect(result.current.snapshot).toEqual(snap)
       expect(result.current.persistence.kind).toBe('saved')
     })
 
-    it('behaves exactly like today when initialCanvasId is omitted', async () => {
+    it('behaves exactly like today when initialDocumentId is omitted', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId('c1')
       await store.save(snap)
@@ -556,18 +556,18 @@ describe('useBrowserLocalDocumentController', () => {
     })
   })
 
-  describe('multi-canvas: listCanvases / createCanvas / switchDocument', () => {
-    it('listCanvases reflects the auto-created canvas on first mount', async () => {
+  describe('multi-canvas: listDocuments / createDocument / switchDocument', () => {
+    it('listDocuments reflects the auto-created canvas on first mount', async () => {
       const store = new MemoryStore()
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
-      const list = await result.current.listCanvases()
+      const list = await result.current.listDocuments()
       expect(list).toHaveLength(1)
       expect(list[0].id).toBe(result.current.snapshot?.id)
     })
 
-    it('createCanvas returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
+    it('createDocument returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId('c1')
       await store.save(snap)
@@ -578,7 +578,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
       expect(created).toBeDefined()
@@ -592,19 +592,19 @@ describe('useBrowserLocalDocumentController', () => {
       expect(loro.saved.some((s) => s.id === created!.id)).toBe(true)
     })
 
-    it('createCanvas defaults the name to "untitled" when none is given', async () => {
+    it('createDocument defaults the name to "untitled" when none is given', async () => {
       const store = new MemoryStore()
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas()
+        created = await result.current.createDocument()
       })
       expect(created?.name).toBe('untitled')
     })
 
-    it('createCanvas rolls back the metadata row when the Loro write fails', async () => {
+    it('createDocument rolls back the metadata row when the Loro write fails', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId('c1')
       await store.save(snap)
@@ -616,27 +616,27 @@ describe('useBrowserLocalDocumentController', () => {
       let thrown: unknown
       await act(async () => {
         try {
-          await result.current.createCanvas('Doomed')
+          await result.current.createDocument('Doomed')
         } catch (err) {
           thrown = err
         }
       })
       expect(thrown).toBeDefined()
 
-      const list = await store.listCanvases()
+      const list = await store.listDocuments()
       expect(list).toHaveLength(1)
       expect(list[0].id).toBe('c1')
     })
 
-    it('listCanvases includes canvases created via createCanvas', async () => {
+    it('listDocuments includes documents created via createDocument', async () => {
       const store = new MemoryStore()
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
       await act(async () => {
-        await result.current.createCanvas('Second canvas')
+        await result.current.createDocument('Second canvas')
       })
-      const list = await result.current.listCanvases()
+      const list = await result.current.listDocuments()
       expect(list).toHaveLength(2)
     })
 
@@ -650,11 +650,11 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
       act(() => {
-        result.current.renameCanvas('Renamed before switch')
+        result.current.renameDocument('Renamed before switch')
       })
 
       await act(async () => {
@@ -707,7 +707,7 @@ describe('useBrowserLocalDocumentController', () => {
         save: base.save.bind(base),
         del: base.del.bind(base),
         generateId: base.generateId.bind(base),
-        listCanvases: base.listCanvases.bind(base),
+        listDocuments: base.listDocuments.bind(base),
         load: async (id: string) => (id === 'corrupt-1' ? { kind: 'corrupted' } : base.load(id)),
       }
       const loro = new FakeLoroStore()
@@ -716,7 +716,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
       // Leave a stale degraded banner behind, as a prior corrupt-record
@@ -744,7 +744,7 @@ describe('useBrowserLocalDocumentController', () => {
         save: base.save.bind(base),
         del: base.del.bind(base),
         generateId: base.generateId.bind(base),
-        listCanvases: base.listCanvases.bind(base),
+        listDocuments: base.listDocuments.bind(base),
         load: async (id: string) => {
           if (id === 'boom') throw new Error('IndexedDB: read aborted')
           return base.load(id)
@@ -776,7 +776,7 @@ describe('useBrowserLocalDocumentController', () => {
         save: base.save.bind(base),
         del: base.del.bind(base),
         generateId: base.generateId.bind(base),
-        listCanvases: base.listCanvases.bind(base),
+        listDocuments: base.listDocuments.bind(base),
         load: base.load.bind(base),
       }
       const loro = new FakeLoroStore()
@@ -785,7 +785,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
       await act(async () => {
@@ -807,10 +807,10 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
-      // Intercept the next save() (the one renameCanvas's fire-and-forget
+      // Intercept the next save() (the one renameDocument's fire-and-forget
       // flushSave triggers) so the test controls exactly when it settles.
       let rejectFirstSave!: (err: unknown) => void
       let firstSaveStarted = false
@@ -827,11 +827,11 @@ describe('useBrowserLocalDocumentController', () => {
         return originalSave(s)
       }
 
-      // Fire-and-forget flush, exactly like renameCanvas triggers internally.
+      // Fire-and-forget flush, exactly like renameDocument triggers internally.
       // The intercepted save rejects below, so catch here — this test only
       // cares about switchDocument's abort behavior, not this rejection.
       act(() => {
-        result.current.renameCanvas('Renamed before switch').catch(() => {})
+        result.current.renameDocument('Renamed before switch').catch(() => {})
       })
       expect(firstSaveStarted).toBe(true)
 
@@ -877,7 +877,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createCanvas('Second canvas')
+        created = await result.current.createDocument('Second canvas')
       })
 
       // Intercept store.save so the test controls exactly when each of the
@@ -907,14 +907,14 @@ describe('useBrowserLocalDocumentController', () => {
 
       // First rename starts save #1 (fire-and-forget, exactly like the real hook).
       act(() => {
-        result.current.renameCanvas('First rename')
+        result.current.renameDocument('First rename')
       })
       expect(saveCallCount).toBe(1)
 
       // Second rename queues a new pending snapshot and starts a second
       // flush waiter that awaits the still-in-flight save #1.
       act(() => {
-        result.current.renameCanvas('Second rename')
+        result.current.renameDocument('Second rename')
       })
 
       // A concurrent switchDocument call is a third waiter on the same save #1.
@@ -1015,7 +1015,7 @@ describe('useBrowserLocalDocumentController', () => {
       await act(async () => {})
 
       act(() => {
-        result.current.renameCanvas('Renamed before duplicate')
+        result.current.renameDocument('Renamed before duplicate')
       })
 
       let duplicated: DocumentSnapshot | undefined
@@ -1046,7 +1046,7 @@ describe('useBrowserLocalDocumentController', () => {
       })
       expect(thrown).toBeDefined()
 
-      const list = await store.listCanvases()
+      const list = await store.listDocuments()
       expect(list).toHaveLength(1)
       expect(list[0].id).toBe('c1')
       // Never switched away from the source canvas on failure.

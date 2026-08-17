@@ -90,18 +90,18 @@ describe('MemoryStore', () => {
     expect(a).not.toBe(b)
   })
 
-  it('listCanvases returns empty array when store is empty', async () => {
+  it('listDocuments returns empty array when store is empty', async () => {
     const store = new MemoryStore()
-    expect(await store.listCanvases()).toEqual([])
+    expect(await store.listDocuments()).toEqual([])
   })
 
-  it('listCanvases returns all saved snapshots by id', async () => {
+  it('listDocuments returns all saved snapshots by id', async () => {
     const store = new MemoryStore()
     const a: DocumentSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
     const b: DocumentSnapshot = { ...snap, id: 'c2', name: 'Canvas B' }
     await store.save(a)
     await store.save(b)
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list).toHaveLength(2)
     expect(list).toEqual(expect.arrayContaining([a, b]))
   })
@@ -181,23 +181,23 @@ describe('IndexedDBStore', () => {
     expect(await store.del('c1')).toEqual({ deleted: false, reason: 'not-found' })
   })
 
-  it('listCanvases returns empty array when store is empty', async () => {
+  it('listDocuments returns empty array when store is empty', async () => {
     const store = new IndexedDBStore()
-    expect(await store.listCanvases()).toEqual([])
+    expect(await store.listDocuments()).toEqual([])
   })
 
-  it('listCanvases returns all saved snapshots by id', async () => {
+  it('listDocuments returns all saved snapshots by id', async () => {
     const store = new IndexedDBStore()
     const a: DocumentSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
     const b: DocumentSnapshot = { ...snap, id: 'c2', name: 'Canvas B' }
     await store.save(a)
     await store.save(b)
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list).toHaveLength(2)
     expect(list).toEqual(expect.arrayContaining([a, b]))
   })
 
-  it('listCanvases skips a corrupt row instead of throwing or blanking the list', async () => {
+  it('listDocuments skips a corrupt row instead of throwing or blanking the list', async () => {
     const store = new IndexedDBStore()
     const a: DocumentSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
     await store.save(a)
@@ -216,7 +216,7 @@ describe('IndexedDBStore', () => {
       }
       req.onerror = () => reject(req.error)
     })
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list).toEqual([a])
   })
 })

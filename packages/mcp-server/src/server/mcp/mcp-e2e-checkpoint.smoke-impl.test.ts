@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildCheckpointChildEnv,
   readDaemonLogsForFailure,
-  triggerDaemonCanvasCreate,
+  triggerDaemonDocumentCreate,
 } from './mcp-e2e-checkpoint.smoke-impl.js'
 
 describe('buildCheckpointChildEnv', () => {
@@ -64,7 +64,7 @@ describe('readDaemonLogsForFailure', () => {
   })
 })
 
-describe('triggerDaemonCanvasCreate', () => {
+describe('triggerDaemonDocumentCreate', () => {
   it('recovers when retry is opted in and the daemon eventually starts', async () => {
     let calls = 0
     const callTool = vi.fn(async () => {
@@ -73,7 +73,7 @@ describe('triggerDaemonCanvasCreate', () => {
       return { id: 'ws_1/e2e-src', url: 'http://localhost/ws_1/e2e-src' }
     })
 
-    const result = await triggerDaemonCanvasCreate(callTool, {
+    const result = await triggerDaemonDocumentCreate(callTool, {
       retryDaemonStartup: true,
       maxDaemonStartupRetries: 1,
     })
@@ -88,7 +88,10 @@ describe('triggerDaemonCanvasCreate', () => {
     })
 
     await expect(
-      triggerDaemonCanvasCreate(callTool, { retryDaemonStartup: true, maxDaemonStartupRetries: 2 }),
+      triggerDaemonDocumentCreate(callTool, {
+        retryDaemonStartup: true,
+        maxDaemonStartupRetries: 2,
+      }),
     ).rejects.toThrow('unexpected tool/call result shape: {}')
     expect(callTool).toHaveBeenCalledTimes(1)
   })
@@ -99,7 +102,7 @@ describe('triggerDaemonCanvasCreate', () => {
     })
 
     await expect(
-      triggerDaemonCanvasCreate(callTool, {
+      triggerDaemonDocumentCreate(callTool, {
         retryDaemonStartup: false,
         maxDaemonStartupRetries: 3,
       }),

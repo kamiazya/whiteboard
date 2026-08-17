@@ -4,10 +4,10 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
-import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
 import { createVersionSaveTool } from './version-save.js'
@@ -20,7 +20,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 }
 
 async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
-  const snapshot = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId } })
+  const snapshot = await store.loadSnapshot({ docRef: { kind: 'document', documentId } })
   const doc = new LoroDoc()
   if (snapshot !== null) {
     doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
@@ -100,7 +100,7 @@ describe('wb_version_list tool', () => {
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -120,7 +120,7 @@ describe('wb_version_restore tool', () => {
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
 
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'original' }],
@@ -139,7 +139,7 @@ describe('wb_version_restore tool', () => {
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -169,7 +169,7 @@ describe('wb_version_restore tool', () => {
 
   test('throws VersionNotFoundError for unknown versionId', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
@@ -187,7 +187,7 @@ describe('wb_version_restore tool', () => {
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       // frontier must be a string; this stored record predates schema validation
       // or was corrupted, and must be treated as not-found rather than crashing.
@@ -203,9 +203,9 @@ describe('wb_version_restore tool', () => {
     ).rejects.toThrow(VersionNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+  test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
@@ -217,6 +217,6 @@ describe('wb_version_restore tool', () => {
         documentId: CANVAS_ID,
         versionId: saved.versionId,
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 })

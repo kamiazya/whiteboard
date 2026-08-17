@@ -101,8 +101,8 @@ describe('0007-adopt-workspace-tree migration', () => {
           { canvasId: ULID_B, segments: ['plans', 'q3'] },
         ]),
       )
-      await storeDoc(db, `canvas:${ULID_A}`, canvasDoc('markdown'))
-      await storeDoc(db, `canvas:${ULID_B}`, canvasDoc('spatial'))
+      await storeDoc(db, `document:${ULID_A}`, canvasDoc('markdown'))
+      await storeDoc(db, `document:${ULID_B}`, canvasDoc('spatial'))
 
       await migration.up(db as unknown as Kysely<unknown>)
 
@@ -176,7 +176,7 @@ describe('0007-adopt-workspace-tree migration', () => {
           { canvasId: ULID_C, segments: ['notes'] },
         ]),
       )
-      await storeDoc(db, `canvas:${ULID_C}`, canvasDoc('markdown'))
+      await storeDoc(db, `document:${ULID_C}`, canvasDoc('markdown'))
 
       await migration.up(db as unknown as Kysely<unknown>)
 

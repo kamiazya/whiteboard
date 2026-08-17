@@ -69,7 +69,7 @@ export function DocumentPickerDialog({
     >
       <div className="mb-2 text-xs text-muted-foreground">{title}</div>
       {options.length === 0 ? (
-        <div className="px-1 py-2 text-sm text-muted-foreground">No other canvases yet.</div>
+        <div className="px-1 py-2 text-sm text-muted-foreground">No other documents yet.</div>
       ) : (
         <ul className="m-0 flex max-h-64 list-none flex-col gap-0.5 overflow-y-auto p-0">
           {options.map((option) => (

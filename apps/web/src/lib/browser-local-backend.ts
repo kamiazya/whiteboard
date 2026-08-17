@@ -1,14 +1,14 @@
 import type {
   BinaryFileDataLike,
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
 import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 /**
- * BrowserLocalBackend: CanvasBackend implementation for fully offline,
+ * BrowserLocalBackend: DocumentBackend implementation for fully offline,
  * browser-local use. Persists Loro CRDT snapshots and incremental deltas
  * in IndexedDB via LoroStore (DB v2 'loroDocuments' store), and uploaded
  * image files via DocumentFileStore (DB v4 'documentFiles' store).
@@ -35,11 +35,11 @@ import { LoroStore } from './loro-store.js'
  * further serializes the read-modify-write inside a single IDB readwrite
  * transaction for appendDelta.
  */
-export class BrowserLocalBackend implements CanvasBackend {
+export class BrowserLocalBackend implements DocumentBackend {
   private readonly documentId: string
   private readonly store: LoroStore
   private readonly fileStore: DocumentFileStore
-  private handlers: CanvasBackendHandlers | null = null
+  private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
@@ -50,7 +50,7 @@ export class BrowserLocalBackend implements CanvasBackend {
     this.fileStore = fileStore ?? new DocumentFileStore()
   }
 
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.disconnected = false
     this.handlers = handlers
     // Fire synchronously so the caller can observe onConnected immediately.
@@ -151,7 +151,7 @@ export class BrowserLocalBackend implements CanvasBackend {
   // ── Private ──────────────────────────────────────────────────────────────────
 
   /** True once the original connect() handlers are no longer the live ones. */
-  private isStale(handlers: CanvasBackendHandlers): boolean {
+  private isStale(handlers: DocumentBackendHandlers): boolean {
     return this.disconnected || this.handlers !== handlers
   }
 

@@ -15,7 +15,7 @@ import {
   writeSpatialEdge,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
@@ -339,14 +339,14 @@ function commitToDoc(doc: LoroDoc, next: SpatialCanvas, command: EditorCommand):
 }
 
 /**
- * One DocumentSyncSession = one live connection to one CanvasBackend. Owns
+ * One DocumentSyncSession = one live connection to one DocumentBackend. Owns
  * every piece of state that only makes sense for the lifetime of that single
  * connection (the LoroDoc, its UndoManager, the debounced commit pipeline,
  * queued export requests, published canvas value + subscribers). Constructing
  * a new session for a backend swap therefore resets all of that for free.
  */
 export function createDocumentSyncSession(
-  backend: CanvasBackend,
+  backend: DocumentBackend,
   deps: SessionDeps,
 ): DocumentSyncSession {
   const myGeneration = deps.generations.nextConnectionGeneration()
@@ -417,7 +417,7 @@ export function createDocumentSyncSession(
   }
 
   // Bridges flushPendingExportRequests'/handleIncomingExportRequest's
-  // string-message `send` contract to CanvasBackend's typed
+  // string-message `send` contract to DocumentBackend's typed
   // sendExportResponse(requestId, data) method.
   function sendExportResponseMessage(message: string): void {
     let parsed: z.infer<typeof exportResponseMessageSchema>

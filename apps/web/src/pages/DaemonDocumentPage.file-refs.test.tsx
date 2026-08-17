@@ -7,8 +7,8 @@
  * passing through as legacy path references.
  */
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -23,7 +23,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
+    listDocuments: vi.fn(),
   }
 })
 
@@ -42,16 +42,16 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 })
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-class FakeBackend implements CanvasBackend {
+class FakeBackend implements DocumentBackend {
   constructor(
     public workspaceId: string,
     public path: string,
   ) {
     createdBackends.push(this)
   }
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     handlers.onConnected()
     const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
     handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
@@ -96,8 +96,8 @@ describe('DaemonDocumentPage file refs', () => {
     capturedEditorProps = null
     createdBackends.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [
+    mockListDocuments.mockResolvedValue({
+      documents: [
         { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
@@ -109,7 +109,7 @@ describe('DaemonDocumentPage file refs', () => {
     vi.clearAllMocks()
   })
 
-  it('offers other canvases as id-valued refs labeled with their path', async () => {
+  it('offers other documents as id-valued refs labeled with their path', async () => {
     await renderPage()
     // The open canvas (main) is excluded; the ref stored into the document
     // is the id, the label the user sees is the path. `kind` rides along
@@ -146,7 +146,7 @@ describe('DaemonDocumentPage file refs', () => {
     expect(missing).toBeDefined()
     // Live id and live path (a legacy ref) are both known; a ref matching
     // neither points at a deleted canvas. Image refs live in the file
-    // store, not the canvases list, so they are never "missing" here.
+    // store, not the documents list, so they are never "missing" here.
     expect(missing?.('id-second')).toBe(false)
     expect(missing?.('second')).toBe(false)
     expect(missing?.('deleted-canvas-id')).toBe(true)
@@ -154,8 +154,8 @@ describe('DaemonDocumentPage file refs', () => {
   })
 
   it('falls back to path refs for entries an older daemon lists without ids', async () => {
-    mockListCanvases.mockResolvedValue({
-      canvases: [
+    mockListDocuments.mockResolvedValue({
+      documents: [
         { path: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
         { path: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],

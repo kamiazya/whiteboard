@@ -2,7 +2,7 @@
  * Content loading for inline canvas embeds (embed spec J5a-2), browser-local
  * flavor: a file node's reference is a browser-local canvas id, and the
  * editor's `resolveReference` seam is SYNCHRONOUS by contract — so the page
- * pre-fetches referenced canvases here and hands the editor a cache lookup.
+ * pre-fetches referenced documents here and hands the editor a cache lookup.
  *
  * Totality mirrors the layout seam: any load/import failure resolves to
  * `undefined` and the editor keeps the card — a broken reference must never
@@ -128,7 +128,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  * The browser-local binding of the editor's file seams. Declared here beside
  * the four functions it wires so the page is left with no backend knowledge
  * of its own — the daemon page supplies its own adapter over the daemon's
- * `/api/w/:workspaceId/canvas/:path/file/:fileId` endpoints.
+ * `/api/w/:workspaceId/document/:path/file/:fileId` endpoints.
  */
 export const BROWSER_LOCAL_FILE_ADAPTER: DocumentFileAdapter = {
   isImageRef,

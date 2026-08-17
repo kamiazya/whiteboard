@@ -10,7 +10,7 @@
 //
 // Expected behavior:
 // 1. codex returns a JSON object { path, documentId, versionId }
-// 2. tmp data dir contains a blob for the canvas (under blobs/{ws}/canvas/)
+// 2. tmp data dir contains a blob for the canvas (under blobs/{ws}/document/)
 //
 // Notes:
 // - This consumes OpenAI API quota, so it does not run in CI. Manual use:

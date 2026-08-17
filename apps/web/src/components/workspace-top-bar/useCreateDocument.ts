@@ -7,7 +7,7 @@ import type { DocumentInfo } from './types'
 interface UseCreateDocumentOptions {
   workspaceId: string
   path: string
-  canvases: DocumentInfo[]
+  documents: DocumentInfo[]
   isLocalMode: boolean
   onCreateDocument: (() => void | Promise<void>) | undefined
   onNavigateToDocument: (path: string) => void
@@ -27,7 +27,7 @@ interface UseCreateDocumentOptions {
 export function useCreateDocument({
   workspaceId,
   path,
-  canvases,
+  documents,
   isLocalMode,
   onCreateDocument,
   onNavigateToDocument,
@@ -59,12 +59,12 @@ export function useCreateDocument({
         }
         const ix = path.indexOf('/')
         const prefix = ix !== -1 ? path.slice(0, ix + 1) : ''
-        const scoped = canvases
+        const scoped = documents
           .filter((c) => c.path.startsWith(prefix))
           .map((c) => c.path.slice(prefix.length))
         const target = `${prefix}${deriveNewDocumentPath(scoped)}`
         const res = await daemonFetch(
-          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

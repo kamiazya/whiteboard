@@ -1,6 +1,6 @@
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   act,
@@ -30,21 +30,21 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
-    createCanvas: vi.fn(),
+    listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-class FakeBackend implements CanvasBackend {
-  handlers: CanvasBackendHandlers | null = null
+class FakeBackend implements DocumentBackend {
+  handlers: DocumentBackendHandlers | null = null
   constructor(
     public workspaceId: string,
     public path: string,
   ) {}
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.handlers = handlers
     handlers.onConnected()
     const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
@@ -84,8 +84,8 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 describe('DaemonDocumentPage WebMCP wiring', () => {
   beforeEach(() => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 
@@ -117,8 +117,8 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     expect(fake.liveNames().sort()).toEqual(webMcpTools.map((tool) => tool.name).sort())
   })
 
-  it('attempts no registration while the workspace resolves to zero canvases (canvas === null)', async () => {
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+  it('attempts no registration while the workspace resolves to zero documents (canvas === null)', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] })
     const fake = createFakeModelContext()
     document.modelContext = fake
 

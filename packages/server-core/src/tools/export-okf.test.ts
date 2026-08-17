@@ -1,6 +1,6 @@
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
-import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
+import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { exportOkf } from './export-okf.js'
 
@@ -53,6 +53,6 @@ describe('exportOkf', () => {
         workspaceId: WORKSPACE_ID,
         documentId: CANVAS_ID,
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 })

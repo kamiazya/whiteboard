@@ -31,7 +31,7 @@ async function indexExists(db: Kysely<DatabaseSchema>, name: string): Promise<bo
 }
 
 const TABLES = [
-  'workspaceIndexCanvasList',
+  'workspaceIndexDocumentList',
   'workspaceIndexFacets',
   'workspaceIndexAliases',
   'workspaceIndexBacklinks',
@@ -39,7 +39,7 @@ const TABLES = [
 ]
 
 // One lookup index per workspace-scoped table that queryFacet/listBacklinks/
-// alias resolution rely on for non-scan lookups (workspaceIndexCanvasList has
+// alias resolution rely on for non-scan lookups (workspaceIndexDocumentList has
 // no dedicated lookup index — it is read in full per workspace).
 const LOOKUP_INDEXES = [
   'workspaceIndexFacets_lookup',

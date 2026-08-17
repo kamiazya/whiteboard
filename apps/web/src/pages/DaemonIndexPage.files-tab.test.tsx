@@ -30,7 +30,7 @@ function installFetchMock(
   v1ListResponse: { status: number; body: unknown } = {
     status: 200,
     body: {
-      canvases: [
+      documents: [
         { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
         {
           documentId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
@@ -45,16 +45,16 @@ function installFetchMock(
     if (url.endsWith('/api/workspaces')) {
       return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
     }
-    if (url.endsWith('/api/v1/workspaces/default/canvases')) {
+    if (url.endsWith('/api/v1/workspaces/default/documents')) {
       return Promise.resolve(jsonResponse(v1ListResponse.body, v1ListResponse.status))
     }
-    if (url.endsWith('/api/v1/workspaces/default/canvases/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
+    if (url.endsWith('/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
       return Promise.resolve(
         jsonResponse({ markdown: OKF_DOC, frontmatter: { type: 'note', title: 'Design' } }),
       )
     }
-    if (url.match(/\/api\/workspaces\/[^/]+\/canvases$/)) {
-      return Promise.resolve(jsonResponse({ canvases: [] }))
+    if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+      return Promise.resolve(jsonResponse({ documents: [] }))
     }
     return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
   })

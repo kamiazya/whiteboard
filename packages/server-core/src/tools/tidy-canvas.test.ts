@@ -9,7 +9,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { loadDocument } from './document-io.js'
@@ -24,13 +24,13 @@ async function seedCanvas(
   canvas: SpatialCanvas,
   lockedIds: readonly string[] = [],
 ): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   for (const id of lockedIds) setNodeLock(seedDoc, id, true)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -162,7 +162,7 @@ describe('wb_canvas_tidy on a markdown document', () => {
     // document predating the format guards, or one the web editor gave a
     // second node, is the one that got repositioned.
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
       writeSpatialCanvas(doc, {

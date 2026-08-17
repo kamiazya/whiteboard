@@ -131,10 +131,10 @@ describe('App route sync against an asynchronously-propagating router', () => {
       })
     }
     expect(screen.getByTestId('daemon-document-page')).toBeTruthy()
-    expect(fakeLocation.pathname).toBe('/w/w1/canvas/main')
+    expect(fakeLocation.pathname).toBe('/w/w1/document/main')
     // The payload said "open this canvas": the gallery must never flash in,
     // and one navigation ('/' -> canvas URL) is all the sync needs.
     expect(indexPageMounts).toBe(0)
-    expect(navigateCalls).toEqual(['/w/w1/canvas/main'])
+    expect(navigateCalls).toEqual(['/w/w1/document/main'])
   })
 })

@@ -28,6 +28,6 @@ export const mcpSourceAlias: Record<string, string> = {
   // that resolves the export map rather than any dist a previous local build
   // happened to leave behind.
   '@kamiazya/whiteboard-mcp/sse-stream-hub': src('sse-stream-hub.ts'),
-  '@kamiazya/whiteboard-mcp/select-canvas-transport': src('select-canvas-transport.ts'),
+  '@kamiazya/whiteboard-mcp/select-document-transport': src('select-document-transport.ts'),
   '@kamiazya/whiteboard-mcp/api-contracts': src('api-contracts/index.ts'),
 }

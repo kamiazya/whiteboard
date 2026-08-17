@@ -29,7 +29,7 @@ export async function loadDocument(
   deps: ServerDeps,
   documentId: DocumentId,
 ): Promise<LoadedDocument> {
-  const docRef = { kind: 'canvas' as const, documentId }
+  const docRef = { kind: 'document' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
   if (existing === null) throw new DocumentNotFoundError(documentId)
 
@@ -48,7 +48,7 @@ export async function loadOrCreateDocument(
   deps: ServerDeps,
   documentId: DocumentId,
 ): Promise<LoroDoc> {
-  const docRef = { kind: 'canvas' as const, documentId }
+  const docRef = { kind: 'document' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
   const doc = new LoroDoc()
   if (existing !== null) {
@@ -59,7 +59,7 @@ export async function loadOrCreateDocument(
 
 /**
  * Exports the LoroDoc as a chunked snapshot and persists it. Shared by
- * `saveCanvasDoc` (spatial patch tools) and `wb_facet_set` (facet-only
+ * `saveDocumentBodySnapshot` (spatial patch tools) and `wb_facet_set` (facet-only
  * mutations) so the chunk+save logic lives in one place.
  */
 export async function saveDocumentSnapshot(
@@ -72,7 +72,7 @@ export async function saveDocumentSnapshot(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await deps.documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId },
+    docRef: { kind: 'document', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -91,7 +91,7 @@ export async function saveDocumentSnapshot(
  * outright — the earlier patch is silently lost rather than merged. This
  * is an accepted limitation for now, not an oversight.
  */
-export async function saveCanvasDoc(
+export async function saveDocumentBodySnapshot(
   deps: ServerDeps,
   documentId: DocumentId,
   doc: LoroDoc,

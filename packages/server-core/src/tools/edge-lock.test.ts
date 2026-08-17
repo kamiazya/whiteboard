@@ -3,7 +3,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+} from '../test-utils/fake-document-store.js'
 import { createEdgeLockTool } from './edge-lock.js'
 import { EdgeNotFoundError } from './errors.js'
 
@@ -22,12 +25,12 @@ const CANVAS: SpatialCanvas = {
 }
 
 async function seedCanvas(documentStore: FakeDocumentStore): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -40,7 +43,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 
 async function loadLocks(documentStore: FakeDocumentStore): Promise<ReadonlySet<string>> {
   const stored = await documentStore.loadSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: CANVAS_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -116,7 +119,7 @@ describe('wb_edge_lock tool', () => {
     })
 
     const stored = await documentStore.loadSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
     })
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(stored!.manifest, stored!.chunks))

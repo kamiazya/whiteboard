@@ -37,7 +37,7 @@ describe('ImportBrowserLocalPanel', () => {
   beforeEach(() => localStorage.clear())
   afterEach(cleanup)
 
-  it('lists canvases from the injected BrowserLocalStore', async () => {
+  it('lists documents from the injected BrowserLocalStore', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'Alpha'))
     await store.save(makeCanvas('c2', 'Beta'))
@@ -79,7 +79,7 @@ describe('ImportBrowserLocalPanel', () => {
     await waitFor(() => expect(daemonFetch).toHaveBeenCalled())
     const post = daemonFetch.mock.calls.find(
       ([url, init]) =>
-        String(url).includes('/canvases') && (init as RequestInit | undefined)?.method === 'POST',
+        String(url).includes('/documents') && (init as RequestInit | undefined)?.method === 'POST',
     )
     expect(post).toBeTruthy()
     // biome is right that post?.[1] could be undefined in general; the toBeTruthy above plus the
@@ -91,7 +91,7 @@ describe('ImportBrowserLocalPanel', () => {
     })
   })
 
-  it('renders an empty state, disables import, and makes zero calls when there are no canvases', async () => {
+  it('renders an empty state, disables import, and makes zero calls when there are no documents', async () => {
     const daemonFetch = vi.fn()
     const settingsStore = createUserSettingsStore()
     render(
@@ -104,7 +104,7 @@ describe('ImportBrowserLocalPanel', () => {
       />,
     )
 
-    await screen.findByText(/no browser-local canvases/i)
+    await screen.findByText(/no browser-local documents/i)
     expect(screen.queryByRole('button', { name: /import/i })).toBeNull()
     expect(daemonFetch).not.toHaveBeenCalled()
     expect(settingsStore.load().migration.browserLocalToDaemon?.lastImportedAt).toBeUndefined()
@@ -147,7 +147,7 @@ describe('ImportBrowserLocalPanel', () => {
     )
   })
 
-  it('recovers when a loro load throws mid-batch: later canvases still import, button re-enables', async () => {
+  it('recovers when a loro load throws mid-batch: later documents still import, button re-enables', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'Thrower'))
     await store.save(makeCanvas('c2', 'Good'))
@@ -189,9 +189,9 @@ describe('ImportBrowserLocalPanel', () => {
     )
   })
 
-  it('shows the empty state instead of loading forever when listCanvases rejects', async () => {
+  it('shows the empty state instead of loading forever when listDocuments rejects', async () => {
     const store = new MemoryStore()
-    store.listCanvases = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
+    store.listDocuments = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
 
     render(
       <ImportBrowserLocalPanel
@@ -203,7 +203,7 @@ describe('ImportBrowserLocalPanel', () => {
       />,
     )
 
-    await screen.findByText(/no browser-local canvases/i)
+    await screen.findByText(/no browser-local documents/i)
   })
 
   it('does not write lastImportedAt when every canvas fails', async () => {
@@ -231,7 +231,7 @@ describe('ImportBrowserLocalPanel', () => {
   it('does not mutate the source store during import (copy-first)', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'Alpha'))
-    const before = await store.listCanvases()
+    const before = await store.listDocuments()
 
     const daemonFetch = vi
       .fn()
@@ -251,11 +251,11 @@ describe('ImportBrowserLocalPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: /import/i }))
     await waitFor(() => expect(screen.getByText(/imported/i)).toBeTruthy())
 
-    const after = await store.listCanvases()
+    const after = await store.listDocuments()
     expect(after).toEqual(before)
   })
 
-  it('imports two same-named canvases sequentially with distinct destination paths on 409', async () => {
+  it('imports two same-named documents sequentially with distinct destination paths on 409', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'My Canvas!'))
     await store.save(makeCanvas('c2', 'My Canvas!'))
@@ -263,7 +263,7 @@ describe('ImportBrowserLocalPanel', () => {
     const takenPaths = new Set<string>()
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/canvases')) {
+      if (url.endsWith('/documents')) {
         const { path } = JSON.parse(init?.body as string) as { path: string }
         if (takenPaths.has(path)) return jsonResponse({ title: 'exists' }, 409)
         takenPaths.add(path)

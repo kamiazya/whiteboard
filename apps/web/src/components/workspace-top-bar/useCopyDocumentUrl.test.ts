@@ -19,7 +19,7 @@ describe('useCopyDocumentUrl', () => {
   it('sets copyStatus to "copied" on a successful clipboard write', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const { result } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/canvas/ws/foo'),
+      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
@@ -32,7 +32,7 @@ describe('useCopyDocumentUrl', () => {
       clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
     const { result } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/canvas/ws/foo'),
+      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
@@ -45,7 +45,7 @@ describe('useCopyDocumentUrl', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
     const { result, unmount } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/canvas/ws/foo'),
+      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
@@ -67,7 +67,11 @@ describe('useCopyDocumentUrl', () => {
     const { result } = renderHook(
       () => {
         const mountedRef = useRef(true)
-        const hook = useCopyDocumentUrl('https://example.test/canvas/ws/foo', undefined, mountedRef)
+        const hook = useCopyDocumentUrl(
+          'https://example.test/document/ws/foo',
+          undefined,
+          mountedRef,
+        )
         return { mountedRef, hook }
       },
       { wrapper: StrictMode },

@@ -1,8 +1,8 @@
-import type { CanvasSummary, WorkspaceSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentSummary, WorkspaceSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  createCanvas as createCanvasApi,
-  listCanvases as listCanvasesApi,
+  createDocument as createCanvasApi,
+  listDocuments as listCanvasesApi,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 
@@ -24,13 +24,13 @@ export interface DaemonDocumentController {
   workspaceId: string | null
   path: string | null
   workspaces: WorkspaceSummary[]
-  canvases: CanvasSummary[]
+  documents: DocumentSummary[]
   switchDocument: (path: string) => void
   switchWorkspace: (workspaceId: string) => Promise<void>
-  createCanvas: (path: string) => Promise<void>
+  createDocument: (path: string) => Promise<void>
   createError: string | null
-  // Non-fatal: switchWorkspace only commits the new workspaceId/canvases
-  // after listCanvases succeeds, so a failure here leaves the previous
+  // Non-fatal: switchWorkspace only commits the new workspaceId/documents
+  // after listDocuments succeeds, so a failure here leaves the previous
   // selection (and the still-connected editor) valid. Kept separate from
   // loadError so the page can show an inline error instead of tearing down
   // the current session.
@@ -44,7 +44,7 @@ function errorMessage(err: unknown): string {
 /**
  * Resolves workspace/canvas defaults and owns the canvas-switcher list state
  * for DaemonDocumentPage. Deliberately does NOT create or own the
- * CanvasBackend/useDocumentSync connection — that stays in the page component,
+ * DocumentBackend/useDocumentSync connection — that stays in the page component,
  * mirroring BrowserLocalDocumentPage's own useMemo(backend, [documentId]) plus
  * useDocumentSync ownership split.
  */
@@ -55,7 +55,7 @@ export function useDaemonDocumentController(
   const [workspaceId, setWorkspaceId] = useState<string | null>(options.workspaceId ?? null)
   const [path, setPath] = useState<string | null>(options.path ?? null)
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
-  const [canvases, setCanvases] = useState<CanvasSummary[]>([])
+  const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -88,9 +88,9 @@ export function useDaemonDocumentController(
         }
         setWorkspaceId(wid)
 
-        const { canvases: canvasList } = await listCanvasesApi(daemonFetch, daemonBaseUrl, wid)
+        const { documents: canvasList } = await listCanvasesApi(daemonFetch, daemonBaseUrl, wid)
         if (cancelled || seq !== switchSeqRef.current) return
-        setCanvases(canvasList)
+        setDocuments(canvasList)
         setPath(options.path ?? canvasList[0]?.path ?? null)
       } catch (err) {
         if (!cancelled && seq === switchSeqRef.current) setLoadError(errorMessage(err))
@@ -120,14 +120,14 @@ export function useDaemonDocumentController(
       setCreateError(null)
       setSwitchError(null)
       try {
-        const { canvases: list } = await listCanvasesApi(
+        const { documents: list } = await listCanvasesApi(
           daemonFetch,
           daemonBaseUrl,
           nextWorkspaceId,
         )
         if (seq !== switchSeqRef.current) return
         setWorkspaceId(nextWorkspaceId)
-        setCanvases(list)
+        setDocuments(list)
         setPath(list[0]?.path ?? null)
       } catch (err) {
         // Deliberately setSwitchError, not setLoadError: the previous
@@ -139,27 +139,27 @@ export function useDaemonDocumentController(
     [daemonFetch, daemonBaseUrl],
   )
 
-  const createCanvas = useCallback(
+  const createDocument = useCallback(
     async (newPath: string): Promise<void> => {
       if (workspaceId === null) return
       setCreateError(null)
       try {
         const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newPath)
-        const { canvases: refreshed } = await listCanvasesApi(
+        const { documents: refreshed } = await listCanvasesApi(
           daemonFetch,
           daemonBaseUrl,
           workspaceId,
         )
-        setCanvases(refreshed)
+        setDocuments(refreshed)
         setPath(created.path)
       } catch (err) {
         setCreateError(errorMessage(err))
-        // The caller derives its next path from `canvases`. A failure often means that list is
+        // The caller derives its next path from `documents`. A failure often means that list is
         // already stale (another client took the path) — without a refresh, a retry re-derives
         // the SAME losing path from the same stale list and collides forever. Best-effort:
         // leaving the previous (possibly stale) list is no worse than not trying.
         await listCanvasesApi(daemonFetch, daemonBaseUrl, workspaceId)
-          .then(({ canvases: refreshed }) => setCanvases(refreshed))
+          .then(({ documents: refreshed }) => setDocuments(refreshed))
           .catch(() => {})
       }
     },
@@ -172,10 +172,10 @@ export function useDaemonDocumentController(
     workspaceId,
     path,
     workspaces,
-    canvases,
+    documents,
     switchDocument,
     switchWorkspace,
-    createCanvas,
+    createDocument,
     createError,
     switchError,
   }

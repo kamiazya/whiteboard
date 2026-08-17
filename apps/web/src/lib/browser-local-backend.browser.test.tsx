@@ -1,12 +1,12 @@
 /**
- * 3-C: BrowserLocalBackend — CanvasBackend contract tests.
+ * 3-C: BrowserLocalBackend — DocumentBackend contract tests.
  *
  * Real browser context required for IndexedDB + loro-crdt WASM.
  */
 
 import type {
   BinaryFileDataLike,
-  CanvasBackendHandlers,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,7 +27,7 @@ async function clearDb(): Promise<void> {
   })
 }
 
-function makeHandlers(overrides: Partial<CanvasBackendHandlers> = {}): CanvasBackendHandlers {
+function makeHandlers(overrides: Partial<DocumentBackendHandlers> = {}): DocumentBackendHandlers {
   return {
     onSnapshot: vi.fn(),
     onRemoteUpdate: vi.fn(),

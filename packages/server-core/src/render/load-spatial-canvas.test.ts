@@ -3,16 +3,16 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import { CanvasNotFoundError, loadSpatialCanvas } from './load-spatial-canvas.js'
+import { loadSpatialCanvas, SnapshotNotFoundError } from './load-spatial-canvas.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
 describe('loadSpatialCanvas', () => {
-  test('throws CanvasNotFoundError when no snapshot exists', async () => {
+  test('throws SnapshotNotFoundError when no snapshot exists', async () => {
     const documentStore = new FakeDocumentStore()
     const deps = { documentStore, blobStore: {} as never, documentIndex: unusedDocumentIndex() }
 
-    await expect(loadSpatialCanvas(deps, CANVAS_ID)).rejects.toThrow(CanvasNotFoundError)
+    await expect(loadSpatialCanvas(deps, CANVAS_ID)).rejects.toThrow(SnapshotNotFoundError)
   })
 
   test('returns the doc and decoded canvas for an existing snapshot', async () => {

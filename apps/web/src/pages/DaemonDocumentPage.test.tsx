@@ -1,6 +1,6 @@
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   act,
@@ -37,21 +37,21 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
-    createCanvas: vi.fn(),
+    listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
-const mockCreateDocument = vi.mocked(daemonApiClient.createCanvas)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
+const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
 
 // Records every fake backend instance created, in order, so tests can assert
 // exactly-once disconnect and ordering (old disconnects before new connects).
 const createdBackends: FakeBackend[] = []
 
-class FakeBackend implements CanvasBackend {
-  handlers: CanvasBackendHandlers | null = null
+class FakeBackend implements DocumentBackend {
+  handlers: DocumentBackendHandlers | null = null
   connectCount = 0
   disconnectCount = 0
   constructor(
@@ -60,7 +60,7 @@ class FakeBackend implements CanvasBackend {
   ) {
     createdBackends.push(this)
   }
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.connectCount += 1
     this.handlers = handlers
     handlers.onConnected()
@@ -125,8 +125,8 @@ describe('DaemonDocumentPage', () => {
     window.localStorage.clear()
     createdBackends.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [
+    mockListDocuments.mockResolvedValue({
+      documents: [
         { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
@@ -142,14 +142,14 @@ describe('DaemonDocumentPage', () => {
     // The daemon now answers 404 for a workspace it has never registered —
     // the reachable case being a stale pairing, since a browser keeps its
     // paired workspace id in localStorage and ids outlive the install that
-    // minted them. Rendering that as "This workspace has no canvases yet"
+    // minted them. Rendering that as "This workspace has no documents yet"
     // plus a Create button reads as the user's data being GONE, and invites
     // them to start over inside a workspace that never existed here. The
     // error screen, with the daemon's own title, is the honest rendering.
     const { DaemonApiError } = await vi.importActual<typeof import('../lib/daemon-api-client.js')>(
       '../lib/daemon-api-client.js',
     )
-    mockListCanvases.mockRejectedValue(
+    mockListDocuments.mockRejectedValue(
       new DaemonApiError('Workspace "stale-pairing" not found', 404),
     )
 
@@ -167,7 +167,7 @@ describe('DaemonDocumentPage', () => {
     await waitFor(() =>
       expect(screen.getByText('Workspace "stale-pairing" not found')).toBeTruthy(),
     )
-    expect(screen.queryByText('This workspace has no canvases yet.')).toBeNull()
+    expect(screen.queryByText('This workspace has no documents yet.')).toBeNull()
     expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
   })
 
@@ -184,7 +184,7 @@ describe('DaemonDocumentPage', () => {
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
     // The switcher's trigger names the workspace; the canvas entries appear
-    // in its list. What this pins is still the CanvasSummary
+    // in its list. What this pins is still the DocumentSummary
     // {path, updatedAt} -> WorkspaceTopBar DocumentInfo mapping, end to end.
     expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
     await openDocumentSwitcher()
@@ -276,16 +276,16 @@ describe('DaemonDocumentPage', () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
-      mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
+      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
         if (workspaceId === 'w2') {
           return Promise.resolve({
-            canvases: [
+            documents: [
               { path: 'w2-main', id: 'id-w2-main', updatedAt: '2026-02-01', kind: 'spatial' },
             ],
           })
         }
         return Promise.resolve({
-          canvases: [
+          documents: [
             { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
             { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
@@ -321,14 +321,14 @@ describe('DaemonDocumentPage', () => {
       expect(createdBackends[0]?.disconnectCount).toBe(1)
     })
 
-    it('shows the empty-state create form when the switched-to workspace has zero canvases', async () => {
+    it('shows the empty-state create form when the switched-to workspace has zero documents', async () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
-      mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
-        if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
+      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
+        if (workspaceId === 'w2') return Promise.resolve({ documents: [] })
         return Promise.resolve({
-          canvases: [
+          documents: [
             { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
             { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
           ],
@@ -349,7 +349,7 @@ describe('DaemonDocumentPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      // w1 has canvases, so the dropdown (not the row select, which is
+      // w1 has documents, so the dropdown (not the row select, which is
       // absent while a canvas is mounted) is what starts the switch.
       await openDocumentSwitcher()
       await act(async () => {
@@ -357,9 +357,9 @@ describe('DaemonDocumentPage', () => {
       })
 
       await waitFor(() =>
-        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+        expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
-      // w2 has zero canvases, so WorkspaceTopBar (and its dropdown) is
+      // w2 has zero documents, so WorkspaceTopBar (and its dropdown) is
       // unmounted — the row select is the only switcher available here, and
       // it must still work to get back out of the empty workspace.
       const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
@@ -375,8 +375,8 @@ describe('DaemonDocumentPage', () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
-      mockListCanvases.mockResolvedValueOnce({
-        canvases: [
+      mockListDocuments.mockResolvedValueOnce({
+        documents: [
           { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
           { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
@@ -397,7 +397,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
       expect(createdBackends).toHaveLength(1)
 
-      mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
+      mockListDocuments.mockRejectedValueOnce(new Error('daemon unreachable'))
 
       await openDocumentSwitcher()
       await act(async () => {
@@ -663,10 +663,10 @@ describe('DaemonDocumentPage', () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
-      if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
+    mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
+      if (workspaceId === 'w2') return Promise.resolve({ documents: [] })
       return Promise.resolve({
-        canvases: [
+        documents: [
           { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
           { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
@@ -689,7 +689,7 @@ describe('DaemonDocumentPage', () => {
     })
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
 
-    // Switch into a workspace with zero canvases: the canvas backend tears
+    // Switch into a workspace with zero documents: the canvas backend tears
     // down entirely (no WorkspaceTopBar mounts), but there genuinely is no
     // live sync happening either way, so the indicator must not disappear
     // just because the canvas-gated UI does. w1 has a mounted canvas, so the
@@ -700,7 +700,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
     )
     expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
   })
@@ -808,8 +808,8 @@ describe('DaemonDocumentPage', () => {
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
   })
 
-  it('renders a create-canvas button, not a form, when the workspace has zero canvases (ADR-0006)', async () => {
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+  it('renders a create-canvas button, not a form, when the workspace has zero documents (ADR-0006)', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] })
 
     await act(async () => {
       render(
@@ -819,7 +819,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
     )
     expect(screen.queryByLabelText('Canvases')).toBeNull()
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
@@ -830,10 +830,12 @@ describe('DaemonDocumentPage', () => {
   })
 
   it('clicking Create a canvas derives a path and mounts the editor once the canvas exists', async () => {
-    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockListDocuments.mockResolvedValueOnce({ documents: [] })
     mockCreateDocument.mockResolvedValue({ path: 'untitled' })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' },
+      ],
     })
 
     await act(async () => {
@@ -844,7 +846,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
     )
 
     await act(async () => {
@@ -866,7 +868,7 @@ describe('DaemonDocumentPage', () => {
   })
 
   it('disables Create a canvas while a create is in flight, and a same-tick second click is a no-op', async () => {
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+    mockListDocuments.mockResolvedValue({ documents: [] })
     let resolveCreate: (value: { path: string }) => void = () => {}
     mockCreateDocument.mockReturnValue(
       new Promise((resolve) => {
@@ -882,7 +884,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
@@ -903,8 +905,8 @@ describe('DaemonDocumentPage', () => {
     })
   })
 
-  it('shows the createError alert in the empty-canvases state when creation fails', async () => {
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+  it('shows the createError alert in the empty-documents state when creation fails', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] })
     mockCreateDocument.mockRejectedValue(new Error('path already exists'))
 
     await act(async () => {
@@ -915,7 +917,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
     )
 
     await act(async () => {
@@ -945,7 +947,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
                 JSON.stringify({
@@ -993,7 +995,7 @@ describe('DaemonDocumentPage', () => {
           fetchMock.mock.calls.some(
             ([reqInput, init]) =>
               String(reqInput).startsWith(DAEMON_BASE_URL) &&
-              String(reqInput).includes('/workspaces/w1/canvases/main/versions') &&
+              String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
               init?.method === 'POST',
           ),
         ).toBe(true)
@@ -1015,7 +1017,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
                 JSON.stringify({
@@ -1100,7 +1102,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             // Malformed 200: missing the `version` envelope the schema requires.
             return Promise.resolve(
               new Response(JSON.stringify({ id: 'v-manual' }), {
@@ -1178,7 +1180,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(new Response('nope', { status: 500 }))
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
@@ -1212,7 +1214,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     it('disables the save button while a save is in flight and when no canvas is selected', async () => {
-      mockListCanvases.mockResolvedValue({ canvases: [] })
+      mockListDocuments.mockResolvedValue({ documents: [] })
 
       await act(async () => {
         render(
@@ -1225,7 +1227,7 @@ describe('DaemonDocumentPage', () => {
       })
 
       await waitFor(() =>
-        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+        expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
       expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
     })
@@ -1293,7 +1295,7 @@ describe('DaemonDocumentPage', () => {
           fetchMock.mock.calls.some(
             ([reqInput]) =>
               String(reqInput).startsWith(DAEMON_BASE_URL) &&
-              String(reqInput).includes('/workspaces/w1/canvases/main/versions'),
+              String(reqInput).includes('/workspaces/w1/documents/main/versions'),
           ),
         ).toBe(true)
       })
@@ -1547,7 +1549,7 @@ describe('DaemonDocumentPage', () => {
           fetchMock.mock.calls.some(
             ([reqInput]) =>
               String(reqInput).startsWith(DAEMON_BASE_URL) &&
-              String(reqInput).includes('/workspaces/w1/canvases/main/branches'),
+              String(reqInput).includes('/workspaces/w1/documents/main/branches'),
           ),
         ).toBe(true)
       })
@@ -1921,8 +1923,8 @@ describe('DaemonDocumentPage', () => {
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
     })
 
-    it('renders "Back to canvas list" in the zero-canvases branch, where WorkspaceTopBar does not mount', async () => {
-      mockListCanvases.mockResolvedValue({ canvases: [] })
+    it('renders "Back to canvas list" in the zero-documents branch, where WorkspaceTopBar does not mount', async () => {
+      mockListDocuments.mockResolvedValue({ documents: [] })
       const onNavigateBack = vi.fn()
 
       await act(async () => {
@@ -1937,7 +1939,7 @@ describe('DaemonDocumentPage', () => {
       })
 
       await waitFor(() =>
-        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+        expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
 
       const button = screen.getByRole('button', { name: 'Back to canvas list' })
@@ -1957,7 +1959,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
                 JSON.stringify({
@@ -2001,7 +2003,7 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => {
         const postCalls = fetchMock.mock.calls.filter(
           ([reqInput, init]) =>
-            String(reqInput).includes('/workspaces/w1/canvases/main/versions') &&
+            String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
             init?.method === 'POST',
         )
         expect(postCalls).toHaveLength(1)
@@ -2160,7 +2162,7 @@ describe('DaemonDocumentPage', () => {
 
     it('does not touch the browser-local store until the disclosure is opened', async () => {
       const browserLocalStore = new MemoryStore()
-      const listSpy = vi.spyOn(browserLocalStore, 'listCanvases')
+      const listSpy = vi.spyOn(browserLocalStore, 'listDocuments')
 
       await act(async () => {
         render(

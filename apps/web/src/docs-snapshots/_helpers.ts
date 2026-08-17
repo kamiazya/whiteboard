@@ -58,7 +58,7 @@ export function topBarFetchHandler({ dirty }: { dirty: boolean }): DocFetchHandl
     if (url.endsWith('/names')) {
       return jsonResponse({
         workspace: 'Main workspace',
-        canvases: { 'design/architecture': 'System architecture' },
+        documents: { 'design/architecture': 'System architecture' },
         pinned: [],
       })
     }

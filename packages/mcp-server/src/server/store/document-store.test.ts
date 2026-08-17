@@ -249,8 +249,8 @@ describe('saveDocument - overwrite handling', () => {
     ).rejects.toMatchObject({ name: 'ConflictError' })
   })
 
-  it('does not leave an orphan canvases row behind when the snapshot+commit step fails', async () => {
-    // Older cuts of saveDocument committed the canvases row before writing the
+  it('does not leave an orphan documents row behind when the snapshot+commit step fails', async () => {
+    // Older cuts of saveDocument committed the documents row before writing the
     // .loro file, so any failure between that DB write and the blob commit
     // stranded the row and made every future saveDocument hit ConflictError
     // forever. The exact failure point is incidental — what matters is that
@@ -387,7 +387,7 @@ describe('listDocuments', () => {
   // listDocuments no longer walks the filesystem; the previous corruption
   // tests against directory traversal failures and broken non-directory
   // paths no longer apply now that the listing is a SELECT against the
-  // canvases table.
+  // documents table.
 })
 
 describe('getDocumentKind', () => {
@@ -763,7 +763,7 @@ describe('deleteDocument', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('removes the canvases row, cascades branches/versions rows, and unlinks the .loro blob and version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('removes the documents row, cascades branches/versions rows, and unlinks the .loro blob and version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch } = await import('./branches-store.js')
     const { stat } = await import('node:fs/promises')
@@ -777,13 +777,13 @@ describe('deleteDocument', () => {
     await createBranch('session1', 'canvas-a', { name: 'feature' })
 
     const db = await getDb(tempDir)
-    const canvasRow = await db
+    const documentRow = await db
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const documentId = canvasRow.id
+    const documentId = documentRow.id
 
     const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${documentId}.loro`)
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
@@ -856,7 +856,7 @@ describe('deleteDocument', () => {
     await expect(deleteDocument('session1', 'once')).resolves.toBe(false)
   })
 
-  it('deletes a canvas whose blob file is already missing (unlink ignores ENOENT so row-only canvases still delete)', async () => {
+  it('deletes a canvas whose blob file is already missing (unlink ignores ENOENT so row-only documents still delete)', async () => {
     const { getDb } = await import('./db/index.js')
     const { unlink } = await import('node:fs/promises')
 
@@ -896,7 +896,7 @@ describe('renameDocumentPath', () => {
 
   it('moves only the path: branches/versions rows and the .loro blob stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
-    const { createBranch, loadCanvasBranches } = await import('./branches-store.js')
+    const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
     const { readFile } = await import('node:fs/promises')
 
     const doc = new LoroDoc()
@@ -946,8 +946,8 @@ describe('renameDocumentPath', () => {
     const blobAfter = await readFile(blobPath)
     expect(blobAfter).toEqual(blobBefore)
 
-    // loadCanvasBranches also resolves under the new path.
-    const branches = await loadCanvasBranches('session1', 'b')
+    // loadDocumentBranches also resolves under the new path.
+    const branches = await loadDocumentBranches('session1', 'b')
     expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
   })
 

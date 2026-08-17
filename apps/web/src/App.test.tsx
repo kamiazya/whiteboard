@@ -37,7 +37,7 @@ afterEach(cleanup)
 // page mounts. BrowserLocalDocumentPage pulls in loro-crdt, which needs a
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
-// Captures the initialCanvasId prop so a test can assert App derives it from
+// Captures the initialDocumentId prop so a test can assert App derives it from
 // the /local/:documentId URL (parseBrowserLocalRoute) rather than merely
 // mounting the page.
 let receivedInitialCanvasId: string | undefined
@@ -47,13 +47,13 @@ let throwInBrowserLocalDocumentPage = false
 vi.mock('./pages/BrowserLocalDocumentPage.js', () => ({
   BrowserLocalDocumentPage: ({
     capabilities,
-    initialCanvasId,
+    initialDocumentId,
   }: {
     capabilities?: WhiteboardCapabilities
-    initialCanvasId?: string
+    initialDocumentId?: string
   }) => {
     receivedCapabilities = capabilities
-    receivedInitialCanvasId = initialCanvasId
+    receivedInitialCanvasId = initialDocumentId
     if (throwInBrowserLocalDocumentPage) {
       throw new Error('boom')
     }
@@ -396,7 +396,7 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialCanvasId from a /local/:documentId cold-load URL', async () => {
+  it('derives initialDocumentId from a /local/:documentId cold-load URL', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/local/c2']}>
@@ -851,8 +851,8 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /w/:workspaceId/canvas/:path deep link straight into DaemonDocumentPage', async () => {
-    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
+  it('cold-loads a /w/:workspaceId/document/:path deep link straight into DaemonDocumentPage', async () => {
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/main')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
@@ -861,7 +861,7 @@ describe('App URL routing', () => {
   it('cold-loads a NESTED document path deep link, path intact', async () => {
     // The tail is the document's path since the data layer converged on
     // paths; the page must receive it verbatim, separators and all.
-    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/notes/2026/plan')
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/notes/2026/plan')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('notes/2026/plan')
@@ -884,11 +884,11 @@ describe('App URL routing', () => {
       onOpenDocument('w1', 'main')
     })
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
+    expect(router.state.location.pathname).toBe('/w/w1/document/main')
   })
 
   it('updates the URL back to the gallery when onNavigateBack fires', async () => {
-    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
+    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/main')
     await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
@@ -935,7 +935,7 @@ describe('App URL routing', () => {
     }
     const router = renderAppWithRouter(BROWSER_LOCAL_STATE, '/')
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
+    expect(router.state.location.pathname).toBe('/w/w1/document/main')
     // The replace must not have added a new history entry: going back from
     // here should leave the SPA (nothing left to land on inside this test's
     // single-entry history), not bounce to a stale pre-pairing '/' entry.
@@ -944,7 +944,7 @@ describe('App URL routing', () => {
 
   it('shows the not-found page for an unrecognized path (no blank page, no silent redirect)', async () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/something/unrelated/entirely')
-    expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
   })
 })
@@ -1205,7 +1205,7 @@ describe('App not-found route', () => {
       </MemoryRouter>,
     )
     // The page chunk is lazy — wait for it to resolve.
-    expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
     expect(document.querySelector('[data-mark="not-found"]')).toBeTruthy()
   })
 

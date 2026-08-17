@@ -70,13 +70,13 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     // Not yet deleted: the cleanup-completed screen has not been shown, and the
     // canvas row is still present in the store.
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list.length).toBeGreaterThan(0)
   })
 
   it('confirming deletion shows the cleanup-completed view and removes the canvas row', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await store.listCanvases()).map((c) => c.id)
+    const beforeIds = (await store.listDocuments()).map((c) => c.id)
     expect(beforeIds.length).toBeGreaterThan(0)
 
     const dialog = await openDeleteDialog()
@@ -87,7 +87,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listCanvases()).map((c) => c.id)
+    const afterIds = (await store.listDocuments()).map((c) => c.id)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }
@@ -145,7 +145,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
     let store = await renderLoaded()
-    const beforeIds = (await store.listCanvases()).map((c) => c.id)
+    const beforeIds = (await store.listDocuments()).map((c) => c.id)
 
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
@@ -198,7 +198,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listCanvases()).map((c) => c.id)
+    const afterIds = (await store.listDocuments()).map((c) => c.id)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }

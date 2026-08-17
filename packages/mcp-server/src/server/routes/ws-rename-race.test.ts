@@ -117,7 +117,7 @@ describe('handleWsUpgrade binary update vs rename race', () => {
 
     // Exactly one canvas must survive -- the update must not have silently
     // inserted a phantom duplicate back at the old path.
-    const canvases = await listDocuments('session1')
-    expect(canvases.map((c) => c.path)).toEqual(['b'])
+    const documents = await listDocuments('session1')
+    expect(documents.map((c) => c.path)).toEqual(['b'])
   })
 })

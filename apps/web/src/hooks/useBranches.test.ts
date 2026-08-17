@@ -13,13 +13,13 @@ import {
 describe('buildBranchUrls', () => {
   it('encodes hierarchical path with "/" safely', () => {
     const urls = buildBranchUrls('sess_1', '621/header')
-    expect(urls.list).toBe('/api/workspaces/sess_1/canvases/621%2Fheader/branches')
-    expect(urls.head).toBe('/api/workspaces/sess_1/canvases/621%2Fheader/head')
+    expect(urls.list).toBe('/api/workspaces/sess_1/documents/621%2Fheader/branches')
+    expect(urls.head).toBe('/api/workspaces/sess_1/documents/621%2Fheader/head')
     expect(urls.deleteBranch('feature')).toBe(
-      '/api/workspaces/sess_1/canvases/621%2Fheader/branches/feature',
+      '/api/workspaces/sess_1/documents/621%2Fheader/branches/feature',
     )
     expect(urls.merge('feature')).toBe(
-      '/api/workspaces/sess_1/canvases/621%2Fheader/branches/feature/merge',
+      '/api/workspaces/sess_1/documents/621%2Fheader/branches/feature/merge',
     )
   })
 })
@@ -110,7 +110,7 @@ describe('branchesApi', () => {
     const state = await api.list()
     expect(state.branches).toHaveLength(1)
     const firstCall = fetchMock.mock.calls[0]
-    expect(firstCall?.[0]).toBe('/api/workspaces/sess_1/canvases/canvas-a/branches')
+    expect(firstCall?.[0]).toBe('/api/workspaces/sess_1/documents/canvas-a/branches')
   })
 
   it('create() POSTs JSON body', async () => {
@@ -163,7 +163,7 @@ describe('branchesApi', () => {
     const api = branchesApi('sess_1', 'canvas-a')
     const result = await api.setHead('feature')
     expect(result).toEqual({ head: 'feature', previousHead: 'main' })
-    expect(fetchMock.mock.calls[0]![0]).toBe('/api/workspaces/sess_1/canvases/canvas-a/head')
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/workspaces/sess_1/documents/canvas-a/head')
     const headCall = fetchMock.mock.calls[0]
     const headInit = headCall?.[1] as RequestInit | undefined
     expect(headInit?.method).toBe('PUT')
@@ -194,7 +194,7 @@ describe('branchesApi', () => {
     const mergeCall = fetchMock.mock.calls[0]
     const url = mergeCall?.[0]
     const init2 = mergeCall?.[1] as RequestInit | undefined
-    expect(url).toBe('/api/workspaces/sess_1/canvases/canvas-a/branches/feature/merge')
+    expect(url).toBe('/api/workspaces/sess_1/documents/canvas-a/branches/feature/merge')
     expect(init2?.method).toBe('POST')
     expect(init2?.body).toBe(JSON.stringify({ into: 'main', dryRun: true }))
   })
@@ -443,7 +443,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
 
     const calls = fetchMock.mock.calls
     const lastCall = calls[calls.length - 1]
-    expect(lastCall?.[0]).toBe('/api/workspaces/sess_1/canvases/canvas-b/branches')
+    expect(lastCall?.[0]).toBe('/api/workspaces/sess_1/documents/canvas-b/branches')
   })
 
   it('discards in-flight canvas-a fetch when key changes to canvas-b before it resolves', async () => {

@@ -174,7 +174,7 @@ describe('LoroStore (real IndexedDB)', () => {
     expect(result.kind).toBe('corrupt-delta')
   })
 
-  it('legacy v1 JSON record in canvases store is not-found for LoroStore', async () => {
+  it('legacy v1 JSON record in documents store is not-found for LoroStore', async () => {
     // Seed a v1 JSON record into the legacy 'documents' store
     const db = await openLoroDb()
     await writeRaw(db, 'documents', 'legacy-canvas', {

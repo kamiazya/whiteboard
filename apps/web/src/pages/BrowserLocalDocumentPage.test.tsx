@@ -26,7 +26,7 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-// createCanvas seeds an empty Loro doc; the real LoroStore touches IndexedDB,
+// createDocument seeds an empty Loro doc; the real LoroStore touches IndexedDB,
 // which jsdom does not implement. A fake keeps these page-level tests scoped
 // to the switcher/create UI wiring, matching the controller test's own fake.
 class FakeLoroStore implements LoroStoreLike {
@@ -129,7 +129,7 @@ describe('BrowserLocalDocumentPage', () => {
       save: base.save.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalDocumentPage store={failingStore} />)
@@ -150,7 +150,7 @@ describe('BrowserLocalDocumentPage', () => {
       save: base.save.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalDocumentPage store={failingStore} />)
@@ -175,7 +175,7 @@ describe('BrowserLocalDocumentPage', () => {
       },
       del: base.del.bind(base),
       generateId: () => 'fresh-id',
-      listCanvases: async () => [],
+      listDocuments: async () => [],
     }
     await act(async () => {
       render(<BrowserLocalDocumentPage store={failingFreshStore} />)
@@ -291,7 +291,7 @@ describe('BrowserLocalDocumentPage', () => {
     // menu offers Duplicate enabled again.
     await openDocumentOpsMenu()
     expect((await documentOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list.filter((c) => c.name === 'untitled (copy)')).toHaveLength(1)
   })
 
@@ -427,7 +427,7 @@ describe('BrowserLocalDocumentPage', () => {
       },
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalDocumentPage store={failingSaveStore} />)
@@ -535,7 +535,7 @@ describe('BrowserLocalDocumentPage', () => {
     expect(screen.queryByRole('button', { name: /add rectangle/i })).toBeNull()
   })
 
-  it('lists all canvases in the switcher dropdown', async () => {
+  it('lists all documents in the switcher dropdown', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
@@ -582,11 +582,11 @@ describe('BrowserLocalDocumentPage', () => {
     expect(await store.getDefaultDocumentId()).toBe('c2')
   })
 
-  it('honors an explicit initialCanvasId prop over the store default canvas', async () => {
-    // This only proves the page itself respects initialCanvasId — it does NOT
-    // cover the URL->initialCanvasId wiring (App.tsx's parseBrowserLocalRoute),
+  it('honors an explicit initialDocumentId prop over the store default canvas', async () => {
+    // This only proves the page itself respects initialDocumentId — it does NOT
+    // cover the URL->initialDocumentId wiring (App.tsx's parseBrowserLocalRoute),
     // since the pathname and the prop are set independently here. See
-    // App.test.tsx's "derives initialCanvasId from the /local/:documentId URL"
+    // App.test.tsx's "derives initialDocumentId from the /local/:documentId URL"
     // test for that boundary.
     vi.useRealTimers()
     const store = new MemoryStore()
@@ -601,7 +601,11 @@ describe('BrowserLocalDocumentPage', () => {
     await act(async () => {
       rtlRender(
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalDocumentPage store={store} loro={new FakeLoroStore()} initialCanvasId="c2" />
+          <BrowserLocalDocumentPage
+            store={store}
+            loro={new FakeLoroStore()}
+            initialDocumentId="c2"
+          />
         </MemoryRouter>,
       )
     })
@@ -667,7 +671,7 @@ describe('BrowserLocalDocumentPage', () => {
     })
     const newId = await store.getDefaultDocumentId()
     expect(newId).not.toBe('c1')
-    const list = await store.listCanvases()
+    const list = await store.listDocuments()
     expect(list.map((c) => c.id)).toEqual(expect.arrayContaining(['c1', newId]))
   })
 
@@ -676,7 +680,7 @@ describe('BrowserLocalDocumentPage', () => {
     const base = new MemoryStore()
     await base.setDefaultDocumentId('c1')
     await base.save(snap)
-    // Fail the metadata save that createCanvas performs first, so createCanvas()
+    // Fail the metadata save that createDocument performs first, so createDocument()
     // rejects before ever calling switchDocument.
     let failNextSave = false
     const failingCreateStore: BrowserLocalStore = {
@@ -689,7 +693,7 @@ describe('BrowserLocalDocumentPage', () => {
       },
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
-      listCanvases: base.listCanvases.bind(base),
+      listDocuments: base.listDocuments.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalDocumentPage store={failingCreateStore} loro={new FakeLoroStore()} />)
@@ -699,7 +703,7 @@ describe('BrowserLocalDocumentPage', () => {
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     const newItem = await screen.findByTestId('new-document-menu-item')
     fireEvent.pointerUp(newItem)
-    // The rejection from createCanvas() must be caught and surfaced by
+    // The rejection from createDocument() must be caught and surfaced by
     // WorkspaceTopBar's own local-mode error channel, not left as an
     // unhandled promise rejection with the UI silently doing nothing.
     expect((await screen.findByRole('alert')).textContent).toBe('Failed to create canvas.')
@@ -708,7 +712,7 @@ describe('BrowserLocalDocumentPage', () => {
     expect(await failingCreateStore.getDefaultDocumentId()).toBe('c1')
   })
 
-  it('drops a stale listCanvases resolution that would otherwise clobber a newer refresh from a fast switch', async () => {
+  it('drops a stale listDocuments resolution that would otherwise clobber a newer refresh from a fast switch', async () => {
     const store = new MemoryStore()
     await store.setDefaultDocumentId('c1')
     vi.useRealTimers()
@@ -728,7 +732,7 @@ describe('BrowserLocalDocumentPage', () => {
       save: store.save.bind(store),
       del: store.del.bind(store),
       generateId: store.generateId.bind(store),
-      listCanvases: () => new Promise((resolve) => resolvers.push(resolve)),
+      listDocuments: () => new Promise((resolve) => resolvers.push(resolve)),
     }
 
     await act(async () => {
@@ -736,7 +740,7 @@ describe('BrowserLocalDocumentPage', () => {
     })
     await screen.findByLabelText('Canvas actions')
     // Resolve the initial mount's list refresh (generation 1) with both
-    // canvases, so the switcher has real options to switch between.
+    // documents, so the switcher has real options to switch between.
     await act(async () => {
       resolvers[0]!([
         snap,
@@ -750,7 +754,7 @@ describe('BrowserLocalDocumentPage', () => {
     })
 
     // Fast switch: c1 -> c2 -> c1. Each switch bumps the list-refresh
-    // generation but its listCanvases() call is left pending (deferred),
+    // generation but its listDocuments() call is left pending (deferred),
     // so two stale refreshes (generation 2 for c2, generation 3 for c1) end
     // up in flight at once.
     const switchTo = async (name: string) => {
@@ -817,7 +821,7 @@ describe('BrowserLocalDocumentPage', () => {
       save: store.save.bind(store),
       del: store.del.bind(store),
       generateId: store.generateId.bind(store),
-      listCanvases: () => new Promise((resolve) => resolvers.push(resolve)),
+      listDocuments: () => new Promise((resolve) => resolvers.push(resolve)),
     }
 
     await act(async () => {
@@ -987,7 +991,7 @@ describe('?new=canvas launch shortcut', () => {
       </MemoryRouter>,
     )
     await waitFor(async () => {
-      expect((await store.listCanvases()).length).toBe(2)
+      expect((await store.listDocuments()).length).toBe(2)
     })
     expect(window.location.search).not.toContain('new=canvas')
     window.history.replaceState(null, '', '/')
@@ -997,7 +1001,7 @@ describe('?new=canvas launch shortcut', () => {
     const store = new MemoryStore()
     render(<BrowserLocalDocumentPage store={store} loro={new FakeLoroStore()} />)
     await waitFor(async () => {
-      expect((await store.listCanvases()).length).toBe(1)
+      expect((await store.listDocuments()).length).toBe(1)
     })
   })
 
@@ -1021,7 +1025,7 @@ describe('?new=canvas launch shortcut', () => {
     )
     expect(window.location.search).not.toContain('new=canvas')
     await waitFor(async () => {
-      expect((await store.listCanvases()).length).toBe(1)
+      expect((await store.listDocuments()).length).toBe(1)
     })
     window.history.replaceState(null, '', '/')
   })

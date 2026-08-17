@@ -28,7 +28,7 @@ export function useDirtyState(workspaceId: string, path: string): UseDirtyStateR
   const changeCountRef = useRef(0)
   const savedAtRef = useRef(0)
 
-  // Reset counters when switching canvases; a new document starts clean.
+  // Reset counters when switching documents; a new document starts clean.
   useEffect(() => {
     changeCountRef.current = 0
     savedAtRef.current = 0

@@ -15,8 +15,8 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
@@ -41,8 +41,8 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
-    createCanvas: vi.fn(),
+    listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
@@ -57,7 +57,7 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
 const BODY = '# Hello from an agent'
 
@@ -70,13 +70,13 @@ function markdownSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements CanvasBackend {
+class FakeBackend implements DocumentBackend {
   readonly pushed: Uint8Array[] = []
   // The exact bytes the page hydrated from: the replay assertion must
   // import updates into the SAME doc lineage, not a structurally-equal
   // rebuild with different Loro op ids.
   snapshot: Uint8Array = new Uint8Array()
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     handlers.onConnected()
     this.snapshot = markdownSnapshot()
     handlers.onSnapshot(this.snapshot)
@@ -101,8 +101,8 @@ describe('DaemonDocumentPage markdown editing', () => {
   beforeEach(() => {
     window.localStorage.clear()
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
     })
   })
   afterEach(() => {

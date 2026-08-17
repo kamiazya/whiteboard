@@ -2,7 +2,7 @@ import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { loadDocument } from './document-io.js'
@@ -23,7 +23,7 @@ function node(id: string) {
 const EDGE = { id: 'e1', fromNode: 'a', toNode: 'b' } as const
 
 async function seedTwoNodes(store: FakeDocumentStore, kind: 'spatial' | 'markdown' = 'spatial') {
-  await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   await seedDoc(store, CANVAS_ID, (doc) => {
     writeDocumentKind(doc, kind)
     writeSpatialCanvas(doc, { nodes: [node('a'), node('b')], edges: [] })
@@ -49,7 +49,7 @@ describe('wb_edge_add', () => {
 
   test('keeps the edges already on the canvas', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, { nodes: [node('a'), node('b')], edges: [EDGE] })
@@ -67,7 +67,7 @@ describe('wb_edge_add', () => {
 
   test('refuses an id that is already taken rather than overwriting it', async () => {
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, { nodes: [node('a'), node('b')], edges: [EDGE] })

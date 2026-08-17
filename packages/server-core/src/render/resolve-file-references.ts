@@ -77,7 +77,7 @@ export async function resolveFileReferences(
         if (entry === null) return
 
         const snapshot = await deps.documentStore.loadSnapshot({
-          docRef: { kind: 'canvas', documentId: entry.documentId },
+          docRef: { kind: 'document', documentId: entry.documentId },
         })
         if (snapshot === null) {
           if (entry.name !== undefined) resolved.set(ref, { label: entry.name })

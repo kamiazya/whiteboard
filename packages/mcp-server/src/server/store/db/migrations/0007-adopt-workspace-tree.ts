@@ -216,7 +216,7 @@ async function readStoredKind(
   db: Kysely<MigrationSchema>,
   canvasId: string,
 ): Promise<string | null> {
-  const doc = await loadStoredDoc(db, `canvas:${canvasId}`)
+  const doc = await loadStoredDoc(db, `document:${canvasId}`)
   if (doc === null) return null
   const kind = doc.getMap('document').get('kind')
   return kind === 'spatial' || kind === 'markdown' ? kind : null

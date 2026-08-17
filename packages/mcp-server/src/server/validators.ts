@@ -172,7 +172,7 @@ export function validateBranchName(name: string): string {
   return name
 }
 
-export function validateCanvasId(id: string): string {
+export function validateDocumentId(id: string): string {
   return validateSafeIdentifier(id, 'canvas id')
 }
 

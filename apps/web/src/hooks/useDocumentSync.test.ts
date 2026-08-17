@@ -2,7 +2,7 @@
  * useDocumentSync unit tests — jsdom layer.
  *
  * No Excalidraw mocking: the hook's whole surface is now SpatialCanvas +
- * EditorCommand, driven by a fake CanvasBackend. Per-connection ordering/
+ * EditorCommand, driven by a fake DocumentBackend. Per-connection ordering/
  * drain semantics (commit chain, pendingCommitCount, fine-grained writes) are
  * exercised at the nearer document-sync-session.test.ts layer; this file
  * covers the hook's own React wiring: canvas state, subscribe/dispose,
@@ -12,8 +12,8 @@
 
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -26,12 +26,12 @@ import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
 import { type UseDocumentSyncResult, useDocumentSync } from './useDocumentSync.js'
 
 type FakeBackendControl = {
-  handlers: CanvasBackendHandlers | null
+  handlers: DocumentBackendHandlers | null
   disconnectCalled: boolean
   pushLocalUpdateCalls: Uint8Array[]
 }
 
-function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
+function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
   const ctrl: FakeBackendControl = {
     handlers: null,
     disconnectCalled: false,
@@ -199,7 +199,7 @@ describe('useDocumentSync', () => {
     const backendA = makeFakeBackend()
     const backendB = makeFakeBackend()
     const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: backendA as CanvasBackend },
+      initialProps: { backend: backendA as DocumentBackend },
     })
 
     await hydrate(backendA, TEXT_CANVAS)
@@ -222,7 +222,7 @@ describe('useDocumentSync', () => {
   it('clears the locked set when the backend goes away', async () => {
     const backend = makeFakeBackend()
     const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: backend as CanvasBackend | null },
+      initialProps: { backend: backend as DocumentBackend | null },
     })
 
     await hydrate(backend, TEXT_CANVAS)
@@ -239,7 +239,7 @@ describe('useDocumentSync', () => {
 
   it('does not connect when backend is null, and onChange is a safe no-op', () => {
     const { result } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: null as CanvasBackend | null },
+      initialProps: { backend: null as DocumentBackend | null },
     })
 
     expect(result.current.syncStatus).toBe('idle')
@@ -250,7 +250,7 @@ describe('useDocumentSync', () => {
 
   it('undo/redo keyboard shortcuts are safe no-ops when backend is null', () => {
     const { result } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: null as CanvasBackend | null },
+      initialProps: { backend: null as DocumentBackend | null },
     })
 
     expect(dispatchCtrlZ).not.toThrow()
@@ -273,7 +273,7 @@ describe('useDocumentSync', () => {
   it('connects when backend changes from null to a real backend', () => {
     const backend = makeFakeBackend()
     const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: null as CanvasBackend | null },
+      initialProps: { backend: null as DocumentBackend | null },
     })
 
     expect(result.current.syncStatus).toBe('idle')
@@ -287,12 +287,12 @@ describe('useDocumentSync', () => {
   it('sets syncStatus to "error" and does not resurrect A when switching to a backend whose connect fails', () => {
     const backendA = makeFakeBackend()
     const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-      initialProps: { backend: backendA as CanvasBackend },
+      initialProps: { backend: backendA as DocumentBackend },
     })
 
     expect(result.current.syncStatus).toBe('connected')
 
-    const failingBackend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+    const failingBackend: DocumentBackend & { _ctrl: FakeBackendControl } = {
       _ctrl: { handlers: null, disconnectCalled: false, pushLocalUpdateCalls: [] },
       connect(handlers) {
         handlers.onError?.('storage-failure')
@@ -342,7 +342,7 @@ describe('useDocumentSync', () => {
       const { rerender } = renderHook(
         ({ backend }) => useDocumentSync(backend, { onVersionCreated }),
         {
-          initialProps: { backend: backendA as CanvasBackend },
+          initialProps: { backend: backendA as DocumentBackend },
         },
       )
 
@@ -395,7 +395,7 @@ describe('useDocumentSync', () => {
       const backendA = makeFakeBackend()
       const backendB = makeFakeBackend()
       const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-        initialProps: { backend: backendA as CanvasBackend },
+        initialProps: { backend: backendA as DocumentBackend },
       })
 
       act(() => {
@@ -442,7 +442,7 @@ describe('useDocumentSync', () => {
       const backendA = makeFakeBackend()
       const backendB = makeFakeBackend()
       const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
-        initialProps: { backend: backendA as CanvasBackend },
+        initialProps: { backend: backendA as DocumentBackend },
       })
 
       const staleHandlers = backendA._ctrl.handlers!

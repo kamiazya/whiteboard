@@ -101,7 +101,7 @@ interface BrowserLocalDocumentPageProps {
   // A canvas id requested by the URL at mount (e.g. a bookmarked
   // /local/:documentId deep link), read once — see
   // useBrowserLocalDocumentController's own contract for the same parameter.
-  initialCanvasId?: string
+  initialDocumentId?: string
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -109,7 +109,7 @@ interface BrowserLocalDocumentPageProps {
 
 /**
  * The canvas name as a TITLE. `untitled` is the store's sentinel for an
- * unnamed canvas (`renameCanvas` normalises a cleared name to it), so it
+ * unnamed canvas (`renameDocument` normalises a cleared name to it), so it
  * becomes the empty string here and the title box falls back to its
  * placeholder rather than showing the sentinel as a real name.
  */
@@ -121,7 +121,7 @@ export function BrowserLocalDocumentPage({
   store,
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
-  initialCanvasId,
+  initialDocumentId,
 }: BrowserLocalDocumentPageProps) {
   const {
     loro: resolvedLoro,
@@ -131,12 +131,12 @@ export function BrowserLocalDocumentPage({
     cleanupError,
     triggerCleanup,
     startFresh,
-    renameCanvas,
-    listCanvases,
-    createCanvas,
+    renameDocument,
+    listDocuments,
+    createDocument,
     switchDocument,
     duplicateDocument,
-  } = useBrowserLocalDocumentController(store, loro, initialCanvasId)
+  } = useBrowserLocalDocumentController(store, loro, initialDocumentId)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -217,7 +217,7 @@ export function BrowserLocalDocumentPage({
   // create-then-switch, and edits to the current row reflecting in the list).
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
-  const [canvases, setCanvases] = useState<DocumentSnapshot[]>([])
+  const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
   const listGenerationRef = useRef(0)
   // A ref that matches no live canvas id points at a deleted canvas: the
   // editor renders a quiet "Missing reference" and hides the follow
@@ -225,16 +225,16 @@ export function BrowserLocalDocumentPage({
   // the file store, not this list; undefined while the list has not loaded
   // keeps everything ordinary.
   const missingFileRef = useMemo(() => {
-    if (canvases.length === 0) return undefined
-    const known = new Set(canvases.map((entry) => entry.id))
+    if (documents.length === 0) return undefined
+    const known = new Set(documents.map((entry) => entry.id))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
-  }, [canvases])
+  }, [documents])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
-  const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
+  const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
   // Binds CodeMirror straight to the document's 'body' text container:
@@ -254,7 +254,7 @@ export function BrowserLocalDocumentPage({
   // [[Name]] resolution for the markdown preview: display names from the
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
-  const resolveAlias = useMemo(() => createSnapshotAliasResolver(canvases), [canvases])
+  const resolveAlias = useMemo(() => createSnapshotAliasResolver(documents), [documents])
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
     body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
@@ -263,7 +263,7 @@ export function BrowserLocalDocumentPage({
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
-  // /canvas/:workspaceId/:path contract). This page only mounts on
+  // /document/:workspaceId/:path contract). This page only mounts on
   // /local/:documentId (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
   // exists for the stale-deep-link case: a bookmarked id that no longer
@@ -306,10 +306,10 @@ export function BrowserLocalDocumentPage({
   useEffect(() => {
     if (documentId === null) return
     const requestedId = parseBrowserLocalRoute(location.pathname)?.documentId
-    const lastKnownCanvasId = lastKnownCanvasIdRef.current
+    const lastKnownDocumentId = lastKnownCanvasIdRef.current
     lastKnownCanvasIdRef.current = documentId
     if (requestedId === undefined || requestedId === documentId) return
-    if (requestedId === lastKnownCanvasId) return
+    if (requestedId === lastKnownDocumentId) return
     void switchDocument(requestedId).then((switched) => {
       // A stale deep link (deleted/unknown canvas) is a recoverable miss:
       // keep the loaded canvas and repair the address bar instead of
@@ -322,17 +322,17 @@ export function BrowserLocalDocumentPage({
   useEffect(() => {
     if (documentId === null) return
     const generation = ++listGenerationRef.current
-    listCanvases()
+    listDocuments()
       .then((list) => {
         if (generation !== listGenerationRef.current) return
-        setCanvases(list)
+        setDocuments(list)
       })
       .catch((err: unknown) => {
         // A stale/failed list refresh must not surface as an unhandled
         // rejection; the switcher just keeps showing its last-known list.
-        log.error('listCanvases failed', err)
+        log.error('listDocuments failed', err)
       })
-  }, [documentId, currentUpdatedAt, listCanvases])
+  }, [documentId, currentUpdatedAt, listDocuments])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged. A markdown canvas
@@ -371,7 +371,7 @@ export function BrowserLocalDocumentPage({
 
   // Export rides the canvas row's operations kebab on this page (the top
   // bar keeps its export only in daemon mode, which has no canvas row).
-  const documentOpsFilenameBase = sanitizeExportFilenameBase(canvasName ?? 'canvas')
+  const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
   const { exportError, handleExport } = useSceneExport({
     onExport: exportScene,
     filenameBase: documentOpsFilenameBase,
@@ -385,14 +385,14 @@ export function BrowserLocalDocumentPage({
     canvas,
     adapter: BROWSER_LOCAL_FILE_ADAPTER,
     stampOf: useMemo(
-      () => new Map(canvases.map((entry) => [entry.id, entry.updatedAt])),
-      [canvases],
+      () => new Map(documents.map((entry) => [entry.id, entry.updatedAt])),
+      [documents],
     ),
   })
 
   const commands = useWhiteboardCommands({
     provider: { kind: 'browser-local', capabilities },
-    canvas: documentId !== null ? { documentId, name: canvasName ?? '' } : null,
+    canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
   })
 
   // Read once at mount: the routed /settings page is the only place this
@@ -424,11 +424,11 @@ export function BrowserLocalDocumentPage({
       window.location.pathname + (rest ? `?${rest}` : ''),
     )
     // Fire-and-forget: the failure path already rolls back inside
-    // createCanvas, so the shortcut degrades to a plain load.
-    createCanvas().catch((err) => {
+    // createDocument, so the shortcut degrades to a plain load.
+    createDocument().catch((err) => {
       log.error('launcher shortcut create failed', err)
     })
-  }, [createCanvas])
+  }, [createDocument])
 
   // Tab favicon: persistence state as the status dot (degraded reads as
   // offline — data is at risk either way), scene content as the minimap.
@@ -460,13 +460,13 @@ export function BrowserLocalDocumentPage({
   // than from the list: the list read races the save that a rename queues, and
   // a read that resolves first pins the pre-rename name with nothing left to
   // schedule another refresh. The snapshot is this canvas's live truth; the
-  // list is only the copy the switcher reads for the OTHER canvases.
+  // list is only the copy the switcher reads for the OTHER documents.
   const switcherOptions =
     pageState.kind === 'editing'
-      ? canvases.some((c) => c.id === pageState.snapshot.id)
-        ? canvases.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
-        : [...canvases, pageState.snapshot]
-      : canvases
+      ? documents.some((c) => c.id === pageState.snapshot.id)
+        ? documents.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
+        : [...documents, pageState.snapshot]
+      : documents
 
   if (pageState.kind === 'load-degraded') {
     return (
@@ -619,7 +619,7 @@ export function BrowserLocalDocumentPage({
   // export. Both kinds share this — the same callback for both mount sites
   // below is the point, not a coincidence.
   const onTitleChange = (next: string) => {
-    void renameCanvas(next).catch(() => {
+    void renameDocument(next).catch(() => {
       // Surfaced through persistence state, which the save chip beside this
       // box already renders.
     })
@@ -636,7 +636,7 @@ export function BrowserLocalDocumentPage({
           key={documentId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
-          title={titleOf(canvasName)}
+          title={titleOf(documentName)}
           onTitleChange={onTitleChange}
           facets={markdownDoc.coreFacets}
           onFacetsChange={markdownDoc.setCoreFacets}
@@ -654,7 +654,7 @@ export function BrowserLocalDocumentPage({
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
-        title={titleOf(canvasName)}
+        title={titleOf(documentName)}
         onTitleChange={onTitleChange}
       />
     )
@@ -691,7 +691,7 @@ export function BrowserLocalDocumentPage({
             <WorkspaceTopBar
               // Local mode names documents through its own store, not through
               // the daemon's `/names`, so the identity the bar offers is unused
-              // here and `canvasName`/`onTitleChange` stay the source.
+              // here and `documentName`/`onTitleChange` stay the source.
               titleSlot={() => documentTitleSlot}
               statusSlot={
                 <ConnectionStatus state="local">
@@ -710,19 +710,19 @@ export function BrowserLocalDocumentPage({
               dataMode="local"
               workspaceId="local"
               path={pageState.snapshot.id}
-              canvases={switcherOptions.map((c) => ({
+              documents={switcherOptions.map((c) => ({
                 path: c.id,
                 name: c.name,
                 updatedAt: c.updatedAt,
               }))}
               onNavigateToDocument={(id) => void switchDocument(id)}
-              onRenameDocument={renameCanvas}
+              onRenameDocument={renameDocument}
               onCreateDocument={async () => {
-                const created = await createCanvas()
+                const created = await createDocument()
                 await switchDocument(created.id)
               }}
               onCreateMarkdownCanvas={async () => {
-                const created = await createCanvas(undefined, 'markdown')
+                const created = await createDocument(undefined, 'markdown')
                 await switchDocument(created.id)
               }}
               isFullscreen={isFullscreen}
@@ -748,7 +748,7 @@ export function BrowserLocalDocumentPage({
           </Suspense>
         )}
       </div>
-      {/* The snapshot's kind picks the editor: markdown canvases open the
+      {/* The snapshot's kind picks the editor: markdown documents open the
           markdown editor (body and OKF core facets persisted as containers
           of one Loro document — see use-markdown-document.ts), everything
           else the spatial editor. */}
@@ -780,7 +780,7 @@ export function BrowserLocalDocumentPage({
                   autoFocus: true,
                   theme: resolvedTheme,
                   meta: markdownDoc.coreFacets,
-                  title: titleOf(canvasName),
+                  title: titleOf(documentName),
                   resolveAlias,
                   onOpenDocument: (id) => navigate(browserLocalDocumentPath(id)),
                   resolveEmbed,
@@ -792,7 +792,7 @@ export function BrowserLocalDocumentPage({
                 {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                   gesture and open text editor all describe ONE canvas, and
                   `SpatialCanvas` carries no id for the editor to notice a
-                  switch by. Without the key, switching canvases silently
+                  switch by. Without the key, switching documents silently
                   inherits the previous canvas's viewport. (The markdown
                   branch keys for the same reason.) */}
                 <SpatialEditor
@@ -814,7 +814,7 @@ export function BrowserLocalDocumentPage({
                   theme={resolvedTheme}
                   // File-node reference = browser-local canvas id; the current
                   // canvas is excluded (a self-reference card is pure noise).
-                  fileRefOptions={canvases
+                  fileRefOptions={documents
                     .filter((entry) => entry.id !== documentId)
                     .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
                   onOpenFileRef={(file) => navigate(browserLocalDocumentPath(file))}
@@ -837,7 +837,7 @@ export function BrowserLocalDocumentPage({
             </div>
           )}
         />
-        {/* Markdown canvases keep CodeMirror's own history (its keymap
+        {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
       </div>

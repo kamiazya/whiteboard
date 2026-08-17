@@ -1,7 +1,7 @@
 /**
- * S-C1 multi-canvas foundation (real IndexedDB): listCanvases / createCanvas /
+ * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createDocument /
  * switchDocument against the real IndexedDBStore + LoroStore, proving id-addressed
- * isolation between canvases rather than relying on the fake-indexeddb node tests.
+ * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
@@ -35,7 +35,7 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     await clearDb()
   })
 
-  it('createCanvas twice persists both, and listCanvases returns both by their real id', async () => {
+  it('createDocument twice persists both, and listDocuments returns both by their real id', async () => {
     const store = new IndexedDBStore()
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -44,26 +44,26 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createCanvas('Canvas A')).id
+      idA = (await result.current.createDocument('Canvas A')).id
     })
     await act(async () => {
-      idB = (await result.current.createCanvas('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).id
     })
 
-    const list = await result.current.listCanvases()
+    const list = await result.current.listDocuments()
     const ids = list.map((c) => c.id)
     expect(ids).toContain(idA)
     expect(ids).toContain(idB)
     expect(list.find((c) => c.id === idA)?.name).toBe('Canvas A')
     expect(list.find((c) => c.id === idB)?.name).toBe('Canvas B')
 
-    // createCanvas seeds an empty Loro doc so a switch onto a never-edited
+    // createDocument seeds an empty Loro doc so a switch onto a never-edited
     // canvas delivers a valid empty doc rather than not-found.
     expect((await loro.load(idA)).kind).toBe('ok')
     expect((await loro.load(idB)).kind).toBe('ok')
   })
 
-  it('two canvases hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
+  it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
     const store = new IndexedDBStore()
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -72,10 +72,10 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createCanvas('Canvas A')).id
+      idA = (await result.current.createDocument('Canvas A')).id
     })
     await act(async () => {
-      idB = (await result.current.createCanvas('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).id
     })
 
     await loro.save(idA, snapshotWithElements([{ id: 'rect-a', type: 'rectangle' }]))
@@ -104,7 +104,7 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
 
     let idB = ''
     await act(async () => {
-      idB = (await result.current.createCanvas('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).id
     })
 
     await act(async () => {

@@ -5,7 +5,7 @@ import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
 
 // A document's blob has always lived at
-// `{dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro`. The `canvas`
+// `{dataDir}/blobs/{workspaceId}/document/{documentId}.loro`. The `canvas`
 // segment names the CONTAINER, which ADR-0009 calls a Document — the same
 // violation 0009 and 0010 removed from the database. It survived those two
 // because it is a stored LAYOUT rather than a column: correcting it means

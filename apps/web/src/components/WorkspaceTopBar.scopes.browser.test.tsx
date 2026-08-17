@@ -25,7 +25,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="local"
         path="my-canvas"
-        canvases={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
+        documents={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
         onNavigateToDocument={() => {}}
         {...props}
       />

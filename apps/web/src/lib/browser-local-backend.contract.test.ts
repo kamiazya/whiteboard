@@ -1,13 +1,13 @@
 /**
- * The browser-local implementation against the shared CanvasBackend contract.
+ * The browser-local implementation against the shared DocumentBackend contract.
  * Its transport siblings run the same cases from mcp-server, where they live.
  *
  * In-memory stores rather than real IndexedDB: the contract is about what a
  * caller of the port may rely on, and the persistence layer has its own
  * browser-mode suite (`browser-local-backend.browser.test.tsx`).
  */
-import type { CanvasBackendHarness } from '@kamiazya/whiteboard-mcp/canvas-backend-contract-suite'
-import { canvasBackendContract } from '@kamiazya/whiteboard-mcp/canvas-backend-contract-suite'
+import type { DocumentBackendHarness } from '@kamiazya/whiteboard-mcp/document-backend-contract-suite'
+import { documentBackendContract } from '@kamiazya/whiteboard-mcp/document-backend-contract-suite'
 import { describe } from 'vitest'
 import { BrowserLocalBackend } from './browser-local-backend.js'
 import type { DocumentFileStore } from './document-file-store.js'
@@ -43,8 +43,8 @@ function createStores(written: Uint8Array[]) {
   return { store, fileStore }
 }
 
-describe('CanvasBackend contract: BrowserLocalBackend', () => {
-  canvasBackendContract((): CanvasBackendHarness => {
+describe('DocumentBackend contract: BrowserLocalBackend', () => {
+  documentBackendContract((): DocumentBackendHarness => {
     const written: Uint8Array[] = []
     const { store, fileStore } = createStores(written)
     const backend = new BrowserLocalBackend('canvas-a', store, fileStore)

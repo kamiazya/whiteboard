@@ -22,7 +22,7 @@ export async function upsertWorkspaceRow(db: Database, workspaceId: string): Pro
 
 // Look up the stable canvas id for (workspaceId, path). Returns null when
 // the canvas does not exist; callers that want to create it should use
-// upsertCanvasRow.
+// upsertDocumentRow.
 export async function getDocumentIdByPath(
   db: Database,
   workspaceId: string,
@@ -37,11 +37,11 @@ export async function getDocumentIdByPath(
   return row?.id ?? null
 }
 
-// Look up or create the canvases row for (workspaceId, path). Returns the
+// Look up or create the documents row for (workspaceId, path). Returns the
 // stable canvas id child tables FK on. The displayName / pin fields are left
 // at their existing values when the row already exists, matching the previous
 // "upsert without overwriting names" semantics.
-export async function upsertCanvasRow(
+export async function upsertDocumentRow(
   db: Database,
   workspaceId: string,
   path: string,

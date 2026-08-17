@@ -124,14 +124,14 @@ describe('createApp daemon mutation auth', () => {
     const debugRes = await app.request('/api/debug')
     expect(debugRes.status).toBe(401)
 
-    const createRes = await app.request('/api/workspaces/session1/canvases', {
+    const createRes = await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'demo' }),
     })
     expect(createRes.status).toBe(401)
 
-    const authedCreateRes = await app.request('/api/workspaces/session1/canvases', {
+    const authedCreateRes = await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('redirects every non-/pair UI path to the official hosted app', async () => {
     const app = createApp(createRuntimeOptions('secret'))
-    for (const path of ['/', '/canvas/session1/demo', '/local/abc', '/w/ws/c/alias']) {
+    for (const path of ['/', '/document/session1/demo', '/local/abc', '/w/ws/c/alias']) {
       const res = await app.request(path)
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('https://kamiazya-whiteboard.pages.dev/')
@@ -786,29 +786,29 @@ describe('createApp daemon mutation auth', () => {
 
   // The "PUT /head surfaces current canvas corruption" assertion relied on
   // pre-populating the canvas .loro on the legacy filesystem path before any
-  // doc-cache / branches write. Now that canvases live under blobs/ and the
+  // doc-cache / branches write. Now that documents live under blobs/ and the
   // branches metadata + canvas snapshot can race the doc-cache, the precise
   // 500 propagation needs a dedicated harness. Re-add as a follow-up once the
   // version-store conversion lands and the cache invalidation path is settled.
 
   it('PUT /head rejects invalid target tip and does not change head', async () => {
     const { saveDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
     await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const feature = state.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = 'not-a-valid-tip'
-    await saveCanvasBranches('session1', 'canvas-a', state)
-    const before = await loadCanvasBranches('session1', 'canvas-a')
+    await saveDocumentBranches('session1', 'canvas-a', state)
+    const before = await loadDocumentBranches('session1', 'canvas-a')
 
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
@@ -819,28 +819,28 @@ describe('createApp daemon mutation auth', () => {
       error: 'corrupt_stored_data',
       message: expect.stringContaining('checkout-target'),
     })
-    await expect(loadCanvasBranches('session1', 'canvas-a')).resolves.toEqual(before)
+    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
   })
 
   it('merge preview rejects invalid source tip without mutating branches', async () => {
     const { saveDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
     await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const feature = state.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = 'not-a-valid-tip'
-    await saveCanvasBranches('session1', 'canvas-a', state)
-    const before = await loadCanvasBranches('session1', 'canvas-a')
+    await saveDocumentBranches('session1', 'canvas-a', state)
+    const before = await loadDocumentBranches('session1', 'canvas-a')
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -853,13 +853,13 @@ describe('createApp daemon mutation auth', () => {
       error: 'corrupt_stored_data',
       message: expect.stringContaining('feature'),
     })
-    await expect(loadCanvasBranches('session1', 'canvas-a')).resolves.toEqual(before)
+    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
   })
 
   it('merge commit rejects invalid into tip without mutating live doc or branch tips', async () => {
     const { clearCache } = await import('./store/doc-cache.js')
     const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
     const doc = new LoroDoc()
@@ -870,19 +870,19 @@ describe('createApp daemon mutation auth', () => {
     doc.commit()
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!
     main.tipFrontiers = 'not-a-valid-tip'
-    await saveCanvasBranches('session1', 'canvas-a', state)
-    const before = await loadCanvasBranches('session1', 'canvas-a')
+    await saveDocumentBranches('session1', 'canvas-a', state)
+    const before = await loadDocumentBranches('session1', 'canvas-a')
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -895,7 +895,7 @@ describe('createApp daemon mutation auth', () => {
       error: 'corrupt_stored_data',
       message: expect.stringContaining('main'),
     })
-    await expect(loadCanvasBranches('session1', 'canvas-a')).resolves.toEqual(before)
+    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
 
     clearCache()
     const reloaded = await loadDocument('session1', 'canvas-a')
@@ -912,14 +912,14 @@ describe('createApp daemon mutation auth', () => {
     const doc = new LoroDoc()
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -959,14 +959,14 @@ describe('createApp daemon mutation auth', () => {
     })
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1003,14 +1003,14 @@ describe('createApp daemon mutation auth', () => {
     })
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1036,7 +1036,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {
     const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const app = createApp(createRuntimeOptions())
 
     const doc = makeSpatialDoc({
@@ -1048,7 +1048,7 @@ describe('createApp daemon mutation auth', () => {
     })
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -1057,10 +1057,10 @@ describe('createApp daemon mutation auth', () => {
     // Pin feature's tip to the pre-deletion state so it stops tracking the
     // live doc (an empty tipFrontiers always resolves to the live doc).
     const pinnedTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const feature = state.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = pinnedTip
-    await saveCanvasBranches('session1', 'canvas-a', state)
+    await saveDocumentBranches('session1', 'canvas-a', state)
 
     // Main (the live doc, still HEAD) deletes A.
     const mainDoc = await loadDocument('session1', 'canvas-a')
@@ -1068,7 +1068,7 @@ describe('createApp daemon mutation auth', () => {
     await saveDocument('session1', 'canvas-a', mainDoc, { overwrite: true })
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1083,7 +1083,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('committed merge returns newElementIds/changedElementIds derived from the nodes model', async () => {
     const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const { writeSpatialNode } = await import('@kamiazya/whiteboard-loro-adapter')
 
     const app = createApp(createRuntimeOptions())
@@ -1094,7 +1094,7 @@ describe('createApp daemon mutation auth', () => {
     })
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -1102,10 +1102,10 @@ describe('createApp daemon mutation auth', () => {
 
     // Pin main to the A-only state so it stops tracking the live doc.
     const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!
     main.tipFrontiers = mainOnlyTip
-    await saveCanvasBranches('session1', 'canvas-a', state)
+    await saveDocumentBranches('session1', 'canvas-a', state)
 
     // Reload (a fresh doc instance importing the same history) and add C on
     // top — this is what feature's tip below points at, and what becomes
@@ -1123,13 +1123,13 @@ describe('createApp daemon mutation auth', () => {
     await saveDocument('session1', 'canvas-a', withC, { overwrite: true })
 
     const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
-    const afterAddC = await loadCanvasBranches('session1', 'canvas-a')
+    const afterAddC = await loadDocumentBranches('session1', 'canvas-a')
     const feature = afterAddC.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = featureTip
-    await saveCanvasBranches('session1', 'canvas-a', afterAddC)
+    await saveDocumentBranches('session1', 'canvas-a', afterAddC)
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1145,7 +1145,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
     const { saveDocument } = await import('./store/document-store.js')
-    const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
     const { writeSpatialNode } = await import('@kamiazya/whiteboard-loro-adapter')
 
     const app = createApp(createRuntimeOptions())
@@ -1158,7 +1158,7 @@ describe('createApp daemon mutation auth', () => {
     await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
     const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -1195,15 +1195,15 @@ describe('createApp daemon mutation auth', () => {
     forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
     await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
 
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!
     main.tipFrontiers = mainTip
     const feature = state.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = sourceTip
-    await saveCanvasBranches('session1', 'canvas-a', state)
+    await saveDocumentBranches('session1', 'canvas-a', state)
 
     const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1283,7 +1283,7 @@ describe('createApp daemon mutation auth', () => {
 
     it('rejects an OPTIONS preflight with a spoofed non-loopback Host with 403 before any CORS short-circuit', async () => {
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/canvases', {
+      const res = await app.request('/api/workspaces/session1/documents', {
         method: 'OPTIONS',
         headers: { Host: 'evil.example', Origin: 'http://localhost:5173' },
       })
@@ -1292,7 +1292,7 @@ describe('createApp daemon mutation auth', () => {
 
     it('cross-origin loopback POST to a mutation route without Authorization returns 401 (auth ordering)', async () => {
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/canvases', {
+      const res = await app.request('/api/workspaces/session1/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1305,7 +1305,7 @@ describe('createApp daemon mutation auth', () => {
 
     it('OPTIONS preflight for a mutation route returns 204 with CORS+PNA headers', async () => {
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/canvases', {
+      const res = await app.request('/api/workspaces/session1/documents', {
         method: 'OPTIONS',
         headers: { Origin: 'http://localhost:5173' },
       })
@@ -1400,7 +1400,7 @@ describe('createApp daemon mutation auth', () => {
 
     it('mutation route from an allowlisted hosted origin without Bearer still 401s', async () => {
       const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/workspaces/session1/canvases', {
+      const res = await app.request('/api/workspaces/session1/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1642,8 +1642,8 @@ describe('createApp daemon mutation auth', () => {
       // getStatus() also computes app.buildPresent via a synchronous
       // existsSync() the real http-server.ts implementation performs.
       const callsBeforeRequests = getStatus.mock.calls.length
-      await app.request('/canvas/session1/demo')
-      await app.request('/canvas/session2/other')
+      await app.request('/document/session1/demo')
+      await app.request('/document/session2/other')
       await app.request('/')
       expect(getStatus.mock.calls.length).toBe(callsBeforeRequests)
     })

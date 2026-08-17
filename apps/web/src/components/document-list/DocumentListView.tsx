@@ -83,7 +83,7 @@ export function DocumentListView({
         {/* The signature as a faint watermark: an empty gallery is the
             blank board, not an error — the mark stays quiet (BRAND.md). */}
         <EmptyMark className="text-muted-foreground/30" />
-        <p className="text-sm font-medium">No canvases yet</p>
+        <p className="text-sm font-medium">No documents yet</p>
         {/* Arrivals from a shared link have no other page to learn from, so
             the empty board is where the product introduces itself: what a
             canvas holds, and where the work lives. */}
@@ -108,8 +108,8 @@ export function DocumentListView({
       <div className="flex items-center gap-2">
         <input
           type="search"
-          aria-label="Search canvases"
-          placeholder="Search canvases…"
+          aria-label="Search documents"
+          placeholder="Search documents…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-md border bg-background px-2 py-1 text-sm"
@@ -157,7 +157,7 @@ export function DocumentListView({
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No canvases match.</p>
+        <p className="text-sm text-muted-foreground">No documents match.</p>
       ) : null}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {visible.map((row) => (

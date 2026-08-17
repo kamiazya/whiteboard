@@ -37,20 +37,20 @@ describe('DocumentListView', () => {
     expect(within(cards[0]!).getByText('Alpha')).toBeTruthy()
     expect(within(cards[1]!).getByText('Notes')).toBeTruthy()
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search canvases' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
       target: { value: 'alp' },
     })
     expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
     expect(screen.getByText('Alpha')).toBeTruthy()
   })
 
-  it('says "No canvases match." when search filters everything out', () => {
+  it('says "No documents match." when search filters everything out', () => {
     renderList()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search canvases' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
       target: { value: 'zzz' },
     })
     expect(screen.queryAllByTestId('document-list-card')).toHaveLength(0)
-    expect(screen.getByText('No canvases match.')).toBeTruthy()
+    expect(screen.getByText('No documents match.')).toBeTruthy()
   })
 
   it('createDisabled reaches menu items already open when the busy state flips', async () => {
@@ -187,7 +187,7 @@ describe('DocumentListView — branded empty state', () => {
       <DocumentListView rows={[]} onCreate={() => {}} onOpen={() => {}} renderThumb={() => null} />,
     )
     expect(document.querySelector('[data-mark="empty-squiggle"]')).toBeTruthy()
-    expect(screen.getByText('No canvases yet')).toBeTruthy()
+    expect(screen.getByText('No documents yet')).toBeTruthy()
   })
 })
 

@@ -26,12 +26,12 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
   useEffect(() => {
     let cancelled = false
     store
-      .listCanvases()
+      .listDocuments()
       .then((all) => {
         if (!cancelled) setSnapshots(all)
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load canvases from this browser.')
+        if (!cancelled) setError('Failed to load documents from this browser.')
       })
     return () => {
       cancelled = true
@@ -68,7 +68,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       // pointer resumes into, the pointer dangles deliberately — the
       // editor's resume path already falls back safely on a dead id.
       await store.removeDocument?.(pendingDelete.id)
-      setSnapshots(await store.listCanvases())
+      setSnapshots(await store.listDocuments())
       setPendingDelete(null)
     } catch {
       setDeleteError('Failed to delete the canvas from this browser.')
@@ -113,7 +113,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       {snapshots === null && !error ? (
         <div
           role="status"
-          aria-label="Loading canvases"
+          aria-label="Loading documents"
           className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
         >
           {[0, 1, 2, 3].map((i) => (

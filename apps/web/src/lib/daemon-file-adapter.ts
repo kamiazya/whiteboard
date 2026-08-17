@@ -46,7 +46,7 @@ export function createDaemonFileAdapter({
   resolveRefPath,
 }: DaemonFileAdapterOptions): DocumentFileAdapter {
   const canvasPath = (target: string) =>
-    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/canvas/${encodeURIComponent(target)}`
+    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/document/${encodeURIComponent(target)}`
 
   return {
     isImageRef,

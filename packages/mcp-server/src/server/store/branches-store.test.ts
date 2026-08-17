@@ -16,8 +16,8 @@ vi.mock('../config.js', () => ({
 }))
 
 const {
-  loadCanvasBranches,
-  saveCanvasBranches,
+  loadDocumentBranches,
+  saveDocumentBranches,
   createBranch,
   deleteBranch,
   setHead,
@@ -43,9 +43,9 @@ describe('branches-store', () => {
     _resetWorkspaceLocksForTests()
   })
 
-  describe('loadCanvasBranches (lazy default)', () => {
+  describe('loadDocumentBranches (lazy default)', () => {
     it('returns the default main branch state when no rows exist', async () => {
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.head).toBe('main')
       expect(state.branches).toHaveLength(1)
       expect(state.branches[0]).toMatchObject({
@@ -58,14 +58,14 @@ describe('branches-store', () => {
     })
 
     it('returns independent objects for each lazy default call', async () => {
-      const a = await loadCanvasBranches('sess-a', 'canvas-x')
-      const b = await loadCanvasBranches('sess-a', 'canvas-x')
+      const a = await loadDocumentBranches('sess-a', 'canvas-x')
+      const b = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(a).not.toBe(b)
       expect(a.branches).not.toBe(b.branches)
     })
   })
 
-  describe('saveCanvasBranches + round-trip', () => {
+  describe('saveDocumentBranches + round-trip', () => {
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',
@@ -86,8 +86,8 @@ describe('branches-store', () => {
           },
         ],
       }
-      await saveCanvasBranches('sess-a', 'canvas-x', state)
-      const loaded = await loadCanvasBranches('sess-a', 'canvas-x')
+      await saveDocumentBranches('sess-a', 'canvas-x', state)
+      const loaded = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(loaded).toEqual(state)
     })
 
@@ -103,8 +103,8 @@ describe('branches-store', () => {
           },
         ],
       }
-      await saveCanvasBranches('sess-a', '621/header', state)
-      const loaded = await loadCanvasBranches('sess-a', '621/header')
+      await saveDocumentBranches('sess-a', '621/header', state)
+      const loaded = await loadDocumentBranches('sess-a', '621/header')
       expect(loaded).toEqual(state)
     })
 
@@ -120,7 +120,9 @@ describe('branches-store', () => {
           },
         ],
       }
-      await expect(saveCanvasBranches('../evil', 'x', state)).rejects.toThrow(/Invalid workspaceId/)
+      await expect(saveDocumentBranches('../evil', 'x', state)).rejects.toThrow(
+        /Invalid workspaceId/,
+      )
     })
 
     it('rejects invalid paths such as empty strings, "..", and "/foo"', async () => {
@@ -135,9 +137,9 @@ describe('branches-store', () => {
           },
         ],
       }
-      await expect(saveCanvasBranches('sess', '', state)).rejects.toThrow(/Invalid path/)
-      await expect(saveCanvasBranches('sess', '/foo', state)).rejects.toThrow(/Invalid path/)
-      await expect(saveCanvasBranches('sess', '../x', state)).rejects.toThrow(/Invalid path/)
+      await expect(saveDocumentBranches('sess', '', state)).rejects.toThrow(/Invalid path/)
+      await expect(saveDocumentBranches('sess', '/foo', state)).rejects.toThrow(/Invalid path/)
+      await expect(saveDocumentBranches('sess', '../x', state)).rejects.toThrow(/Invalid path/)
     })
   })
 
@@ -157,7 +159,7 @@ describe('branches-store', () => {
       expect(branch.color).toBe('#9333ea')
       expect(branch.createdAt).toMatch(/^\d{4}-/)
 
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
     })
 
@@ -195,7 +197,7 @@ describe('branches-store', () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
       const result = await deleteBranch('sess-a', 'canvas-x', 'feature')
       expect(result.ok).toBe(true)
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.map((b) => b.name)).toEqual(['main'])
     })
 
@@ -221,7 +223,7 @@ describe('branches-store', () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
       const result = await setHead('sess-a', 'canvas-x', 'feature')
       expect(result).toEqual({ head: 'feature', previousHead: 'main' })
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.head).toBe('feature')
     })
 
@@ -239,13 +241,13 @@ describe('branches-store', () => {
     it('overwrites tipFrontiers on an existing branch', async () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
       await updateBranchTip('sess-a', 'canvas-x', 'feature', 'AAECAw==')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.find((b) => b.name === 'feature')?.tipFrontiers).toBe('AAECAw==')
     })
 
     it('also updates main.tipFrontiers', async () => {
       await updateBranchTip('sess-a', 'canvas-x', 'main', 'BAUGBw==')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.find((b) => b.name === 'main')?.tipFrontiers).toBe('BAUGBw==')
     })
 
@@ -261,7 +263,7 @@ describe('branches-store', () => {
         initialTipFrontiers: 'AAECAw==',
       })
       await updateBranchTip('sess-a', 'canvas-x', 'feature', '')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.find((b) => b.name === 'feature')?.tipFrontiers).toBe('')
     })
   })
@@ -298,7 +300,7 @@ describe('branches-store', () => {
       expect(result.name).toBe('experimental')
       expect(result.tipFrontiers).toBe('AAECAw==')
       expect(result.color).toBe('#9333ea')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.branches.map((b) => b.name).sort()).toEqual(['experimental', 'main'])
     })
 
@@ -306,7 +308,7 @@ describe('branches-store', () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
       await setHead('sess-a', 'canvas-x', 'feature')
       await renameBranch('sess-a', 'canvas-x', 'feature', 'experimental')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       expect(state.head).toBe('experimental')
     })
 
@@ -353,20 +355,20 @@ describe('branches-store', () => {
         baseBranch: 'feature',
       })
       await renameBranch('sess-a', 'canvas-x', 'feature', 'experimental')
-      const state = await loadCanvasBranches('sess-a', 'canvas-x')
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
       const v2 = state.branches.find((b) => b.name === 'feature-v2')
       expect(v2?.baseBranch).toBe('experimental')
     })
   })
 
-  // Every read-modify-write mutator funnels through mutateCanvasBranches,
+  // Every read-modify-write mutator funnels through mutateDocumentBranches,
   // which is documented to take the same per-workspace write lock that
   // file-gc's collect-then-unlink pass holds — the read and the write must
   // happen inside a SINGLE lock acquisition, otherwise a GC pass can
   // interleave between them. These tests assert the lock coverage directly
   // (by holding the workspace lock externally, the way file-gc does, and
   // checking the mutator blocks until it is released) rather than only via
-  // the comment on mutateCanvasBranches — a regression that reintroduced an
+  // the comment on mutateDocumentBranches — a regression that reintroduced an
   // unlocked read before the write would leave the mutator free to run
   // concurrently with the held lock and this test would catch that.
   describe('workspace write lock coverage', () => {

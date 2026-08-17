@@ -4,12 +4,12 @@ import {
   type BranchStatsResponse,
   branchMetaSchema,
   branchStatsResponseSchema,
-  type CanvasBranchesState,
   type CreateBranchRequest,
-  canvasBranchesStateSchema,
   createBranchResponseSchema,
   type DeleteBranchResponse,
+  type DocumentBranchesState,
   deleteBranchResponseSchema,
+  documentBranchesStateSchema,
   type MergeResponse,
   mergeResponseSchema,
   type RenameBranchResponse,
@@ -27,7 +27,7 @@ import { ZodError } from 'zod'
 //   the returned `refetch`; this hook does not subscribe to any event bus.
 
 export type { BranchMeta }
-export type BranchesState = CanvasBranchesState
+export type BranchesState = DocumentBranchesState
 export type MergeResult = MergeResponse
 
 // ── URL builder ──
@@ -43,7 +43,7 @@ export function buildBranchUrls(
   merge: (source: string) => string
 } {
   const safePath = encodeURIComponent(path)
-  const base = `/api/workspaces/${workspaceId}/canvases/${safePath}`
+  const base = `/api/workspaces/${workspaceId}/documents/${safePath}`
   return {
     list: `${base}/branches`,
     head: `${base}/head`,
@@ -53,14 +53,14 @@ export function buildBranchUrls(
   }
 }
 
-// canvasBranchesStateSchema is the single source of truth for the envelope
+// documentBranchesStateSchema is the single source of truth for the envelope
 // shape. Fall back to filtering the branches array per-item only when the
 // envelope itself fails validation (e.g. a single rogue row breaks the whole
 // array parse), so the BranchPicker keeps rendering the valid branches
 // instead of dropping the entire response.
 export function parseBranchesResponse(raw: unknown): BranchesState {
   if (!raw || typeof raw !== 'object') return { branches: [], head: 'main' }
-  const envelope = canvasBranchesStateSchema.safeParse(raw)
+  const envelope = documentBranchesStateSchema.safeParse(raw)
   if (envelope.success) {
     return {
       branches: envelope.data.branches,

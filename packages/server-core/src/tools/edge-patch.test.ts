@@ -3,8 +3,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
-import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+} from '../test-utils/fake-document-store.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument } from './document-io.js'
 import { createEdgeLockTool } from './edge-lock.js'
 import { createEdgePatchTool, edgePatchFieldsSchema } from './edge-patch.js'
@@ -14,12 +17,12 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -121,7 +124,7 @@ describe('wb_edge_patch tool', () => {
     ).rejects.toThrow(PatchValidationError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+  test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, BASE_CANVAS)
     const tool = createEdgePatchTool(makeDeps(documentStore))
@@ -133,7 +136,7 @@ describe('wb_edge_patch tool', () => {
         edgeId: 'e1',
         patch: { color: '1' },
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   test('refuses to patch a LOCKED edge — the lock binds agents too, not just the pointer', async () => {

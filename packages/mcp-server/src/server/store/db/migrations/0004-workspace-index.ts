@@ -13,13 +13,13 @@ import type { Kysely, Migration } from 'kysely'
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
     await db.schema
-      .createTable('workspaceIndexCanvasList')
+      .createTable('workspaceIndexDocumentList')
       .addColumn('workspaceId', 'text', (c) => c.notNull())
       .addColumn('seq', 'integer', (c) => c.notNull())
       .addColumn('canvasId', 'text', (c) => c.notNull())
       .addColumn('title', 'text', (c) => c.notNull())
       .addColumn('updatedAtMs', 'integer', (c) => c.notNull())
-      .addPrimaryKeyConstraint('workspaceIndexCanvasList_pk', ['workspaceId', 'seq'])
+      .addPrimaryKeyConstraint('workspaceIndexDocumentList_pk', ['workspaceId', 'seq'])
       .execute()
 
     await db.schema
@@ -58,14 +58,14 @@ export const migration: Migration = {
       .addColumn('workspaceId', 'text', (c) => c.notNull())
       .addColumn('seq', 'integer', (c) => c.notNull())
       .addColumn('fromCanvasId', 'text', (c) => c.notNull())
-      .addColumn('toCanvasId', 'text', (c) => c.notNull())
+      .addColumn('toDocumentId', 'text', (c) => c.notNull())
       .addPrimaryKeyConstraint('workspaceIndexBacklinks_pk', ['workspaceId', 'seq'])
       .execute()
-    // Backs listBacklinks' exact (workspaceId, toCanvasId) lookup.
+    // Backs listBacklinks' exact (workspaceId, toDocumentId) lookup.
     await db.schema
       .createIndex('workspaceIndexBacklinks_lookup')
       .on('workspaceIndexBacklinks')
-      .columns(['workspaceId', 'toCanvasId'])
+      .columns(['workspaceId', 'toDocumentId'])
       .execute()
 
     await db.schema
@@ -89,6 +89,6 @@ export const migration: Migration = {
     await db.schema.dropTable('workspaceIndexBacklinks').execute()
     await db.schema.dropTable('workspaceIndexAliases').execute()
     await db.schema.dropTable('workspaceIndexFacets').execute()
-    await db.schema.dropTable('workspaceIndexCanvasList').execute()
+    await db.schema.dropTable('workspaceIndexDocumentList').execute()
   },
 }

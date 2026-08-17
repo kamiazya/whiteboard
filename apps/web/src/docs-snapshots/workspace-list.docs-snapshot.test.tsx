@@ -9,7 +9,7 @@ import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 // Generates docs/assets/workspace-list.png — the daemon canvas gallery
 // (DaemonIndexPage), used in README and workspace docs.
 //
-// DaemonIndexPage renders ONE workspace's canvases at a time (picked via
+// DaemonIndexPage renders ONE workspace's documents at a time (picked via
 // the "Workspace" <select>), unlike the retired mcp-server IndexPage this
 // image used to show, which flattened every workspace into a single list.
 // A native <select>'s open dropdown is not reliably screenshot-able in
@@ -39,9 +39,9 @@ beforeEach(() => {
           workspaces: [{ workspaceId: 'ws_main' }, { workspaceId: 'ws_sketches' }],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_main/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_main/documents')) {
         return jsonResponse({
-          canvases: [
+          documents: [
             // 1d, 2d, 5d ago relative to NOW (2026-05-02T12:00Z) so the
             // rendered labels stay stable across regenerations.
             { path: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
@@ -50,16 +50,16 @@ beforeEach(() => {
           ],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_sketches/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_sketches/documents')) {
         return jsonResponse({
-          canvases: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
+          documents: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
       // Pre-rename state: no display names set yet, no canvas pinned. The
       // companion workspace-list-renamed test seeds the rename-applied
       // half so the two images form a coherent before / after pair.
       if (url.endsWith('/names')) {
-        return jsonResponse({ workspace: null, canvases: {}, pinned: [] })
+        return jsonResponse({ workspace: null, documents: {}, pinned: [] })
       }
       if (url.includes('/latest-thumbnail')) {
         thumbnailFetchCount += 1
@@ -95,7 +95,7 @@ describe('docs snapshot — workspace list', () => {
     )
 
     // Wait for all 3 of ws_main's canvas cards to settle (proves the
-    // canvases + names fetches both resolved) AND for each card's
+    // documents + names fetches both resolved) AND for each card's
     // DocumentThumb to have fired its own latest-thumbnail fetch.
     await waitFor(() => {
       const cards = container.querySelectorAll('[data-testid="document-list-card"]')

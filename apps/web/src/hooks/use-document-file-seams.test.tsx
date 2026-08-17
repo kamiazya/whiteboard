@@ -272,7 +272,7 @@ describe('useDocumentFileSeams facets', () => {
   })
 })
 
-describe('useDocumentFileSeams empty canvases', () => {
+describe('useDocumentFileSeams empty documents', () => {
   it('has nothing to embed for a document whose canvas has no nodes', async () => {
     // A markdown document reads back this way; an empty miniature outranks
     // the facet card and shows less than it would.

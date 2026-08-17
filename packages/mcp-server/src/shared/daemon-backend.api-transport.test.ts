@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BinaryFileDataLike } from './canvas-backend-contract.js'
 import { DaemonBackend } from './daemon-backend.js'
+import type { BinaryFileDataLike } from './document-backend-contract.js'
 
 // getFile/putFile normally go through the module-level apiFetch, which only
 // resolves relative paths against the current page origin. Cross-origin
@@ -27,7 +27,7 @@ describe('DaemonBackend apiTransport', () => {
 
     expect(injectedFetch).toHaveBeenCalledTimes(1)
     const [url] = injectedFetch.mock.calls[0] as [string]
-    expect(url).toBe('/api/w/ws-1/canvas/canvas-1/file/file-1')
+    expect(url).toBe('/api/w/ws-1/document/canvas-1/file/file-1')
     // The module-level fetch (used by the default same-origin apiFetch) must
     // not be touched when an apiTransport override is supplied.
     expect(fetch).not.toHaveBeenCalled()
@@ -92,7 +92,7 @@ describe('DaemonBackend apiTransport', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('/api/w/ws-1/canvas/canvas-1/file/file-a')
+    expect(url).toBe('/api/w/ws-1/document/canvas-1/file/file-a')
     expect(init.method).toBe('PUT')
     expect(onSuccess).toHaveBeenCalledWith('file-a')
   })

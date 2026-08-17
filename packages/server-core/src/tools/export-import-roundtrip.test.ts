@@ -3,10 +3,10 @@ import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whit
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
+import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
@@ -21,7 +21,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 }
 
 async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
-  const snap = await store.loadSnapshot({ docRef: { kind: 'canvas', documentId } })
+  const snap = await store.loadSnapshot({ docRef: { kind: 'document', documentId } })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
@@ -30,7 +30,7 @@ async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<Lo
 
 async function setupTools() {
   const store = new FakeDocumentStore()
-  await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
   const deps = makeDeps(store)
   return {
     store,
@@ -254,7 +254,7 @@ describe('error paths do not silently produce corrupt output', () => {
     // clean not-found error rather than reading corrupt/partial state.
     await expect(
       exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 
   test('a non-yaml-safe facet value (YAML .nan) imports but rejects on export, never silently exported', async () => {
@@ -279,7 +279,7 @@ describe('error paths do not silently produce corrupt output', () => {
 
     await expect(
       exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 
   test('export_json_canvas on a canvas with no stored snapshot surfaces a clean error', async () => {
@@ -287,6 +287,6 @@ describe('error paths do not silently produce corrupt output', () => {
 
     await expect(
       exportJsonCanvas(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 })

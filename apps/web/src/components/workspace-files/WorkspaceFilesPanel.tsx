@@ -26,7 +26,7 @@ export function WorkspaceFilesPanel({
   daemonBaseUrl,
   workspaceId,
 }: WorkspaceFilesPanelProps) {
-  const [canvases, setCanvases] = useState<WorkspaceFileTreeDocument[] | null>(null)
+  const [documents, setDocuments] = useState<WorkspaceFileTreeDocument[] | null>(null)
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
@@ -34,12 +34,12 @@ export function WorkspaceFilesPanel({
 
   useEffect(() => {
     let cancelled = false
-    setCanvases(null)
+    setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
     listCanvasesV1(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
-        if (!cancelled) setCanvases(res.canvases)
+        if (!cancelled) setDocuments(res.documents)
       })
       .catch((err) => {
         if (cancelled) return
@@ -81,14 +81,14 @@ export function WorkspaceFilesPanel({
   if (listStatus === 'not-found') {
     return <p className="text-muted-foreground text-sm">This workspace has no document tree yet.</p>
   }
-  if (canvases === null) {
+  if (documents === null) {
     return <p className="text-muted-foreground text-sm">Loading files…</p>
   }
 
   return (
     <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
       <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
-        <WorkspaceFileTree canvases={canvases} onOpen={openCanvas} />
+        <WorkspaceFileTree documents={documents} onOpen={openCanvas} />
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (

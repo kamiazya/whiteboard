@@ -33,18 +33,18 @@ beforeEach(() => {
           workspaces: [{ workspaceId: 'ws_main' }, { workspaceId: 'ws_sketches' }],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_main/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_main/documents')) {
         return jsonResponse({
-          canvases: [
+          documents: [
             { path: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
             { path: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
             { path: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
           ],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_sketches/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_sketches/documents')) {
         return jsonResponse({
-          canvases: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
+          documents: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
       // The "renamed" half: every canvas has a friendly display name and a
@@ -52,7 +52,7 @@ beforeEach(() => {
       if (url.endsWith('/api/workspaces/ws_main/names')) {
         return jsonResponse({
           workspace: 'Production designs',
-          canvases: {
+          documents: {
             'design/login-flow': 'Auth signup flow',
             'design/onboarding': 'New user onboarding',
             'architecture/overview': 'System architecture',
@@ -63,7 +63,7 @@ beforeEach(() => {
       if (url.endsWith('/api/workspaces/ws_sketches/names')) {
         return jsonResponse({
           workspace: 'Quick sketches',
-          canvases: { inbox: "Today's inbox" },
+          documents: { inbox: "Today's inbox" },
           pinned: [],
         })
       }

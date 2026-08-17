@@ -3,7 +3,7 @@ import type { Kysely, Migration } from 'kysely'
 // Add canvases.kind so a canvas can carry which editor (spatial | markdown)
 // opens it. Nullable because existing rows predate the field; the
 // application layer maps a null kind to 'spatial' — the only kind that
-// existed before this column, matching createCanvasRequestSchema's default.
+// existed before this column, matching createDocumentRequestSchema's default.
 
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {

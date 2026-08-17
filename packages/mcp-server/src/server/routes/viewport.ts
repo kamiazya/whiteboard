@@ -3,8 +3,8 @@ import { nanoid } from 'nanoid'
 import type {
   ViewportErrorBody,
   ViewportResponse,
-} from '../../shared/api-contracts/canvas-runtime.js'
-import { onCanvasAction } from './canvas/path-route.js'
+} from '../../shared/api-contracts/document-runtime.js'
+import { onDocumentAction } from './document/path-route.js'
 import { getClientCount, sendViewportRequest } from './ws.js'
 
 // requestId -> { resolve, reject }
@@ -25,7 +25,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
   const timeoutMs = options.timeoutMs ?? 5_000
   const app = new Hono()
 
-  onCanvasAction(app, 'post', 'viewport', async (c, workspaceId, path) => {
+  onDocumentAction(app, 'post', 'viewport', async (c, workspaceId, path) => {
     // The body is optional. Forward all viewport parameters (mode / elementIds /
     // padding / animate / scrollX / scrollY / zoom) to the browser, which applies defaults.
     const body = await c.req

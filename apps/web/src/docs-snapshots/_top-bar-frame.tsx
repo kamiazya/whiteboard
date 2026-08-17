@@ -14,11 +14,11 @@ interface TopBarFrameProps {
   testId: string
   width: number
   height: number
-  canvases: DocumentInfo[]
+  documents: DocumentInfo[]
   scene: SpatialCanvas
 }
 
-export function TopBarFrame({ testId, width, height, canvases, scene }: TopBarFrameProps) {
+export function TopBarFrame({ testId, width, height, documents, scene }: TopBarFrameProps) {
   return (
     <div
       data-testid={testId}
@@ -27,7 +27,7 @@ export function TopBarFrame({ testId, width, height, canvases, scene }: TopBarFr
       <WorkspaceTopBar
         workspaceId="ws_main"
         path="design/architecture"
-        canvases={canvases}
+        documents={documents}
         onNavigateToDocument={() => undefined}
         onToggleFullscreen={() => undefined}
       />

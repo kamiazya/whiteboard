@@ -23,17 +23,17 @@ import type { DocumentInfo } from './types'
 interface DocumentDropdownProps {
   workspaceId: string
   path: string
-  canvases: DocumentInfo[]
+  documents: DocumentInfo[]
   effectiveNames: WorkspaceNames
   isLocalMode: boolean
   documentSearch: string
   onCanvasSearchChange: (value: string) => void
   onNavigateToDocument: (path: string) => void
   onTogglePin: (path: string, nextPinned: boolean) => void
-  onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind canvases (local mode). */
+  onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind documents (local mode). */
   onCreateMarkdown?: () => void
   // Both present (and >1 entry) render a "Workspaces" section above the
-  // canvases section. Either omitted keeps every existing caller
+  // documents section. Either omitted keeps every existing caller
   // (BrowserLocalDocumentPage, docs snapshots) byte-identical.
   workspaces?: string[]
   onSwitchWorkspace?: (workspaceId: string) => void
@@ -45,7 +45,7 @@ interface DocumentDropdownProps {
 export function DocumentDropdown({
   workspaceId,
   path,
-  canvases,
+  documents,
   effectiveNames,
   isLocalMode,
   documentSearch,
@@ -57,13 +57,13 @@ export function DocumentDropdown({
   workspaces,
   onSwitchWorkspace,
 }: DocumentDropdownProps) {
-  const sortedCanvases = useMemo(() => sortDocumentsByRecency(canvases), [canvases])
+  const sortedCanvases = useMemo(() => sortDocumentsByRecency(documents), [documents])
   const filteredCanvases = useMemo(
-    () => filterDocumentsBySearch(sortedCanvases, documentSearch, effectiveNames.canvases),
-    [sortedCanvases, documentSearch, effectiveNames.canvases],
+    () => filterDocumentsBySearch(sortedCanvases, documentSearch, effectiveNames.documents),
+    [sortedCanvases, documentSearch, effectiveNames.documents],
   )
 
-  // Split canvases into pinned and regular sections.
+  // Split documents into pinned and regular sections.
   // Preserve the user-defined order in names.pinned instead of resorting those items by recency.
   const pinnedSet = useMemo(() => new Set(effectiveNames.pinned), [effectiveNames.pinned])
   const pinnedCanvases = useMemo(
@@ -203,9 +203,9 @@ export function DocumentDropdown({
                         key={c.path}
                         canvas={c}
                         workspaceId={workspaceId}
-                        customName={effectiveNames.canvases[c.path]}
+                        customName={effectiveNames.documents[c.path]}
                         // Keep the full path in the pinned section so the original group context stays visible.
-                        leafLabel={effectiveNames.canvases[c.path] ?? c.path}
+                        leafLabel={effectiveNames.documents[c.path] ?? c.path}
                         active={c.path === path}
                         pinned={true}
                         isLocalMode={isLocalMode}
@@ -232,8 +232,8 @@ export function DocumentDropdown({
                           key={c.path}
                           canvas={c}
                           workspaceId={workspaceId}
-                          customName={effectiveNames.canvases[c.path]}
-                          leafLabel={effectiveNames.canvases[c.path] ?? leafSegment}
+                          customName={effectiveNames.documents[c.path]}
+                          leafLabel={effectiveNames.documents[c.path] ?? leafSegment}
                           active={c.path === path}
                           pinned={false}
                           isLocalMode={isLocalMode}

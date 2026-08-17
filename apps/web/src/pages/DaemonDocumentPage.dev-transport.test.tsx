@@ -18,7 +18,7 @@ import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return { ...actual, listWorkspaces: vi.fn(), listCanvases: vi.fn() }
+  return { ...actual, listWorkspaces: vi.fn(), listDocuments: vi.fn() }
 })
 
 const built: string[] = []
@@ -48,7 +48,7 @@ vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
 vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({ SseBackend: stubBackend('sse') }))
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
 function Wrapper({ children }: { children: ReactNode }) {
   return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
@@ -59,8 +59,8 @@ describe('DaemonDocumentPage transport selection', () => {
     window.localStorage.clear()
     built.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
   afterEach(() => {

@@ -144,7 +144,7 @@ function countWords(value: string): number {
  * v4 UUIDs — both reach the preview through the alias resolver.
  */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isCanvasIdHref(href: string): boolean {
+function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
@@ -227,7 +227,7 @@ export function MarkdownEditor({
     const anchor = event.target instanceof Element ? event.target.closest('a') : null
     if (!anchor) return
     const href = anchor.getAttribute('href')
-    if (href === null || !isCanvasIdHref(href)) return
+    if (href === null || !isDocumentIdHref(href)) return
     event.preventDefault()
     onOpenDocument(href)
   }

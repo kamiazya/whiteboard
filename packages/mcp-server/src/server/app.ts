@@ -33,8 +33,8 @@ import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
-import { createCanvasRouter } from './routes/canvas.js'
 import { createDebugRouter } from './routes/debug.js'
+import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import {
@@ -70,7 +70,7 @@ import { createWsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
   deleteBranch,
-  loadCanvasBranches,
+  loadDocumentBranches,
   setHead as setHeadPersist,
   updateBranchTip,
 } from './store/branches-store.js'
@@ -401,11 +401,11 @@ export function createApp(options: AppOptions) {
 
   app.route(
     '/',
-    createCanvasRouter({
+    createDocumentRouter({
       // Attach the current HEAD branch name to saved versions when available.
       getHeadBranch: async (sid, path) => {
         try {
-          const state = await loadCanvasBranches(sid, path)
+          const state = await loadDocumentBranches(sid, path)
           return state.head
         } catch (error) {
           if (isCorruptStoredDataError(error)) {
@@ -529,7 +529,7 @@ export function createApp(options: AppOptions) {
         // deadlocking — mirrors live-doc.ts's POST /update handler.
         performMerge: async (sid, path, { source, into, dryRun }) =>
           withWorkspaceWriteLock(sid, async () => {
-            const state = await loadCanvasBranches(sid, path)
+            const state = await loadDocumentBranches(sid, path)
             const sourceBranch = state.branches.find((b) => b.name === source)
             const intoBranch = state.branches.find((b) => b.name === into)
             if (!sourceBranch) {
@@ -664,7 +664,7 @@ export function createApp(options: AppOptions) {
 
             // If the target is HEAD, reconcile and broadcast the live doc. Otherwise only
             // rewrite the stored tip.
-            const latest = await loadCanvasBranches(sid, path)
+            const latest = await loadDocumentBranches(sid, path)
             if (latest.head === into && sourceTip && sourceTip.length > 0) {
               const prevVV = liveDoc.version()
               liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
@@ -684,7 +684,7 @@ export function createApp(options: AppOptions) {
             let switchedHead: { from: string; to: string } | undefined
             let deletedSource: string | undefined
             try {
-              const afterCommit = await loadCanvasBranches(sid, path)
+              const afterCommit = await loadDocumentBranches(sid, path)
               if (afterCommit.head === source && source !== into) {
                 await setHeadPersist(sid, path, into)
                 switchedHead = { from: source, to: into }

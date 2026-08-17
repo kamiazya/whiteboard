@@ -3,8 +3,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
-import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+} from '../test-utils/fake-document-store.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument } from './document-io.js'
 import { DocumentNotFoundError, NodeLockedError, NodeNotFoundError } from './errors.js'
 import { createNodeLockTool } from './node-lock.js'
@@ -14,12 +17,12 @@ const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: CANVAS_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -58,7 +61,7 @@ describe('wb_node_patch tool', () => {
     })
 
     const reloaded = await documentStore.loadSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: CANVAS_ID },
     })
     expect(reloaded).not.toBeNull()
   })
@@ -119,7 +122,7 @@ describe('wb_node_patch tool', () => {
 
   test('throws DocumentNotFoundError when no snapshot exists yet', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createNodePatchTool(makeDeps(documentStore))
 
     await expect(
@@ -132,7 +135,7 @@ describe('wb_node_patch tool', () => {
     ).rejects.toThrow(DocumentNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+  test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, {
       nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
@@ -147,7 +150,7 @@ describe('wb_node_patch tool', () => {
         nodeId: 'n1',
         patch: { x: 1 },
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   test('rejects a negative width at the input-schema level', () => {

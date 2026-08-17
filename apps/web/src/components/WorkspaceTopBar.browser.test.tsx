@@ -12,7 +12,7 @@ function mkNamesResponse(): Response {
   return new Response(
     JSON.stringify({
       workspace: 'Design review',
-      canvases: {
+      documents: {
         'design/login-flow': 'Login flow',
         'design/settings-flow': 'Settings flow',
       },
@@ -88,7 +88,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        canvases={[
+        documents={[
           { path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
           { path: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
         ]}
@@ -138,7 +138,7 @@ describe('WorkspaceTopBar browser mode', () => {
       if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      if (url.includes('/canvases') && init?.method === 'POST') {
+      if (url.includes('/documents') && init?.method === 'POST') {
         callCount++
         if (callCount === 1) {
           // First activation → 409 Problem Details with title.

@@ -9,14 +9,14 @@ import { DocumentListView } from '../components/document-list/DocumentListView.j
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
-  createCanvas,
   createDaemonFetch,
-  deleteCanvas,
+  createDocument,
+  deleteDocument,
   getCanvasSnapshot,
-  listCanvases,
+  listDocuments,
   listWorkspaces,
-  setCanvasName,
-  updateCanvas,
+  setDocumentDisplayName,
+  updateDocument,
 } from '../lib/daemon-api-client.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopyPath } from '../lib/derive-copy-path.js'
@@ -24,7 +24,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
-// workspace selector picks which workspace's canvases populate the grid.
+// workspace selector picks which workspace's documents populate the grid.
 // Modeled on the original daemon-served UI's IndexPage filter/sort/pin logic
 // (since retired), but single-workspace rather than the all-workspace flat
 // list that IndexPage rendered (see the design note for why).
@@ -95,7 +95,7 @@ export function DaemonIndexPage({
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   const [rows, setRows] = useState<CanvasRow[]>([])
-  // False from the moment a workspace switch clears rows until its canvases
+  // False from the moment a workspace switch clears rows until its documents
   // fetch settles — rows=[] alone cannot distinguish "still loading" from
   // "genuinely empty", and rendering an empty state during the gap reads as
   // data loss.
@@ -149,17 +149,17 @@ export function DaemonIndexPage({
     async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
       try {
-        const [canvasesRes, names] = await Promise.all([
-          listCanvases(daemonFetch, daemonBaseUrl, workspaceId),
+        const [documentsRes, names] = await Promise.all([
+          listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
           fetchWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId),
         ])
         if (isStale()) return
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
-        const nextRows: CanvasRow[] = canvasesRes.canvases.map((c) => {
+        const nextRows: CanvasRow[] = documentsRes.documents.map((c) => {
           const pinOrder = pinIndex.get(c.path)
           return {
             path: c.path,
-            displayName: names?.canvases?.[c.path] ?? c.path,
+            displayName: names?.documents?.[c.path] ?? c.path,
             updatedAt: c.updatedAt,
             kind: c.kind,
             pinned: pinOrder !== undefined,
@@ -172,7 +172,7 @@ export function DaemonIndexPage({
         if (isStale()) return
         setRows([])
         setLoaded(true)
-        setLoadError('Failed to load canvases for this workspace.')
+        setLoadError('Failed to load documents for this workspace.')
       }
     },
     [daemonFetch, daemonBaseUrl],
@@ -205,7 +205,13 @@ export function DaemonIndexPage({
       setCreateError(null)
       try {
         const path = deriveNewDocumentPath(rows.map((r) => r.path))
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, path, kind)
+        const created = await createDocument(
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceAtStart,
+          path,
+          kind,
+        )
         onOpenDocument(workspaceAtStart, created.path)
       } catch (err) {
         // daemon-api-client errors are already sanitized (Problem Details
@@ -250,11 +256,17 @@ export function DaemonIndexPage({
         )
         const existingPaths = new Set(rows.map((r) => r.path))
         const newPath = deriveCopyPath(sourcePath, existingPaths)
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newPath)
-        await updateCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
+        const created = await createDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, newPath)
+        await updateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
         const newName = deriveCopyName(sourceRow?.displayName ?? sourcePath, existingNames)
-        await setCanvasName(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, newName)
+        await setDocumentDisplayName(
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceAtStart,
+          created.path,
+          newName,
+        )
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)
@@ -295,7 +307,7 @@ export function DaemonIndexPage({
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deleteCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.path)
+      await deleteDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.path)
       closeDeleteDialog()
     } catch (err) {
       // daemon-api-client errors are already sanitized (problem-details
@@ -401,7 +413,7 @@ export function DaemonIndexPage({
         ) : !loaded ? (
           <div
             role="status"
-            aria-label="Loading canvases"
+            aria-label="Loading documents"
             className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
           >
             {[0, 1, 2, 3].map((i) => (
@@ -420,7 +432,7 @@ export function DaemonIndexPage({
                 path: row.path,
                 displayName: row.displayName,
                 // The path is worth a second line only when a display name
-                // covers the first; unnamed canvases already show it once.
+                // covers the first; unnamed documents already show it once.
                 secondary: row.displayName !== row.path ? row.path : undefined,
                 updatedAt: row.updatedAt,
                 kind: row.kind,

@@ -71,7 +71,7 @@ describe('BrowserLocalIndexPage', () => {
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     const newId = onOpenDocument.mock.calls[0]![0] as string
     expect(newId).not.toBe('id-a')
-    const all = await store.listCanvases()
+    const all = await store.listDocuments()
     const created = all.find((s) => s.id === newId)
     expect(created?.kind).toBe('markdown')
     expect(await store.getDefaultDocumentId()).toBe(newId)
@@ -85,7 +85,7 @@ describe('BrowserLocalIndexPage', () => {
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     const newId = onOpenDocument.mock.calls[0]![0] as string
-    const created = (await store.listCanvases()).find((s) => s.id === newId)
+    const created = (await store.listDocuments()).find((s) => s.id === newId)
     expect(created?.kind).toBe('spatial')
   })
 
@@ -100,18 +100,18 @@ describe('BrowserLocalIndexPage', () => {
     fireEvent.click(button)
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
-    expect(await store.listCanvases()).toHaveLength(1)
+    expect(await store.listDocuments()).toHaveLength(1)
   })
 
   it('keeps a create entry point when the list fails to load', async () => {
-    // A failed listCanvases must not dead-end the page: the create path
+    // A failed listDocuments must not dead-end the page: the create path
     // does not need the list (fresh id + save), and success navigates away.
     const store = new MemoryStore()
-    store.listCanvases = () => Promise.reject(new Error('idb blocked'))
+    store.listDocuments = () => Promise.reject(new Error('idb blocked'))
     const { onOpenDocument } = renderPage(store)
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('Failed to load canvases from this browser.')
+    expect(alert.textContent).toBe('Failed to load documents from this browser.')
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
   })
@@ -144,7 +144,7 @@ describe('BrowserLocalIndexPage', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(await store.listCanvases()).toHaveLength(1)
+    expect(await store.listDocuments()).toHaveLength(1)
     expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
   })
 
@@ -160,8 +160,8 @@ describe('BrowserLocalIndexPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(await store.listCanvases()).toHaveLength(0)
-    expect(await screen.findByText('No canvases yet')).toBeTruthy()
+    expect(await store.listDocuments()).toHaveLength(0)
+    expect(await screen.findByText('No documents yet')).toBeTruthy()
     // The delete flow must never open the canvas.
     expect(onOpenDocument).not.toHaveBeenCalled()
   })

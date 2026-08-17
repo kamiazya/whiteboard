@@ -1,6 +1,6 @@
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
@@ -125,21 +125,21 @@ function isEditingText(target: EventTarget | null): boolean {
  * This hook is React glue only: state, the connect/teardown effect, and the
  * keyboard undo-redo intercept. All per-connection state (the LoroDoc, its
  * UndoManager, the debounced commit pipeline, queued export requests, and
- * the CanvasBackendHandlers wiring) lives in a `DocumentSyncSession` from
+ * the DocumentBackendHandlers wiring) lives in a `DocumentSyncSession` from
  * `../lib/document-sync-session.js` — a plain non-React module constructed
  * fresh for every backend identity. This hook mirrors the session's
  * published canvas value into React state via `session.subscribe`, and
  * forwards `onChange(next, command)` — structurally the same signature as
  * `SpatialEditorProps['onChange']` — straight through to the session.
  *
- * Accepts a CanvasBackend (e.g. BrowserLocalBackend) or null when no backend
+ * Accepts a DocumentBackend (e.g. BrowserLocalBackend) or null when no backend
  * is available yet (e.g. the initial snapshot is still loading). A null
  * backend never connects: syncStatus stays 'idle', canvas stays the empty
  * canvas, and onChange is a no-op. When the backend identity changes —
  * including null-to-backend and backend-to-backend — the previous session
  * is fully disposed before the new one connects. This is the mechanism a
  * browser-local -> daemon in-place migration rides on: swapping the
- * CanvasBackend prop is the whole contract.
+ * DocumentBackend prop is the whole contract.
  *
  * `options` wires the daemon-only capability receptors (onVersionCreated,
  * onHeadChanged) plus the restore-overlay state and
@@ -157,14 +157,14 @@ function isEditingText(target: EventTarget | null): boolean {
  * teardown + the next session's construction.
  */
 export function useDocumentSync(
-  backend: CanvasBackend | null,
+  backend: DocumentBackend | null,
   options?: UseDocumentSyncOptions,
 ): UseDocumentSyncResult {
   // Latest-prop mirrors deliberately excluded from the connect effect's
   // dependency array below: reading `backend`/`options` through these refs
   // (rather than as effect deps) means a fresh inline object passed on every
   // render never forces a reconnect.
-  const backendRef = useRef<CanvasBackend | null>(backend)
+  const backendRef = useRef<DocumentBackend | null>(backend)
   backendRef.current = backend
   const optionsRef = useRef<UseDocumentSyncOptions>(options ?? {})
   optionsRef.current = options ?? {}

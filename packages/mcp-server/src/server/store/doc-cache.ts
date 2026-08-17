@@ -4,13 +4,13 @@ import { loadDocument, saveDocument } from './document-store.js'
 // key: "workspaceId/path"
 //
 // LRU eviction keeps LoroDoc memory from growing without bound across many
-// canvases or during long daemon uptime. One canvas can hold several MiB
+// documents or during long daemon uptime. One canvas can hold several MiB
 // of CRDT history, so cap the cache at 32 entries. This uses Map insertion order as
 // the minimal implementation with no extra dependency.
 //
 // Caveat: WS handlers may keep live doc references. Evicting a canvas that still has
 // active connections could leave callers mutating an old doc instance. In practice,
-// canvases with active WS connections should stay recently touched and remain on the
+// documents with active WS connections should stay recently touched and remain on the
 // hot side of the LRU.
 const CACHE_MAX_SIZE = 32
 const cache = new Map<string, LoroDoc>()

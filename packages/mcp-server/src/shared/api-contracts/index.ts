@@ -1,7 +1,7 @@
 // Public barrel for the `./api-contracts` package subpath.
 //
 // Deliberately narrow: only the schemas below are re-exported here.
-// canvas-runtime.ts, daemon-doctor.ts, export.ts, libraries.ts, and the
+// document-runtime.ts, daemon-doctor.ts, export.ts, libraries.ts, and the
 // rest of runtime.ts stay off the published npm surface — widening this
 // barrel widens semver liability for a public package, so any addition
 // here must be an intentional decision, not incidental scope creep.
@@ -15,12 +15,12 @@
 // barrel instead of importing a shared-layer package it is not allowed to
 // depend on directly (see .claude/rules/architecture-map.md).
 export {
-  exportOkfOutputSchema as canvasOkfV1ResponseSchema,
-  listCanvasesOutputSchema as listCanvasesV1ResponseSchema,
+  exportOkfOutputSchema as documentOkfV1ResponseSchema,
+  wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
-export * from './canvas.js'
-export * from './canvas-url.js'
+export * from './document.js'
+export * from './document-url.js'
 export * from './errors.js'
 export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
@@ -34,8 +34,8 @@ export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime
 
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
-  listCanvasesOutputSchema as _listCanvasesV1ResponseSchema,
+  wbDocumentListOutputSchema as _listCanvasesV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { z as _z } from 'zod'
-export type CanvasOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
-export type ListCanvasesV1Response = _z.infer<typeof _listCanvasesV1ResponseSchema>
+export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
+export type ListDocumentsV1Response = _z.infer<typeof _listCanvasesV1ResponseSchema>

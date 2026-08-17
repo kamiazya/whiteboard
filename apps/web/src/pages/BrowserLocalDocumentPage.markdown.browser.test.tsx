@@ -3,7 +3,7 @@
  * note through the top bar's "New markdown note…" item, type into the real
  * source pane, and confirm the body survives a full page remount — the Loro
  * 'body' text container persisted through the SAME store the spatial
- * canvases use. SpatialEditor is mocked (this suite's subject is the
+ * documents use. SpatialEditor is mocked (this suite's subject is the
  * kind-switch + persistence wiring, not gesture input), but MarkdownEditor
  * is REAL: CodeMirror's input path and Canvas 2D measurement are exactly
  * what jsdom cannot exercise.
@@ -239,7 +239,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     // stores the name twice, which is the state it exists to rule out.
     // By kind, not by index: the workspace still holds the initial spatial
     // canvas this flow started from.
-    const entry = (await store.listCanvases()).find((row) => row.kind === 'markdown')
+    const entry = (await store.listDocuments()).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
     const loaded = await new LoroStore().load(entry?.id ?? '')
     expect(loaded.kind).toBe('ok')
@@ -323,7 +323,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     await userEvent.keyboard('Fast switch')
     await expectTitleValue('Fast switch')
 
-    // Unmount immediately after typing. The name goes through `renameCanvas`,
+    // Unmount immediately after typing. The name goes through `renameDocument`,
     // which flushes rather than debouncing — but the markdown document's own
     // save is still pending, and an unmount that tore the page down before
     // the rename landed would lose the title with it.
@@ -392,7 +392,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     )
   })
 
-  it('spatial canvases still open the spatial editor after a markdown note exists', async () => {
+  it('spatial documents still open the spatial editor after a markdown note exists', async () => {
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is
     // unambiguous (the fresh markdown note is also 'untitled').

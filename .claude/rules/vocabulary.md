@@ -82,44 +82,70 @@ knowing before doing it:
 
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
-- `Canvas` as the CONTAINER noun, across apps/web and mcp-server's HTTP side
-  — `CanvasSnapshot` (a document row), `listCanvases`/`createCanvas`/
-  `renameCanvas`, `CanvasBackend`, `BrowserLocalCanvasPage`, and the
-  IndexedDB stores `canvases`/`loroCanvases`/`canvasFiles`. The biggest by
-  count and the one the standing rule below is actually for: fix it where you
-  already are, never as a sweep.
-  `switchCanvas` is DONE (`switchDocument`), and WHY it went first is the
-  useful part: it was the only member of that list with no wrapper — zero
-  `onSwitchCanvas` props, no `useSwitchCanvas` hook — so renaming it left
-  nothing calling it by the old noun. `createCanvas` is the counter-example
-  and is deliberately still here: 52 `onCreateCanvas` props and 21
-  `useCreateCanvas` uses would keep the old name at every call site, and its
-  spelling sits one character from the published `createCanvasRequestSchema`.
-  Pick the identifier with no family first; a rename that leaves its own
-  callers behind makes a file LESS consistent, not more.
-  `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
+`Canvas` as the CONTAINER noun — once the largest entry here — is DONE, in
+four increments (`switchDocument`, the `useDocumentSync` stack, the apps/web
+UI surface, the browser stores, and the server contracts + HTTP routes).
+`SpatialCanvas`, `CanvasEdge`, `CanvasColor`, `CanvasContextMenu`,
+`CanvasDisplaySettings`, `CanvasViewer`, `canvasRef`, `screenToCanvas`,
+`wb_canvas_tidy` and the render/layout helpers are CORRECT and stay: they name
+the spatial surface, which is what the word means.
 
-  The `useCanvasSync` stack is DONE (`useDocumentSync`), and it is the
-  counter-lesson to `switchCanvas`: it HAD a family — `createCanvasSyncSession`,
-  `CanvasSyncSession`, `UseCanvasSyncOptions`/`Result`, the two
-  `CANVAS_SYNC_*_EVENT` constants, and three `canvas-sync-*.ts` modules — and
-  moved anyway, because every member was inside `apps/web` and none crossed a
-  published subpath. So the rule is not "no family"; it is **no member outside
-  the increment's own boundary**. That is what still holds `listCanvases` and
-  `CanvasBackend` back: both reach `packages/mcp-server/src/shared/`, which
-  publishes as `./api-contracts` / `./daemon-backend` / `./sse-backend`.
-  One thing did NOT move with the names: the window-event VALUES stay
-  `'excalidraw:doc_changed'` and `'excalidraw:wb_version_saved'`, because
-  `useDirtyState`, `HeaderBranchBanner`, `useBranches` and
-  `merge-committed-event` still match the raw string. `document-sync-types.test.ts`
-  pins both literals so a later rename cannot take the wire format with it.
-- `onOpenCanvas`, the React prop meaning "open this document" — 178
-  occurrences across apps/web. It is the `Canvas`-as-container violation
-  above wearing a handler name, so it belongs to the same standing rule and
-  the same "never as a sweep" clause. Called out separately only because a
-  regex for the retired word `OpenCanvas` hits every one of them, and the
-  next person running that search should know they are the expected
-  remainder rather than a miss.
+Four things about how it went are worth keeping.
+
+**Order the increments by BOUNDARY, not by size.** `switchCanvas` went first
+because it was the only name with no wrapper at all — zero `onSwitchCanvas`
+props, no `useSwitchCanvas` hook — so renaming it left nothing calling it by
+the old noun. But the `useCanvasSync` stack moved next as ONE increment
+despite a six-member family, because every member lived inside `apps/web` and
+none crossed a published subpath. So the rule is not "no family"; it is **no
+member outside the increment's own boundary**. `listCanvases` and
+`CanvasBackend` waited for their own increment for exactly that reason — both
+were exported through `./api-contracts` / `./daemon-backend` / `./sse-backend`.
+
+**A stored or published shape moves with a migration, or not at all.** The
+apps/web IndexedDB stores went `canvases`/`loroCanvases`/`canvasFiles` ->
+`documents`/`loroDocuments`/`documentFiles` and the pointer key
+`defaultCanvasId` -> `defaultDocumentId` at DB_VERSION 6 -> 7. IndexedDB has
+no rename, so each store is created, copied record by record, and the old one
+DELETED once its cursor is exhausted — a store left in place keeps a second
+copy of every document readable by anything that still remembers the name.
+The HTTP surface moved in the same spirit and without a migration, since
+server and clients ship together: `/api/workspaces/:ws/canvases/...` ->
+`/documents/...`, `/api/w/:ws/canvas/...` -> `/document/...`, the browser
+route `/w/:ws/canvas/:path` -> `/document/:path`, and the `canvases` array
+key in three payloads (`wb_document_list`, the list response, the `/names`
+response) -> `documents`.
+
+**The old name is load-bearing in exactly two places, and a bulk rename
+destroys both silently.** A migration's SOURCE names, and the fixtures that
+seed a pre-migration database. Both happened here: one pass rewrote
+`['canvases', 'documents']` to `['documents', 'documents']`, and another
+rewrote every legacy fixture in `browser-idb-migration.browser.test.tsx` to
+the new vocabulary — leaving the migration untested while every assertion
+still passed. A third rewrote `/canvas/i.test(name)` in
+`0009-document-vocabulary.test.ts`, inverting an assertion that no table is
+still named for a canvas. Exclude `migrations/`, migration tests, and any
+regex whose subject is the OLD word, then re-read the diff of what you did
+exclude.
+
+**What deliberately did NOT move.** The window-event VALUES stay
+`'excalidraw:doc_changed'` and `'excalidraw:wb_version_saved'` —
+`useDirtyState`, `HeaderBranchBanner`, `useBranches` and
+`merge-committed-event` still match the raw strings, and
+`document-sync-types.test.ts` pins both literals so a later rename cannot take
+the wire format with it. User-visible UI copy still says "canvas" ("New
+canvas", "Canvas actions"): what the product calls a thing to its users is a
+product decision, not a code-vocabulary one, and this rule does not reach it.
+
+One duplication surfaced and was NOT merged, because collapsing it changes
+behaviour rather than names: three separate "not found" errors existed, two of
+them meaning the same thing. `render/load-spatial-canvas.ts`'s is now
+`SnapshotNotFoundError` (the alias `create-server.ts` had already given it),
+`tools/document-crud.errors.ts`'s is `WorkspaceDocumentNotFoundError` (the
+workspace index has no such document), and `tools/errors.ts` keeps
+`DocumentNotFoundError` — which documents itself as "no saved snapshot", i.e.
+the same condition as the first. `create-server.ts` maps classes to status
+codes, so merging them is its own increment.
 
 The four mis-prefixed package names are DONE: `@kamiazya/whiteboard-{model,
 codec,ports,loro-adapter}`, with directories and vitest projects following.
@@ -162,10 +188,11 @@ ADR-0007/0008/0009 keep it and carry a dated vocabulary note instead, exactly
 like `slug`: a decision record is history, and rewriting the reasoning would
 misreport what was decided.
 
-It gets no executable rung. `vocabulary-check.test.ts` could not hold it
-without excluding both the ADR directory and every `onOpenCanvas` handler,
-and a guard that needs two carve-outs to pass is one nobody will trust the
-next time it fires. Same reason `canvas` will never qualify.
+It gets no executable rung. `vocabulary-check.test.ts` would have to exclude
+the ADR directory, and a guard that needs a carve-out to pass is one nobody
+will trust the next time it fires. Same reason `canvas` will never qualify.
+(The 178 `onOpenCanvas` handlers this note once listed as the OTHER carve-out
+are gone — they are `onOpenDocument` now.)
 
 The blob tree's path segment is DONE: `{dataDir}/blobs/{workspaceId}/canvas/`
 is now `.../document/`, moved by migration `0011-document-blob-dir`. Two

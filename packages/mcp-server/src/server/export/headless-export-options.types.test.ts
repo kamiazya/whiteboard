@@ -12,7 +12,7 @@ import type { HeadlessCanvasExportOptions } from './headless-export.js'
 // expectTypeOf assertions are erased at runtime) if the derived type and the
 // route-forwarded field set ever diverge. routes/export.ts forwards
 // padding/scale/frameId/minFontPx/theme from exportRequestSchema;
-// routes/canvas/export-svg.ts forwards only padding/frameId/theme from
+// routes/document/export-svg.ts forwards only padding/frameId/theme from
 // exportSvgRequestSchema (no scale/minFontPx — vector output has neither
 // raster scale nor a font-bump ceiling).
 

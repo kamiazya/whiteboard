@@ -5,13 +5,13 @@ import { useDaemonDocumentController } from './use-daemon-document-controller.js
 
 vi.mock('../lib/daemon-api-client.js', () => ({
   listWorkspaces: vi.fn(),
-  listCanvases: vi.fn(),
-  createCanvas: vi.fn(),
+  listDocuments: vi.fn(),
+  createDocument: vi.fn(),
 }))
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
-const mockCreateDocument = vi.mocked(daemonApiClient.createCanvas)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
+const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const fetchFn = vi.fn() as unknown as typeof fetch
@@ -25,8 +25,8 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     const { result } = renderHook(() =>
@@ -35,13 +35,13 @@ describe('useDaemonDocumentController', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.workspaceId).toBe('w1')
-    expect(mockListCanvases).toHaveBeenCalledWith(fetchFn, DAEMON_BASE_URL, 'w1')
+    expect(mockListDocuments).toHaveBeenCalledWith(fetchFn, DAEMON_BASE_URL, 'w1')
   })
 
   it('picks the first canvas when no path is given', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [
+    mockListDocuments.mockResolvedValue({
+      documents: [
         { path: 'first', id: 'id-first', updatedAt: '2026-01-01', kind: 'spatial' },
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
@@ -53,12 +53,12 @@ describe('useDaemonDocumentController', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.path).toBe('first')
-    expect(result.current.canvases).toHaveLength(2)
+    expect(result.current.documents).toHaveLength(2)
   })
 
-  it('exposes an empty-state when the workspace has zero canvases', async () => {
+  it('exposes an empty-state when the workspace has zero documents', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+    mockListDocuments.mockResolvedValue({ documents: [] })
 
     const { result } = renderHook(() =>
       useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
@@ -66,7 +66,7 @@ describe('useDaemonDocumentController', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.path).toBeNull()
-    expect(result.current.canvases).toEqual([])
+    expect(result.current.documents).toEqual([])
   })
 
   it('still fetches the workspace list when an explicit workspaceId/path is given, populating controller.workspaces', async () => {
@@ -76,8 +76,10 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w-explicit' }, { workspaceId: 'w-other' }],
     })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'explicit', id: 'id-explicit', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { path: 'explicit', id: 'id-explicit', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -103,8 +105,8 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
 
     const { result } = renderHook(() =>
@@ -116,12 +118,12 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.workspaces).toEqual([{ workspaceId: 'w1' }, { workspaceId: 'w2' }])
   })
 
-  it('switchWorkspace re-fetches canvases for the new workspace and selects the first canvas', async () => {
+  it('switchWorkspace re-fetches documents for the new workspace and selects the first canvas', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
@@ -133,8 +135,8 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.workspaceId).toBe('w1')
     expect(result.current.path).toBe('w1-canvas')
 
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
@@ -143,20 +145,20 @@ describe('useDaemonDocumentController', () => {
       await result.current.switchWorkspace('w2')
     })
 
-    expect(mockListCanvases).toHaveBeenLastCalledWith(fetchFn, DAEMON_BASE_URL, 'w2')
+    expect(mockListDocuments).toHaveBeenLastCalledWith(fetchFn, DAEMON_BASE_URL, 'w2')
     expect(result.current.workspaceId).toBe('w2')
     expect(result.current.path).toBe('w2-canvas')
-    expect(result.current.canvases).toEqual([
+    expect(result.current.documents).toEqual([
       { path: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
     ])
   })
 
-  it('switchWorkspace resolves to a null path (empty state) when the target workspace has zero canvases', async () => {
+  it('switchWorkspace resolves to a null path (empty state) when the target workspace has zero documents', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
@@ -166,22 +168,22 @@ describe('useDaemonDocumentController', () => {
     )
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockListDocuments.mockResolvedValueOnce({ documents: [] })
 
     await act(async () => {
       await result.current.switchWorkspace('w2')
     })
 
     expect(result.current.path).toBeNull()
-    expect(result.current.canvases).toEqual([])
+    expect(result.current.documents).toEqual([])
   })
 
   it('discards a stale switchWorkspace response when a later switch resolves first (race guard)', async () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w3' }],
     })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
@@ -192,16 +194,16 @@ describe('useDaemonDocumentController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     let resolveW2: (value: {
-      canvases: { path: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
+      documents: { path: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
     }) => void = () => {}
     const w2Promise = new Promise<{
-      canvases: { path: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
+      documents: { path: string; id: string; updatedAt: string; kind: 'spatial' | 'markdown' }[]
     }>((resolve) => {
       resolveW2 = resolve
     })
-    mockListCanvases.mockReturnValueOnce(w2Promise)
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockReturnValueOnce(w2Promise)
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w3-canvas', id: 'id-w3-canvas', updatedAt: '2026-01-03', kind: 'spatial' },
       ],
     })
@@ -218,7 +220,7 @@ describe('useDaemonDocumentController', () => {
     // The stale w2 response resolves after w3 already won; it must be discarded.
     await act(async () => {
       resolveW2({
-        canvases: [
+        documents: [
           { path: 'w2-canvas', id: 'id-w2-canvas', updatedAt: '2026-01-02', kind: 'spatial' },
         ],
       })
@@ -231,8 +233,8 @@ describe('useDaemonDocumentController', () => {
 
   it('switchDocument updates the selected path synchronously', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [
+    mockListDocuments.mockResolvedValue({
+      documents: [
         { path: 'a', id: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
         { path: 'b', id: 'id-b', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
@@ -249,12 +251,12 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.path).toBe('b')
   })
 
-  it('createCanvas creates via the daemon and switches to the new canvas', async () => {
+  it('createDocument creates via the daemon and switches to the new canvas', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockListDocuments.mockResolvedValueOnce({ documents: [] })
     mockCreateDocument.mockResolvedValue({ path: 'brand-new' })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'brand-new', id: 'id-brand-new', updatedAt: '2026-01-03', kind: 'spatial' },
       ],
     })
@@ -265,16 +267,16 @@ describe('useDaemonDocumentController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
-      await result.current.createCanvas('brand-new')
+      await result.current.createDocument('brand-new')
     })
 
     expect(mockCreateDocument).toHaveBeenCalledWith(fetchFn, DAEMON_BASE_URL, 'w1', 'brand-new')
     expect(result.current.path).toBe('brand-new')
   })
 
-  it('createCanvas surfaces a create error instead of throwing when the daemon call fails', async () => {
+  it('createDocument surfaces a create error instead of throwing when the daemon call fails', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({ canvases: [] })
+    mockListDocuments.mockResolvedValue({ documents: [] })
     mockCreateDocument.mockRejectedValue(new Error('path already exists'))
 
     const { result } = renderHook(() =>
@@ -283,19 +285,19 @@ describe('useDaemonDocumentController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
-      await result.current.createCanvas('brand-new')
+      await result.current.createDocument('brand-new')
     })
 
     expect(result.current.createError).toBe('path already exists')
     expect(result.current.path).toBeNull()
   })
 
-  // The empty-state caller derives its next path from `canvases`. If a create fails because
-  // another client already took that path, `canvases` is stale by definition — without a
+  // The empty-state caller derives its next path from `documents`. If a create fails because
+  // another client already took that path, `documents` is stale by definition — without a
   // refresh here, a retry re-derives the SAME losing path from the same stale list forever.
-  it('createCanvas re-reads the canvas list after a failure so a retry does not repeat the same path', async () => {
+  it('createDocument re-reads the canvas list after a failure so a retry does not repeat the same path', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockListDocuments.mockResolvedValueOnce({ documents: [] })
     mockCreateDocument.mockRejectedValue(new Error('path already exists'))
 
     const { result } = renderHook(() =>
@@ -303,22 +305,24 @@ describe('useDaemonDocumentController', () => {
     )
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [{ path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     await act(async () => {
-      await result.current.createCanvas('untitled')
+      await result.current.createDocument('untitled')
     })
 
     expect(result.current.createError).toBe('path already exists')
     // The refreshed list now shows the path another client already took.
-    expect(result.current.canvases).toEqual([
+    expect(result.current.documents).toEqual([
       { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
     ])
   })
 
-  it('createCanvas is a no-op before workspaceId has resolved', async () => {
+  it('createDocument is a no-op before workspaceId has resolved', async () => {
     // Never resolves during this test, so workspaceId stays null past mount.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))
 
@@ -328,7 +332,7 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.workspaceId).toBeNull()
 
     await act(async () => {
-      await result.current.createCanvas('brand-new')
+      await result.current.createDocument('brand-new')
     })
 
     expect(mockCreateDocument).not.toHaveBeenCalled()
@@ -350,8 +354,8 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
-    mockListCanvases.mockResolvedValueOnce({
-      canvases: [
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
         { path: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
@@ -361,7 +365,7 @@ describe('useDaemonDocumentController', () => {
     )
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
+    mockListDocuments.mockRejectedValueOnce(new Error('daemon unreachable'))
 
     await act(async () => {
       await result.current.switchWorkspace('w2')
@@ -371,7 +375,7 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.loadError).toBeNull()
     expect(result.current.workspaceId).toBe('w1')
     expect(result.current.path).toBe('w1-canvas')
-    expect(result.current.canvases).toEqual([
+    expect(result.current.documents).toEqual([
       { path: 'w1-canvas', id: 'id-w1-canvas', updatedAt: '2026-01-01', kind: 'spatial' },
     ])
   })

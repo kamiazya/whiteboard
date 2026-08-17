@@ -113,7 +113,7 @@ export function createSharedSseStreamSource(
         set = new Set()
         listeners.set(doc, set)
         // The worker refcounts across tabs; this port refcounts within the tab,
-        // so it announces a document once however many canvases here want it.
+        // so it announces a document once however many documents here want it.
         port.postMessage({ type: 'subscribe', doc })
       }
       set.add(listener)

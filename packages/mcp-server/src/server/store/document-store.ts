@@ -15,10 +15,10 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
+import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import { validateCanvasId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
+import { validateDocumentId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
   isCorruptStoredDataError,
@@ -53,7 +53,7 @@ function blobsRoot(): string {
 
 function documentBlobPath(workspaceId: string, documentId: string): string {
   validateWorkspaceId(workspaceId)
-  validateCanvasId(documentId)
+  validateDocumentId(documentId)
   return join(blobsRoot(), workspaceId, 'document', `${documentId}.loro`)
 }
 
@@ -93,13 +93,13 @@ export async function saveDocument(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const overwrite = options.overwrite ?? false
     const db = await dbReady()
-    const existingCanvasId = await getDocumentIdByPath(db, workspaceId, path)
-    if (existingCanvasId && !overwrite) {
+    const existingDocumentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (existingDocumentId && !overwrite) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-    // Pre-allocate the documentId for new canvases so the blob can be written
+    // Pre-allocate the documentId for new documents so the blob can be written
     // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
     // transient corruption) we leave no DB row behind, so a retry can succeed
     // instead of hitting a phantom ConflictError on the orphan.
@@ -107,13 +107,13 @@ export async function saveDocument(
     // table and the port's DocumentEntry accepts only a canonical ULID, so a
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
-    const documentId = existingCanvasId ?? generateDocumentId()
+    const documentId = existingDocumentId ?? generateDocumentId()
     const blobPath = documentBlobPath(workspaceId, documentId)
     await mkdir(dirname(blobPath), { recursive: true })
     const snapshot = doc.export({ mode: 'snapshot' })
     await writeFile(blobPath, snapshot)
     await upsertWorkspaceRow(db, workspaceId)
-    if (existingCanvasId) {
+    if (existingDocumentId) {
       // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
       // `kind` and must never touch the stored value. An explicit `kind` is
       // an intentional sync request (e.g. restore reconciling a different-
@@ -403,7 +403,7 @@ export async function compactDocument(
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
   }
   await writeFile(blobPath, shallow)
-  // Stamp the canvas row so the auto-Optimize loop can skip canvases that
+  // Stamp the canvas row so the auto-Optimize loop can skip documents that
   // have not changed since the last successful compaction, and so the UI
   // can surface "Auto-optimised Ns ago" without reading file mtimes.
   await db
@@ -422,7 +422,7 @@ export async function compactDocument(
   return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
 }
 
-// ── most-recent auto-compact timestamp across all canvases ───────────
+// ── most-recent auto-compact timestamp across all documents ───────────
 // Used by the storage report to show "Auto-optimised Ns ago" without
 // client-side aggregation. Returns null when no canvas has been compacted yet.
 export async function readLatestCompactedAt(): Promise<number | null> {
@@ -588,7 +588,7 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 }
 
 // ── rename a canvas's path ──
-// Updates only canvases.path. branches/versions FK on documentId and the blob
+// Updates only documents.path. branches/versions FK on documentId and the blob
 // path also uses documentId, so none of that moves. Returns null (never
 // throws) for a missing source canvas, matching deleteDocument's boolean-
 // shaped "already gone" handling; a rename onto an already-taken path
@@ -630,10 +630,10 @@ export async function renameDocumentPath(
   })
 }
 
-// ── list canvases from the canvases table ──
+// ── list documents from the documents table ──
 export async function listDocuments(
   workspaceId: string,
-): Promise<Pick<CanvasSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
+): Promise<Pick<DocumentSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db

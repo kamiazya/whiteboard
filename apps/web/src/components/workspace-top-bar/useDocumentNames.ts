@@ -1,18 +1,18 @@
 import {
-  canvasesApiUrl,
+  documentsApiUrl,
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DocumentInfo } from './types'
 
-const EMPTY_NAMES: WorkspaceNames = { canvases: {}, pinned: [] }
+const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 
 interface UseDocumentNamesOptions {
   workspaceId: string
-  canvases: DocumentInfo[]
+  documents: DocumentInfo[]
   // Local mode has no daemon to ask for /names — display names come from
-  // canvases[].name instead, and rename/pin never PUT to the daemon.
+  // documents[].name instead, and rename/pin never PUT to the daemon.
   isLocalMode: boolean
   daemonFetch: typeof globalThis.fetch
 }
@@ -24,7 +24,7 @@ interface UseDocumentNamesOptions {
 // caller from writing an un-validated shape into this state.
 export function useDocumentNames({
   workspaceId,
-  canvases,
+  documents,
   isLocalMode,
   daemonFetch,
 }: UseDocumentNamesOptions) {
@@ -53,25 +53,25 @@ export function useDocumentNames({
   }, [workspaceId, daemonFetch, isLocalMode])
 
   // Local-mode display names come straight from the caller-provided
-  // canvases array rather than the daemon's /names response.
+  // documents array rather than the daemon's /names response.
   const localNames = useMemo<WorkspaceNames>(() => {
     if (!isLocalMode) return EMPTY_NAMES
     const byId: Record<string, string> = {}
-    for (const c of canvases) {
+    for (const c of documents) {
       if (c.name) byId[c.path] = c.name
     }
-    return { canvases: byId, pinned: [] }
-  }, [isLocalMode, canvases])
+    return { documents: byId, pinned: [] }
+  }, [isLocalMode, documents])
 
   const effectiveNames = isLocalMode ? localNames : names
 
   // Daemon-mode rename commit. Returns whether the PUT succeeded so the
   // caller can decide how to react (the local-mode rename path is entirely
   // separate — it calls the host page's onRenameDocument instead).
-  const renameCanvas = useCallback(
+  const renameDocument = useCallback(
     async (targetPath: string, name: string): Promise<boolean> => {
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetPath, 'name'), {
+        const res = await daemonFetch(documentsApiUrl(workspaceId, targetPath, 'name'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),
@@ -93,7 +93,7 @@ export function useDocumentNames({
   const togglePin = useCallback(
     async (targetPath: string, pinned: boolean) => {
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, targetPath, 'pin'), {
+        const res = await daemonFetch(documentsApiUrl(workspaceId, targetPath, 'pin'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pinned }),
@@ -106,5 +106,5 @@ export function useDocumentNames({
     [workspaceId, daemonFetch],
   )
 
-  return { effectiveNames, renameCanvas, togglePin }
+  return { effectiveNames, renameDocument, togglePin }
 }

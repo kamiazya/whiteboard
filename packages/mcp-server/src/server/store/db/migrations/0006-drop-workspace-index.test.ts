@@ -32,7 +32,7 @@ async function indexExists(db: Kysely<DatabaseSchema>, name: string): Promise<bo
 }
 
 const TABLES = [
-  'workspaceIndexCanvasList',
+  'workspaceIndexDocumentList',
   'workspaceIndexFacets',
   'workspaceIndexAliases',
   'workspaceIndexBacklinks',

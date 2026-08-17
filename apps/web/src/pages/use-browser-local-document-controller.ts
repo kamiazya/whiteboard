@@ -37,11 +37,11 @@ export interface BrowserLocalDocumentController {
   // Resolves once the rename is flushed, rejects if the underlying save
   // failed — callers (e.g. WorkspaceTopBar) rely on the rejection to keep a
   // rename input open for retry instead of silently closing it.
-  renameCanvas(name: string): Promise<void>
+  renameDocument(name: string): Promise<void>
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
-  listCanvases(): Promise<DocumentSnapshot[]>
-  createCanvas(name?: string, kind?: DocumentSnapshot['kind']): Promise<DocumentSnapshot>
+  listDocuments(): Promise<DocumentSnapshot[]>
+  createDocument(name?: string, kind?: DocumentSnapshot['kind']): Promise<DocumentSnapshot>
   /** Resolves true when the switch landed; false when superseded, when the
    *  target is missing (recoverable — e.g. a stale deep link), or when the
    *  store degraded. */
@@ -69,7 +69,7 @@ export function useBrowserLocalDocumentController(
   // plain (no deep link) load resumes here — the same contract switchDocument
   // already has. A stale/deleted id falls back to the normal flow rather
   // than showing an error: a dead bookmark must not dead-end the user.
-  initialCanvasId?: string,
+  initialDocumentId?: string,
 ): BrowserLocalDocumentController {
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -96,7 +96,7 @@ export function useBrowserLocalDocumentController(
   // requested one when its async load settles is allowed to commit state, so
   // an earlier call resolving after a later one can never clobber it.
   const switchGenerationRef = useRef(0)
-  // Tracks the currently in-flight flush so overlapping callers (renameCanvas's
+  // Tracks the currently in-flight flush so overlapping callers (renameDocument's
   // fire-and-forget flush racing with switchDocument's own awaited flush) serialize
   // on the real outcome instead of the second caller observing an already-cleared
   // pendingSnapshotRef and returning true before the first save actually settles.
@@ -154,11 +154,11 @@ export function useBrowserLocalDocumentController(
     let cancelled = false
 
     async function load() {
-      if (initialCanvasId !== undefined) {
-        const requested = await storeRef.current.load(initialCanvasId)
+      if (initialDocumentId !== undefined) {
+        const requested = await storeRef.current.load(initialDocumentId)
         if (cancelled) return
         if (requested.kind === 'ok') {
-          await storeRef.current.setDefaultDocumentId(initialCanvasId)
+          await storeRef.current.setDefaultDocumentId(initialDocumentId)
           if (!cancelled) setSnapshot(requested.snapshot)
           return
         }
@@ -212,7 +212,7 @@ export function useBrowserLocalDocumentController(
 
   // Discrete edit — flush immediately (no debounce) so a rename
   // never lingers as "Unsaved changes" and survives a fast reload.
-  const renameCanvas = useCallback(
+  const renameDocument = useCallback(
     (name: string): Promise<void> => {
       // Merge with the freshest pending snapshot instead of committed state, so
       // a concurrent edit in flight is never clobbered. Computed
@@ -311,11 +311,11 @@ export function useBrowserLocalDocumentController(
     setCleanupCompleted(false)
   }, [])
 
-  const listCanvases = useCallback((): Promise<DocumentSnapshot[]> => {
-    return storeRef.current.listCanvases()
+  const listDocuments = useCallback((): Promise<DocumentSnapshot[]> => {
+    return storeRef.current.listDocuments()
   }, [])
 
-  const createCanvas = useCallback(
+  const createDocument = useCallback(
     async (
       name?: string,
       kind: DocumentSnapshot['kind'] = 'spatial',
@@ -415,7 +415,7 @@ export function useBrowserLocalDocumentController(
     }
     const mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
 
-    const existingList = await storeRef.current.listCanvases()
+    const existingList = await storeRef.current.listDocuments()
     const existingNames = new Set(existingList.map((c) => c.name))
     const newName = deriveCopyName(source.name, existingNames)
 
@@ -443,11 +443,11 @@ export function useBrowserLocalDocumentController(
     persistence,
     cleanupCompleted,
     cleanupError,
-    renameCanvas,
+    renameDocument,
     triggerCleanup,
     startFresh,
-    listCanvases,
-    createCanvas,
+    listDocuments,
+    createDocument,
     switchDocument,
     duplicateDocument,
   }

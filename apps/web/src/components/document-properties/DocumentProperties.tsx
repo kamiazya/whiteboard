@@ -43,7 +43,7 @@ export interface DocumentPropertiesProps {
   readonly status?: ReactNode
   /**
    * Canvas display settings control, rendered beside the properties toggle.
-   * Spatial canvases pass the settings popover; markdown canvases omit it —
+   * Spatial documents pass the settings popover; markdown documents omit it —
    * edge routing has no meaning for a document with no spatial scene.
    */
   readonly settings?: ReactNode

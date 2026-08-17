@@ -20,7 +20,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
+    listDocuments: vi.fn(),
   }
 })
 
@@ -51,7 +51,7 @@ vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
 }))
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
 function MemoryRouterWrapper({ children }: { children: ReactNode }) {
   return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
@@ -62,8 +62,8 @@ describe('DaemonDocumentPage default backend wiring', () => {
     window.localStorage.clear()
     constructed.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 

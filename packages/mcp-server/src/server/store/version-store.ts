@@ -15,7 +15,7 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getDocumentIdByPath, upsertCanvasRow } from './db/upsert-workspace.js'
+import { getDocumentIdByPath, upsertDocumentRow } from './db/upsert-workspace.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -142,7 +142,7 @@ interface VersionRow {
   frontiers: string
   hasThumbnail: number
   createdAt: number
-  // The store hydrates this from the canvases row at list time so callers
+  // The store hydrates this from the documents row at list time so callers
   // still see a path field on each entry.
   path: string
 }
@@ -207,7 +207,7 @@ export class FileVersionStore implements VersionStore {
       const operator = opts.operator
 
       const db = await dbReady()
-      const documentId = await upsertCanvasRow(db, workspaceId, path)
+      const documentId = await upsertDocumentRow(db, workspaceId, path)
       await db
         .insertInto('versions')
         .values({

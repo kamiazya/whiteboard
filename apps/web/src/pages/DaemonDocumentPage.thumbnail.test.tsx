@@ -8,8 +8,8 @@
  * prop-threading test, because a regression here is invisible at runtime.
  */
 import type {
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   act,
@@ -50,19 +50,19 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return {
     ...actual,
     listWorkspaces: vi.fn(),
-    listCanvases: vi.fn(),
-    createCanvas: vi.fn(),
+    listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
-const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-class FakeBackend implements CanvasBackend {
-  handlers: CanvasBackendHandlers | null = null
-  connect(handlers: CanvasBackendHandlers): void {
+class FakeBackend implements DocumentBackend {
+  handlers: DocumentBackendHandlers | null = null
+  connect(handlers: DocumentBackendHandlers): void {
     this.handlers = handlers
     handlers.onConnected()
     const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
@@ -86,8 +86,8 @@ describe('DaemonDocumentPage thumbnail wiring', () => {
   beforeEach(() => {
     capturedProps.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListCanvases.mockResolvedValue({
-      canvases: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
   afterEach(() => {

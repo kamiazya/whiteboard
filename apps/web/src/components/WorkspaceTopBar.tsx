@@ -45,7 +45,7 @@ export interface WorkspaceTopBarCapabilities {
 interface Props {
   workspaceId: string
   path: string
-  canvases: DocumentInfo[]
+  documents: DocumentInfo[]
   getThumbnailBlob?: () => Promise<Blob | null>
   // apps/web has no react-router-dom; the page owns navigation and passes it
   // in as callbacks instead of the original Link/useNavigate. Omitted when
@@ -117,7 +117,7 @@ interface Props {
 export default function WorkspaceTopBar({
   workspaceId,
   path,
-  canvases,
+  documents,
   onToggleFullscreen,
   isFullscreen,
   getThumbnailBlob,
@@ -142,9 +142,9 @@ export default function WorkspaceTopBar({
   const log = getAppLogger('workspace-top-bar')
   const daemonFetch = useDaemonApi()
 
-  const { effectiveNames, renameCanvas, togglePin } = useDocumentNames({
+  const { effectiveNames, renameDocument, togglePin } = useDocumentNames({
     workspaceId,
-    canvases,
+    documents,
     isLocalMode,
     daemonFetch,
   })
@@ -185,9 +185,9 @@ export default function WorkspaceTopBar({
     }
   }, [])
 
-  const canvasCustomName = effectiveNames.canvases[path]
+  const canvasCustomName = effectiveNames.documents[path]
   // Prefer the custom name when present; otherwise split the path into prefix and leaf.
-  // Muting the prefix helps show that nearby canvases belong to the same group.
+  // Muting the prefix helps show that nearby documents belong to the same group.
   const slashIndex = path.indexOf('/')
   const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? path.slice(0, slashIndex) : null
   const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? path.slice(slashIndex + 1) : null
@@ -206,13 +206,13 @@ export default function WorkspaceTopBar({
     isLocalMode,
     currentName: canvasCustomName,
     onRenameDocument,
-    renameCanvas,
+    renameDocument,
     mountedRef,
   })
 
   const { newDocumentError, newDocumentBusy, openNewDocument } = useCreateDocument({
     workspaceId,
-    canvases,
+    documents,
     path,
     isLocalMode,
     onCreateDocument,
@@ -262,7 +262,7 @@ export default function WorkspaceTopBar({
         <DocumentDropdown
           workspaceId={workspaceId}
           path={path}
-          canvases={canvases}
+          documents={documents}
           effectiveNames={effectiveNames}
           isLocalMode={isLocalMode}
           documentSearch={documentSearch}
@@ -351,7 +351,7 @@ export default function WorkspaceTopBar({
 
         {titleSlot?.({
           name: canvasCustomName ?? path,
-          ...(isLocalMode ? {} : { onRename: (next: string) => void renameCanvas(path, next) }),
+          ...(isLocalMode ? {} : { onRename: (next: string) => void renameDocument(path, next) }),
         })}
 
         {/* Branch chip with switch, create, rename, delete, and merge actions.
