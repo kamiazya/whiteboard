@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -189,6 +190,40 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     const listRes = await app.request('/api/workspaces/ws1/canvases')
     const listJson = (await listRes.json()) as { canvases: { path: string; kind: string }[] }
     expect(listJson.canvases.find((c) => c.path === 'legacy')?.kind).toBe('spatial')
+  })
+
+  it('writes kind onto the stored Loro doc itself, not only the SQL row', async () => {
+    const app = createCanvasRouter()
+
+    const markdownRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'markdown-note', kind: 'markdown' }),
+    })
+    expect(markdownRes.status).toBe(200)
+    const markdownDoc = await canvasStore.loadDocument('ws1', 'markdown-note')
+    expect(readDocumentKind(markdownDoc)).toBe('markdown')
+
+    const spatialRes = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'board', kind: 'spatial' }),
+    })
+    expect(spatialRes.status).toBe(200)
+    const spatialDoc = await canvasStore.loadDocument('ws1', 'board')
+    expect(readDocumentKind(spatialDoc)).toBe('spatial')
+  })
+
+  it('stamps the schema-defaulted kind onto the doc bytes when kind is omitted', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'legacy-kind-bytes' }),
+    })
+    expect(res.status).toBe(200)
+    const doc = await canvasStore.loadDocument('ws1', 'legacy-kind-bytes')
+    expect(readDocumentKind(doc)).toBe('spatial')
   })
 
   it('returns 400 with Problem Details title naming the actual failing field on an invalid kind', async () => {
