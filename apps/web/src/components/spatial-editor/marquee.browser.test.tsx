@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -111,6 +112,6 @@ it('a stationary empty double press still creates a node at the point', async ()
 
   await vi.waitFor(() => {
     expect(latest.nodes.length).toBe(4)
-    expect(container.querySelector('textarea')).not.toBeNull()
+    expect(nodeEditorContent(container)).not.toBeNull()
   })
 })

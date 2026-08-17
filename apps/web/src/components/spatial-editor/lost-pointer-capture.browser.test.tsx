@@ -17,6 +17,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -77,11 +78,11 @@ it('keeps the node a double-TAP just created when the touch capture is handed ba
   touchTap(root, 600, 450)
   await new Promise((resolve) => setTimeout(resolve, 30))
   touchTap(root, 600, 450)
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
   expect(commands.filter((kind) => kind === 'create-node')).toHaveLength(1)
   expect(commands).not.toContain('delete-node')
-  expect(container.querySelector('textarea')).not.toBeNull()
+  expect(nodeEditorContent(container)).not.toBeNull()
 })
 
 it('recovers a capture lost while its own finger is still down, mid-pinch', async () => {
@@ -130,7 +131,7 @@ it('recovers a capture lost while its own finger is still down, mid-pinch', asyn
   }
 
   expect(commands).toContain('create-node')
-  expect(container.querySelector('textarea')).not.toBeNull()
+  expect(nodeEditorContent(container)).not.toBeNull()
 })
 
 it('recovers a capture lost mid-resize, which never went through the root press', async () => {
@@ -186,7 +187,7 @@ it('still discards the new node on a real pointercancel', async () => {
   touchTap(root, 600, 450)
   await new Promise((resolve) => setTimeout(resolve, 30))
   touchTap(root, 600, 450)
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
   root.dispatchEvent(
     new PointerEvent('pointercancel', { bubbles: true, pointerId: 1, pointerType: 'touch' }),

@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -266,9 +267,9 @@ it('entering hand mode clears edit state: selection, open text editor, armed con
   // An open text editor closes (uncommitted text is discarded, like Escape).
   fireEvent.click(selectBtn)
   await userEvent.dblClick(root, { position: { x: 150, y: 130 } })
-  await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
   fireEvent.click(handBtn)
-  expect(container.querySelector('textarea')).toBeNull()
+  expect(nodeEditorContent(container)).toBeNull()
 
   // An armed connect never completes across the mode switch.
   fireEvent.click(container.querySelector('[data-testid="connect-tool-button"]') as HTMLElement)

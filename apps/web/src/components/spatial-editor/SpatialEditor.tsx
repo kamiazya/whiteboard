@@ -141,6 +141,7 @@ import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
+import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -3668,7 +3669,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           {gestureState.kind === 'editing-text' &&
             selectedNode?.type === 'text' &&
             selection !== undefined && (
-              <TextNodeEditor
+              <MarkdownNodeEditor
                 box={selection.box}
                 initialText={selectedNode.text}
                 style={(() => {
