@@ -26,7 +26,8 @@ import { fileURLToPath } from 'node:url'
 import { readSpatialCanvas, writeSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
-import { buildWhiteboardWsProtocols } from '../../src/shared/ws-protocol.js'
+import { canvasApiUrl } from '../../src/shared/api-contracts/canvas-url.js'
+import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../src/shared/ws-protocol.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -66,6 +67,17 @@ function assertNoTokenLeak(text) {
 function log(message) {
   assertNoTokenLeak(message)
   console.log(message)
+}
+
+// Same funnel as log(), for the error-reporting paths (WS errors, the
+// top-level rejection handler) that print to stderr instead of stdout.
+function logError(message) {
+  try {
+    assertNoTokenLeak(message)
+    console.error(message)
+  } catch {
+    console.error('[e2e] error message suppressed: token leaked into output')
+  }
 }
 
 function getFreePort() {
@@ -225,10 +237,6 @@ async function waitForReadyAndInitialize() {
   }
 }
 
-function pathSegments(path) {
-  return path.split('/').map(encodeURIComponent).join('/')
-}
-
 async function main() {
   await waitForReadyAndInitialize()
   log(`[e2e] daemon ready → ${mcpUrl}`)
@@ -269,7 +277,7 @@ async function main() {
   // ── Step 3: read the SAME document with no mocks through the HTTP path-
   //    snapshot route and the WS route — the exact shape of the drift bug ──
   const snapshotRes = await fetch(
-    `http://127.0.0.1:${port}/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${pathSegments(DOCUMENT_PATH)}/snapshot`,
+    `http://127.0.0.1:${port}${canvasApiUrl(WORKSPACE_ID, DOCUMENT_PATH, 'snapshot')}`,
     { headers: { Authorization: `Bearer ${TOKEN}` } },
   )
   if (!snapshotRes.ok) {
@@ -285,11 +293,18 @@ async function main() {
   }
   log('[e2e] HTTP path-snapshot → node A present with exact content')
 
-  const wsUrl = `ws://127.0.0.1:${port}/ws/${encodeURIComponent(WORKSPACE_ID)}/${pathSegments(DOCUMENT_PATH)}`
+  const wsUrl = buildWhiteboardWsUrl(mcpUrl, WORKSPACE_ID, DOCUMENT_PATH)
   const ws = new WebSocket(wsUrl, buildWhiteboardWsProtocols(TOKEN))
-  const wsSnapshotBytes = await new Promise((resolveSnapshot, rejectSnapshot) => {
+  // Long-lived for the whole WS lifetime (initial snapshot, the later push,
+  // and close) — not scoped to the snapshot wait — so a socket error any
+  // time after the snapshot arrives is reported through the script's own
+  // token-safe path instead of throwing uncaught and skipping cleanup().
+  ws.on('error', (err) => {
+    logError(`[e2e] WS error: ${err instanceof Error ? err.message : String(err)}`)
+    cleanup(1)
+  })
+  const wsSnapshotBytes = await new Promise((resolveSnapshot) => {
     ws.once('message', (data) => resolveSnapshot(new Uint8Array(data)))
-    ws.once('error', rejectSnapshot)
   })
   const wsDoc = new LoroDoc()
   wsDoc.import(wsSnapshotBytes)
@@ -383,7 +398,7 @@ async function main() {
 main().then(
   () => cleanup(0),
   (err) => {
-    console.error(`[e2e] FAIL: ${err instanceof Error ? err.message : String(err)}`)
+    logError(`[e2e] FAIL: ${err instanceof Error ? err.message : String(err)}`)
     cleanup(1)
   },
 )
