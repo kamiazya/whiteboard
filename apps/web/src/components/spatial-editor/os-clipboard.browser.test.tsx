@@ -158,6 +158,38 @@ it('a native cut copies to the OS clipboard AND removes the selection in one bat
   expect(latest.commands.at(-1)?.kind).toBe('batch')
 })
 
+it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON carries the cut surface', () => {
+  const wired: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
+      { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
+    ],
+    edges: [{ id: 'ab', fromNode: 'a', toNode: 'b', label: 'kept' }],
+  }
+  const { Host, latest } = makeHost(wired)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectFirst(root)
+
+  const clipboardData = clipboardWith()
+  dispatchClipboard(root, 'cut', clipboardData)
+  expect(latest.canvas.edges).toEqual([])
+  const written = clipboardData.getData('text/plain')
+  // The cut surface survives the JSON round trip Ctrl+V re-parses.
+  expect(JSON.parse(written).cut.boundaryEdges).toHaveLength(1)
+
+  // Each paste re-parses the SAME text, exactly like repeated Ctrl+V.
+  dispatchClipboard(root, 'paste', clipboardWith(written))
+  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  expect(latest.canvas.edges).toHaveLength(1)
+  const restored = latest.canvas.edges[0]
+  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+
+  dispatchClipboard(root, 'paste', clipboardWith(written))
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(latest.canvas.edges).toHaveLength(1)
+})
+
 it('the in-app store still round-trips when the event carries no clipboardData', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

@@ -2,7 +2,7 @@
 // the module-level clipboard store — cross-canvas within the tab, every
 // mutation ONE batch command (one undo step), reminted ids on every paste.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
@@ -21,13 +21,19 @@ const initial: SpatialCanvas = {
 }
 
 function makeHost(start: SpatialCanvas = initial) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
+  const latest: {
+    canvas: SpatialCanvas
+    commands: EditorCommand[]
+    reset: (canvas: SpatialCanvas) => void
+  } = {
     canvas: start,
     commands: [],
+    reset: () => {},
   }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(start)
     latest.canvas = canvas
+    latest.reset = setCanvas
     return (
       <div style={{ width: 800, height: 600 }}>
         <SpatialEditor
@@ -112,6 +118,92 @@ it('cut removes the selection as ONE batch and paste restores a reminted copy', 
   clip(root, 'paste')
   expect(latest.canvas.nodes).toHaveLength(2)
   expect(latest.canvas.nodes[1]).toMatchObject({ text: 'A' })
+})
+
+it('cut then paste restores the boundary edge to its surviving peer — cut is a move, not a delete', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  clip(root, 'cut')
+  expect(latest.canvas.edges).toEqual([])
+
+  clip(root, 'paste')
+  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  expect(pasted).toBeDefined()
+  // The edge to the untouched peer is back, endpoints reminted-side + peer.
+  expect(latest.canvas.edges).toHaveLength(1)
+  const restored = latest.canvas.edges[0]
+  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+
+  // A second paste of the same cut is a plain copy: no second wire onto the peer.
+  clip(root, 'paste')
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(latest.canvas.edges).toHaveLength(1)
+})
+
+it("the context menu's Cut records the cut surface too — menu and keyboard are the same cut", () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 120, clientY: r.top + 80 })
+  const cutItem = [...container.querySelectorAll('[role="menuitem"]')].find(
+    (el) => (el.getAttribute('aria-label') ?? el.textContent) === 'Cut',
+  ) as HTMLElement
+  expect(cutItem).toBeDefined()
+  fireEvent.click(cutItem)
+  expect(latest.canvas.nodes.map((n) => n.id)).toEqual(['b'])
+  expect(latest.canvas.edges).toEqual([])
+
+  clip(root, 'paste')
+  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  expect(latest.canvas.edges).toHaveLength(1)
+  const restored = latest.canvas.edges[0]
+  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+})
+
+it('undoing a paste restores the cut surface — the next paste reconnects again', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  clip(root, 'cut')
+  const afterCut = latest.canvas
+  clip(root, 'paste')
+  expect(latest.canvas.edges).toHaveLength(1)
+
+  // The paste landed in the wrong spot and the person undoes it. Undo lives
+  // in the host (one batch = one undo step), so from this component's side
+  // it arrives as the pre-paste snapshot coming back.
+  act(() => latest.reset(afterCut))
+  expect(latest.canvas.edges).toEqual([])
+
+  // The document holds no trace of the first paste, so the next paste is a
+  // first paste again: the boundary edge must reconnect, not silently drop.
+  clip(root, 'paste')
+  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  expect(latest.canvas.edges).toHaveLength(1)
+  const restored = latest.canvas.edges[0]
+  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+})
+
+it('copy then paste never wires the duplicate to the original peer', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  clip(root, 'copy')
+  clip(root, 'paste')
+  // The original edge a–b survives untouched; the duplicate arrives bare.
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(latest.canvas.edges).toHaveLength(1)
+  expect(latest.canvas.edges[0]).toMatchObject({ fromNode: 'a', toNode: 'b' })
 })
 
 it('a multi-selection copy carries the internal edge with properties; paste remaps endpoints', () => {

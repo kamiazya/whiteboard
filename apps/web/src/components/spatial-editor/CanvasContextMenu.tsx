@@ -118,6 +118,8 @@ export interface CanvasContextMenuProps {
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
   readonly copySelection: () => ClipboardFragment | null
+  /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
+  readonly cutSelection: () => ClipboardFragment | null
   readonly deleteSelectionAsBatch: () => boolean
   readonly duplicateSelection: () => boolean
   readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
@@ -157,6 +159,7 @@ export function CanvasContextMenu({
   onOpenFileRef,
   openLinkNode,
   copySelection,
+  cutSelection,
   deleteSelectionAsBatch,
   duplicateSelection,
   reorderSelection,
@@ -568,7 +571,7 @@ export function CanvasContextMenu({
           icon: <Scissors />,
           onSelect: () => {
             // Menu path mirrors the native cut: copy, then remove.
-            if (copySelection() !== null) deleteSelectionAsBatch()
+            if (cutSelection() !== null) deleteSelectionAsBatch()
           },
         })
         verbs.push({

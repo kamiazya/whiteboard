@@ -739,6 +739,36 @@ describe('buildFragmentInsertCommand', () => {
     return () => `new-${n++}`
   }
 
+  it('a cut fragment reconnects its boundary edges to surviving peers, reminted on the cut side', () => {
+    // The peer stayed on the canvas; the cut node comes back with a new id.
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'peer', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'peer' }],
+      edges: [],
+    }
+    const cutFragment = {
+      ...fragment(),
+      cut: {
+        id: 'cut-1',
+        boundaryEdges: [
+          { id: 'src-boundary', fromNode: 'src-b', toNode: 'peer', label: 'kept' },
+          // This peer is gone (cross-canvas, or deleted since): silently dropped.
+          { id: 'src-gone', fromNode: 'src-a', toNode: 'vanished' },
+        ],
+      },
+    }
+    const command = buildFragmentInsertCommand(canvas, cutFragment, sequentialIds())
+    if (command?.kind !== 'batch') throw new Error('expected a batch command')
+    const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
+    const nodeCommands = command.commands.filter((c) => c.kind === 'create-node')
+    const remintedB = nodeCommands.find((c) => c.node.type === 'text' && c.node.text === 'b')?.node
+      .id
+    expect(remintedB).toBeDefined()
+    const boundary = edgeCommands.find((c) => c.edge.label === 'kept')?.edge
+    expect(boundary).toMatchObject({ fromNode: remintedB, toNode: 'peer' })
+    expect(boundary?.id).not.toBe('src-boundary')
+    expect(edgeCommands.some((c) => c.edge.toNode === 'vanished')).toBe(false)
+  })
+
   it('returns undefined for an empty-node fragment', () => {
     const canvas: SpatialCanvas = { nodes: [], edges: [] }
     expect(buildFragmentInsertCommand(canvas, { nodes: [], edges: [] }, sequentialIds())).toBe(
