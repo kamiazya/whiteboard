@@ -33,26 +33,35 @@ Returns `{ canvases: [{ documentId, path, name? }] }` — placement only, no con
 `workspaceId` is an error here, not an empty list, so a typo reads as a failure rather than "nothing
 found."
 
-### Step 2: Sample Each Document
+### Step 2: Classify, Then Sample Each Document
 
-For a markdown document, `wb_document_get` returns the OKF Markdown body directly:
+Step 1's listing carries no `kind`, and `wb_document_get` is the only tool that reports one — so
+classification comes first, and it costs one `wb_document_get` per document:
 
 ```js
 wb_document_get({ workspaceId, documentId })
-// -> { kind: "markdown", content: "...", frontmatter: {...} }
+// markdown -> { kind: "markdown", content: "...", frontmatter: {...} }  (the body, directly)
+// spatial  -> { kind: "spatial", content: "..." }                        (full JSON Canvas payload)
+// no recorded kind -> throws a "no recorded kind" error — itself a signal worth reporting
 ```
 
-For a spatial document, prefer `wb_scene_digest` over `wb_document_get` — it summarizes the
-laid-out scene (counts and bounding boxes) without pulling the full JSON Canvas payload:
+**Do not probe with `wb_scene_digest` first.** The digest reads the spatial containers without
+checking the document's kind, so a markdown document — whose body lives elsewhere — digests as
+`{ nodes: [], edges: [] }` with no error. Digest-first therefore cannot distinguish "empty spatial
+document" from "markdown document full of prose."
+
+Once a document is KNOWN spatial (from `wb_document_get`'s `kind`, or because this session created
+it), `wb_scene_digest` is the cheap re-probe for later passes — counts and bounding boxes without
+re-pulling the payload:
 
 ```js
-wb_scene_digest({ workspaceId, documentId })
+wb_scene_digest({ workspaceId, documentId })  // only meaningful for a known-spatial document
 ```
 
-A document created before formats were tracked answers neither call (`wb_document_get` refuses
-with a "no recorded kind" error); that itself is a signal worth reporting; the only way to give it a
-kind is to write to it (`wb_node_add`/`wb_node_patch`/`wb_edge_patch` records `spatial`,
-`wb_document_set` records `markdown`).
+A document with no recorded kind predates format tracking (`wb_document_get` refuses; the digest
+still answers, misleadingly, from the empty spatial containers). The only way to give it a kind is
+to write to it (`wb_node_add`/`wb_node_patch`/`wb_edge_patch` records `spatial`, `wb_document_set`
+records `markdown`).
 
 ### Step 3: Judge Staleness
 
@@ -61,7 +70,7 @@ structurally instead:
 
 | Signal | How To Check | Likely Meaning |
 | --- | --- | --- |
-| empty spatial document | digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for `wb_document_delete` |
+| empty spatial document | `kind` is `spatial` (Step 2) AND digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for `wb_document_delete`. A zero-node digest ALONE proves nothing: markdown documents always digest empty |
 | near-duplicate path | two `wb_document_list` entries with similar `path`/`name` | probably one abandoned in favor of the other |
 | markdown document with an empty body | `content` is blank apart from frontmatter | scaffolded but never written |
 | document with no recorded kind | `wb_document_get` throws the "no recorded kind" error | predates format tracking; needs deciding, not deleting on sight |
