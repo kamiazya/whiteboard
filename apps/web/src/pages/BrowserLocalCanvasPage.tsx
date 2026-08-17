@@ -689,7 +689,10 @@ export function BrowserLocalCanvasPage({
             }
           >
             <WorkspaceTopBar
-              titleSlot={canvasTitleSlot}
+              // Local mode names documents through its own store, not through
+              // the daemon's `/names`, so the identity the bar offers is unused
+              // here and `canvasName`/`onTitleChange` stay the source.
+              titleSlot={() => canvasTitleSlot}
               statusSlot={
                 <ConnectionStatus state="local">
                   <p className="text-muted-foreground">

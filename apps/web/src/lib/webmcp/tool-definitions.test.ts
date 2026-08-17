@@ -37,7 +37,7 @@ describe('webMcpTools manifest', () => {
   })
 
   // Regression guard: this tool read the live scene through
-  // ExcalidrawImperativeAPI, which is going away, and has no OpenCanvas-shaped
+  // ExcalidrawImperativeAPI, which is going away, and has no document-shaped
   // replacement yet. It must stay absent rather than be silently reintroduced
   // by a later merge.
   it('does not register the removed Excalidraw-backed scene-summary tool', () => {

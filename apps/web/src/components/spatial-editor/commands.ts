@@ -26,6 +26,7 @@ import type {
   LineJumps,
   SpatialCanvas,
   SpatialNode,
+  StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import type { Point } from './viewport.js'
@@ -167,6 +168,12 @@ export type EditorCommand =
    * pipeline beside them.
    */
   | { readonly kind: 'set-body'; readonly text: string }
+  /**
+   * A markdown document's OKF core facets, written to the doc's `core` map.
+   * Same class as `set-body` and not an `EditorLeafCommand` for the same
+   * reasons: no node, no edge, canvas value untouched, never in a batch.
+   */
+  | { readonly kind: 'set-facets'; readonly facets: StoredCoreFacets }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -473,10 +480,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
     case 'set-text':
       return setText(canvas, command.id, command.text)
     case 'set-body':
-      // The body is not IN the canvas — it is the doc's own `body` text
-      // container — so applying one leaves the canvas value identical.
-      // Returning the same reference is what keeps a keystroke in the
-      // markdown editor from re-rendering the spatial scene.
+    case 'set-facets':
+      // Neither is IN the canvas — the body is the doc's own `body` text
+      // container and the facets are its `core` map — so applying one leaves
+      // the canvas value identical. Returning the same reference is what
+      // keeps a keystroke in the markdown editor from re-rendering the
+      // spatial scene.
       return canvas
     case 'connect-nodes':
       return connectNodes(canvas, command.edgeId, command.fromNode, command.toNode)

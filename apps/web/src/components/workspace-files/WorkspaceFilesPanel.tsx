@@ -16,10 +16,10 @@ type OkfPreview =
   | { kind: 'error'; path: string }
 
 /**
- * The OpenCanvas workspace file tree (/api/v1): nested document paths on the
- * left, a read-only OKF markdown preview of the clicked canvas on the
- * right. Read-only by design — editing OpenCanvas docs stays with the MCP
- * tools until the editor surfaces migrate to the v1 world.
+ * The workspace document tree (`/api/v1`): nested document paths on the
+ * left, a read-only OKF markdown preview of the clicked document on the
+ * right. Read-only by design — editing stays with the MCP tools until the
+ * editor surfaces migrate to the v1 world.
  */
 export function WorkspaceFilesPanel({
   daemonFetch,
@@ -79,9 +79,7 @@ export function WorkspaceFilesPanel({
     )
   }
   if (listStatus === 'not-found') {
-    return (
-      <p className="text-muted-foreground text-sm">This workspace has no OpenCanvas tree yet.</p>
-    )
+    return <p className="text-muted-foreground text-sm">This workspace has no document tree yet.</p>
   }
   if (canvases === null) {
     return <p className="text-muted-foreground text-sm">Loading files…</p>

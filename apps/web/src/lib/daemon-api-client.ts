@@ -173,7 +173,7 @@ export function setCanvasName(
   )
 }
 
-// ---- OpenCanvas /api/v1 surface (documentId + derived alias world) ----
+// ---- /api/v1 document surface (documentId + derived alias world) ----
 
 export function listCanvasesV1(
   fetchFn: typeof globalThis.fetch,

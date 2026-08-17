@@ -2,7 +2,7 @@
  * Classification of all registered MCP tools by smoke-test coverage level.
  *
  * ALL_REGISTERED_TOOLS is the authoritative list that mirrors what
- * createMcpServer (index.ts) registers at runtime via registerOpenCanvasTools.
+ * createMcpServer (index.ts) registers at runtime via registerDocumentTools.
  * It is defined independently of the four category arrays below so that the
  * meta-property test can verify category completeness without self-reference.
  *
@@ -33,7 +33,7 @@
  *                         Each entry carries reason and unblock.
  */
 
-// Authoritative list — keep in sync with registerOpenCanvasTools calls.
+// Authoritative list — keep in sync with registerDocumentTools calls.
 export const ALL_REGISTERED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
@@ -85,7 +85,7 @@ export const ERROR_PATH_ONLY_TOOLS = [] as const
 // SEPARATE axis, so an entry here also belongs to exactly one coverage
 // category. Two guards read it: the ADR-0009 naming check exempts these
 // from `wb_<entity>_<action>` (point 7 keeps them outside the data plane),
-// and opencanvas-tools.test.ts asserts each one's real registration
+// and document-tools.test.ts asserts each one's real registration
 // actually carries the linkage — without that second guard this list would
 // be a claim nobody checks.
 export const UI_LINKED_TOOLS = ['canvas_view'] as const

@@ -1,7 +1,7 @@
 {
   "name": "whiteboard",
   "version": "0.0.19",
-  "description": "Collaborative OpenCanvas whiteboard for Gemini CLI. Runs a live whiteboard in your browser and exposes MCP tools so Gemini can draw, annotate, and refine diagrams alongside you.",
+  "description": "Collaborative whiteboard for Gemini CLI. Runs a live whiteboard in your browser and exposes MCP tools so Gemini can draw, annotate, and refine diagrams alongside you.",
   "mcpServers": {
     "whiteboard": {
       "command": "npx",

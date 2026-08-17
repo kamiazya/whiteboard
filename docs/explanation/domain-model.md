@@ -8,7 +8,7 @@ backed by more than one representation today. Read
 ## The nouns
 
 - **Canvas** — one drawable document. It has a `kind`: `spatial` (the
-  OpenCanvas node-and-edge editor) or `markdown` (a single markdown body).
+  spatial node-and-edge editor) or `markdown` (a single markdown body).
   The kind is chosen at creation and does not change afterwards — except
   that restoring a version also restores that version's kind.
 - **Workspace** — a named collection of canvases. Only daemon mode has
@@ -68,7 +68,7 @@ The daemon currently keeps **two separate stores** that both hold
 - The **workspace/path store** backs everything the web app shows and
   edits: the gallery, the editor, names, pins, kinds, branches, versions,
   and sync. Its writers are the daemon's HTTP API only.
-- The **OpenCanvas doc store** backs the agent-facing MCP tools
+- The **document store** backs the agent-facing MCP tools
   (`wb_document_*`, `wb_canvas_tidy`, node/edge patches, facets) and the
   `/api/v1` routes. It organizes canvases as a CRDT tree of
   ULID-identified documents with derived alias paths, and it is what the
@@ -90,7 +90,7 @@ path), is [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md
   through the same surface (for example, an agent driving the daemon's
   HTTP API, or a human using the tree view over `/api/v1` documents).
 - The workspace selector in the daemon gallery lists workspaces from the
-  workspace/path store; the tree view reads the OpenCanvas store. A
+  workspace/path store; the tree view reads the document store. A
   workspace that exists in only one of the two renders as missing or
   empty in the other.
 - Browser-local canvases cross into daemon mode only by an explicit,

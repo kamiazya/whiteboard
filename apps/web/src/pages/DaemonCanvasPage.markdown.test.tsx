@@ -54,6 +54,13 @@ const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
  * an agent-authored document that opened empty here is exactly the interop
  * defect the one-writer rule exists to prevent.
  */
+/** A daemon-held spatial document: empty canvas, stored kind, no facets. */
+function spatialSnapshot(): Uint8Array {
+  const doc = new LoroDoc()
+  writeDocumentKind(doc, 'spatial')
+  return doc.export({ mode: 'snapshot' })
+}
+
 function markdownSnapshot(): Uint8Array {
   const doc = new LoroDoc()
   writeMarkdownBody(doc, '# Hello from an agent')
@@ -84,9 +91,29 @@ class FakeBackend implements CanvasBackend {
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
+/**
+ * Serves the daemon's `/api/workspaces/:id/names` surface, which is where a
+ * document's display NAME lives (the canvas summary carries only a path).
+ * Anything else the page fetches answers 404 so a missing stub shows up as a
+ * failed expectation rather than as a hang.
+ */
+function stubNames(names: { canvases: Record<string, string>; pinned: string[] }): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/names')) {
+        return new Response(JSON.stringify(names), { status: 200 })
+      }
+      return new Response('{}', { status: 404 })
+    }),
+  )
+}
+
 describe('DaemonCanvasPage markdown documents', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    stubNames({ canvases: { 'agent-note': 'Agent verification note' }, pinned: [] })
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
@@ -95,6 +122,7 @@ describe('DaemonCanvasPage markdown documents', () => {
   afterEach(() => {
     cleanup()
     window.localStorage.clear()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
@@ -132,8 +160,85 @@ describe('DaemonCanvasPage markdown documents', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Hello from an agent'))
   })
 
-  // No title-slot coverage here, deliberately. This page mounts no identity
-  // slot: a document's NAME is the workspace's (ADR-0009 decision 2) and the
-  // daemon's canvas summary carries no display name to render. The tests for
-  // the title box live with the browser-local page, which has one.
+  // The title box shows the WORKSPACE's display name for this document —
+  // never a `title` read out of its content, which ADR-0009 decision 2
+  // forbids and `storedCoreFacetsSchema` no longer even has room for. The
+  // name comes from the daemon's `/names` endpoint, the same one the canvas
+  // dropdown renames through.
+  it("shows the workspace's display name for the open document", async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="agent-note"
+          createBackend={() => new FakeBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => {
+      const title = screen.getByPlaceholderText('Untitled') as HTMLInputElement
+      expect(title.value).toBe('Agent verification note')
+    })
+  })
+
+  // Facets ARE OKF frontmatter, so a markdown document gets the disclosure
+  // and a spatial one does not — ADR-0009 decision 3, the same split the
+  // browser-local page makes. `readCoreFacets` answering `undefined` for a
+  // spatial document is what makes the second case fall out rather than
+  // needing a flag.
+  it('offers the facets disclosure for a markdown document', async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="agent-note"
+          createBackend={() => new FakeBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByLabelText('Properties')).toBeTruthy())
+  })
+
+  it('hides the facets disclosure for a spatial document', async () => {
+    mockListCanvases.mockResolvedValue({
+      canvases: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+    })
+    stubNames({ canvases: { board: 'A board' }, pinned: [] })
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="board"
+          createBackend={() => new FakeBackend(spatialSnapshot)}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByPlaceholderText('Untitled')).toBeTruthy())
+    expect(screen.queryByLabelText('Properties')).toBeNull()
+  })
+
+  it('falls back to the path when the workspace has stored no name', async () => {
+    stubNames({ canvases: {}, pinned: [] })
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="agent-note"
+          createBackend={() => new FakeBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => {
+      const title = screen.getByPlaceholderText('Untitled') as HTMLInputElement
+      expect(title.value).toBe('agent-note')
+    })
+  })
 })

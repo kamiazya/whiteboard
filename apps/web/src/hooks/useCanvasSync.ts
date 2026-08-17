@@ -1,7 +1,7 @@
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
@@ -60,6 +60,14 @@ export interface UseCanvasSyncResult {
    * whether the document has hydrated reads `loaded`.
    */
   markdownBody: string
+  /**
+   * OKF core facets from the doc's `core` map — `undefined` for a spatial
+   * document, which has none to hold. Republished on the same signal as
+   * `markdownBody`: both live outside the canvas value and change together
+   * on hydration, remote import and undo.
+   */
+  coreFacets: StoredCoreFacets | undefined
+  setCoreFacets: (facets: StoredCoreFacets) => void
   /** OKF core facets from the doc's sidecar map; undefined until hydrated or when never written. */
   lockedEdgeIds: ReadonlySet<string>
   setEdgeLock: (edgeId: string, locked: boolean) => void
@@ -178,6 +186,7 @@ export function useCanvasSync(
   const [, setHistoryVersion] = useState(0)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
+  const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -204,6 +213,7 @@ export function useCanvasSync(
     // The body belongs to the session being torn down, exactly as the locks
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
+    setCoreFacetsState(undefined)
 
     if (backend === null) {
       sessionRef.current = null
@@ -247,6 +257,7 @@ export function useCanvasSync(
     // notification for the same reason locks do.
     const unsubscribeBody = session.subscribeMarkdownBody(() => {
       setMarkdownBodyState(session.getMarkdownBody())
+      setCoreFacetsState(session.getCoreFacets())
     })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
@@ -283,6 +294,12 @@ export function useCanvasSync(
   // the session on each render is always current and never stale.
   const setEdgeLock = useCallback((edgeId: string, locked: boolean) => {
     sessionRef.current?.setEdgeLock(edgeId, locked)
+  }, [])
+
+  const setCoreFacets = useCallback((facets: StoredCoreFacets) => {
+    const session = sessionRef.current
+    if (session === undefined || session === null) return
+    session.onChange(session.getCanvas(), { kind: 'set-facets', facets })
   }, [])
 
   const setNodeLock = useCallback((nodeId: string, locked: boolean) => {
@@ -380,6 +397,8 @@ export function useCanvasSync(
     lockedNodeIds,
     setNodeLock,
     markdownBody,
+    coreFacets,
+    setCoreFacets,
     lockedEdgeIds,
     setEdgeLock,
     canRedo,

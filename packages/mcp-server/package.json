@@ -1,7 +1,7 @@
 {
   "name": "@kamiazya/whiteboard-mcp",
   "version": "0.0.19",
-  "description": "MCP server + OpenCanvas whiteboard UI for AI-assisted diagramming (Claude Code / Codex).",
+  "description": "MCP server + whiteboard UI for AI-assisted diagramming (Claude Code / Codex). Documents are stored as OKF Markdown or JSON Canvas 1.0.",
   "author": "kamiazya",
   "license": "Apache-2.0",
   "keywords": [
@@ -13,7 +13,7 @@
     "anthropic",
     "codex",
     "openai",
-    "opencanvas",
+    "json-canvas",
     "json-canvas",
     "whiteboard",
     "diagram",

@@ -3,7 +3,7 @@ paths:
   - "packages/canvas-viewer/**"
 ---
 
-# canvas-viewer — read-only OpenCanvas scene viewer UI
+# canvas-viewer — read-only spatial-canvas scene viewer UI
 
 ## What belongs here
 

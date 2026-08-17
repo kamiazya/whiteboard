@@ -2,7 +2,7 @@
 
 > **Available, minus the sticky note.** `canvas_view` is wired back up to the widget
 > resource, so the inline view works again. The add-a-sticky-note control is gone:
-> it called an `annotate` tool the OpenCanvas migration removed, so every submission
+> it called an `annotate` tool the move to the document model removed, so every submission
 > failed at the host while the control still looked live. Everything else on this
 > page reflects what ships today.
 
@@ -39,7 +39,7 @@ snapshot instead.
 ## Adding a sticky note from the widget
 
 Removed. The control called an `annotate` tool that no longer exists, so it could
-only ever fail. Restoring it is not just re-wiring: OpenCanvas has no `annotate`
+only ever fail. Restoring it is not just re-wiring: the document model has no `annotate`
 equivalent, and a sticky note is a `wb_node_add` of a text node — so it needs a
 decision about whether this widget should mutate a document at all, given that it
 is otherwise strictly read-only. See the `TODO(annotate)` note in

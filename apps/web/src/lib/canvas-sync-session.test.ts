@@ -3,7 +3,7 @@
  *
  * Exercises the session module directly (no React, no Excalidraw) against a
  * fake CanvasBackend and SpatialCanvas/EditorCommand fixtures — the
- * OpenCanvas-shaped surface this session now owns.
+ * document-shaped surface this session now owns.
  */
 
 import {
