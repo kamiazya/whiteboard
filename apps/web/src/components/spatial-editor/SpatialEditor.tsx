@@ -176,6 +176,7 @@ import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   type ContainerSize,
+  canvasToScreen,
   fitViewportToBoxes,
   frameViewport,
   IDENTITY_VIEWPORT,
@@ -2215,7 +2216,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
-        applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+        // Escape is the PERSON's cancel, not the platform's: it routes to
+        // cancel-text-edit, whose empty-note branch keeps a freshly placed
+        // box. pointercancel is reserved for genuine gesture teardown (see
+        // the lost-capture handling), where the half-made node is debris.
+        // For every non-editing gesture the two arms behave identically.
+        applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
         return
       }
       // Delete/Backspace deletes the current selection — but never while the
@@ -3390,19 +3396,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
-              onEditRequest={
-                !isMultiSelection && selectedNode?.type === 'text'
-                  ? () => {
-                      applyResult(
-                        reduceGesture(gestureState, canvas, {
-                          type: 'start-text-edit',
-                          nodeId: selectedNode.id,
-                          text: selectedNode.text,
-                        }),
-                      )
-                    }
-                  : undefined
-              }
+              // The ⋯ opens the SAME menu right-click does, for the same
+              // target — one catalog, now with a visible doorway. Offered
+              // for every selection (multi included: align/distribute were
+              // the least discoverable actions of all).
+              onMoreActions={(anchor) => {
+                const screen = canvasToScreen(anchor, viewport)
+                setContextMenu({
+                  x: screen.x,
+                  y: screen.y,
+                  nodeId: selection.id,
+                  edgeId: undefined,
+                  point: anchor,
+                  // The ⋯ vessel follows the editor's width, decided at open
+                  // time (the menu is transient): below the minimap
+                  // breakpoint the popover becomes a bottom sheet — keyed
+                  // off the CONTAINER for the same reason the minimap is.
+                  variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
+                })
+              }}
             />
           )}
           {/* In-flight gesture preview. Drawn from component-local pointer

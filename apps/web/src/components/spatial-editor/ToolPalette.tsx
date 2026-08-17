@@ -17,8 +17,10 @@
  * surface — it must never grow per-object actions.
  *
  * Icon-only dock buttons keep their accessible names via aria-label; the
- * "+" menu's entries show icon AND label (a menu is a reading surface,
- * not a memorized strip).
+ * "+" menu's entries show icon AND label (a creation menu is a reading
+ * surface, not a memorized strip). Scope note: this labels-on rule covers
+ * CREATION surfaces only — object-action surfaces are icon-first by
+ * design (see DESIGN.md, "Object-action surfaces are icon-first").
  *
  * Marked `data-editor-overlay` so the canvas root's gesture handlers
  * ignore presses originating here (see SpatialEditor's isOverlayEvent).

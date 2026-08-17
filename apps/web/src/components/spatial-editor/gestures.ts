@@ -387,8 +387,28 @@ export function reduceGesture(
     case 'canvas-replaced':
       return reduceCanvasReplaced(state, event.canvas, event.origin ?? 'local')
     case 'pointercancel':
+      // The platform tore the gesture down mid-flight; a node created for
+      // the edit it interrupted is debris, not a decision. Distinct from the
+      // explicit cancel below on purpose — the lost-capture handling relies
+      // on a real pointercancel staying a discard.
+      if (state.kind === 'editing-text' && state.createdForEdit === true) {
+        return {
+          state: { kind: 'idle' },
+          commands: [{ kind: 'delete-node', id: state.nodeId }],
+          selectedId: null,
+        }
+      }
+      return idle
     case 'cancel-text-edit':
       if (state.kind === 'editing-text' && state.createdForEdit === true) {
+        // Escape discards what was TYPED, and takes the node with it only
+        // when there is typed text to discard. With nothing typed, Escape
+        // just closes the editor: an empty note is a layout tool (it is the
+        // rectangle this product deliberately does not have a second kind
+        // for), and eating it punished exactly the person sketching boxes.
+        if (state.pendingText === '') {
+          return { state: { kind: 'idle' }, commands: [], selectedId: state.nodeId }
+        }
         return {
           state: { kind: 'idle' },
           commands: [{ kind: 'delete-node', id: state.nodeId }],

@@ -46,6 +46,24 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     await waitFor(() => expect(latest.nodes).toHaveLength(0))
   })
 
+  it('keeps the box when Escape lands before any typing — sketching layouts', async () => {
+    let latest: SpatialCanvas = { nodes: [], edges: [] }
+    render(<Host onCanvas={(c) => (latest = c)} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
+    await screen.findByRole('textbox')
+    await waitFor(() => expect(latest.nodes).toHaveLength(1))
+
+    await userEvent.keyboard('{Escape}')
+
+    // The editor closes; the empty box stays. Someone placing boxes to think
+    // about a layout is not cancelling the box — only the typing.
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull())
+    expect(latest.nodes).toHaveLength(1)
+    expect(latest.nodes[0]?.type === 'text' ? latest.nodes[0].text : 'unset').toBe('')
+  })
+
   it('keeps an existing note and its stored text when the edit is cancelled', async () => {
     let latest: SpatialCanvas = { nodes: [], edges: [] }
     render(<Host onCanvas={(c) => (latest = c)} />)

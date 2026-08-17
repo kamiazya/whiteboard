@@ -215,6 +215,27 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
   expect(latest.canvas.edges).toHaveLength(1)
 })
 
+it('the edge menu keeps the shared band order: properties, then verbs, Delete last', async () => {
+  const { EdgeHost } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+
+  // Same catalog discipline as the node menu: property rows (Arrows, sides,
+  // Color) come first, verbs (Edit label) after, and the destructive entry
+  // sits alone at the bottom.
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const names = Array.from(
+    menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], fieldset'),
+  ).map((el) => el.getAttribute('aria-label') ?? el.textContent)
+  expect(names.indexOf('Arrows')).toBeGreaterThanOrEqual(0)
+  expect(names.indexOf('Arrows')).toBeLessThan(names.indexOf('Edit label'))
+  expect(names.indexOf('Color')).toBeLessThan(names.indexOf('Edit label'))
+  expect(names[names.length - 1]).toBe('Delete')
+})
+
 // Deterministic option-click for the inline property rows: applying an
 // option re-routes the edge and re-renders the scene under the pointer,
 // which Playwright's stability check intermittently reads as "element not
