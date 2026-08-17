@@ -134,10 +134,12 @@ async function importOneBlob(
       chunkRows.map((row) => ({
         index: row.chunkIndex,
         of: existing.chunkCount,
-        bytes: toBytes(row.bytes),
+        // Fresh copy: drivers hand back Buffer or Uint8Array by dialect, and
+        // ports' DTOs require an `ArrayBuffer`-backed `Uint8Array<ArrayBuffer>`.
+        bytes: new Uint8Array(row.bytes),
       })),
     )
-    if (!bytesEqual(existingBytes, bytes)) {
+    if (Buffer.compare(existingBytes, bytes) !== 0) {
       log.warning(
         {
           workspaceId,
@@ -187,30 +189,9 @@ async function importOneBlob(
       .execute()
   }
 
-  const frontierRow = await db
-    .selectFrom('documentFrontiers')
-    .select('docKey')
-    .where('docKey', '=', docKey)
-    .executeTakeFirst()
-  if (!frontierRow) {
-    await db.insertInto('documentFrontiers').values({ docKey, frontier }).execute()
-  }
-}
-
-/**
- * Drivers hand blobs back as Buffer or Uint8Array depending on dialect. The
- * array-like `Uint8Array` constructor overload always allocates a fresh
- * `ArrayBuffer`-backed copy — unlike a bare `instanceof` passthrough, this is
- * what keeps the result assignable to ports' `Uint8Array<ArrayBuffer>` DTOs.
- */
-function toBytes(value: Uint8Array): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(value)
-}
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.byteLength !== b.byteLength) return false
-  for (let i = 0; i < a.byteLength; i++) {
-    if (a[i] !== b[i]) return false
-  }
-  return true
+  await db
+    .insertInto('documentFrontiers')
+    .values({ docKey, frontier })
+    .onConflict((oc) => oc.column('docKey').doNothing())
+    .execute()
 }
