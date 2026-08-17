@@ -7,7 +7,10 @@
  * bytes a `wb_document_*` tool call would — the FS `.loro` blob tree
  * `documentBlobPath` still computes is no longer read or written here; it
  * survives only as an identity label for corrupt-data error messages and as
- * the legacy-migration backup path.
+ * the legacy-migration backup path. Any blob file still on disk is swept
+ * away by `sweep-imported-fs-blobs.ts` once its bytes are proven to live in
+ * Libsql, so `deleteDocument`'s unlink below is a straggler cleanup, not the
+ * primary deletion path.
  *
  * `listDocuments`/`deleteDocument` here are NOT `DocumentIndex`'s methods of
  * the same names — that is the agent-facing side of the same split, reached
