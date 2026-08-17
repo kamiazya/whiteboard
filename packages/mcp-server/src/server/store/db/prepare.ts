@@ -1,7 +1,11 @@
 import type { Kysely } from 'kysely'
+import { getLogger } from '../../log.js'
 import { getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'
+import { sweepImportedFsBlobs } from './sweep-imported-fs-blobs.js'
+
+const log = getLogger('prepare')
 
 // Memoized startup hook. Idempotent across repeated calls per dataDir, so
 // daemon entry, createApp, smoke tests, and unit tests can all call it
@@ -27,6 +31,18 @@ export function prepareDataDir(dataDir: string): Promise<void> {
     // same widening Kysely's own Migrator performs internally when it calls
     // migration.up(db).
     await importFsBlobs(db as unknown as Kysely<unknown>, dataDir)
+    // Best-effort: a sweep failure (e.g. an unreadable blobs root) must not
+    // block startup the way a failed import does — the FS copies it would
+    // have deleted are still safe on disk, so the worst case is deferring
+    // cleanup to the next successful boot.
+    try {
+      await sweepImportedFsBlobs(db, dataDir)
+    } catch (err) {
+      log.warning(
+        { dataDir, err },
+        'failed to sweep imported FS blobs, continuing without deleting them',
+      )
+    }
   })()
   ready.set(dataDir, pending)
   pending.catch(() => {

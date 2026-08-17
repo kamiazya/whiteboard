@@ -80,8 +80,8 @@ export async function importFsBlobs(db: Kysely<unknown>, dataDir: string): Promi
   }
 }
 
-/** `readdir` a directory that may not exist (or may not BE a directory — a stray file left directly under `blobs/`); both are a clean no-op. */
-async function readDirSafe(dir: string): Promise<string[]> {
+/** `readdir` a directory that may not exist (or may not BE a directory — a stray file left directly under `blobs/`); both are a clean no-op. Exported for `sweep-imported-fs-blobs.ts`, which walks the same frozen blob-tree layout — safe to depend on precisely because this file never changes. */
+export async function readDirSafe(dir: string): Promise<string[]> {
   try {
     return await readdir(dir)
   } catch (err) {
