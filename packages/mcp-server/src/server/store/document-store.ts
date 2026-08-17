@@ -461,45 +461,83 @@ export async function compactDocument(
   }
   const documentStore = await documentStoreReady()
   const docRef = { kind: 'canvas' as const, documentId }
-  const existing = await documentStore.loadSnapshot({ docRef })
-  if (existing === null) {
-    return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
-  }
-  const beforeBytes = existing.manifest.totalBytes
 
-  const cut = await versionStore.earliestFrontiers(workspaceId, path)
-  if (!cut) {
-    return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
-  }
+  // Hold the canvas-doc write lock across the read that decides the shallow
+  // snapshot AND the write that persists it. Previously only the final
+  // saveSnapshotLocked call was locked, so a concurrent canvas-doc write (an
+  // MCP tool call, or a WS/HTTP save) landing between this function's reads
+  // and its write was invisible to both reads and got silently discarded by
+  // the shallow write that followed — the same lost-update class
+  // saveDocument's own write already guards against, now reachable here too
+  // because compaction's target and the tool surface's target are the same
+  // Libsql rows.
+  return withCanvasDocWriteLock(documentId, async () => {
+    const existing = await documentStore.loadSnapshot({ docRef })
+    if (existing === null) {
+      return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
+    }
+    const beforeBytes = existing.manifest.totalBytes
 
-  const doc = await loadDocument(workspaceId, path)
-  const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
-  if (shallow.byteLength >= beforeBytes) {
-    return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
-  }
-  await saveSnapshotLocked(
-    documentStore,
-    documentId,
-    shallow,
-    doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-  )
-  // Stamp the canvas row so the auto-Optimize loop can skip canvases that
-  // have not changed since the last successful compaction, and so the UI
-  // can surface "Auto-optimised Ns ago" without reading file mtimes.
-  await db
-    .updateTable('documents')
-    .set({ lastCompactedAt: Date.now() })
-    .where('id', '=', documentId)
-    .execute()
-  // Drop the cached LoroDoc for this canvas. Without this, a still-resident
-  // full doc (held open by an active WS connection or a previous getDoc)
-  // would be re-exported on the next save and clobber the shallow snapshot
-  // we just wrote. Done inside compactDocument so every caller — manual
-  // optimize_canvases route and the debounced auto-compact alike — gets
-  // the same invariant for free.
-  const { evictDoc } = await import('./doc-cache.js')
-  evictDoc(workspaceId, path)
-  return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
+    const cut = await versionStore.earliestFrontiers(workspaceId, path)
+    if (!cut) {
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
+    }
+
+    // Decode inline rather than delegating to loadDocument(): that function
+    // also runs a one-shot legacy-migration that calls saveDocument, which
+    // would acquire the workspace lock while this canvas-doc lock is still
+    // held — the opposite of every other caller's nesting order (workspace
+    // lock outer, canvas-doc lock inner, per this module's header comment)
+    // and a lock-order-inversion deadlock waiting to happen against a
+    // concurrent saveDocument on the same document. Skipping migration here
+    // is safe: it is idempotent and re-runs on the next ordinary
+    // loadDocument() call, so compaction just defers it rather than losing it.
+    const blobPath = documentBlobPath(workspaceId, documentId)
+    let originalBytes: Uint8Array
+    try {
+      originalBytes = reassembleSnapshot(existing.manifest, existing.chunks)
+    } catch (error) {
+      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
+    }
+    let doc: LoroDoc
+    try {
+      doc = LoroDoc.fromSnapshot(originalBytes)
+    } catch (error) {
+      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
+    }
+
+    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    if (shallow.byteLength >= beforeBytes) {
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
+    }
+    await saveSnapshotLocked(
+      documentStore,
+      documentId,
+      shallow,
+      doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    )
+    // Stamp the canvas row so the auto-Optimize loop can skip canvases that
+    // have not changed since the last successful compaction, and so the UI
+    // can surface "Auto-optimised Ns ago" without reading file mtimes.
+    await db
+      .updateTable('documents')
+      .set({ lastCompactedAt: Date.now() })
+      .where('id', '=', documentId)
+      .execute()
+    // Drop the cached LoroDoc for this canvas. Without this, a still-resident
+    // full doc (held open by an active WS connection or a previous getDoc)
+    // would be re-exported on the next save and clobber the shallow snapshot
+    // we just wrote. Done inside compactDocument so every caller — manual
+    // optimize_canvases route and the debounced auto-compact alike — gets
+    // the same invariant for free.
+    const { evictDoc } = await import('./doc-cache.js')
+    evictDoc(workspaceId, path)
+    return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
+  })
 }
 
 // ── most-recent auto-compact timestamp across all canvases ───────────

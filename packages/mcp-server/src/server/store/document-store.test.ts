@@ -1049,6 +1049,99 @@ describe('compactDocument', () => {
     expect(stamp!).toBeGreaterThanOrEqual(before)
     expect(stamp!).toBeLessThanOrEqual(after)
   })
+
+  // compactDocument's beforeBytes read and its internal doc reload both ran
+  // unlocked before this test's fix, with only the final shallow-snapshot
+  // write taking withCanvasDocWriteLock. A concurrent canvas-doc write (an
+  // MCP tool call, or a WS/HTTP save) landing in that unlocked window was
+  // captured by neither read, so compactDocument's later write silently
+  // discarded it — the same lost-update class saveDocument's own write
+  // already guards against, now reachable against compaction too because
+  // both paths write the same Libsql rows.
+  it('does not lose a concurrent canvas-doc write racing into the window between compactDocument reading the doc and writing its shallow snapshot', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { getDataDir } = await import('../config.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
+    const { withCanvasDocWriteLock } = await import('./workspace-lock.js')
+
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `elem-${i}`)
+    }
+    doc.commit()
+    await saveDocument('session1', 'test', doc)
+
+    const store = new FileVersionStore()
+    await store.save('session1', 'test', doc, { auto: true })
+
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `extra-${i}`)
+    }
+    doc.commit()
+    await saveDocument('session1', 'test', doc, { overwrite: true })
+
+    const db = await getDb(getDataDir())
+    const documentId = (await getDocumentIdByPath(db, 'session1', 'test'))!
+
+    // Delay only compactDocument's SECOND loadSnapshot call for this
+    // document (its internal doc reload, after the beforeBytes read) —
+    // AFTER it has already captured the pre-race bytes, so the delay opens
+    // a real wall-clock window without changing what compactDocument reads.
+    const originalLoadSnapshot = LibsqlDocumentStore.prototype.loadSnapshot
+    let loadCallsForDoc = 0
+    LibsqlDocumentStore.prototype.loadSnapshot = async function (
+      this: InstanceType<typeof LibsqlDocumentStore>,
+      input,
+    ) {
+      const forThisDoc = input.docRef.kind === 'canvas' && input.docRef.documentId === documentId
+      const result = await originalLoadSnapshot.call(this, input)
+      if (forThisDoc) {
+        loadCallsForDoc++
+        if (loadCallsForDoc === 2) {
+          await new Promise((r) => setTimeout(r, 60))
+        }
+      }
+      return result
+    }
+
+    try {
+      const compactPromise = compactDocument('session1', 'test', store)
+
+      // Give compactDocument a head start so it is mid-delay inside its
+      // second (doc-reload) read before this fires from a genuinely
+      // separate call chain (not nested inside compactDocument's own).
+      await new Promise((r) => setTimeout(r, 20))
+      const concurrentWrite = withCanvasDocWriteLock(documentId, async () => {
+        const libsqlStore = new LibsqlDocumentStore(db)
+        const existing = await libsqlStore.loadSnapshot({
+          docRef: { kind: 'canvas', documentId },
+        })
+        const base = new LoroDoc()
+        base.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
+        base.getMap('root').set('agentMarker', 'concurrent-edit')
+        base.commit()
+        const chunked = chunkSnapshot(base.export({ mode: 'snapshot' }), 1_000_000)
+        await libsqlStore.saveSnapshot({
+          docRef: { kind: 'canvas', documentId },
+          manifest: chunked.manifest,
+          chunks: chunked.chunks,
+          frontier: base.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+        })
+      })
+
+      await Promise.all([compactPromise, concurrentWrite])
+    } finally {
+      LibsqlDocumentStore.prototype.loadSnapshot = originalLoadSnapshot
+    }
+
+    const after = await loadDocument('session1', 'test')
+    expect(after.getMap('root').get('agentMarker')).toBe('concurrent-edit')
+  })
 })
 
 describe('deleteDocument', () => {
