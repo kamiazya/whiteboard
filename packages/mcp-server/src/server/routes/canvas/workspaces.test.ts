@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
@@ -101,20 +101,25 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
   })
 
   it('returns 500 with Problem Details title when saveDocument fails unexpectedly', async () => {
-    // Block the canvas blob directory with a file so saveDocument throws a
-    // non-ConflictError, exercising the catch-all 500 branch (mutation-check
-    // guard for the 400 -> 500 change).
-    await mkdir(join(tmp.dir, 'blobs', 'ws1'), { recursive: true })
-    await writeFile(join(tmp.dir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/ws1/canvases', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'new-canvas' }),
+    // Force the snapshot export saveDocument makes internally to throw, so
+    // it surfaces a non-ConflictError, exercising the catch-all 500 branch
+    // (mutation-check guard for the 400 -> 500 change).
+    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+      throw new Error('snapshot serialization failed')
     })
-    expect(res.status).toBe(500)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toBe('Failed to create canvas.')
+    try {
+      const app = createCanvasRouter()
+      const res = await app.request('/api/workspaces/ws1/canvases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'new-canvas' }),
+      })
+      expect(res.status).toBe(500)
+      const json = (await res.json()) as { title?: string }
+      expect(json.title).toBe('Failed to create canvas.')
+    } finally {
+      exportSpy.mockRestore()
+    }
   })
 
   it('returns 400 with Problem Details title on invalid path', async () => {

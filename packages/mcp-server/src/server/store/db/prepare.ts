@@ -1,4 +1,6 @@
+import type { Kysely } from 'kysely'
 import { getDb } from './index.js'
+import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'
 
 // Memoized startup hook. Idempotent across repeated calls per dataDir, so
@@ -12,6 +14,19 @@ export function prepareDataDir(dataDir: string): Promise<void> {
   const pending = (async () => {
     const db = await getDb(dataDir)
     await runMigrations(db)
+    // Migration 0011 itself runs exactly once (Kysely tracks it by key).
+    // The identity-convergence flip needs its import routine to run a
+    // SECOND time here, every prepare — closing the window between "0011
+    // ran" and "document-store.ts stopped writing FS blobs", during which
+    // an old process could still write a fresh blob 0011 never saw. Cheap
+    // and idempotent by design (see importFsBlobs's own doc comment).
+    // importFsBlobs takes Kysely<unknown> (it defines its own frozen
+    // migration-time schema — see its doc comment) and Kysely's method
+    // builders are contravariant in their generic params, so the concrete
+    // Database type is not structurally assignable without this cast; the
+    // same widening Kysely's own Migrator performs internally when it calls
+    // migration.up(db).
+    await importFsBlobs(db as unknown as Kysely<unknown>, dataDir)
   })()
   ready.set(dataDir, pending)
   pending.catch(() => {

@@ -19,7 +19,7 @@
 // would still visibly create a `.whiteboard` directory under the fake home.
 
 import { existsSync, mkdtempSync, readdirSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -240,13 +240,21 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       await closeWsServer(server, wss)
     }
 
-    // Persistence landed under the injected scratch dir: the sqlite db plus
-    // the canvas blob artifact tree, not just the top-level file.
+    // Persistence landed under the injected scratch dir: the sqlite db file,
+    // plus a real Libsql snapshot row for the canvas the socket wrote to
+    // (content lives in the db now, not a separate blob artifact tree).
     expect(existsSync(join(scratchDir, 'whiteboard.db'))).toBe(true)
-    const blobDir = join(scratchDir, 'blobs', 'session1', 'canvas')
-    expect(existsSync(blobDir)).toBe(true)
-    const blobFiles = await readdir(blobDir)
-    expect(blobFiles.length).toBeGreaterThan(0)
+    const { getDb } = await import('../store/db/index.js')
+    const { getDocumentIdByPath } = await import('../store/db/upsert-workspace.js')
+    const db = await getDb(scratchDir)
+    const documentId = await getDocumentIdByPath(db, 'session1', 'canvas-a')
+    expect(documentId).not.toBeNull()
+    const snapshotRow = await db
+      .selectFrom('documentSnapshots')
+      .select(['docKey'])
+      .where('docKey', '=', `canvas:${documentId}`)
+      .executeTakeFirst()
+    expect(snapshotRow).toBeDefined()
 
     // Nothing wrote to the (fake, per-test) home dir. No concurrent process
     // can perturb this directory the way the real ~/.whiteboard can.
