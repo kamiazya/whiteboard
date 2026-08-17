@@ -17,12 +17,22 @@ const tmp = withTempDataDir('whiteboard-restore-test-')
 
 const { createRestoreRouter } = await import('./restore.js')
 const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const { saveDocument, getDocumentKind } = await import('../../store/document-store.js')
+const { saveDocument, getDocumentKind, loadDocument } = await import(
+  '../../store/document-store.js'
+)
+const { countAliveNodes } = await import('../../store/count-alive-nodes.js')
 const { createCanvasRouter } = await import('../canvas.js')
 const { setBroadcastFn } = await import('./_shared.js')
 // Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
 // documented cycle workaround for canvas.ts's dynamic import.
 await import('../ws.js')
+
+beforeEach(() => {
+  clearCache()
+})
+afterEach(() => {
+  clearCache()
+})
 
 describe('restore router', () => {
   it('returns a Hono instance', () => {
@@ -32,9 +42,8 @@ describe('restore router', () => {
   })
 })
 
-// Returns [doc, updateFromEmpty] so a caller can POST the whole doc as one
-// update, matching restore-race.test.ts's convention of capturing the
-// version vector before any writes.
+// Builds a doc holding one text node per id and exports its full update from
+// the empty version vector, so a caller can POST the whole doc as one update.
 function nodesModelDocUpdate(nodeIds: string[]): Uint8Array {
   const doc = new LoroDoc()
   const vv0 = doc.version()
@@ -54,14 +63,6 @@ function nodesModelDocUpdate(nodeIds: string[]): Uint8Array {
 }
 
 describe('restore router (real node counts)', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-
-  afterEach(() => {
-    clearCache()
-  })
-
   it("restore into a brand-new targetPath responds with the past state's real node count", async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
@@ -136,8 +137,6 @@ describe('restore router (real node counts)', () => {
     // Reconcile-onto-live-doc is CRDT merge, not a straight overwrite, so
     // assert the response tracks whatever the live target doc actually
     // ended up holding rather than assuming an exact merged node set.
-    const { loadDocument } = await import('../../store/document-store.js')
-    const { countAliveNodes } = await import('../../store/count-alive-nodes.js')
     const finalTargetDoc = await loadDocument('session1', 'canvas-b')
     expect(restoreBody.elementCount).toBe(countAliveNodes(finalTargetDoc))
     // And it must be the real (non-zero) count, not the retired stub's 0.
@@ -146,14 +145,6 @@ describe('restore router (real node counts)', () => {
 })
 
 describe('restore router (kind propagation)', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-
-  afterEach(() => {
-    clearCache()
-  })
-
   it("stamps the source's kind on a brand-new target so it opens in the right editor", async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     // A markdown document: its OKF body is a text node, so the restored
@@ -217,14 +208,6 @@ describe('restore router (kind propagation)', () => {
 })
 
 describe('POST /api/workspaces/:workspaceId/canvases/:path/versions/:id/restore', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-
-  afterEach(() => {
-    clearCache()
-  })
-
   it('restores the past-state element set through POST /versions/:id/restore', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
 
@@ -425,12 +408,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/versions/:id/restore'
 // instead of replacing persistence, so connected clients stay on the same
 // CRDT lineage and converge through the normal update broadcast.
 describe('overwrite restore reconciles instead of replacing', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-
   afterEach(() => {
-    clearCache()
     setBroadcastFn(() => {})
   })
 

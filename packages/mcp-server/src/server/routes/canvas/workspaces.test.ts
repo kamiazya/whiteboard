@@ -32,10 +32,18 @@ vi.mock('../../store/doc-cache.js', async () => {
 })
 
 const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const { saveDocument } = await import('../../store/document-store.js')
+const canvasStore = await import('../../store/document-store.js')
+const { saveDocument } = canvasStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
 const { createCanvasRouter } = await import('../canvas.js')
+
+beforeEach(() => {
+  clearCache()
+})
+afterEach(() => {
+  clearCache()
+})
 
 describe('workspaces router', () => {
   it('returns a Hono instance', () => {
@@ -45,13 +53,6 @@ describe('workspaces router', () => {
 })
 
 describe('GET /api/workspaces', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
-
   it('returns the canonical workspace list with workspaceId entries', async () => {
     await saveDocument('workspace-a', 'a', new LoroDoc())
     const app = createCanvasRouter()
@@ -66,13 +67,6 @@ describe('GET /api/workspaces', () => {
 })
 
 describe('POST /api/workspaces/:workspaceId/canvases', () => {
-  beforeEach(() => {
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
-
   it('returns { path } on success', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/ws1/canvases', {
@@ -251,10 +245,6 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
 describe('DELETE /api/workspaces/:workspaceId/canvases/:path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
   })
 
   it('returns 200 { ok: true }, parses with deleteCanvasResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
@@ -309,7 +299,6 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const canvasStore = await import('../../store/document-store.js')
     const spy = vi
       .spyOn(canvasStore, 'deleteDocument')
       .mockRejectedValueOnce(
@@ -386,10 +375,6 @@ describe('DELETE /api/workspaces/:workspaceId/canvases/:path', () => {
 describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
   })
 
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
@@ -629,7 +614,6 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const canvasStore = await import('../../store/document-store.js')
     const spy = vi
       .spyOn(canvasStore, 'renameDocumentPath')
       .mockRejectedValueOnce(
@@ -668,10 +652,6 @@ describe('PUT /api/workspaces/:workspaceId/canvases/:path/path', () => {
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
   })
 
   it('returns the canvas list', async () => {
@@ -714,10 +694,6 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'workspace1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
   })
 
   it('also returns the canvas list from the canonical workspace route', async () => {

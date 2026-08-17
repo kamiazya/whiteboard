@@ -18,9 +18,17 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const { saveDocument } = await import('../../store/document-store.js')
+const { saveDocument, loadDocument } = await import('../../store/document-store.js')
 const { createLiveDocRouter } = await import('./live-doc.js')
 const { createCanvasRouter } = await import('../canvas.js')
+
+beforeEach(async () => {
+  await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+  clearCache()
+})
+afterEach(() => {
+  clearCache()
+})
 
 describe('live-doc router', () => {
   it('returns a Hono instance', () => {
@@ -31,14 +39,6 @@ describe('live-doc router', () => {
 })
 
 describe('GET /api/w/:workspaceId/canvas/:path/snapshot', () => {
-  beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
-
   it('returns the Loro snapshot binary', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -91,14 +91,6 @@ describe('GET /api/w/:workspaceId/canvas/:path/snapshot', () => {
 })
 
 describe('GET /api/w/:workspaceId/canvas/:path/exists', () => {
-  beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
-
   it('returns exists:true for a canvas that was actually saved', async () => {
     const doc = new LoroDoc()
     await saveDocument('session1', 'canvas-a', doc)
@@ -129,14 +121,6 @@ describe('GET /api/w/:workspaceId/canvas/:path/exists', () => {
 })
 
 describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
-  beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
-
   it('applies a Loro update to the document', async () => {
     // Create the change in the client-side doc.
     const clientDoc = new LoroDoc()
@@ -162,7 +146,6 @@ describe('POST /api/w/:workspaceId/canvas/:path/update', () => {
 
     // Clear the cache, reload, and confirm the change was persisted.
     clearCache()
-    const { loadDocument } = await import('../../store/document-store.js')
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as { id: string; type: string }[]
     expect(elements).toHaveLength(1)

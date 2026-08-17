@@ -33,10 +33,9 @@ describe('createCanvasRouter composition', () => {
   })
 
   it('serves a nested document path at /api/w/:workspaceId/canvas/*', async () => {
-    // The path-addressed shape (task #33, decided 2026-08-15): the document
-    // path is the URL tail, one segment per path segment, with the action
-    // suffix anchoring the parse. A nested path is exactly what the old
-    // :path param could never match.
+    // The path-addressed shape: the document path is the URL tail, one
+    // segment per path segment, with the action suffix anchoring the parse.
+    // A nested path is exactly what the old :path param could never match.
     const app = createCanvasRouter()
     const createRes = await app.request('/api/workspaces/ws1/canvases', {
       method: 'POST',

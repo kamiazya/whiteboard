@@ -18,7 +18,9 @@ vi.mock('../../config.js', () => ({
 const { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } = await import('./auto-version.js')
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { clearCache } = await import('../../store/doc-cache.js')
+const { loadDocument } = await import('../../store/document-store.js')
 const { createCanvasRouter } = await import('../canvas.js')
+const wsModule = await import('../ws.js')
 
 describe('auto-version', () => {
   it('exports a positive interval constant', () => {
@@ -269,7 +271,6 @@ describe('auto-version corruption handling', () => {
   })
 
   it('returns 200 and skips version_created when auto-version save reports corruption', async () => {
-    const wsModule = await import('../ws.js')
     const sendVersionCreated = vi
       .spyOn(wsModule, 'sendVersionCreated')
       .mockImplementation(() => undefined)
@@ -311,7 +312,6 @@ describe('auto-version corruption handling', () => {
     expect(sendVersionCreated).not.toHaveBeenCalled()
 
     clearCache()
-    const { loadDocument } = await import('../../store/document-store.js')
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['e1'])

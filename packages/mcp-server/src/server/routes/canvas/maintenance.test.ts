@@ -17,9 +17,17 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { clearCache } = await import('../../store/doc-cache.js')
+const { getDb } = await import('../../store/db/index.js')
 const { saveDocument } = await import('../../store/document-store.js')
 const { createMaintenanceRouter } = await import('./maintenance.js')
 const { createCanvasRouter } = await import('../canvas.js')
+
+beforeEach(() => {
+  clearCache()
+})
+afterEach(() => {
+  clearCache()
+})
 
 describe('maintenance router', () => {
   it('returns a Hono instance', () => {
@@ -46,14 +54,9 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
 
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
-    const { getDb } = await import('../../store/db/index.js')
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
     const row = await db
@@ -105,13 +108,6 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
       pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
-
-  beforeEach(() => {
-    clearCache()
-  })
-  afterEach(() => {
-    clearCache()
-  })
 
   it('iterates every canvas in the workspace and returns aggregated results', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
