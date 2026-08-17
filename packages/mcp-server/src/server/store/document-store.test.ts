@@ -325,6 +325,24 @@ describe('saveDocument / loadDocument', () => {
     expect(loaded.getMovableList('elements').length).toBe(0)
   })
 
+  it("persists the frontier bytes as the doc's own oplog version, readable back via LibsqlDocumentStore.readFrontier", async () => {
+    const { getDb } = await import('./db/index.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const doc = new LoroDoc()
+    doc.getMovableList('elements').insert(0, 'x')
+    doc.commit()
+    await saveDocument('session1', 'frontier-check', doc)
+
+    const db = await getDb(tempDir)
+    const documentId = await getDocumentIdByPath(db, 'session1', 'frontier-check')
+    const store = new LibsqlDocumentStore(db)
+    const result = await store.readFrontier({
+      docRef: { kind: 'canvas', documentId: documentId! },
+    })
+    expect(result?.frontier).toEqual(doc.oplogVersion().encode())
+  })
+
   it('mints a canonical ULID for a new row, so both writers share one id space', async () => {
     // The document index and saveDocument both create rows in the same table.
     // The index mints ULIDs (the port's DocumentEntry accepts nothing else),
@@ -964,6 +982,19 @@ describe('compactDocument', () => {
     const past = await store.load('session1', v.id, live)
     expect(past).not.toBeNull()
     expect(past!.getMovableList('elements').length).toBe(30)
+
+    // Compaction prunes history, not state, so the frontier written for the
+    // shallow snapshot must still match the doc's current oplog version.
+    const { getDb } = await import('./db/index.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const db = await getDb(tempDir)
+    const documentId = await getDocumentIdByPath(db, 'session1', 'test')
+    const libsqlStore = new LibsqlDocumentStore(db)
+    const frontierResult = await libsqlStore.readFrontier({
+      docRef: { kind: 'canvas', documentId: documentId! },
+    })
+    expect(frontierResult?.frontier).toEqual(live.oplogVersion().encode())
   })
 
   it('writes lastCompactedAt only on successful compaction', async () => {

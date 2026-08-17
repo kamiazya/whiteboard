@@ -255,18 +255,24 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
     try {
       originalBytes = reassembleSnapshot(snapshot.manifest, snapshot.chunks)
     } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`)
+      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
     }
     try {
       doc = LoroDoc.fromSnapshot(originalBytes)
     } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`)
+      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
+        locationKind: 'identity',
+      })
     }
   } catch (error) {
     if (isCorruptStoredDataError(error)) {
       throw error
     }
-    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`)
+    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`, {
+      locationKind: 'identity',
+    })
   }
   // One-shot legacy container migration. Older data stored "elements" in
   // LoroList; current code uses LoroMovableList. Repair on load and rewrite.
