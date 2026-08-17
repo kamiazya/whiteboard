@@ -15,6 +15,7 @@
 //   WHITEBOARD_SMOKE_READY_TIMEOUT_MS        daemon readiness budget (default 30000)
 //   WHITEBOARD_SMOKE_RPC_TIMEOUT_MS           per-RPC budget (default 20000)
 //   WHITEBOARD_SMOKE_CONVERGENCE_TIMEOUT_MS   wb_scene_digest poll budget (default 10000)
+//   WHITEBOARD_SMOKE_WS_SNAPSHOT_TIMEOUT_MS   WS initial-snapshot wait budget (default 20000)
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
@@ -28,6 +29,7 @@ import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
 import { canvasApiUrl } from '../../src/shared/api-contracts/canvas-url.js'
 import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../src/shared/ws-protocol.js'
+import { waitForEventWithTimeout } from './lib/wait-for-event.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -48,6 +50,11 @@ const CONVERGENCE_TIMEOUT_MS = /^\d+$/.test(
   ? Number(process.env.WHITEBOARD_SMOKE_CONVERGENCE_TIMEOUT_MS)
   : 10_000
 const CONVERGENCE_POLL_INTERVAL_MS = 200
+const WS_SNAPSHOT_TIMEOUT_MS = /^\d+$/.test(
+  process.env.WHITEBOARD_SMOKE_WS_SNAPSHOT_TIMEOUT_MS ?? '',
+)
+  ? Number(process.env.WHITEBOARD_SMOKE_WS_SNAPSHOT_TIMEOUT_MS)
+  : 20_000
 
 // Generated fresh per run and passed to the daemon ONLY via child env
 // (WHITEBOARD_TOKEN) — never as a --token argv flag, so it is invisible to
@@ -188,16 +195,23 @@ async function rpc(method, params) {
   return payload.result
 }
 
-function notify(method, params) {
-  return fetch(mcpUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${TOKEN}`,
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', method, params }),
-  })
+async function notify(method, params) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS)
+  try {
+    return await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', method, params }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function callTool(name, args) {
@@ -303,9 +317,13 @@ async function main() {
     logError(`[e2e] WS error: ${err instanceof Error ? err.message : String(err)}`)
     cleanup(1)
   })
-  const wsSnapshotBytes = await new Promise((resolveSnapshot) => {
-    ws.once('message', (data) => resolveSnapshot(new Uint8Array(data)))
-  })
+  const wsSnapshotData = await waitForEventWithTimeout(
+    ws,
+    'message',
+    WS_SNAPSHOT_TIMEOUT_MS,
+    `WS did not send the initial snapshot within ${WS_SNAPSHOT_TIMEOUT_MS}ms`,
+  )
+  const wsSnapshotBytes = new Uint8Array(wsSnapshotData)
   const wsDoc = new LoroDoc()
   wsDoc.import(wsSnapshotBytes)
   const nodeAViaWs = readSpatialCanvas(wsDoc).nodes.find((n) => n.id === 'node-a')
