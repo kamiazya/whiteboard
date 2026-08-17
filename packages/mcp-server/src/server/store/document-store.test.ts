@@ -236,6 +236,71 @@ describe('saveDocument nests withCanvasDocWriteLock (identity-convergence flip)'
   })
 })
 
+// The lock alone only makes an overwrite ATOMIC — it cannot make it
+// correct. doc-cache holds a long-lived LoroDoc that WS frames mutate in
+// place; an MCP tool writing the same Libsql rows out of band leaves that
+// cached doc stale, and its next save would export the stale state as the
+// whole new truth, erasing the agent's ops in one atomic write. The save
+// path must MERGE the stored snapshot into the outgoing doc first (a CRDT
+// import: known ops are no-ops), so both writers' ops survive.
+describe('saveDocument merges an out-of-band write instead of clobbering it', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-merge-save-test-'))
+    await setupIsolatedDb()
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('a stale cached doc save preserves ops an MCP-style writer stored since it loaded', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { getDataDir } = await import('../config.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
+
+    // Create, then take the "cached" live doc the WS session would hold.
+    const seed = new LoroDoc()
+    seed.getMap('nodes').set('base', { id: 'base' })
+    seed.commit()
+    await saveDocument('session1', 'merge-race', seed, { overwrite: true })
+    const live = await loadDocument('session1', 'merge-race')
+
+    // Out-of-band MCP-style write: an independent load-modify-save straight
+    // through LibsqlDocumentStore, exactly as server-core's document-io does
+    // — the doc-cache (and `live`) never see it.
+    const db = await getDb(getDataDir())
+    const documentId = (await getDocumentIdByPath(db, 'session1', 'merge-race'))!
+    const docRef = { kind: 'canvas' as const, documentId }
+    const store = new LibsqlDocumentStore(db)
+    const agentDoc = new LoroDoc()
+    const existing = await store.loadSnapshot({ docRef })
+    agentDoc.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
+    agentDoc.getMap('nodes').set('agent', { id: 'agent' })
+    agentDoc.commit()
+    const agentSnapshot = agentDoc.export({ mode: 'snapshot' })
+    const { manifest, chunks } = chunkSnapshot(agentSnapshot, 1_000_000)
+    await store.saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: agentDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
+
+    // The stale cached doc makes its own edit and saves.
+    live.getMap('nodes').set('web', { id: 'web' })
+    live.commit()
+    await saveDocument('session1', 'merge-race', live, { overwrite: true })
+
+    // Both writers' ops must survive in the stored truth.
+    const reloaded = await loadDocument('session1', 'merge-race')
+    const keys = reloaded.getMap('nodes').keys().sort()
+    expect(keys).toEqual(['agent', 'base', 'web'])
+  })
+})
+
 describe('legacy LoroList -> MovableList migration reads and persists through Libsql (identity-convergence flip)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-legacy-migrate-test-'))

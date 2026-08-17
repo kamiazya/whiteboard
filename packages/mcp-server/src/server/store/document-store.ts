@@ -23,7 +23,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -121,6 +121,56 @@ async function saveSnapshotLocked(
   })
 }
 
+// Merge-then-save for the live-doc path. The lock alone only makes an
+// overwrite ATOMIC — it cannot make it correct: `doc` may be a long-lived
+// cached instance (doc-cache) that has not seen ops an MCP tool wrote to
+// these same rows since it loaded, and exporting it as the whole new truth
+// would erase them in one clean write. When the stored frontier is not
+// already contained in the doc's version (behind or concurrent), import
+// the stored snapshot first so the save is a CRDT merge — ops the doc
+// already carries are no-ops, unseen ops join the history (and, for a
+// cached doc, heal the live session in place). The frontier check is the
+// fast path: one small row read skips the full snapshot load whenever this
+// doc was the last writer. A stored snapshot that fails to import falls
+// back to plain overwrite — the pre-flip semantics for an unreadable
+// snapshot — with a warning.
+async function mergeAndSaveSnapshotLocked(
+  documentStore: LibsqlDocumentStore,
+  workspaceId: string,
+  documentId: string,
+  doc: LoroDoc,
+): Promise<number> {
+  const docRef = { kind: 'canvas' as const, documentId }
+  return withCanvasDocWriteLock(documentId, async () => {
+    const stored = await documentStore.readFrontier({ docRef })
+    if (stored !== null) {
+      const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
+      if (comparison === undefined || comparison < 0) {
+        try {
+          const existing = await documentStore.loadSnapshot({ docRef })
+          if (existing !== null) {
+            doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
+          }
+        } catch (err) {
+          getLogger('canvas').warning(
+            { workspaceId, documentId, err: err as Error },
+            'stored snapshot failed to merge before save; overwriting',
+          )
+        }
+      }
+    }
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
+    await documentStore.saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
+    return snapshot.byteLength
+  })
+}
+
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
 //    upserting the matching DB rows. ──
 // overwrite defaults to false so canvas_create does not destroy existing
@@ -159,14 +209,8 @@ export async function saveDocument(
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
     const documentId = existingCanvasId ?? generateDocumentId()
-    const snapshot = doc.export({ mode: 'snapshot' })
     const documentStore = await documentStoreReady()
-    await saveSnapshotLocked(
-      documentStore,
-      documentId,
-      snapshot,
-      doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    )
+    const savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingCanvasId) {
       // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
@@ -205,7 +249,7 @@ export async function saveDocument(
         .onConflict((oc) => oc.columns(['workspaceId', 'path']).doUpdateSet({ updatedAt: now }))
         .execute()
     }
-    if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
+    if (savedBytes > SNAPSHOT_WARN_BYTES) {
       const key = `${workspaceId}/${path}`
       if (!warnedSnapshots.has(key)) {
         warnedSnapshots.add(key)
@@ -213,7 +257,7 @@ export async function saveDocument(
           {
             workspaceId,
             path,
-            bytes: snapshot.byteLength,
+            bytes: savedBytes,
             thresholdBytes: SNAPSHOT_WARN_BYTES,
           },
           'snapshot exceeds soft cap; consider compactDocument() to GC op-log',
