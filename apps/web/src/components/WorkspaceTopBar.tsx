@@ -25,6 +25,17 @@ import { useSceneExport } from './workspace-top-bar/useSceneExport'
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
 // pre-existing caller (all of which never pass `capabilities`) byte-identical.
+/** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
+export interface CanvasIdentity {
+  /** The workspace's display name, falling back to the path when none is stored. */
+  readonly name: string
+  /**
+   * Commits a new display name. Absent in local mode, where the host page
+   * owns renaming through its own store rather than through `/names`.
+   */
+  readonly onRename?: (next: string) => void
+}
+
 export interface WorkspaceTopBarCapabilities {
   versions?: boolean
   branches?: boolean
@@ -80,8 +91,15 @@ interface Props {
    * The merged canvas row's flexible middle (title + properties triggers),
    * provided by the page — the header is one row, so pages inject their
    * canvas identity here instead of stacking a second chrome strip.
+   *
+   * A FUNCTION rather than a node because the display NAME lives here, not
+   * in the page: this bar already loads `/names` for the canvas dropdown, so
+   * a page that rendered its own identity would either duplicate that fetch
+   * or invent a second source for the same value. Passing the name down is
+   * what lets `apps/web`'s two pages agree that a document is named by its
+   * workspace (ADR-0009 decision 2) rather than by its content.
    */
-  titleSlot?: ReactNode
+  titleSlot?: (identity: CanvasIdentity) => ReactNode
   // Pass-through to CanvasDropdown's optional Workspaces section — both
   // omitted (every pre-existing caller) keeps this byte-identical.
   workspaces?: string[]
@@ -331,7 +349,10 @@ export default function WorkspaceTopBar({
           </span>
         )}
 
-        {titleSlot}
+        {titleSlot?.({
+          name: canvasCustomName ?? path,
+          ...(isLocalMode ? {} : { onRename: (next: string) => void renameCanvas(path, next) }),
+        })}
 
         {/* Branch chip with switch, create, rename, delete, and merge actions.
             This is the top bar's only destructive control (branch delete,

@@ -19,7 +19,11 @@ export interface CanvasPropertiesProps {
    * document; the box shows its placeholder.
    */
   readonly title: string
-  readonly onTitleChange: (next: string) => void
+  /**
+   * Absent when this backend cannot rename — the title then renders
+   * read-only rather than accepting keystrokes it would discard.
+   */
+  readonly onTitleChange?: (next: string) => void
   /**
    * The document's OKF frontmatter, or absent when the document has none to
    * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
@@ -101,9 +105,11 @@ export function CanvasProperties({
           id={`${suggestionsId}-title`}
           value={draftTitle ?? title}
           onChange={(event) => {
+            if (onTitleChange === undefined) return
             setDraftTitle(event.target.value)
             onTitleChange(event.target.value)
           }}
+          readOnly={onTitleChange === undefined}
           // Dropping the draft is the whole tidy-up: the box falls back to the
           // canonical name, which is already trimmed.
           onBlur={() => setDraftTitle(null)}

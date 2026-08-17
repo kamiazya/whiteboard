@@ -1430,7 +1430,7 @@ describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         onNavigateToCanvas={() => {}}
-        titleSlot={<input aria-label="Merged title" readOnly value="t" />}
+        titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
       { container: document.body },
     )
