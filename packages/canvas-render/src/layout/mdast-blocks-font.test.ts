@@ -175,3 +175,79 @@ describe('measured-vs-declared font SIZE on markdown runs', () => {
     expect((bullet?.bbox.x ?? 0) < 0).toBe(true)
   })
 })
+
+describe('emphasis flags reach the measurer — bold is wider, so it must be measured bold', () => {
+  const root = (md: { strong?: boolean; emphasis?: boolean }): MdastRoot => ({
+    type: 'root',
+    children: [
+      {
+        type: 'paragraph',
+        children: [
+          { type: 'text', value: 'plain ' },
+          md.strong
+            ? { type: 'strong', children: [{ type: 'text', value: 'loud' }] }
+            : { type: 'emphasis', children: [{ type: 'text', value: 'lean' }] },
+        ],
+      },
+    ],
+  })
+
+  it('a strong run is measured at weight 700 and an emphasis run at style italic', () => {
+    const seen: { text: string; weight: number; style: string }[] = []
+    const spy: typeof measure = (text, font) => {
+      seen.push({ text, weight: font.weight, style: font.style })
+      return measure(text, font)
+    }
+    layoutMdastBlocks(root({ strong: true }), {
+      measure: spy,
+      maxWidth: 600,
+      fontFamily: 'Test',
+    })
+    expect(seen.find((s) => s.text === 'loud')?.weight).toBe(700)
+    expect(seen.find((s) => s.text === 'plain')?.weight).toBe(400)
+
+    seen.length = 0
+    layoutMdastBlocks(root({ emphasis: true }), {
+      measure: spy,
+      maxWidth: 600,
+      fontFamily: 'Test',
+    })
+    expect(seen.find((s) => s.text === 'lean')?.style).toBe('italic')
+    expect(seen.find((s) => s.text === 'plain')?.style).toBe('normal')
+  })
+
+  it('a boundary space inside a styled span is measured with that style too', () => {
+    const seen: { text: string; weight: number }[] = []
+    const spy: typeof measure = (text, font) => {
+      seen.push({ text, weight: font.weight })
+      return measure(text, font)
+    }
+    // **a *i* b** — the ' b' chunk starts with a boundary space and is
+    // walked under { strong: true }; its space ADVANCE must be bold-width,
+    // or the gap next to a styled run comes out regular-sized.
+    layoutMdastBlocks(
+      {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'strong',
+                children: [
+                  { type: 'text', value: 'a ' },
+                  { type: 'emphasis', children: [{ type: 'text', value: 'i' }] },
+                  { type: 'text', value: ' b' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { measure: spy, maxWidth: 600, fontFamily: 'Test' },
+    )
+    const spaceMeasurements = seen.filter((s) => s.text === ' ')
+    expect(spaceMeasurements.length).toBeGreaterThan(0)
+    expect(spaceMeasurements.every((s) => s.weight === 700)).toBe(true)
+  })
+})

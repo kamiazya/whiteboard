@@ -1,4 +1,4 @@
-// The canonical export font: a single vendored static TTF used by
+// The canonical export font: vendored static TTFs (four faces) used by
 // createOpentypeMeasureText (measure-text.ts) and, later, the headless SVG
 // export renderer. canvas-viewer vendors a byte-identical copy of this same
 // file and loads it as a real webfont (its own font-loading.ts, wired in at
@@ -10,11 +10,14 @@
 // on the two constants naming the same family rather than on a shared
 // declaration.
 //
-// Roboto-Regular.ttf is vendored under assets/fonts/Roboto (Apache-2.0,
-// see assets/fonts/Roboto/LICENSE.txt) as a static (non-variable) face:
+// The Roboto faces are vendored under assets/fonts/Roboto (Apache-2.0,
+// see assets/fonts/Roboto/LICENSE.txt) as static (non-variable) files:
 // opentype.js's variable-font axis support is weaker and a variable font's
-// default-instance metrics are less predictable than a dedicated static
-// Regular face.
+// default-instance metrics are less predictable than dedicated static
+// faces. Regular is the anchor; Bold/Italic/BoldItalic exist because the
+// layout measures emphasis runs at their real widths and resvg does NOT
+// synthesize a missing face — without them, exported bold text would paint
+// regular glyphs at bold-measured positions.
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Font as OpentypeFont } from 'opentype.js'
@@ -23,28 +26,44 @@ import { findPackageRoot } from '../../shared/package-root.js'
 
 export const EXPORT_FONT_FAMILY = 'Roboto'
 
-const EXPORT_FONT_RELATIVE_SEGMENTS = ['fonts', 'Roboto', 'Roboto-Regular.ttf'] as const
+export type ExportFontFace = 'regular' | 'bold' | 'italic' | 'boldItalic'
 
-/**
- * Resolves the vendored export font's absolute path, or `null` if it is not
- * present under either layout this package ships as.
- *
- * The dist candidate is checked first: a stale src-mode copy must never
- * shadow the file a real `pnpm build` actually produces, since dist is the
- * only layout the published tarball or a `pnpm build`'d dev daemon serves
- * from.
- */
-export async function resolveExportFontFile(
-  packageRoot: string = findPackageRoot(import.meta.url),
-): Promise<string | null> {
+const EXPORT_FONT_FILES: Record<ExportFontFace, string> = {
+  regular: 'Roboto-Regular.ttf',
+  bold: 'Roboto-Bold.ttf',
+  italic: 'Roboto-Italic.ttf',
+  boldItalic: 'Roboto-BoldItalic.ttf',
+}
+
+function resolveFace(packageRoot: string, file: string): string | null {
+  // The dist candidate is checked first: a stale src-mode copy must never
+  // shadow the file a real `pnpm build` actually produces, since dist is
+  // the only layout the published tarball or a `pnpm build`'d dev daemon
+  // serves from.
   const candidates = [
-    resolve(packageRoot, 'dist', 'assets', ...EXPORT_FONT_RELATIVE_SEGMENTS),
-    resolve(packageRoot, 'assets', ...EXPORT_FONT_RELATIVE_SEGMENTS),
+    resolve(packageRoot, 'dist', 'assets', 'fonts', 'Roboto', file),
+    resolve(packageRoot, 'assets', 'fonts', 'Roboto', file),
   ]
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate
   }
   return null
+}
+
+/**
+ * Resolves the vendored export faces' absolute paths; a face missing under
+ * both layouts resolves to `null` (callers degrade per face — a missing
+ * Bold falls back to Regular metrics/glyphs, it never blocks the export).
+ */
+export async function resolveExportFontFaces(
+  packageRoot: string = findPackageRoot(import.meta.url),
+): Promise<Record<ExportFontFace, string | null>> {
+  return {
+    regular: resolveFace(packageRoot, EXPORT_FONT_FILES.regular),
+    bold: resolveFace(packageRoot, EXPORT_FONT_FILES.bold),
+    italic: resolveFace(packageRoot, EXPORT_FONT_FILES.italic),
+    boldItalic: resolveFace(packageRoot, EXPORT_FONT_FILES.boldItalic),
+  }
 }
 
 // @types/opentype.js's `FontNames` interface still models the pre-locale-

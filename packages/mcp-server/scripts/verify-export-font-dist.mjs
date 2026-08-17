@@ -6,13 +6,16 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_RELATIVE_SEGMENTS } from './copy-export-font-into-dist.mjs'
+import { FONT_DIR_SEGMENTS, FONT_FILES } from './copy-export-font-into-dist.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 export function findMissingExportFont(packageRoot = PACKAGE_ROOT) {
-  const fontPath = resolve(packageRoot, 'dist', ...FONT_RELATIVE_SEGMENTS)
-  return existsSync(fontPath) ? null : fontPath
+  for (const file of FONT_FILES) {
+    const fontPath = resolve(packageRoot, 'dist', ...FONT_DIR_SEGMENTS, file)
+    if (!existsSync(fontPath)) return fontPath
+  }
+  return null
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -26,5 +29,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // stderr, not stdout: npm interleaves lifecycle-script stdout with the
   // `npm pack --json` payload, so anything printed here on stdout corrupts
   // JSON consumers of the pack output (e.g. the release pack-contents check).
-  console.error('prepack gate: dist/assets/fonts/Roboto/Roboto-Regular.ttf present — OK')
+  console.error('prepack gate: dist/assets/fonts/Roboto faces present — OK')
 }

@@ -41,6 +41,9 @@ const REQUIRED_FILES = [
   // measure-text.ts). A tarball missing it would silently degrade every
   // export to the constant-ratio fallback measurer with no build-time signal.
   'dist/assets/fonts/Roboto/Roboto-Regular.ttf',
+  'dist/assets/fonts/Roboto/Roboto-Bold.ttf',
+  'dist/assets/fonts/Roboto/Roboto-Italic.ttf',
+  'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf',
 ]
 
 // Deliberately does NOT include \.map$ — the packaged tarball legitimately

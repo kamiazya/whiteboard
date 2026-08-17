@@ -51,8 +51,21 @@ const TABLE_ROW_HEIGHT_PX = 24
 const CODE_LINE_HEIGHT_PX = 20
 const THEMATIC_BREAK_HEIGHT_PX = 1
 
-function bodyFont(family: string, sizePx: number) {
-  return { family, fallbackChain: [], weight: 400, style: 'normal' as const, sizePx }
+function bodyFont(
+  family: string,
+  sizePx: number,
+  style: { emphasis?: boolean; strong?: boolean } = {},
+) {
+  // Bold glyphs are wider: a strong run measured at 400 would wrap at
+  // positions the painted 700 text does not occupy (the measured-vs-declared
+  // invariant this file already holds for family and size).
+  return {
+    family,
+    fallbackChain: [],
+    weight: style.strong === true ? 700 : 400,
+    style: style.emphasis === true ? ('italic' as const) : ('normal' as const),
+    sizePx,
+  }
 }
 
 export interface MdastLayoutOptions {
@@ -157,8 +170,9 @@ function measureRunWidth(
   fontFamily: string,
   text: string,
   sizePx: number,
+  style: { emphasis?: boolean; strong?: boolean } = {},
 ): number {
-  const metrics = measure(text, bodyFont(fontFamily, sizePx))
+  const metrics = measure(text, bodyFont(fontFamily, sizePx, style))
   return clampAdvance(metrics.advanceWidth)
 }
 
@@ -207,7 +221,7 @@ function layoutPhrasing(
     extra: Partial<TextRunNode>,
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
-    const metrics = options.measure(text, bodyFont(options.fontFamily, fontSizePx))
+    const metrics = options.measure(text, bodyFont(options.fontFamily, fontSizePx, runStyle))
     const width = clampAdvance(metrics.advanceWidth)
     const baseline = clampAdvance(metrics.ascent)
     runs.push({
@@ -237,9 +251,15 @@ function layoutPhrasing(
     // every word except the first — `emit` has already advanced the cursor
     // for the chunk's own leading space when one existed in the source.
     const words = text.split(' ')
-    const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
+    const spaceWidth = measureRunWidth(
+      options.measure,
+      options.fontFamily,
+      ' ',
+      fontSizePx,
+      runStyle,
+    )
     words.forEach((word, index) => {
-      const width = measureRunWidth(options.measure, options.fontFamily, word, fontSizePx)
+      const width = measureRunWidth(options.measure, options.fontFamily, word, fontSizePx, runStyle)
       if (line.x > 0) {
         const separator = index > 0 ? spaceWidth : 0
         if (line.x + separator + width > options.maxWidth) {
@@ -274,14 +294,26 @@ function layoutPhrasing(
     // measured them ("`code` and" painting as "codeand"). Atomic runs above
     // are exempt: their source text is verbatim by contract.
     const collapsed = text.trim().replace(/\s+/g, ' ')
-    const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
+    const spaceWidth = measureRunWidth(
+      options.measure,
+      options.fontFamily,
+      ' ',
+      fontSizePx,
+      runStyle,
+    )
     // A boundary space at the start of a line is dropped, not advanced —
     // the same rule wrapAndPush applies to its separators.
     if (/^\s/.test(text) && line.x > 0) {
       line.x += spaceWidth
     }
     if (collapsed !== '') {
-      const fullWidth = measureRunWidth(options.measure, options.fontFamily, collapsed, fontSizePx)
+      const fullWidth = measureRunWidth(
+        options.measure,
+        options.fontFamily,
+        collapsed,
+        fontSizePx,
+        runStyle,
+      )
       if (canWrap && line.x + fullWidth > options.maxWidth && /\s/.test(collapsed)) {
         wrapAndPush(collapsed, extra, runStyle)
       } else {

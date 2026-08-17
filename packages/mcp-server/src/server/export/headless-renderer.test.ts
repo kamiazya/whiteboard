@@ -40,6 +40,52 @@ async function importRenderer() {
   return import('./headless-renderer.js')
 }
 
+import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { buildSpatialScene } from './headless-renderer.js'
+import { createOpentypeMeasureText } from './measure-text.js'
+
+describe('emphasis survives the whole export pipeline', () => {
+  it('a real PNG render selects the vendored bold/italic faces — styled pixels differ from plain', async () => {
+    const { renderSpatialCanvasToPng } = await importRenderer()
+    const at = (text: string) => ({
+      nodes: [{ id: 'n1', type: 'text' as const, x: 0, y: 0, width: 320, height: 120, text }],
+      edges: [],
+    })
+    // Same painted words; only the emphasis differs. resvg must accept the
+    // weight/style attributes AND paint different glyphs for them.
+    const styled = await renderSpatialCanvasToPng(at('**bold** and *italic*'))
+    const plain = await renderSpatialCanvasToPng(at('bold and italic'))
+    expect(styled.png.subarray(0, 8).equals(PNG_MAGIC)).toBe(true)
+    expect(plain.png.subarray(0, 8).equals(PNG_MAGIC)).toBe(true)
+    expect(styled.png.equals(plain.png)).toBe(false)
+  })
+
+  it('markdown source with strong/emphasis reaches the SVG as weight/style attributes', async () => {
+    const measure = await createOpentypeMeasureText()
+    const scene = buildSpatialScene(
+      {
+        nodes: [
+          {
+            id: 'n1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 200,
+            text: 'plain **bold** *lean* ~~gone~~',
+          },
+        ],
+        edges: [],
+      },
+      measure,
+    )
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('font-weight="700"')
+    expect(svg).toContain('font-style="italic"')
+    expect(svg).toContain('text-decoration="line-through"')
+  })
+})
+
 describe('headless-renderer', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -272,7 +318,12 @@ describe('headless-renderer', () => {
   it('degrades to system fonts with a single warning when the font asset is missing', async () => {
     vi.doMock('./export-font.js', () => ({
       EXPORT_FONT_FAMILY: 'Roboto',
-      resolveExportFontFile: vi.fn(async () => null),
+      resolveExportFontFaces: vi.fn(async () => ({
+        regular: null,
+        bold: null,
+        italic: null,
+        boldItalic: null,
+      })),
     }))
     const { captureLogsForTests } = await import('../log.js')
     const capture = captureLogsForTests('debug')
