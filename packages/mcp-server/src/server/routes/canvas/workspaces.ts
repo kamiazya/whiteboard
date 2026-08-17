@@ -1,3 +1,4 @@
+import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { LoroDoc as LoroDocCtor } from 'loro-crdt'
 import type { z } from 'zod'
@@ -115,6 +116,11 @@ export function createWorkspacesRouter() {
     }
     try {
       const doc = new LoroDocCtor()
+      // The doc's own bytes must be self-describing exactly like an
+      // MCP-created (wb_document_create) doc — kind lives on the SQL row
+      // AND on the doc, so a reader of the blob alone (an editor opening it,
+      // a snapshot export) doesn't need the row to know what it's looking at.
+      writeDocumentKind(doc, parsed.data.kind)
       await saveDocument(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
       const response: CreateCanvasResponse = { path }
       return c.json(response)
