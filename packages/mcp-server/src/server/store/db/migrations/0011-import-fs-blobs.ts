@@ -119,26 +119,42 @@ async function importOneBlob(
     // only compares bytes to tell a genuine divergence from an already-
     // imported, unchanged blob (idempotence) and leaves both sides alone
     // either way.
+    //
+    // reassembleSnapshot can itself throw (SnapshotReassemblyError) when the
+    // existing row is structurally inconsistent with its chunk rows — e.g. a
+    // prior importOneBlob call was interrupted between its independent
+    // documentSnapshots/documentSnapshotChunks inserts. That is symmetric
+    // with the decode-failure gate below: skip the one document rather than
+    // aborting every other document in this import.
     const chunkRows = await db
       .selectFrom('documentSnapshotChunks')
       .select(['chunkIndex', 'bytes'])
       .where('docKey', '=', docKey)
       .orderBy('chunkIndex', 'asc')
       .execute()
-    const existingBytes = reassembleSnapshot(
-      {
-        chunkCount: existing.chunkCount,
-        totalBytes: existing.totalBytes,
-        maxChunkBytes: existing.maxChunkBytes,
-      },
-      chunkRows.map((row) => ({
-        index: row.chunkIndex,
-        of: existing.chunkCount,
-        // Fresh copy: drivers hand back Buffer or Uint8Array by dialect, and
-        // ports' DTOs require an `ArrayBuffer`-backed `Uint8Array<ArrayBuffer>`.
-        bytes: new Uint8Array(row.bytes),
-      })),
-    )
+    let existingBytes: Uint8Array
+    try {
+      existingBytes = reassembleSnapshot(
+        {
+          chunkCount: existing.chunkCount,
+          totalBytes: existing.totalBytes,
+          maxChunkBytes: existing.maxChunkBytes,
+        },
+        chunkRows.map((row) => ({
+          index: row.chunkIndex,
+          of: existing.chunkCount,
+          // Fresh copy: drivers hand back Buffer or Uint8Array by dialect, and
+          // ports' DTOs require an `ArrayBuffer`-backed `Uint8Array<ArrayBuffer>`.
+          bytes: new Uint8Array(row.bytes),
+        })),
+      )
+    } catch (err) {
+      log.warning(
+        { workspaceId, documentId, err },
+        'existing snapshot row failed to reassemble, leaving both sides untouched for manual triage',
+      )
+      return
+    }
     if (Buffer.compare(existingBytes, bytes) !== 0) {
       log.warning(
         {

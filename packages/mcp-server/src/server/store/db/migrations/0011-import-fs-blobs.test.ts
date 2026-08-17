@@ -276,6 +276,61 @@ describe('0011-import-fs-blobs', () => {
     await db.destroy()
   })
 
+  it('does not abort the whole import when an existing row is structurally inconsistent with its manifest', async () => {
+    const db = await memoryDb()
+    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+    await seedWorkspace(db, 'ws-1')
+
+    // A documentSnapshots row claiming 2 chunks but only 1 persisted — the
+    // shape a prior interrupted importOneBlob call would leave, since its
+    // two inserts are not wrapped in a shared sub-transaction.
+    await db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey: 'canvas:doc-broken',
+        chunkCount: 2,
+        totalBytes: 10,
+        maxChunkBytes: 5,
+        frontier: new Uint8Array([9]),
+      })
+      .execute()
+    await db
+      .insertInto('documentSnapshotChunks')
+      .values({
+        docKey: 'canvas:doc-broken',
+        chunkIndex: 0,
+        bytes: new Uint8Array([1, 2, 3, 4, 5]),
+      })
+      .execute()
+
+    await writeBlob(dataDir, 'ws-1', 'doc-broken', snapshotBytes('anything'))
+    const okBytes = snapshotBytes('the sibling document')
+    await writeBlob(dataDir, 'ws-1', 'doc-ok', okBytes)
+
+    const capture = captureLogsForTests()
+    try {
+      expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
+      const warnings = capture.records.filter(
+        (r) => r.level === 'warning' && r.data?.documentId === 'doc-broken',
+      )
+      expect(warnings).toHaveLength(1)
+    } finally {
+      capture.restore()
+    }
+
+    // The broken row itself is left untouched...
+    const header = await db
+      .selectFrom('documentSnapshots')
+      .select(['chunkCount'])
+      .where('docKey', '=', 'canvas:doc-broken')
+      .executeTakeFirstOrThrow()
+    expect(header.chunkCount).toBe(2)
+    // ...but the sibling document still imports.
+    expect(await reassembledRow(db, 'canvas:doc-ok')).toEqual(okBytes)
+
+    await db.destroy()
+  })
+
   it('runs the standalone importFsBlobs a second time against an already-migrated database to catch a later-written blob', async () => {
     const db = await memoryDb()
     expect((await migratorFor(db).migrateToLatest()).error).toBeUndefined()
@@ -318,6 +373,36 @@ describe('0011-import-fs-blobs', () => {
 
     const rows = await db.selectFrom('documentSnapshots').selectAll().execute()
     expect(rows).toEqual([])
+
+    await db.destroy()
+  })
+
+  it('warns and skips a blob that fails to read (e.g. permission denied) without aborting the rest of the import', async () => {
+    const db = await memoryDb()
+    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+    await seedWorkspace(db, 'ws-1')
+
+    const unreadablePath = await writeBlob(dataDir, 'ws-1', 'doc-unreadable', snapshotBytes('x'))
+    const { chmod } = await import('node:fs/promises')
+    await chmod(unreadablePath, 0o000)
+
+    const okBytes = snapshotBytes('the sibling document')
+    await writeBlob(dataDir, 'ws-1', 'doc-ok', okBytes)
+
+    const capture = captureLogsForTests()
+    try {
+      expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
+      const warnings = capture.records.filter(
+        (r) => r.level === 'warning' && r.data?.documentId === 'doc-unreadable',
+      )
+      expect(warnings).toHaveLength(1)
+    } finally {
+      capture.restore()
+      await chmod(unreadablePath, 0o644)
+    }
+
+    expect(await reassembledRow(db, 'canvas:doc-unreadable')).toBeNull()
+    expect(await reassembledRow(db, 'canvas:doc-ok')).toEqual(okBytes)
 
     await db.destroy()
   })
