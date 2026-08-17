@@ -202,6 +202,48 @@ describe('sweepImportedFsBlobs', () => {
     expect(await exists(blobPath)).toBe(true)
   })
 
+  it('(c’’) never sweeps a blob whose matched snapshot row has internally inconsistent chunks (reassembleSnapshot throws)', async () => {
+    const db = await getDb(tempDir)
+    await runMigrations(db)
+    await seedWorkspace(db, 'ws-1')
+
+    // A documentSnapshots header declaring 2 chunks, a documentFrontiers row
+    // (so both of sweepOneBlob's row-existence gates pass), but only chunk
+    // index 0 actually stored — reassembleSnapshot throws MISSING_CHUNK for
+    // this shape, which is the catch branch under test.
+    const bytes = snapshotBytes('inconsistent chunks')
+    const { manifest, chunks } = chunkSnapshot(bytes, Math.ceil(bytes.byteLength / 2))
+    expect(manifest.chunkCount).toBeGreaterThanOrEqual(2)
+    await db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey: 'canvas:doc-inconsistent',
+        chunkCount: manifest.chunkCount,
+        totalBytes: manifest.totalBytes,
+        maxChunkBytes: manifest.maxChunkBytes,
+        frontier: new Uint8Array([1]),
+      })
+      .execute()
+    await db
+      .insertInto('documentSnapshotChunks')
+      .values({
+        docKey: 'canvas:doc-inconsistent',
+        chunkIndex: chunks[0].index,
+        bytes: chunks[0].bytes,
+      })
+      .execute()
+    await db
+      .insertInto('documentFrontiers')
+      .values({ docKey: 'canvas:doc-inconsistent', frontier: new Uint8Array([1]) })
+      .execute()
+
+    const blobPath = await writeBlob('ws-1', 'doc-inconsistent', bytes)
+
+    await expect(sweepImportedFsBlobs(db, tempDir)).resolves.toBeUndefined()
+
+    expect(await exists(blobPath)).toBe(true)
+  })
+
   it('(d) removes empty canvas/workspace dirs after sweeping, but keeps a workspace dir alive for a sibling versions/thumbnail file', async () => {
     const db = await getDb(tempDir)
     await runMigrations(db)
