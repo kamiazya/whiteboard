@@ -40,13 +40,13 @@ export class ConflictError extends Error {
 }
 
 // ── blob path helpers ──
-// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
+// Snapshots live under {dataDir}/blobs/{workspaceId}/document/{documentId}.loro.
 // The documentId is the stable row PK from the `documents` table, so renaming
 // a document's path does not move blobs around.
 //
-// The `canvas/` segment is a stored layout, not a name this module is free to
-// correct: moving it means walking every workspace's blob tree at boot, so it
-// is its own migration-bearing increment rather than part of a rename.
+// The `document/` segment matches the entity (ADR-0009). Migration
+// `0011-document-blob-dir` moves an existing tree off the older `canvas/`
+// spelling at boot, so this module only ever needs to know the one name.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
@@ -54,7 +54,7 @@ function blobsRoot(): string {
 function documentBlobPath(workspaceId: string, documentId: string): string {
   validateWorkspaceId(workspaceId)
   validateCanvasId(documentId)
-  return join(blobsRoot(), workspaceId, 'canvas', `${documentId}.loro`)
+  return join(blobsRoot(), workspaceId, 'document', `${documentId}.loro`)
 }
 
 function errorMessage(error: unknown): string {

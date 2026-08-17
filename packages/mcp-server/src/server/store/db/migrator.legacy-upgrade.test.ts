@@ -59,9 +59,14 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
       kind: 'spatial',
     })
     .execute()
-  const blobDir = join(dataDir, 'blobs', 'ws-boot', 'canvas')
-  await mkdir(blobDir, { recursive: true })
-  await writeFile(join(blobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([9]))
+  // Seeded under the OLD segment, because that IS what a pre-0008 data dir
+  // looks like on disk. 0011 moves it, so the assertion below reads the new
+  // one — which is what proves the blob survived BOTH the 0008 re-key and the
+  // 0011 move, in that order, rather than either one alone.
+  const legacyBlobDir = join(dataDir, 'blobs', 'ws-boot', 'canvas')
+  const blobDir = join(dataDir, 'blobs', 'ws-boot', 'document')
+  await mkdir(legacyBlobDir, { recursive: true })
+  await writeFile(join(legacyBlobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([9]))
 
   // What the next boot does.
   await runMigrations(db as never)

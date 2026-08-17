@@ -755,7 +755,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     // document-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/canvas/...
     // -- no files/ child of its own -- so the shared discovery containment
     // check already excludes it without a name-based special case.
-    const blobsDir = join(tempDir, 'blobs', 'some_other_ws', 'canvas')
+    const blobsDir = join(tempDir, 'blobs', 'some_other_ws', 'document')
     await mkdir(blobsDir, { recursive: true })
     const listWorkspaces = vi.fn(async () => [])
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))

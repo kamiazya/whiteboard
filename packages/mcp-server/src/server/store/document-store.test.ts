@@ -155,7 +155,7 @@ describe('saveDocument / loadDocument', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'broken')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(loadDocument('session1', 'broken')).rejects.toThrow()
@@ -649,7 +649,7 @@ describe('compactDocument', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'broken')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(compactDocument('session1', 'broken', store)).rejects.toMatchObject({
@@ -785,7 +785,7 @@ describe('deleteDocument', () => {
       .executeTakeFirstOrThrow()
     const documentId = canvasRow.id
 
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${documentId}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${documentId}.loro`)
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
     await expect(stat(blobPath)).resolves.toBeDefined()
     await expect(stat(thumbPath)).resolves.toBeDefined()
@@ -841,7 +841,7 @@ describe('deleteDocument', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'migrated')
       .executeTakeFirstOrThrow()
-    const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
+    const bakPath = join(tempDir, 'blobs', 'session1', 'document', `${row.id}.loro.pre-migrate-bak`)
     await writeFile(bakPath, new Uint8Array([9, 9, 9]))
 
     await expect(deleteDocument('session1', 'migrated')).resolves.toBe(true)
@@ -868,7 +868,7 @@ describe('deleteDocument', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'row-only')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${row.id}.loro`)
     await unlink(blobPath)
 
     await expect(deleteDocument('session1', 'row-only')).resolves.toBe(true)
@@ -913,7 +913,7 @@ describe('renameDocumentPath', () => {
       .where('path', '=', 'a')
       .executeTakeFirstOrThrow()
     const documentId = before.id
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${documentId}.loro`)
+    const blobPath = join(tempDir, 'blobs', 'session1', 'document', `${documentId}.loro`)
     const blobBefore = await readFile(blobPath)
 
     await expect(renameDocumentPath('session1', 'a', 'b')).resolves.toEqual({ documentId })

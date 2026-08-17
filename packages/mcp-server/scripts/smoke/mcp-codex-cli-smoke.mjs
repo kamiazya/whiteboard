@@ -155,15 +155,15 @@ child.on('exit', (code) => {
   }
 
   const [sessionId] = String(output.documentId).split('/')
-  // Canvas blobs land under blobs/{workspaceId}/canvas/{nanoid}.loro now that
-  // the metadata store owns the path → documentId mapping. We only verify that
-  // *some* canvas blob exists for the workspace; the exact filename is
-  // generated nanoid.
-  const blobsDir = join(tmpDataDir, 'blobs', sessionId, 'canvas')
+  // A document's blob lands under blobs/{workspaceId}/document/{id}.loro now
+  // that the metadata store owns the path -> documentId mapping. We only
+  // verify that *some* blob exists for the workspace; the exact filename is a
+  // generated id.
+  const blobsDir = join(tmpDataDir, 'blobs', sessionId, 'document')
   const blobsExist = existsSync(blobsDir)
 
   if (!blobsExist) {
-    fail(`canvas blob dir missing: ${blobsDir}`)
+    fail(`document blob dir missing: ${blobsDir}`)
   }
 
   console.log(

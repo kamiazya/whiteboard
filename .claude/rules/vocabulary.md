@@ -96,11 +96,6 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   regex for the retired word `OpenCanvas` hits every one of them, and the
   next person running that search should know they are the expected
   remainder rather than a miss.
-- The blob tree's `canvas/` path segment
-  (`{dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro`), which
-  `document-store.ts` and `file-gc-sweeper.ts` both hardcode. Left because
-  moving it means walking every workspace's blob tree at boot — a
-  migration-bearing increment, not a rename.
 
 The four mis-prefixed package names are DONE: `@kamiazya/whiteboard-{model,
 codec,ports,loro-adapter}`, with directories and vitest projects following.
@@ -147,6 +142,18 @@ It gets no executable rung. `vocabulary-check.test.ts` could not hold it
 without excluding both the ADR directory and every `onOpenCanvas` handler,
 and a guard that needs two carve-outs to pass is one nobody will trust the
 next time it fires. Same reason `canvas` will never qualify.
+
+The blob tree's path segment is DONE: `{dataDir}/blobs/{workspaceId}/canvas/`
+is now `.../document/`, moved by migration `0011-document-blob-dir`. Two
+things about it are worth knowing. It was recorded here as hardcoded by
+"`document-store.ts` and `file-gc-sweeper.ts` both", and that was wrong —
+the sweeper only mentions the layout in a comment and never joins the
+segment, so the production surface was ONE line. And a migration can move
+bytes on disk here, not just columns: `0008` already did, which is the
+precedent `0011` follows. The end-to-end guard is
+`migrator.legacy-upgrade.test.ts`, which seeds the OLD layout (that is what a
+pre-0008 data dir looks like) and asserts the blob arrives under the new one,
+so it proves the 0008 re-key and the 0011 move both ran, in order.
 
 `slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
 is what keeps it retired — the one part of this rule that could stop being

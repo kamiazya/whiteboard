@@ -21,4 +21,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0008-ulid-legacy-canvas-ids',
   '0009-document-vocabulary',
   '0010-document-path',
+  '0011-document-blob-dir',
 ] as const satisfies readonly string[]

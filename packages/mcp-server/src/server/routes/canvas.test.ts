@@ -105,7 +105,7 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     // non-ConflictError, exercising the catch-all 500 branch (mutation-check
     // guard for the 400 -> 500 change).
     await mkdir(join(tmp.dir, 'blobs', 'ws1'), { recursive: true })
-    await writeFile(join(tmp.dir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
+    await writeFile(join(tmp.dir, 'blobs', 'ws1', 'document'), 'not-a-directory')
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/ws1/canvases', {
       method: 'POST',
@@ -967,7 +967,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tmp.dir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tmp.dir, 'blobs', 'session1', 'document', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
@@ -982,7 +982,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:path/compact', () => {
     })
   })
 
-  // Canvas blobs live under blobs/{workspaceId}/canvas/, so the previous
+  // A document's blob lives under blobs/{workspaceId}/document/, so the previous
   // "non-directory session path" stat failure case no longer maps. compact
   // returns no-file for missing blobs, and the corrupt-snapshot case above
   // still exercises the corruption branch.

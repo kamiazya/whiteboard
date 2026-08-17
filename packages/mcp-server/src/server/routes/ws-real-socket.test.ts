@@ -243,7 +243,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     // Persistence landed under the injected scratch dir: the sqlite db plus
     // the canvas blob artifact tree, not just the top-level file.
     expect(existsSync(join(scratchDir, 'whiteboard.db'))).toBe(true)
-    const blobDir = join(scratchDir, 'blobs', 'session1', 'canvas')
+    const blobDir = join(scratchDir, 'blobs', 'session1', 'document')
     expect(existsSync(blobDir)).toBe(true)
     const blobFiles = await readdir(blobDir)
     expect(blobFiles.length).toBeGreaterThan(0)
