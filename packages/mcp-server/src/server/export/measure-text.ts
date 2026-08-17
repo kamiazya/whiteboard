@@ -8,7 +8,7 @@ import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whitebo
 import * as opentype from 'opentype.js'
 
 import { getLogger } from '../log.js'
-import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
+import { EXPORT_FONT_FAMILY, type ExportFontFace, resolveExportFontFaces } from './export-font.js'
 
 const log = getLogger('export-measure-text')
 
@@ -54,27 +54,51 @@ export function createConstantRatioMeasureText(): MeasureText {
   }
 }
 
-function buildOpentypeMeasurer(font: opentype.Font): MeasureText {
+/** CSS-style face selection: 600+ is bold, per the numeric weight scale. */
+export function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
+  const bold = descriptor.weight >= 600
+  const italic = descriptor.style === 'italic'
+  if (bold && italic) return 'boldItalic'
+  if (bold) return 'bold'
+  if (italic) return 'italic'
+  return 'regular'
+}
+
+function measureWithFont(
+  font: opentype.Font,
+  text: string,
+  descriptor: FontDescriptor,
+): TextMetrics {
   const unitsPerEm = font.unitsPerEm > 0 ? font.unitsPerEm : 1000
   // hhea.lineGap is a raw font-design-unit value; Table's index signature
   // types it `any`, so coerce explicitly rather than propagate `any`.
   const lineGapUnits = Number(font.tables.hhea?.lineGap) || 0
+  const sizePx = clampNonNegative(descriptor.sizePx)
+  const scale = sizePx / unitsPerEm
+  // Kerning is disabled deliberately: it would make advanceWidth(a + b)
+  // only approximately equal to advanceWidth(a) + advanceWidth(b) at the
+  // kerning-pair seam, which this measurer's callers rely on being exact.
+  const advanceWidth =
+    sizePx === 0 || text.length === 0
+      ? 0
+      : clampNonNegative(font.getAdvanceWidth(text, sizePx, { kerning: false }))
+  return {
+    advanceWidth,
+    ascent: clampNonNegative(font.ascender * scale),
+    descent: clampNonNegative(Math.abs(font.descender) * scale),
+    lineGap: clampNonNegative(lineGapUnits * scale),
+  }
+}
+
+function buildOpentypeMeasurer(
+  regular: opentype.Font,
+  faces: Partial<Record<ExportFontFace, opentype.Font>>,
+): MeasureText {
   return (text: string, descriptor: FontDescriptor): TextMetrics => {
-    const sizePx = clampNonNegative(descriptor.sizePx)
-    const scale = sizePx / unitsPerEm
-    // Kerning is disabled deliberately: it would make advanceWidth(a + b)
-    // only approximately equal to advanceWidth(a) + advanceWidth(b) at the
-    // kerning-pair seam, which this measurer's callers rely on being exact.
-    const advanceWidth =
-      sizePx === 0 || text.length === 0
-        ? 0
-        : clampNonNegative(font.getAdvanceWidth(text, sizePx, { kerning: false }))
-    return {
-      advanceWidth,
-      ascent: clampNonNegative(font.ascender * scale),
-      descent: clampNonNegative(Math.abs(font.descender) * scale),
-      lineGap: clampNonNegative(lineGapUnits * scale),
-    }
+    // A missing sibling face degrades to Regular metrics — the same glyphs
+    // resvg would fall back to painting, so measure and paint stay agreed.
+    const font = faces[faceForDescriptor(descriptor)] ?? regular
+    return measureWithFont(font, text, descriptor)
   }
 }
 
@@ -103,18 +127,34 @@ function logFallbackOnce(reason: string): void {
   )
 }
 
+async function parseFace(path: string | null): Promise<opentype.Font | null> {
+  if (path === null) return null
+  const buffer = await readFile(path)
+  return opentypeApi.parse(buffer)
+}
+
 async function loadRealMeasurer(
-  resolveFontFile: () => Promise<string | null>,
+  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>>,
 ): Promise<MeasureText> {
   try {
-    const fontPath = await resolveFontFile()
-    if (!fontPath) {
+    const paths = await resolveFontFiles()
+    const regular = await parseFace(paths.regular)
+    if (regular === null) {
       logFallbackOnce('asset-not-found')
       return createConstantRatioMeasureText()
     }
-    const buffer = await readFile(fontPath)
-    const font = opentypeApi.parse(buffer)
-    return buildOpentypeMeasurer(font)
+    const faces: Partial<Record<ExportFontFace, opentype.Font>> = { regular }
+    for (const face of ['bold', 'italic', 'boldItalic'] as const) {
+      // A sibling face failing to parse degrades that face only — Regular
+      // already loaded, so the export is degraded, not blocked.
+      try {
+        const parsed = await parseFace(paths[face])
+        if (parsed !== null) faces[face] = parsed
+      } catch (err) {
+        logFallbackOnce(describeLoadFailure(err))
+      }
+    }
+    return buildOpentypeMeasurer(regular, faces)
   } catch (err) {
     logFallbackOnce(describeLoadFailure(err))
     return createConstantRatioMeasureText()
@@ -128,10 +168,10 @@ async function loadRealMeasurer(
  * reused by every caller.
  */
 export async function createOpentypeMeasureText(
-  options: { resolveFontFile?: () => Promise<string | null> } = {},
+  options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},
 ): Promise<MeasureText> {
   if (!cachedMeasurerPromise) {
-    cachedMeasurerPromise = loadRealMeasurer(options.resolveFontFile ?? resolveExportFontFile)
+    cachedMeasurerPromise = loadRealMeasurer(options.resolveFontFiles ?? resolveExportFontFaces)
   }
   return cachedMeasurerPromise
 }

@@ -11,20 +11,34 @@ import { fileURLToPath } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 // Also consumed by verify-export-font-dist.mjs (prefixed with 'dist') so the
-// packed-asset gate and this copy step cannot drift apart on the path.
-export const FONT_RELATIVE_SEGMENTS = ['assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf']
-export const SRC_FILE = resolve(SCRIPT_DIR, '..', ...FONT_RELATIVE_SEGMENTS)
-export const DEST_FILE = resolve(SCRIPT_DIR, '..', 'dist', ...FONT_RELATIVE_SEGMENTS)
+// packed-asset gate and this copy step cannot drift apart on the paths.
+// Four static faces: layout measures emphasis runs at real bold/italic
+// widths and resvg does not synthesize a missing face.
+export const FONT_DIR_SEGMENTS = ['assets', 'fonts', 'Roboto']
+export const FONT_FILES = [
+  'Roboto-Regular.ttf',
+  'Roboto-Bold.ttf',
+  'Roboto-Italic.ttf',
+  'Roboto-BoldItalic.ttf',
+  'LICENSE.txt',
+]
+export const SRC_DIR = resolve(SCRIPT_DIR, '..', ...FONT_DIR_SEGMENTS)
+export const DEST_DIR = resolve(SCRIPT_DIR, '..', 'dist', ...FONT_DIR_SEGMENTS)
 
-export function copyExportFontIntoDist(srcFile = SRC_FILE, destFile = DEST_FILE) {
-  if (!existsSync(srcFile)) {
-    throw new Error(`export font asset not found at ${srcFile} — is assets/fonts/Roboto committed?`)
+export function copyExportFontIntoDist(srcDir = SRC_DIR, destDir = DEST_DIR) {
+  mkdirSync(destDir, { recursive: true })
+  for (const file of FONT_FILES) {
+    const srcFile = resolve(srcDir, file)
+    if (!existsSync(srcFile)) {
+      throw new Error(
+        `export font asset not found at ${srcFile} — is assets/fonts/Roboto committed?`,
+      )
+    }
+    cpSync(srcFile, resolve(destDir, file))
   }
-  mkdirSync(dirname(destFile), { recursive: true })
-  cpSync(srcFile, destFile)
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   copyExportFontIntoDist()
-  console.log(`copied ${SRC_FILE} -> ${DEST_FILE}`)
+  console.log(`copied ${FONT_FILES.length} files ${SRC_DIR} -> ${DEST_DIR}`)
 }

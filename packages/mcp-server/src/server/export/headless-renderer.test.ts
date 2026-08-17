@@ -40,6 +40,37 @@ async function importRenderer() {
   return import('./headless-renderer.js')
 }
 
+import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { buildSpatialScene } from './headless-renderer.js'
+import { createOpentypeMeasureText } from './measure-text.js'
+
+describe('emphasis survives the whole export pipeline', () => {
+  it('markdown source with strong/emphasis reaches the SVG as weight/style attributes', async () => {
+    const measure = await createOpentypeMeasureText()
+    const scene = buildSpatialScene(
+      {
+        nodes: [
+          {
+            id: 'n1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 200,
+            text: 'plain **bold** *lean* ~~gone~~',
+          },
+        ],
+        edges: [],
+      },
+      measure,
+    )
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('font-weight="700"')
+    expect(svg).toContain('font-style="italic"')
+    expect(svg).toContain('text-decoration="line-through"')
+  })
+})
+
 describe('headless-renderer', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -272,7 +303,12 @@ describe('headless-renderer', () => {
   it('degrades to system fonts with a single warning when the font asset is missing', async () => {
     vi.doMock('./export-font.js', () => ({
       EXPORT_FONT_FAMILY: 'Roboto',
-      resolveExportFontFile: vi.fn(async () => null),
+      resolveExportFontFaces: vi.fn(async () => ({
+        regular: null,
+        bold: null,
+        italic: null,
+        boldItalic: null,
+      })),
     }))
     const { captureLogsForTests } = await import('../log.js')
     const capture = captureLogsForTests('debug')

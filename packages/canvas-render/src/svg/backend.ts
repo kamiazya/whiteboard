@@ -95,8 +95,17 @@ function textBaselineY(run: TextRunNode): number {
  * 2px overhang never exceeds the hit tolerance. */
 const TEXT_HALO_PAD_PX = 2
 
+/** Inline emphasis the layout measured for — painted, or the flags are lies. */
+function emphasisAttrs(run: TextRunNode): string {
+  const parts: string[] = []
+  if (run.strong === true) parts.push('font-weight="700"')
+  if (run.emphasis === true) parts.push('font-style="italic"')
+  if (run.deleted === true) parts.push('text-decoration="line-through"')
+  return parts.length > 0 ? ` ${parts.join(' ')}` : ''
+}
+
 function renderTextRun(run: TextRunNode): string {
-  const appearance = withLeadingSpace(appearanceAttrs(run.appearance))
+  const appearance = withLeadingSpace(appearanceAttrs(run.appearance)) + emphasisAttrs(run)
   const position = `x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"`
   const body = escapeXmlText(run.text)
   const halo = run.appearance?.halo

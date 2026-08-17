@@ -1,11 +1,14 @@
 import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
+import { resolveExportFontFaces } from './export-font.js'
 import {
   _resetExportMeasureTextCacheForTests,
   createConstantRatioMeasureText,
   createOpentypeMeasureText,
 } from './measure-text.js'
+
+const NO_FACES = { regular: null, bold: null, italic: null, boldItalic: null }
 
 function font(sizePx: number, overrides: Partial<FontDescriptor> = {}): FontDescriptor {
   return {
@@ -39,6 +42,19 @@ describe('createOpentypeMeasureText', () => {
         expectFiniteNonNegativeMetrics(metrics)
       }
     }
+  })
+
+  it('selects the bold and italic faces the descriptor asks for — bold is measurably wider', async () => {
+    const measure = await createOpentypeMeasureText()
+    const regular = measure('Hello, bold world', font(16))
+    const bold = measure('Hello, bold world', font(16, { weight: 700 }))
+    const italic = measure('Hello, bold world', font(16, { style: 'italic' }))
+    // Roboto Bold's advances genuinely differ from Regular's; a measurer
+    // that ignores the descriptor would return identical widths and the
+    // painted 700 text would not fit the measured wrap positions.
+    expect(bold.advanceWidth).toBeGreaterThan(regular.advanceWidth)
+    // Roboto Italic differs from Regular too (slanted design, own metrics).
+    expect(italic.advanceWidth).not.toBe(regular.advanceWidth)
   })
 
   it('measures "Hello" at 16px to a plausible CSS-px advance width', async () => {
@@ -91,8 +107,15 @@ describe('createOpentypeMeasureText', () => {
     expect(metrics).toEqual({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
   })
 
-  it('accepts bold/italic descriptors without throwing (single Regular face, weight/style currently ignored)', async () => {
-    const measure = await createOpentypeMeasureText()
+  it('degrades a missing sibling face to Regular metrics instead of throwing', async () => {
+    const measure = await createOpentypeMeasureText({
+      resolveFontFiles: async () => ({
+        ...(await resolveExportFontFaces()),
+        bold: null,
+        italic: null,
+        boldItalic: null,
+      }),
+    })
     const regular = measure('Weight test', font(16))
     const bold = measure('Weight test', font(16, { weight: 700, style: 'italic' }))
     expect(bold).toEqual(regular)
@@ -108,15 +131,15 @@ describe('createOpentypeMeasureText', () => {
     const capture = captureLogsForTests('debug')
     try {
       const measure = await createOpentypeMeasureText({
-        resolveFontFile: async () => null,
+        resolveFontFiles: async () => NO_FACES,
       })
       const metrics = measure('Hello', font(16))
       expectFiniteNonNegativeMetrics(metrics)
 
       // A second/third call must not add another warning — the failure (and
       // its fallback measurer) is cached after the first factory call.
-      await createOpentypeMeasureText({ resolveFontFile: async () => null })
-      await createOpentypeMeasureText({ resolveFontFile: async () => null })
+      await createOpentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
+      await createOpentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
 
       const warnings = capture.records.filter(
         (r) => r.level === 'warning' && r.msg.includes('falling back to a constant-ratio'),
@@ -131,11 +154,12 @@ describe('createOpentypeMeasureText', () => {
     const capture = captureLogsForTests('debug')
     try {
       const measure = await createOpentypeMeasureText({
-        resolveFontFile: async () => {
-          // A path that resolves but whose bytes are not a valid font —
-          // readFile succeeds, opentype.parse must be the one to throw.
-          return import.meta.url.replace('file://', '')
-        },
+        // A path that resolves but whose bytes are not a valid font —
+        // readFile succeeds, opentype.parse must be the one to throw.
+        resolveFontFiles: async () => ({
+          ...NO_FACES,
+          regular: import.meta.url.replace('file://', ''),
+        }),
       })
       const metrics = measure('Hello', font(16))
       expectFiniteNonNegativeMetrics(metrics)

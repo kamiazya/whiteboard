@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { copyExportFontIntoDist } from './copy-export-font-into-dist.mjs'
+import { copyExportFontIntoDist, FONT_FILES } from './copy-export-font-into-dist.mjs'
 
 describe('copyExportFontIntoDist', () => {
   let dir: string | undefined
@@ -12,23 +12,28 @@ describe('copyExportFontIntoDist', () => {
     dir = undefined
   })
 
-  it('copies the font asset byte-identically to the destination', () => {
+  it('copies every face byte-identically to the destination', () => {
     dir = mkdtempSync(join(tmpdir(), 'copy-export-font-into-dist-'))
-    const src = join(dir, 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf')
-    const dest = join(dir, 'dist', 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf')
-    mkdirSync(join(dir, 'assets', 'fonts', 'Roboto'), { recursive: true })
-    writeFileSync(src, 'fake-ttf-bytes')
+    const srcDir = join(dir, 'assets', 'fonts', 'Roboto')
+    const destDir = join(dir, 'dist', 'assets', 'fonts', 'Roboto')
+    mkdirSync(srcDir, { recursive: true })
+    for (const file of FONT_FILES) writeFileSync(join(srcDir, file), `bytes:${file}`)
 
-    copyExportFontIntoDist(src, dest)
+    copyExportFontIntoDist(srcDir, destDir)
 
-    expect(readFileSync(dest, 'utf-8')).toBe('fake-ttf-bytes')
+    for (const file of FONT_FILES) {
+      expect(readFileSync(join(destDir, file), 'utf-8')).toBe(`bytes:${file}`)
+    }
   })
 
-  it('throws a loud error when the source font asset is missing', () => {
+  it('throws a loud error when any source face is missing', () => {
     dir = mkdtempSync(join(tmpdir(), 'copy-export-font-into-dist-'))
-    const src = join(dir, 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf')
-    const dest = join(dir, 'dist', 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf')
+    const srcDir = join(dir, 'assets', 'fonts', 'Roboto')
+    const destDir = join(dir, 'dist', 'assets', 'fonts', 'Roboto')
+    mkdirSync(srcDir, { recursive: true })
+    // Regular alone is not enough: the sibling faces are load-bearing too.
+    writeFileSync(join(srcDir, 'Roboto-Regular.ttf'), 'bytes')
 
-    expect(() => copyExportFontIntoDist(src, dest)).toThrow(/export font asset not found/)
+    expect(() => copyExportFontIntoDist(srcDir, destDir)).toThrow(/export font asset not found/)
   })
 })
