@@ -17,9 +17,12 @@ describe('plugin support packaging', () => {
   const claudePlugin = readJson(resolve(repoRoot, '.claude-plugin/plugin.json'))
   const releasePlease = readJson(resolve(repoRoot, 'release-please-config.json'))
 
-  it('ships shared skills with the MCP package', () => {
+  it('ships dist but deliberately NOT skills in the npm package', () => {
+    // Skills distribute through the plugin (repo-root skills/); nothing in
+    // the published server reads a packaged skills/ directory, so a files
+    // entry for it was a false claim — pinned absent.
     expect(mcpPackage.files).toContain('dist')
-    expect(mcpPackage.files).toContain('skills')
+    expect(mcpPackage.files).not.toContain('skills')
   })
 
   it('includes a Codex plugin manifest wired to the shared skills and MCP config', () => {

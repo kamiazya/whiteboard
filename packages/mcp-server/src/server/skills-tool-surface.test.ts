@@ -170,11 +170,11 @@ describe('skills tool-surface guard', () => {
   })
 
   it('plugin manifests point at a repo-root skills/ dir carrying three named SKILL.md files', () => {
-    // Scoped to the repo-root path deliberately: packages/mcp-server/skills/
-    // (the npm tarball's declared `files` entry) does not exist today and
-    // nothing copies root skills/ into it at pack time, so the published
-    // tarball ships no skills despite `files: ['skills']` — a separate
-    // packaging gap, filed for the integrator rather than fixed here.
+    // The repo root is the ONLY distribution point for skills: the Claude
+    // Code / Codex plugin manifests resolve here, and the npm package
+    // deliberately ships none — nothing in the published server reads a
+    // packaged skills/ directory, so a files-array entry for it was a
+    // false claim (removed 2026-08-17), not a missing copy step.
     const readJson = (path: string) => JSON.parse(readFileSync(path, 'utf-8'))
     const claudePlugin = readJson(resolve(repoRoot, '.claude-plugin/plugin.json'))
     const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
@@ -182,8 +182,10 @@ describe('skills tool-surface guard', () => {
     expect(codexPlugin.skills).toBe('./skills')
     expect(existsSync(SKILLS_ROOT)).toBe(true)
 
+    // Pin the deliberate ABSENCE: reintroducing 'skills' to the npm files
+    // array without a consumer would revive the false shipped-skills claim.
     const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
-    expect(mcpPackage.files).toContain('skills')
+    expect(mcpPackage.files).not.toContain('skills')
 
     const skillDirs = ['drawing-visuals', 'coauthoring-visuals', 'auditing-workspaces']
     expect(skillDirs).toHaveLength(3)

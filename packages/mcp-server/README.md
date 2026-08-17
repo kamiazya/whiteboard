@@ -34,13 +34,14 @@ Example MCP config:
 }
 ```
 
-Shared skills are published in the package under `skills/`.
+The product skills are NOT part of this package: skills ship with the
+Claude Code / Codex plugin, whose manifests point at the repository's
+`skills/` directory as the single source of truth.
 
 ## What is in this package
 
 - `dist/` contains the runnable MCP server and browser app assets.
-- `skills/` contains the shared skill bundles that Claude Code and Codex wrappers reference as their source of truth.
-- The repo-level plugin manifests are not shipped as separate release artifacts. Public distribution currently happens through this npm package.
+- The repo-level plugin manifests (and the skills they reference) are distributed through the plugin, not this npm package.
 
 ## Development
 

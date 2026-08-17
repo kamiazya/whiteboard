@@ -242,27 +242,20 @@ describe('publish contract', () => {
     expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
     expect(claudeMarketplace.plugins[0].version).toBe(mcpPackage.version)
 
-    // The manual symlink / junction recipes for skill linking moved to docs/contributing/development.md
-    // (the npx and claude-mcp-add paths only start the MCP server; skills are an opt-in extra).
-    expect(developmentDoc).toContain('## Bundled skills install')
-    expect(developmentDoc).toContain('node_modules/@kamiazya/whiteboard-mcp')
-    expect(developmentDoc).toContain('"$PKG/skills/drawing-visuals"')
-    expect(developmentDoc).toContain('"$PKG/skills/coauthoring-visuals"')
-    expect(developmentDoc).toContain('"$PKG/skills/auditing-workspaces"')
-    expect(developmentDoc).toContain('### macOS / Linux')
-    expect(developmentDoc).toContain('### Windows (junction or copy)')
-    expect(developmentDoc).toContain('$skillRoots = @(')
-    expect(developmentDoc).toContain('foreach ($root in $skillRoots)')
-    expect(developmentDoc).toContain('foreach ($skill in $skills)')
+    // The npm-sourced skill-symlink recipe is RETIRED: skills distribute
+    // through the Claude Code / Codex plugin (repo-root skills/) only, and
+    // the npm tarball deliberately ships none — the recipe documented an
+    // install path that never worked (the tarball never contained skills).
+    // Pin the absence so it cannot quietly return without a real consumer.
+    expect(developmentDoc).not.toContain('## Bundled skills install')
+    expect(developmentDoc).not.toContain('$PKG/skills/')
   })
 
-  it('explains why dist and skills are both shipped in the npm tarball', () => {
+  it('states that skills ship via the plugin, not the npm tarball', () => {
     expect(packageReadme).toContain('## What is in this package')
     expect(packageReadme).toContain('`dist/` contains the runnable MCP server')
-    expect(packageReadme).toContain('`skills/` contains the shared skill bundles')
-    expect(packageReadme).toContain(
-      'The repo-level plugin manifests are not shipped as separate release artifacts.',
-    )
+    expect(packageReadme).toContain('skills are NOT part of this package')
+    expect(packageReadme).not.toContain('`skills/` contains the shared skill bundles')
   })
 
   it('keeps published wrappers on @latest so release-please does not need extra-files sync', () => {
