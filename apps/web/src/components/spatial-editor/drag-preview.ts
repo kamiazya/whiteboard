@@ -59,10 +59,13 @@ export interface ConnectPreviewContext {
 
 /**
  * Returns the preview geometry for the gesture currently in flight, or
- * `undefined` when there is nothing to preview (idle/editing-text state, no
- * live pointer yet, or the gesture's target node has since disappeared from
- * `boxes` — e.g. deleted mid-drag by a canvas-replaced event). Total: never
- * throws, never returns non-finite geometry for finite inputs.
+ * `undefined` when there is nothing to preview (idle/editing-text state, a
+ * connect with no live pointer yet, or the gesture's target node has since
+ * disappeared from `boxes` — e.g. deleted mid-drag by a canvas-replaced
+ * event). A box gesture with no live pointer yet previews at its start
+ * geometry rather than returning `undefined`; see the branches below for
+ * why. Total: never throws, never returns non-finite geometry for finite
+ * inputs.
  *
  * The resize branch must keep calling `resizeBoxByDelta` — the SAME function
  * `reducePointerUpResizing` (gestures.ts) commits with at pointerup — rather
