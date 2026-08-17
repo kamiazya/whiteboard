@@ -120,7 +120,6 @@ export interface CanvasContextMenuProps {
   readonly copySelection: () => ClipboardFragment | null
   /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
   readonly cutSelection: () => ClipboardFragment | null
-  readonly deleteSelectionAsBatch: () => boolean
   readonly duplicateSelection: () => boolean
   readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
 }
@@ -160,7 +159,6 @@ export function CanvasContextMenu({
   openLinkNode,
   copySelection,
   cutSelection,
-  deleteSelectionAsBatch,
   duplicateSelection,
   reorderSelection,
 }: CanvasContextMenuProps) {
@@ -570,8 +568,9 @@ export function CanvasContextMenu({
           label: 'Cut',
           icon: <Scissors />,
           onSelect: () => {
-            // Menu path mirrors the native cut: copy, then remove.
-            if (cutSelection() !== null) deleteSelectionAsBatch()
+            // The cut defers its delete: cutSelection holds the selection as
+            // a ghost until the paste resolves it.
+            cutSelection()
           },
         })
         verbs.push({

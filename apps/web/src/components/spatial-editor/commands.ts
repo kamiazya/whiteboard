@@ -619,7 +619,7 @@ function reorderNodes(
 
 /** Standard duplicate-again cascade offset — also `pasteFragment`'s
  * fallback when it is given no anchor point. */
-const DUPLICATE_OFFSET_PX = 16
+export const DUPLICATE_OFFSET_PX = 16
 
 /**
  * The shared core of `pasteFragment` and `duplicateSelection`: remint a
@@ -657,7 +657,12 @@ export function buildFragmentInsertCommand(
   // peer means a cross-canvas paste or a deleted neighbour, and the edge
   // drops silently — exactly what a plain copy would have done.
   const canvasNodeIds = new Set(canvas.nodes.map((node) => node.id))
+  const canvasEdgeIds = new Set(canvas.edges.map((edge) => edge.id))
   const boundaryEdges = (fragment.cut?.boundaryEdges ?? []).flatMap((edge) => {
+    // The original edge still exists → it was never actually severed (the
+    // cut was lifted, or resolved as a move): nothing to reconnect, and a
+    // second wire onto the peer would be the new defect.
+    if (canvasEdgeIds.has(edge.id)) return []
     const from = reminted.idMap.get(edge.fromNode)
     const to = reminted.idMap.get(edge.toNode)
     if ((from === undefined) === (to === undefined)) return []

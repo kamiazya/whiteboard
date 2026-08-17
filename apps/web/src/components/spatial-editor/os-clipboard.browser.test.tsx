@@ -144,7 +144,7 @@ it('an empty clipboard paste is a no-op', () => {
   expect(latest.commands).toHaveLength(0)
 })
 
-it('a native cut copies to the OS clipboard AND removes the selection in one batch', () => {
+it('a native cut copies to the OS clipboard AND holds the selection as a ghost', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -154,8 +154,10 @@ it('a native cut copies to the OS clipboard AND removes the selection in one bat
   dispatchClipboard(root, 'cut', clipboardData)
 
   expect(JSON.parse(clipboardData.getData('text/plain') || '{}').nodes).toHaveLength(1)
-  expect(latest.canvas.nodes).toEqual([])
-  expect(latest.commands.at(-1)?.kind).toBe('batch')
+  // The cut defers its delete: the document is untouched, the veil shows.
+  expect(latest.commands).toHaveLength(0)
+  expect(latest.canvas.nodes).toHaveLength(1)
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
 })
 
 it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON carries the cut surface', () => {
@@ -173,10 +175,13 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
 
   const clipboardData = clipboardWith()
   dispatchClipboard(root, 'cut', clipboardData)
-  expect(latest.canvas.edges).toEqual([])
   const written = clipboardData.getData('text/plain')
   // The cut surface survives the JSON round trip Ctrl+V re-parses.
   expect(JSON.parse(written).cut.boundaryEdges).toHaveLength(1)
+  // Deleting the held selection makes the cut real — the case where the
+  // surface has something to reconnect.
+  fireEvent.keyDown(root, { key: 'Delete' })
+  expect(latest.canvas.edges).toEqual([])
 
   // Each paste re-parses the SAME text, exactly like repeated Ctrl+V.
   dispatchClipboard(root, 'paste', clipboardWith(written))
