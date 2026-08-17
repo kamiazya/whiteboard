@@ -1,14 +1,23 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
 import { closeDb, getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'
 import { sweepImportedFsBlobs } from './sweep-imported-fs-blobs.js'
+
+// Partial mock so test (f) can force a single readFile rejection (the TOCTOU
+// window sweepOneBlob's own catch guards) while every other call — used
+// throughout this suite's setup helpers and by the production code under
+// test — goes through untouched.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, readFile: vi.fn(actual.readFile) }
+})
 
 let tempDir: string
 
@@ -218,6 +227,38 @@ describe('sweepImportedFsBlobs', () => {
     expect(await exists(join(tempDir, 'blobs', 'ws-2', 'canvas'))).toBe(false)
     expect(await exists(join(tempDir, 'blobs', 'ws-2'))).toBe(true)
     expect(await exists(versionsDir)).toBe(true)
+  })
+
+  it('(f) tolerates a blob removed between listing and reading it (TOCTOU), leaving the row and file untouched', async () => {
+    const db = await getDb(tempDir)
+    await runMigrations(db)
+    await seedWorkspace(db, 'ws-1')
+
+    const bytes = snapshotBytes('raced away')
+    const blobPath = await writeBlob('ws-1', 'doc-race', bytes)
+    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+
+    // Simulate a writer replacing/removing the blob after readDirSafe listed
+    // it but before sweepOneBlob's readFile runs — the TOCTOU window the
+    // module's own ponytail comment calls out. A mocked rejection (rather
+    // than unlinking before the sweep starts) is what actually reaches this
+    // branch: an unlink beforehand just makes readDirSafe skip the entry.
+    vi.mocked(readFile).mockRejectedValueOnce(
+      Object.assign(new Error('ENOENT simulated'), { code: 'ENOENT' }),
+    )
+    try {
+      await expect(sweepImportedFsBlobs(db, tempDir)).resolves.toBeUndefined()
+    } finally {
+      vi.mocked(readFile).mockClear()
+    }
+
+    expect(await exists(blobPath)).toBe(true)
+    const header = await db
+      .selectFrom('documentSnapshots')
+      .select(['chunkCount'])
+      .where('docKey', '=', 'canvas:doc-race')
+      .executeTakeFirst()
+    expect(header).toBeDefined()
   })
 
   it('(e) a second sweep over an already-swept dataDir is a clean no-op', async () => {
