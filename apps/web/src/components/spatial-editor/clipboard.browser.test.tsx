@@ -114,6 +114,43 @@ it('cut removes the selection as ONE batch and paste restores a reminted copy', 
   expect(latest.canvas.nodes[1]).toMatchObject({ text: 'A' })
 })
 
+it('cut then paste restores the boundary edge to its surviving peer — cut is a move, not a delete', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  clip(root, 'cut')
+  expect(latest.canvas.edges).toEqual([])
+
+  clip(root, 'paste')
+  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  expect(pasted).toBeDefined()
+  // The edge to the untouched peer is back, endpoints reminted-side + peer.
+  expect(latest.canvas.edges).toHaveLength(1)
+  const restored = latest.canvas.edges[0]
+  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+
+  // A second paste of the same cut is a plain copy: no second wire onto the peer.
+  clip(root, 'paste')
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(latest.canvas.edges).toHaveLength(1)
+})
+
+it('copy then paste never wires the duplicate to the original peer', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+
+  clip(root, 'copy')
+  clip(root, 'paste')
+  // The original edge a–b survives untouched; the duplicate arrives bare.
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(latest.canvas.edges).toHaveLength(1)
+  expect(latest.canvas.edges[0]).toMatchObject({ fromNode: 'a', toNode: 'b' })
+})
+
 it('a multi-selection copy carries the internal edge with properties; paste remaps endpoints', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

@@ -27,7 +27,24 @@ export function hasClipboardFragment(): boolean {
   return current !== null && current.nodes.length > 0
 }
 
+/**
+ * Cut ids whose boundary edges have already been reconnected by a paste.
+ * Module-scoped like the slot: the "first paste only" rule must hold even
+ * when the paste arrives via the OS clipboard (Ctrl+V re-parses the JSON
+ * fresh each time, so the envelope itself cannot be consumed).
+ */
+const consumedCutIds = new Set<string>()
+
+export function isCutConsumed(cutId: string): boolean {
+  return consumedCutIds.has(cutId)
+}
+
+export function markCutConsumed(cutId: string): void {
+  consumedCutIds.add(cutId)
+}
+
 /** Test isolation only — production never clears the slot. */
 export function clearClipboardFragmentForTests(): void {
   current = null
+  consumedCutIds.clear()
 }

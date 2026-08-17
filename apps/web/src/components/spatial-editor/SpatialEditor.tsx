@@ -93,7 +93,12 @@ import {
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
-import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
+import {
+  isCutConsumed,
+  markCutConsumed,
+  readClipboardFragment,
+  writeClipboardFragment,
+} from '../../lib/clipboard-store.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
 import type { BoxMove } from './align.js'
@@ -2047,6 +2052,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return fragment
     }
 
+    /**
+     * Cut-flavoured copy: the fragment also records the cut surface (the
+     * edges the deletion is about to sever), so the FIRST same-canvas paste
+     * reconnects them — a cut is the front half of a move, not a delete.
+     */
+    const cutSelection = (): ClipboardFragment | null => {
+      if (selection === undefined) return null
+      const fragment = extractClipboardFragment(
+        canvasRef.current,
+        new Set([selection.id, ...extraIds]),
+        { cutId: crypto.randomUUID() },
+      )
+      if (fragment.nodes.length === 0) return null
+      writeClipboardFragment(fragment)
+      return fragment
+    }
+
     /** Remove the selection as ONE batch (one undo step). */
     const deleteSelectionAsBatch = (): boolean => {
       if (selection === undefined) return false
@@ -2089,19 +2111,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
     const pasteFragment = (
-      fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+      fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
       at?: Point,
     ): boolean => {
       const current = canvasRef.current
+      // The cut surface reconnects on the FIRST paste only; after that the
+      // fragment behaves as a plain copy (no second wire onto the peer).
+      const cut =
+        fragment.cut !== undefined && !isCutConsumed(fragment.cut.id) ? fragment.cut : undefined
       const command = buildFragmentInsertCommand(
         current,
-        fragment,
+        { nodes: fragment.nodes, edges: fragment.edges, cut },
         () => createId?.() ?? crypto.randomUUID(),
         at,
       )
       if (command === undefined) return false
       const running = applyCommand(current, command)
       if (running === current) return false
+      if (cut !== undefined) markCutConsumed(cut.id)
       onChange(running, command)
       const remintedIds =
         command.kind === 'batch'
@@ -2896,7 +2923,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }}
         onCut={(e) => {
           if (isTextEntryEvent(e.nativeEvent)) return
-          const fragment = copySelection()
+          const fragment = cutSelection()
           if (fragment === null) return
           e.preventDefault()
           e.clipboardData?.setData('text/plain', JSON.stringify(fragment))
@@ -3107,6 +3134,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onOpenFileRef={onOpenFileRef}
             openLinkNode={openLinkNode}
             copySelection={copySelection}
+            cutSelection={cutSelection}
             deleteSelectionAsBatch={deleteSelectionAsBatch}
             duplicateSelection={duplicateSelection}
             reorderSelection={reorderSelection}

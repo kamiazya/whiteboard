@@ -40,18 +40,31 @@ export function parseClipboardText(text: string): ClipboardFragment | null {
 export function extractClipboardFragment(
   canvas: SpatialCanvas,
   selectedIds: ReadonlySet<string>,
+  options?: { readonly cutId?: string },
 ): ClipboardFragment {
   const nodes = canvas.nodes.filter((node) => selectedIds.has(node.id))
   const included = new Set(nodes.map((node) => node.id))
   const edges = canvas.edges.filter(
     (edge) => included.has(edge.fromNode) && included.has(edge.toNode),
   )
-  return { type: 'whiteboard/clipboard', version: 1, nodes, edges }
+  const base = { type: 'whiteboard/clipboard', version: 1, nodes, edges } as const
+  if (options?.cutId === undefined) return base
+  // A cut also records its cut surface — the edges it severs (exactly one
+  // endpoint selected) — so a same-canvas paste can reconnect them. The
+  // fragment proper stays self-contained; peers live only on the source.
+  const boundaryEdges = canvas.edges.filter(
+    (edge) => included.has(edge.fromNode) !== included.has(edge.toNode),
+  )
+  return { ...base, cut: { id: options.cutId, boundaryEdges } }
 }
 
 export interface RemintedFragment {
   readonly nodes: readonly SpatialNode[]
   readonly edges: readonly CanvasEdge[]
+  /** Source id → reminted id, for reconnecting a cut's boundary edges. */
+  readonly idMap: ReadonlyMap<string, string>
+  /** Mints further ids from the same collision-free pool (boundary edges). */
+  readonly mintId: () => string
 }
 
 export function remintClipboardFragment(
@@ -79,5 +92,5 @@ export function remintClipboardFragment(
     if (fromNode === undefined || toNode === undefined) return []
     return [{ ...edge, id: freshId(), fromNode, toNode }]
   })
-  return { nodes, edges }
+  return { nodes, edges, idMap, mintId: freshId }
 }
