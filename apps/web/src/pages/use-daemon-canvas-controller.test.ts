@@ -229,7 +229,7 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.path).toBe('w3-canvas')
   })
 
-  it('switchCanvas updates the selected path synchronously', async () => {
+  it('switchDocument updates the selected path synchronously', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListCanvases.mockResolvedValue({
       canvases: [
@@ -244,7 +244,7 @@ describe('useDaemonCanvasController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     act(() => {
-      result.current.switchCanvas('b')
+      result.current.switchDocument('b')
     })
     expect(result.current.path).toBe('b')
   })

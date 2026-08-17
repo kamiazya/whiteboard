@@ -134,7 +134,7 @@ export function BrowserLocalCanvasPage({
     renameCanvas,
     listCanvases,
     createCanvas,
-    switchCanvas,
+    switchDocument,
     duplicateCanvas,
   } = useBrowserLocalCanvasController(store, loro, initialCanvasId)
   const location = useLocation()
@@ -272,7 +272,7 @@ export function BrowserLocalCanvasPage({
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
   // This never fights the URL->canvas effect below: that effect only calls
-  // switchCanvas when the URL disagrees with the already-loaded documentId, and
+  // switchDocument when the URL disagrees with the already-loaded documentId, and
   // by the time navigate() below lands, location.pathname already equals
   // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
@@ -290,12 +290,12 @@ export function BrowserLocalCanvasPage({
   // moves location.pathname without any switcher click firing, so this is the
   // only thing that keeps the loaded canvas in sync with the address bar for
   // that direction. Runs in an effect (never during render) so it can't race
-  // Excalidraw's own render cycle; switchCanvas's generation guard (see the
+  // Excalidraw's own render cycle; switchDocument's generation guard (see the
   // controller hook) protects against a rapid back-back-back burst landing a
   // stale canvas.
   //
   // lastKnownCanvasIdRef distinguishes the two ways this effect's own
-  // dependencies can change: a switcher-driven switchCanvas() updates documentId
+  // dependencies can change: a switcher-driven switchDocument() updates documentId
   // before the sibling canvas-id -> URL effect's navigate() call has actually
   // updated `location`, so this effect would otherwise see a stale pathname
   // that still names the PREVIOUS canvas and switch straight back to it. When
@@ -310,14 +310,14 @@ export function BrowserLocalCanvasPage({
     lastKnownCanvasIdRef.current = documentId
     if (requestedId === undefined || requestedId === documentId) return
     if (requestedId === lastKnownCanvasId) return
-    void switchCanvas(requestedId).then((switched) => {
+    void switchDocument(requestedId).then((switched) => {
       // A stale deep link (deleted/unknown canvas) is a recoverable miss:
       // keep the loaded canvas and repair the address bar instead of
       // leaving a URL that names nothing.
       if (!switched) navigate(browserLocalCanvasPath(documentId), { replace: true })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, documentId, switchCanvas])
+  }, [location.pathname, documentId, switchDocument])
 
   useEffect(() => {
     if (documentId === null) return
@@ -715,15 +715,15 @@ export function BrowserLocalCanvasPage({
                 name: c.name,
                 updatedAt: c.updatedAt,
               }))}
-              onNavigateToCanvas={(id) => void switchCanvas(id)}
+              onNavigateToCanvas={(id) => void switchDocument(id)}
               onRenameCanvas={renameCanvas}
               onCreateCanvas={async () => {
                 const created = await createCanvas()
-                await switchCanvas(created.id)
+                await switchDocument(created.id)
               }}
               onCreateMarkdownCanvas={async () => {
                 const created = await createCanvas(undefined, 'markdown')
-                await switchCanvas(created.id)
+                await switchDocument(created.id)
               }}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {

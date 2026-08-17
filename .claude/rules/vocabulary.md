@@ -84,10 +84,19 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
 
 - `Canvas` as the CONTAINER noun, across apps/web and mcp-server's HTTP side
   — `CanvasSnapshot` (a document row), `listCanvases`/`createCanvas`/
-  `renameCanvas`/`switchCanvas`, `useCanvasSync`, `CanvasBackend`,
+  `renameCanvas`, `useCanvasSync`, `CanvasBackend`,
   `BrowserLocalCanvasPage`, and the IndexedDB stores `canvases`/
   `loroCanvases`/`canvasFiles`. The biggest by count and the one the standing
   rule below is actually for: fix it where you already are, never as a sweep.
+  `switchCanvas` is DONE (`switchDocument`), and WHY it went first is the
+  useful part: it was the only member of that list with no wrapper — zero
+  `onSwitchCanvas` props, no `useSwitchCanvas` hook — so renaming it left
+  nothing calling it by the old noun. `createCanvas` is the counter-example
+  and is deliberately still here: 52 `onCreateCanvas` props and 21
+  `useCreateCanvas` uses would keep the old name at every call site, and its
+  spelling sits one character from the published `createCanvasRequestSchema`.
+  Pick the identifier with no family first; a rename that leaves its own
+  callers behind makes a file LESS consistent, not more.
   `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
 - `onOpenCanvas`, the React prop meaning "open this document" — 178
   occurrences across apps/web. It is the `Canvas`-as-container violation

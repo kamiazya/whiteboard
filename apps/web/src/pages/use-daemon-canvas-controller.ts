@@ -25,7 +25,7 @@ export interface DaemonCanvasController {
   path: string | null
   workspaces: WorkspaceSummary[]
   canvases: CanvasSummary[]
-  switchCanvas: (path: string) => void
+  switchDocument: (path: string) => void
   switchWorkspace: (workspaceId: string) => Promise<void>
   createCanvas: (path: string) => Promise<void>
   createError: string | null
@@ -109,7 +109,7 @@ export function useDaemonCanvasController(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const switchCanvas = useCallback((nextPath: string) => {
+  const switchDocument = useCallback((nextPath: string) => {
     setPath(nextPath)
   }, [])
 
@@ -173,7 +173,7 @@ export function useDaemonCanvasController(
     path,
     workspaces,
     canvases,
-    switchCanvas,
+    switchDocument,
     switchWorkspace,
     createCanvas,
     createError,

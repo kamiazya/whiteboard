@@ -603,7 +603,7 @@ export function DaemonCanvasPage({
               workspaceId={canvas.workspaceId}
               path={canvas.path}
               canvases={controller.canvases}
-              onNavigateToCanvas={controller.switchCanvas}
+              onNavigateToCanvas={controller.switchDocument}
               capabilities={{
                 versions: capabilities.versions,
                 branches: capabilities.branches,
@@ -754,7 +754,7 @@ export function DaemonCanvasPage({
               theme: resolvedTheme,
               meta: coreFacets ?? { type: documentKind },
               resolveAlias,
-              onOpenCanvas: (id) => controller.switchCanvas(resolveRefPath(id) ?? id),
+              onOpenCanvas: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
               resolveEmbed,
             }}
             spatial={() => (
@@ -785,7 +785,7 @@ export function DaemonCanvasPage({
                   // File-node reference = the target's immutable id (rename-
                   // safe); the label shows its current path and the current
                   // canvas is excluded. Legacy documents still carry path refs,
-                  // which resolveRefPath misses and switchCanvas takes as-is.
+                  // which resolveRefPath misses and switchDocument takes as-is.
                   // An older daemon's list has no ids yet; those entries fall
                   // back to path refs (same behavior as before ids existed).
                   fileRefOptions={controller.canvases
@@ -795,7 +795,7 @@ export function DaemonCanvasPage({
                       label: entry.path,
                       kind: entry.kind,
                     }))}
-                  onOpenFileRef={(file) => controller.switchCanvas(resolveRefPath(file) ?? file)}
+                  onOpenFileRef={(file) => controller.switchDocument(resolveRefPath(file) ?? file)}
                   missingFileRef={missingFileRef}
                   {...fileSeams}
                   lockedNodeIds={lockedNodeIds}

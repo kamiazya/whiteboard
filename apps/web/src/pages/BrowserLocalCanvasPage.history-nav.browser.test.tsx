@@ -1,7 +1,7 @@
 /**
  * Browser Back/Forward must round-trip through the loaded canvas, not just
  * the address bar: create+switch to a second canvas, go Back to the first
- * (proving the URL->switchCanvas direction fires), then Forward to the
+ * (proving the URL->switchDocument direction fires), then Forward to the
  * second again.
  *
  * SpatialEditor is mocked (see BrowserLocalCanvasPage.reload-elements.browser.test.tsx's

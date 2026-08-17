@@ -556,7 +556,7 @@ describe('useBrowserLocalCanvasController', () => {
     })
   })
 
-  describe('multi-canvas: listCanvases / createCanvas / switchCanvas', () => {
+  describe('multi-canvas: listCanvases / createCanvas / switchDocument', () => {
     it('listCanvases reflects the auto-created canvas on first mount', async () => {
       const store = new MemoryStore()
       const loro = new FakeLoroStore()
@@ -640,7 +640,7 @@ describe('useBrowserLocalCanvasController', () => {
       expect(list).toHaveLength(2)
     })
 
-    it('switchCanvas flushes a pending edit on the current canvas, then sets the target as current and updates the default pointer', async () => {
+    it('switchDocument flushes a pending edit on the current canvas, then sets the target as current and updates the default pointer', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
@@ -658,7 +658,7 @@ describe('useBrowserLocalCanvasController', () => {
       })
 
       await act(async () => {
-        await result.current.switchCanvas(created!.id)
+        await result.current.switchDocument(created!.id)
       })
 
       expect(result.current.snapshot?.id).toBe(created!.id)
@@ -671,7 +671,7 @@ describe('useBrowserLocalCanvasController', () => {
       })
     })
 
-    it('switchCanvas to an unknown id resolves false and leaves the current canvas untouched (recoverable miss)', async () => {
+    it('switchDocument to an unknown id resolves false and leaves the current canvas untouched (recoverable miss)', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
@@ -682,7 +682,7 @@ describe('useBrowserLocalCanvasController', () => {
 
       let switched: boolean | undefined
       await act(async () => {
-        switched = await result.current.switchCanvas('does-not-exist')
+        switched = await result.current.switchDocument('does-not-exist')
       })
 
       // A missing target is exactly what a stale /local/:id bookmark
@@ -694,7 +694,7 @@ describe('useBrowserLocalCanvasController', () => {
       expect(await store.getDefaultCanvasId()).toBe('c1')
     })
 
-    it('switchCanvas clears a stale degraded banner from the previous canvas on a successful switch', async () => {
+    it('switchDocument clears a stale degraded banner from the previous canvas on a successful switch', async () => {
       const base = new MemoryStore()
       await base.setDefaultCanvasId('c1')
       await base.save(snap)
@@ -722,19 +722,19 @@ describe('useBrowserLocalCanvasController', () => {
       // Leave a stale degraded banner behind, as a prior corrupt-record
       // switch would.
       await act(async () => {
-        await result.current.switchCanvas('corrupt-1')
+        await result.current.switchDocument('corrupt-1')
       })
       expect(result.current.persistence.kind).toBe('degraded')
 
       await act(async () => {
-        await result.current.switchCanvas(created!.id)
+        await result.current.switchDocument(created!.id)
       })
 
       expect(result.current.persistence.kind).toBe('saved')
       expect(result.current.snapshot?.id).toBe(created!.id)
     })
 
-    it('switchCanvas degrades persistence instead of rejecting when load() throws', async () => {
+    it('switchDocument degrades persistence instead of rejecting when load() throws', async () => {
       const base = new MemoryStore()
       await base.setDefaultCanvasId('c1')
       await base.save(snap)
@@ -755,7 +755,7 @@ describe('useBrowserLocalCanvasController', () => {
       await act(async () => {})
 
       await act(async () => {
-        await result.current.switchCanvas('boom')
+        await result.current.switchDocument('boom')
       })
 
       expect(result.current.persistence.kind).toBe('degraded')
@@ -764,7 +764,7 @@ describe('useBrowserLocalCanvasController', () => {
       expect(await throwingStore.getDefaultCanvasId()).toBe('c1')
     })
 
-    it('switchCanvas degrades persistence instead of rejecting when setDefaultCanvasId() throws', async () => {
+    it('switchDocument degrades persistence instead of rejecting when setDefaultCanvasId() throws', async () => {
       const base = new MemoryStore()
       await base.setDefaultCanvasId('c1')
       await base.save(snap)
@@ -789,7 +789,7 @@ describe('useBrowserLocalCanvasController', () => {
       })
 
       await act(async () => {
-        await result.current.switchCanvas(created!.id)
+        await result.current.switchDocument(created!.id)
       })
 
       expect(result.current.persistence.kind).toBe('degraded')
@@ -797,7 +797,7 @@ describe('useBrowserLocalCanvasController', () => {
       expect(await base.getDefaultCanvasId()).toBe('c1')
     })
 
-    it('switchCanvas waits for an in-flight fire-and-forget rename flush before switching, and aborts the switch if that flush fails', async () => {
+    it('switchDocument waits for an in-flight fire-and-forget rename flush before switching, and aborts the switch if that flush fails', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
@@ -829,19 +829,19 @@ describe('useBrowserLocalCanvasController', () => {
 
       // Fire-and-forget flush, exactly like renameCanvas triggers internally.
       // The intercepted save rejects below, so catch here — this test only
-      // cares about switchCanvas's abort behavior, not this rejection.
+      // cares about switchDocument's abort behavior, not this rejection.
       act(() => {
         result.current.renameCanvas('Renamed before switch').catch(() => {})
       })
       expect(firstSaveStarted).toBe(true)
 
       let switchSettled = false
-      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+      const switchPromise = result.current.switchDocument(created!.id).then(() => {
         switchSettled = true
       })
 
       // Let pending microtasks run without resolving the intercepted save —
-      // switchCanvas must still be waiting on it, not racing past it.
+      // switchDocument must still be waiting on it, not racing past it.
       await act(async () => {
         await Promise.resolve()
         await Promise.resolve()
@@ -917,9 +917,9 @@ describe('useBrowserLocalCanvasController', () => {
         result.current.renameCanvas('Second rename')
       })
 
-      // A concurrent switchCanvas call is a third waiter on the same save #1.
+      // A concurrent switchDocument call is a third waiter on the same save #1.
       let switchSettled = false
-      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+      const switchPromise = result.current.switchDocument(created!.id).then(() => {
         switchSettled = true
       })
 
@@ -931,11 +931,11 @@ describe('useBrowserLocalCanvasController', () => {
         await Promise.resolve()
       })
       expect(saveCallCount).toBe(2)
-      // switchCanvas must still be waiting — save #2 has not settled yet.
+      // switchDocument must still be waiting — save #2 has not settled yet.
       expect(switchSettled).toBe(false)
       expect(await store.getDefaultCanvasId()).toBe('c1')
 
-      // Now let save #2 settle and confirm switchCanvas only proceeds after it does.
+      // Now let save #2 settle and confirm switchDocument only proceeds after it does.
       await act(async () => {
         resolveSecondSave()
         await switchPromise

@@ -558,7 +558,7 @@ describe('BrowserLocalCanvasPage', () => {
     await screen.findByText('Other canvas')
   })
 
-  it('switching the switcher selection calls switchCanvas exactly once', async () => {
+  it('switching the switcher selection calls switchDocument exactly once', async () => {
     vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
@@ -672,7 +672,7 @@ describe('BrowserLocalCanvasPage', () => {
     await base.setDefaultCanvasId('c1')
     await base.save(snap)
     // Fail the metadata save that createCanvas performs first, so createCanvas()
-    // rejects before ever calling switchCanvas.
+    // rejects before ever calling switchDocument.
     let failNextSave = false
     const failingCreateStore: BrowserLocalStore = {
       getDefaultCanvasId: base.getDefaultCanvasId.bind(base),

@@ -45,7 +45,7 @@ export interface BrowserLocalCanvasController {
   /** Resolves true when the switch landed; false when superseded, when the
    *  target is missing (recoverable — e.g. a stale deep link), or when the
    *  store degraded. */
-  switchCanvas(id: string): Promise<boolean>
+  switchDocument(id: string): Promise<boolean>
   // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
   // then switches to it — matching the create-then-open flow the UI expects.
@@ -66,7 +66,7 @@ export function useBrowserLocalCanvasController(
   // A canvas id requested by the URL (e.g. a bookmarked /local/:documentId
   // deep link), read once at mount. Takes priority over the store's own
   // "default canvas" pointer, which it also repoints on success so a later
-  // plain (no deep link) load resumes here — the same contract switchCanvas
+  // plain (no deep link) load resumes here — the same contract switchDocument
   // already has. A stale/deleted id falls back to the normal flow rather
   // than showing an error: a dead bookmark must not dead-end the user.
   initialCanvasId?: string,
@@ -91,20 +91,20 @@ export function useBrowserLocalCanvasController(
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
   const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
-  // Guards overlapping switchCanvas calls (a fast switcher double-click, or a
+  // Guards overlapping switchDocument calls (a fast switcher double-click, or a
   // burst of browser Back/Forward): only the call that is still the latest
   // requested one when its async load settles is allowed to commit state, so
   // an earlier call resolving after a later one can never clobber it.
   const switchGenerationRef = useRef(0)
   // Tracks the currently in-flight flush so overlapping callers (renameCanvas's
-  // fire-and-forget flush racing with switchCanvas's own awaited flush) serialize
+  // fire-and-forget flush racing with switchDocument's own awaited flush) serialize
   // on the real outcome instead of the second caller observing an already-cleared
   // pendingSnapshotRef and returning true before the first save actually settles.
   const savePromiseRef = useRef<Promise<boolean> | null>(null)
 
   // Returns true if there was nothing to flush or the flush succeeded.
   // Returns false if a pending save failed — callers that depend on data
-  // integrity (e.g. triggerCleanup, switchCanvas) must abort when this returns false.
+  // integrity (e.g. triggerCleanup, switchDocument) must abort when this returns false.
   //
   // Loops instead of awaiting the in-flight save once: two concurrent callers
   // both awaiting the same prior save wake up in the same microtask batch, and
@@ -338,7 +338,7 @@ export function useBrowserLocalCanvasController(
     [],
   )
 
-  const switchCanvas = useCallback(
+  const switchDocument = useCallback(
     async (id: string): Promise<boolean> => {
       const generation = ++switchGenerationRef.current
       // Flush any pending edit on the current canvas before switching away
@@ -430,9 +430,9 @@ export function useBrowserLocalCanvasController(
       throw err
     }
 
-    await switchCanvas(id)
+    await switchDocument(id)
     return fresh
-  }, [flushSave, switchCanvas])
+  }, [flushSave, switchDocument])
 
   return {
     loro: loroRef.current,
@@ -445,7 +445,7 @@ export function useBrowserLocalCanvasController(
     startFresh,
     listCanvases,
     createCanvas,
-    switchCanvas,
+    switchDocument,
     duplicateCanvas,
   }
 }

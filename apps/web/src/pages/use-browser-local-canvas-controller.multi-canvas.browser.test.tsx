@@ -1,6 +1,6 @@
 /**
  * S-C1 multi-canvas foundation (real IndexedDB): listCanvases / createCanvas /
- * switchCanvas against the real IndexedDBStore + LoroStore, proving id-addressed
+ * switchDocument against the real IndexedDBStore + LoroStore, proving id-addressed
  * isolation between canvases rather than relying on the fake-indexeddb node tests.
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
@@ -95,7 +95,7 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     }
   })
 
-  it('switchCanvas swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {
+  it('switchDocument swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {
     const store = new IndexedDBStore()
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
@@ -108,13 +108,13 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     })
 
     await act(async () => {
-      await result.current.switchCanvas(idB)
+      await result.current.switchDocument(idB)
     })
     expect(result.current.snapshot?.id).toBe(idB)
     expect(await store.getDefaultCanvasId()).toBe(idB)
 
     await act(async () => {
-      await result.current.switchCanvas(idA)
+      await result.current.switchDocument(idA)
     })
     expect(result.current.snapshot?.id).toBe(idA)
     expect(await store.getDefaultCanvasId()).toBe(idA)
