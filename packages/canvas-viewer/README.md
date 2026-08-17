@@ -1,6 +1,6 @@
 # @kamiazya/whiteboard-canvas-viewer
 
-Read-only OpenCanvas scene viewer, rendered through canvas-render's SVG
+Read-only spatial-canvas scene viewer, rendered through canvas-render's SVG
 backend and shared between `apps/web` and embedded surfaces (MCP Apps
 widget, HTML export). Private workspace package — never published to npm.
 

@@ -8,9 +8,9 @@ import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
 import { getDb } from '../store/db/index.js'
+import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
-import { registerOpenCanvasTools } from './opencanvas-tools.js'
 import { ensureWorkspaceId } from './session-resolver.js'
 import {
   buildDrawDiagramPrompt,
@@ -107,7 +107,7 @@ export async function createMcpServer() {
   const dataDir = getDataDir()
   const db = await getDb(dataDir)
   const container = createContainer(createStoreLocalModule({ db, blobDir: dataDir }))
-  registerOpenCanvasTools(server, resolveServerDeps(container))
+  registerDocumentTools(server, resolveServerDeps(container))
 
   return server
 }

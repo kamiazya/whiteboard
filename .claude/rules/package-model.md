@@ -3,7 +3,7 @@ paths:
   - "packages/model/**"
 ---
 
-# model — OpenCanvas data-model Zod schemas (single source of truth)
+# model — whiteboard document-model Zod schemas (single source of truth)
 
 ## What belongs here
 

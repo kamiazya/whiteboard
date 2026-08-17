@@ -28,7 +28,7 @@
       "width": 260,
       "height": 100,
       "color": "6",
-      "text": "Browser Canvas\nOpenCanvas spatial editor running in the browser"
+      "text": "Browser Canvas\nSpatial canvas editor running in the browser"
     },
     {
       "id": "plugin-group",

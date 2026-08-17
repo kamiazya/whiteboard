@@ -73,7 +73,7 @@ function exportTableCell(node: MdastTableCell, resolver: CanvasPathResolver): Md
 
 /**
  * Rewrites `wikiLink`/`embed` nodes into plain relative-path markdown links
- * for export to a non-OpenCanvas-aware reader. Pure, single-document: the
+ * for export to a reader that knows only plain markdown. Pure, single-document: the
  * documentId->path resolver is injected. An unresolved id stays as literal
  * `[[canvas:ID]]` text rather than being dropped, so re-applying export with
  * the same resolver is idempotent (nothing left to resolve differently the

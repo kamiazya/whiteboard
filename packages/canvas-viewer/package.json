@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Read-only OpenCanvas scene viewer rendered through canvas-render's SVG backend, shared between apps/web and future embedded surfaces (MCP Apps widget, HTML export). Never published to npm.",
+  "description": "Read-only spatial-canvas scene viewer rendered through canvas-render's SVG backend, shared between apps/web and future embedded surfaces (MCP Apps widget, HTML export). Never published to npm.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

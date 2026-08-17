@@ -82,14 +82,14 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 
 // TODO(annotate): the add-a-sticky-note affordance is UNWIRED.
 //
-// It called an `annotate` MCP tool that the OpenCanvas migration removed;
+// It called an `annotate` MCP tool that the move to the document model removed;
 // nothing replaced it, so every submission failed at the host with an
 // unknown-tool error while the control still looked live. Showing a control
 // that cannot work is worse than not showing one, so the wiring is gone and
 // `widget/sticky-note-control.ts` + `widget/sticky-placement.ts` are kept
 // unmounted for whoever restores it.
 //
-// Restoring it needs a decision first, not just re-wiring: OpenCanvas has no
+// Restoring it needs a decision first, not just re-wiring: the document model has no
 // annotate equivalent, and a sticky note is a `wb_node_add` of a text node —
 // so the question is whether this widget should mutate a document at all
 // (it is otherwise strictly read-only), and if so under what placement

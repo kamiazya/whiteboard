@@ -193,7 +193,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     return [...envWebOrigins, ...grantOrigins]
   }
 
-  // OpenCanvas /api/v1 surface: same libSQL database as the MCP tools
+  // /api/v1 document surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
   const dataDir = getDataDir()

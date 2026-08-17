@@ -1,5 +1,5 @@
 /**
- * Files tab: the OpenCanvas workspace file tree (/api/v1 path world)
+ * Files tab: the workspace document tree (/api/v1 path world)
  * reachable from the daemon index page, with a read-only OKF preview.
  */
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
@@ -97,7 +97,7 @@ describe('DaemonIndexPage tree view', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
 
-    await screen.findByText('This workspace has no OpenCanvas tree yet.')
+    await screen.findByText('This workspace has no document tree yet.')
     expect(screen.queryByRole('alert')).toBeNull()
   })
 

@@ -24,7 +24,7 @@ import { SquiggleLoader } from './SquiggleLoader.js'
 
 // Schema for the daemon's /api/v1/user-libraries response.
 // This is the sole definition — the former api-contracts/libraries.ts was
-// removed during the OpenCanvas migration.
+// removed by the move to the document model.
 const userLibraryRowSchema = z.object({
   name: z.string(),
   path: z.string(),

@@ -13,7 +13,7 @@ import { ARCHITECTURE_SCENE } from './_scenes.js'
 import { TopBarFrame } from './_top-bar-frame.js'
 
 // Generates docs/assets/canvas-browser-ui.png — README hero. Shows the
-// full canvas chrome (workspace + canvas selector top bar, the OpenCanvas
+// full canvas chrome (workspace + canvas selector top bar, the spatial
 // spatial viewport with a populated diagram) so a reader sees what the
 // running app looks like with content. The diagram comes from the
 // canonical architecture.canvas scene file.

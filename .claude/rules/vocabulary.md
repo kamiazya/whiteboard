@@ -14,6 +14,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Body** | an OKF document's markdown body | a spatial document's content |
 | **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
 | **Canvas** | the spatial surface, and the JSON Canvas format | the container a workspace holds — that is a Document |
+| **OpenCanvas** | nothing. Retired — it was a working name for this project's document world, never a spec | the format (that is **JSON Canvas 1.0**) or the entity (that is a **Document**) |
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
 
@@ -88,6 +89,13 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   `loroCanvases`/`canvasFiles`. The biggest by count and the one the standing
   rule below is actually for: fix it where you already are, never as a sweep.
   `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
+- `onOpenCanvas`, the React prop meaning "open this document" — 178
+  occurrences across apps/web. It is the `Canvas`-as-container violation
+  above wearing a handler name, so it belongs to the same standing rule and
+  the same "never as a sweep" clause. Called out separately only because a
+  regex for the retired word `OpenCanvas` hits every one of them, and the
+  next person running that search should know they are the expected
+  remainder rather than a miss.
 - The blob tree's `canvas/` path segment
   (`{dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro`), which
   `document-store.ts` and `file-gc-sweeper.ts` both hardcode. Left because
@@ -114,6 +122,31 @@ sync ports are implemented in the composition roots, so "adapter" here can
 only mean an adapter of the vendor library, and the name says so. Renaming it
 to suggest a port relationship would have stated the opposite of the
 dependency graph.
+
+`OpenCanvas` is retired and DONE outside the ADRs. It was never a spec: the
+formats are OKF Markdown and [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/),
+which `packages/model/src/spatial.ts` already cites by URL and the whole of
+`packages/codec/src/spatial/` already spells correctly. `OpenCanvas` was this
+project's working name for the post-Excalidraw document world — the thing
+ADR-0009 named a **Document** — so the fix was mostly to DELETE the word, not
+to substitute another spec name for it. It also collided with a real,
+unrelated infinite-canvas interchange spec (OCIF, canvasprotocol.org), which
+made it an actively wrong signal in the npm `keywords`.
+
+Gone from: every published manifest (npm description + keywords, the Claude
+and Codex plugin manifests, `server.json`, the Gemini extension), the READMEs
+and user docs, one piece of user-visible UI copy (*"This workspace has no
+OpenCanvas tree yet"*), and the internal identifiers
+`registerOpenCanvasTools` -> `registerDocumentTools`, `opencanvas-tools.ts` ->
+`document-tools.ts`, `createOpenCanvasServer` -> `createDocumentServer`.
+ADR-0007/0008/0009 keep it and carry a dated vocabulary note instead, exactly
+like `slug`: a decision record is history, and rewriting the reasoning would
+misreport what was decided.
+
+It gets no executable rung. `vocabulary-check.test.ts` could not hold it
+without excluding both the ADR directory and every `onOpenCanvas` handler,
+and a guard that needs two carve-outs to pass is one nobody will trust the
+next time it fires. Same reason `canvas` will never qualify.
 
 `slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
 is what keeps it retired — the one part of this rule that could stop being

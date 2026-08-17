@@ -2,6 +2,15 @@
 
 **Status:** Accepted
 
+> **Vocabulary note (2026-08-17):** read **OpenCanvas** as **Document** everywhere
+> below. It was this project's own working name for the post-Excalidraw
+> document world, never a spec — the FORMATS are OKF Markdown and
+> [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/), and
+> [ADR-0009](0009-mcp-tool-naming.md) named the entity `Document`. The word is
+> retired from prose, manifests and identifiers; this ADR keeps it because a
+> decision record is history, and rewriting the reasoning would misreport what
+> was decided.
+
 > **Vocabulary note (2026-08-16):** this ADR predates [ADR-0009](0009-mcp-tool-naming.md)
 > and says **slug** throughout for what the code, the database column, the URLs
 > and the docs now all call a document's **path**. The identity decision itself

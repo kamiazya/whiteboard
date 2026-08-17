@@ -386,7 +386,7 @@ export function createCanvasSyncSession(
    * Reads the doc and publishes it as the session's current canvas value.
    * The apply-generation counter still guards a session swap racing a
    * publish, but since this path is now fully synchronous (no awaited file
-   * fetch in between, unlike the pre-OpenCanvas Excalidraw bridge), the
+   * fetch in between, unlike the older Excalidraw bridge), the
    * generation check collapses to one bump + one isStale() check right
    * before publishing, rather than a capture-then-recheck pair spanning an
    * await.

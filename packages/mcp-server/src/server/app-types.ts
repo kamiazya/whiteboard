@@ -11,7 +11,7 @@ import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
-  /** OpenCanvas store/sync ports. When present, server-core's /api/v1
+  /** Document store/sync ports. When present, server-core's /api/v1
    *  HTTP surface (createServer(deps).app) is mounted behind the same
    *  /api/* auth as every other API route; when absent, /api/v1 stays
    *  unmounted (404). Optional so ad-hoc callers and legacy tests need no
@@ -62,7 +62,7 @@ export interface ServerModeAppOptions {
   authMode: 'server-mode'
   /** See LocalDaemonAppOptions.identity. */
   identity?: DaemonIdentity
-  /** OpenCanvas store/sync ports. When present, server-core's /api/v1
+  /** Document store/sync ports. When present, server-core's /api/v1
    *  HTTP surface (createServer(deps).app) is mounted behind the same
    *  /api/* auth as every other API route; when absent, /api/v1 stays
    *  unmounted (404). Optional so ad-hoc callers and legacy tests need no

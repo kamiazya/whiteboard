@@ -17,7 +17,7 @@ export const MUTATING = { openWorldHint: false } as const
 // registerToolWithAnnotations when building McpServer annotations.
 export type AnnotationProfile = Readonly<Record<string, boolean>>
 export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string }> = {
-  // OpenCanvas tools (server-core)
+  // Document tools (server-core)
   wb_facet_set: {
     profile: MUTATING_IDEMPOTENT,
     title: 'Set the OKF frontmatter facets of a document',

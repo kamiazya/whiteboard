@@ -33,8 +33,8 @@ vi.mock('../store/db/prepare.js', () => ({
 vi.mock('./stdio-lifecycle.js', () => ({
   installStdioLifecycle: vi.fn(() => () => undefined),
 }))
-vi.mock('./opencanvas-tools.js', () => ({
-  registerOpenCanvasTools: vi.fn(),
+vi.mock('./document-tools.js', () => ({
+  registerDocumentTools: vi.fn(),
 }))
 vi.mock('../store/db/index.js', () => ({
   getDb: vi.fn(async () => ({})),

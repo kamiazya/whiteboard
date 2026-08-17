@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { createServer as createOpenCanvasServer } from '@kamiazya/whiteboard-server-core'
+import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
   isLegacyRequest,
@@ -392,11 +392,11 @@ export function createApp(options: AppOptions) {
     app.route('/', createPairingRouter({ ...options.pairing, identity }))
   }
 
-  // server-core's OpenCanvas /api/v1 surface (workspace tree, documentId +
+  // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
   if (options.serverDeps) {
-    app.route('/', createOpenCanvasServer(options.serverDeps).app)
+    app.route('/', createDocumentServer(options.serverDeps).app)
   }
 
   app.route(
