@@ -5,6 +5,7 @@ import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
+import { SqliteDocumentIndex } from './sqlite-document-index.js'
 
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; thumbnails live as PNG
@@ -85,7 +86,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       .executeTakeFirstOrThrow()
     expect(documentIdSchema.safeParse(row.id).success).toBe(true)
 
-    const { SqliteDocumentIndex } = await import('./sqlite-document-index.js')
     const index = new SqliteDocumentIndex(handle.db)
     const entries = await index.listDocuments({ workspaceId: 'sess-1' })
     expect(entries.map((entry) => entry.path)).toContain('canvas-fresh')
