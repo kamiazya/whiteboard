@@ -355,3 +355,58 @@ it('a plain copy clears a pending cut — the newest clipboard intent wins', () 
   expect(container.querySelector('[data-testid="ghost-overlay"]')).toBeNull()
   expect(latest.canvas.nodes).toHaveLength(2)
 })
+
+it('a content-only change to a held node lifts the hold — ANY touch counts, not just geometry', () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).not.toBeNull()
+
+  // A remote collaborator edits the held node's TEXT — same geometry.
+  act(() =>
+    latest.reset({
+      ...latest.canvas,
+      nodes: latest.canvas.nodes.map((n) =>
+        n.id === 'a' && n.type === 'text' ? { ...n, text: 'rewritten' } : n,
+      ),
+    }),
+  )
+  expect(container.querySelector('[data-testid="ghost-overlay"]')).toBeNull()
+
+  // With the hold lifted, paste is a plain copy — never a silent move of
+  // the node someone just rewrote.
+  clip(root, 'paste')
+  expect(latest.canvas.nodes).toHaveLength(3)
+  expect(
+    latest.canvas.nodes.filter((n) => n.type === 'text' && n.text === 'rewritten'),
+  ).toHaveLength(1)
+})
+
+it("an anchored 'Paste here' moves the held selection so its center lands on the click", async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  clip(root, 'cut')
+
+  // Right-click empty space, far from both nodes, and choose Paste here.
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 600, clientY: r.top + 400 })
+  const pasteItem = [...container.querySelectorAll('[role="menuitem"]')].find(
+    (el) => (el.getAttribute('aria-label') ?? el.textContent) === 'Paste here',
+  ) as HTMLElement
+  expect(pasteItem).toBeDefined()
+  fireEvent.click(pasteItem)
+
+  // Same node, no remint; the held box's center lands on the click point
+  // (the default viewport is identity, so screen = canvas coordinates).
+  expect(latest.canvas.nodes.map((n) => n.id).sort()).toEqual(['a', 'b'])
+  const moved = latest.canvas.nodes.find((n) => n.id === 'a')
+  expect(moved).toBeDefined()
+  if (moved === undefined) throw new Error('unreachable')
+  expect(Math.round(moved.x + moved.width / 2)).toBe(600)
+  expect(Math.round(moved.y + moved.height / 2)).toBe(400)
+  expect(latest.canvas.edges).toEqual(initial.edges)
+})

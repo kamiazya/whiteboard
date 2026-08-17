@@ -791,17 +791,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * state (never persisted or synced): the nodes stay in the document,
      * dimmed by GhostOverlay, until a same-canvas paste MOVES them, or the
      * hold is lifted (Escape, a newer copy/cut, or any edit that touches a
-     * held node). `geometry` snapshots each node's box at cut time so ANY
-     * change to a held node — local drag, remote edit, delete — reads as
-     * "someone touched it" and cancels the hold; nothing is ever lost by a
-     * cancel, because nothing was deleted.
+     * held node). `snapshot` records each held node's full serialized value
+     * at cut time so ANY change — a drag, a text or color edit, a remote
+     * write, a delete — reads as "someone touched it" and cancels the hold;
+     * nothing is ever lost by a cancel, because nothing was deleted.
      */
     const [pendingCut, setPendingCut] = useState<{
       readonly cutId: string
-      readonly geometry: ReadonlyMap<
-        string,
-        { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
-      >
+      readonly snapshot: ReadonlyMap<string, string>
     } | null>(null)
     useEffect(() => {
       // Anyone touching a held node — local drag, remote edit, delete —
@@ -809,15 +806,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // it. The move resolution clears the hold before it applies, so its
       // own geometry change never races this.
       if (pendingCut === null) return
-      const touched = [...pendingCut.geometry].some(([id, g]) => {
+      const touched = [...pendingCut.snapshot].some(([id, frozen]) => {
         const node = canvas.nodes.find((n) => n.id === id)
-        return (
-          node === undefined ||
-          node.x !== g.x ||
-          node.y !== g.y ||
-          node.width !== g.width ||
-          node.height !== g.height
-        )
+        return node === undefined || JSON.stringify(node) !== frozen
       })
       if (touched) setPendingCut(null)
     }, [canvas, pendingCut])
@@ -2108,12 +2099,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // decides what the cut meant (move here, copy elsewhere, or nothing).
       setPendingCut({
         cutId: fragment.cut.id,
-        geometry: new Map(
-          fragment.nodes.map((node) => [
-            node.id,
-            { x: node.x, y: node.y, width: node.width, height: node.height },
-          ]),
-        ),
+        snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
       })
       return fragment
     }
@@ -2153,7 +2139,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // or boundary — survives without any reconnection machinery. One batch
       // of move-node commands = one undo step that only moves them back.
       if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
-        const held = current.nodes.filter((node) => pendingCut.geometry.has(node.id))
+        const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
         if (held.length > 0) {
           let dx = DUPLICATE_OFFSET_PX
           let dy = DUPLICATE_OFFSET_PX
@@ -3467,7 +3453,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           {pendingCut !== null && (
             <GhostOverlay
               boxes={canvas.nodes.flatMap((n) =>
-                pendingCut.geometry.has(n.id)
+                pendingCut.snapshot.has(n.id)
                   ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
                   : [],
               )}
