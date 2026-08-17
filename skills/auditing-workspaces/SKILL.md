@@ -1,12 +1,13 @@
 ---
 name: auditing-workspaces
-description: Audit Excalidraw workspaces and canvases to detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches. Use when workspaces are piling up, sync looks suspicious, or you want to check for stale artifacts before creating new canvases.
+description: Audit a whiteboard workspace's documents to find likely-stale or duplicate spatial canvases before creating new ones. Use when a workspace has been in heavy use and you want to check for clutter, or you want a quick sense of what a document actually contains before opening it.
 ---
 
 # auditing-workspaces
 
-Call the whiteboard MCP `/api/debug` endpoint to inspect workspace, canvas, and cache state.
-Use it to find old workspaces (`hasActivePort=false`) and canvases dominated by tombstones, then report them as cleanup candidates.
+List a workspace's documents, then use the spatial ones' scene digests to judge which look empty
+or abandoned. There is no server-side audit endpoint — this skill is a recipe for composing the
+regular document tools toward that end, nothing more.
 
 For the main drawing workflow, see the drawing-visuals skill in `skills/drawing-visuals/SKILL.md`.
 
@@ -14,95 +15,86 @@ For the main drawing workflow, see the drawing-visuals skill in `skills/drawing-
 
 ## When To Use It
 
-- When whiteboard has been in heavy use and `~/.whiteboard/` seems bloated
-- When you want to verify mechanically that a canvas is probably unused
-- When sync behavior looks suspicious and you want to compare cache vs disk state
-- Before opening a new canvas, when you want to check for duplicate slugs
+- When a workspace has been in heavy use and you want a sense of what is in it before adding more
+- When you want to check for a likely-duplicate path before calling `wb_document_create`
+- When you want to know whether a spatial document is worth opening without rendering it
 
 ---
 
 ## Execution Flow
 
-### Step 1: Find The Port For A Running Workspace
+### Step 1: List The Workspace's Documents
 
-In `~/.whiteboard/{workspaceId}/.port`, line 1 is the port number and line 2 is the PID.
-An active workspace has a `.port` file and a live PID.
-
-```bash
-# Quick check for running .port files
-ls $HOME/.whiteboard/*/.port 2>/dev/null
+```js
+wb_document_list({ workspaceId })
 ```
 
-If multiple workspaces are found, use the most recent one by mtime.
+Returns `{ canvases: [{ documentId, path, name? }] }` — placement only, no content. An unknown
+`workspaceId` is an error here, not an empty list, so a typo reads as a failure rather than "nothing
+found."
 
-### Step 2: Fetch Raw Data From `/api/debug`
+### Step 2: Sample Each Document
 
-```bash
-curl -s http://localhost:{PORT}/api/debug | jq .
+For a markdown document, `wb_document_get` returns the OKF Markdown body directly:
+
+```js
+wb_document_get({ workspaceId, documentId })
+// -> { kind: "markdown", content: "...", frontmatter: {...} }
 ```
 
-Response shape:
+For a spatial document, prefer `wb_scene_digest` over `wb_document_get` — it summarizes the
+laid-out scene (counts and bounding boxes) without pulling the full JSON Canvas payload:
 
-```json
-{
-  "sessions": [
-    {
-      "workspaceId": "...",
-      "hasActivePort": true,
-      "canvases": [
-        {
-          "slug": "...",
-          "totalElements": 42,
-          "visibleElements": 30,
-          "tombstones": 12,
-          "cached": true
-        }
-      ]
-    }
-  ],
-  "cache": { "size": 3, "keys": ["sess/slug"] }
-}
+```js
+wb_scene_digest({ workspaceId, documentId })
 ```
 
-### Step 3: Aggregate From An Audit Perspective
+A document created before formats were tracked answers neither call (`wb_document_get` refuses
+with a "no recorded kind" error); that itself is a signal worth reporting; the only way to give it a
+kind is to write to it (`wb_node_add`/`wb_node_patch`/`wb_edge_patch` records `spatial`,
+`wb_document_set` records `markdown`).
 
-Check the following mechanically:
+### Step 3: Judge Staleness
 
-| Concern | Condition | Suggested Action |
+There is no last-modified or last-accessed timestamp exposed through these tools. Judge staleness
+structurally instead:
+
+| Signal | How To Check | Likely Meaning |
 | --- | --- | --- |
-| dead workspace | `hasActivePort=false` and canvases are not empty | candidate for deleting `~/.whiteboard/{workspaceId}/` |
-| tombstone-heavy canvas | `tombstones / totalElements >= 0.5` and `totalElements >= 10` | consider rebuilding with `canvas_clear` or re-saving from a fresh snapshot |
-| empty canvas | `totalElements=0` | candidate for deletion |
-| cache leak | present in `cache.keys` but its workspace has `hasActivePort=false` | usually fixed by process restart; report it |
-| cache size | `cache.size > 20` | possible memory pressure; watch long-lived workspaces |
+| empty spatial document | digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for `wb_document_delete` |
+| near-duplicate path | two `wb_document_list` entries with similar `path`/`name` | probably one abandoned in favor of the other |
+| markdown document with an empty body | `content` is blank apart from frontmatter | scaffolded but never written |
+| document with no recorded kind | `wb_document_get` throws the "no recorded kind" error | predates format tracking; needs deciding, not deleting on sight |
 
 ### Step 4: Write The Report
 
-Keep the user-facing summary short and structured like this:
+Keep the user-facing summary short and structured:
 
 ```text
-## whiteboard audit report
+## whiteboard audit report — workspace {workspaceId}
 
-Active: {N} workspace / {M} canvas
-Old workspaces: {K} candidates
-Tombstone-heavy: {slug count}
-Empty: {slug count}
+Documents: {N}
+Empty or near-empty: {list of path -> documentId}
+Likely-duplicate paths: {pairs}
+No recorded kind: {list}
 
 ### Deletion candidates
-- ~/.whiteboard/{workspaceId}/ ({reason})
-
-### Needs review
-- {workspaceId}/{slug}: tombstones {T}/{Total} -> consider canvas_clear
+- {path} ({documentId}): {reason}
 ```
 
-Do **not** delete anything automatically. Always confirm with the user before running `rm -rf`.
+Do **not** delete anything automatically. Always confirm with the user before calling
+`wb_document_delete`.
 
 ---
 
 ## Notes
 
-- `/api/debug` is a local-only endpoint. It is unauthenticated, so do not expose it externally
-- A canvas with `cached=true` is currently backed by an in-memory LoroDoc. `cached=false` means it was read from disk through `peekDoc` only and did not populate cache
-- `tombstones` count soft-deleted elements. They are part of the CRDT model, so do not delete them directly. If they are a problem, `canvas_clear` and rebuild is the safe route
-- Deleting all of `~/.whiteboard/` destroys all workspace history. Delete only dead workspaces selectively
-- If the numbers look wrong, restart the whiteboard MCP server first so doc-cache and filesystem state can resync, then rerun the audit
+- `wb_document_delete` fails if other documents sit below the target's path — deletion is refused
+  rather than silently cascading, so report the blocker back to the user instead of retrying
+  differently.
+- Deletion is not recoverable through these tools beyond a document's own saved versions
+  (`wb_version_list` / `wb_version_restore`), and those do not survive the document itself being
+  deleted.
+- This skill has no bulk operation: auditing N documents means N `wb_document_get` /
+  `wb_scene_digest` calls. For a very large workspace, sample rather than exhaustively walking
+  every document.
