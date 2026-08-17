@@ -60,41 +60,45 @@ suffixed (`notes`, `notes-2`). It deliberately uses the same character
 set as daemon paths so that, if browser-local canvases ever gain real
 paths, the labels users already see can be promoted without changing.
 
-## One product concept, two daemon-side representations
+## One product concept, one daemon-side store
 
-The daemon currently keeps **two separate stores** that both hold
-"canvases", and they do not see each other:
+The daemon once kept **two separate stores** that both held documents and
+did not see each other: the workspace/path store behind the web app, and a
+document store behind the agent-facing MCP tools. A document an agent
+created was invisible in the gallery, and a document the web app created was
+invisible to `wb_document_list`.
 
-- The **workspace/path store** backs everything the web app shows and
-  edits: the gallery, the editor, names, pins, kinds, branches, versions,
-  and sync. Its writers are the daemon's HTTP API only.
-- The **document store** backs the agent-facing MCP tools
-  (`wb_document_*`, `wb_canvas_tidy`, node/edge patches, facets) and the
-  `/api/v1` routes. It organizes canvases as a CRDT tree of
-  ULID-identified documents with derived alias paths, and it is what the
-  gallery's *tree view* renders.
+That split is **gone**, in three steps recorded in the migration log:
 
-A canvas created by an agent through MCP therefore does **not** appear in
-the daemon gallery's grid, and a canvas created from the web UI does not
-appear to `wb_document_list`. The only value the two representations share
-is the raw `workspaceId` string, and neither side treats the other's use
-of it as authoritative. This split is a known, recorded state — not an
-accident and not yet a converged design — and the decision record for it,
-including what is settled (path-canonical identity, single-workspace
-browser-local) and what is still open (path rename, the convergence
-path), is [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md).
+- Migration `0007` adopted every `workspace-tree:<workspaceId>` document into
+  the shared `documents` table, retiring the separate tree document.
+- Migration `0008` (and `0012` for the rows a later minting site kept
+  producing) re-minted every id as a ULID, so both surfaces address a
+  document by the same identifier — one table, one id space.
+- The byte store converged last: `loadDocument`/`saveDocument` read and write
+  the same Libsql snapshot rows the MCP tools use. Migration `0011` imported
+  the pre-existing filesystem blobs, the daemon re-runs that import at every
+  startup to catch anything written in between, and a blob file is deleted
+  only once its bytes are proven byte-identical to the stored rows.
 
 ## Practical consequences today
 
-- Agents and humans collaborate on the same canvas only when they go
-  through the same surface (for example, an agent driving the daemon's
-  HTTP API, or a human using the tree view over `/api/v1` documents).
-- The workspace selector in the daemon gallery lists workspaces from the
-  workspace/path store; the tree view reads the document store. A
-  workspace that exists in only one of the two renders as missing or
-  empty in the other.
-- Browser-local canvases cross into daemon mode only by an explicit,
-  user-initiated copy, which re-creates the canvas under a new path —
-  no identifier carries over.
+- An agent and a human work on the same document through whichever surface
+  they prefer: an MCP tool call, the daemon's HTTP API, and the WebSocket
+  session all read and write one stored document.
+- A save from a long-lived editing session **merges** the stored snapshot
+  before writing, so a tool call that lands mid-session is not overwritten by
+  the next save from that session.
+- A document whose `kind` was never recorded reports **no** kind rather than
+  claiming `spatial`; a surface that must render something (the gallery's
+  kind badge, the editor choice) decides locally.
+- Browser-local documents still cross into daemon mode only by an explicit,
+  user-initiated copy, which re-creates the document under a new path — no
+  identifier carries over. That half of ADR-0007 is unchanged.
+
+The identity decision itself — `(workspaceId, path)` as the canonical
+user-facing identity — is still
+[ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md); its
+as-built addendum records the convergence above.
 
 ← Back to [documentation home](../)
