@@ -111,12 +111,13 @@ import {
 import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
-import { applyCommand, buildFragmentInsertCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand, DUPLICATE_OFFSET_PX } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
+import { GhostOverlay } from './GhostOverlay.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import {
   distanceToPolyline,
@@ -785,6 +786,41 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [scene],
     )
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+    /**
+     * A cut waiting for its paste — the front half of a move. Pure view
+     * state (never persisted or synced): the nodes stay in the document,
+     * dimmed by GhostOverlay, until a same-canvas paste MOVES them, or the
+     * hold is lifted (Escape, a newer copy/cut, or any edit that touches a
+     * held node). `geometry` snapshots each node's box at cut time so ANY
+     * change to a held node — local drag, remote edit, delete — reads as
+     * "someone touched it" and cancels the hold; nothing is ever lost by a
+     * cancel, because nothing was deleted.
+     */
+    const [pendingCut, setPendingCut] = useState<{
+      readonly cutId: string
+      readonly geometry: ReadonlyMap<
+        string,
+        { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+      >
+    } | null>(null)
+    useEffect(() => {
+      // Anyone touching a held node — local drag, remote edit, delete —
+      // lifts the hold; the veil must never dim a node that changed under
+      // it. The move resolution clears the hold before it applies, so its
+      // own geometry change never races this.
+      if (pendingCut === null) return
+      const touched = [...pendingCut.geometry].some(([id, g]) => {
+        const node = canvas.nodes.find((n) => n.id === id)
+        return (
+          node === undefined ||
+          node.x !== g.x ||
+          node.y !== g.y ||
+          node.width !== g.width ||
+          node.height !== g.height
+        )
+      })
+      if (touched) setPendingCut(null)
+    }, [canvas, pendingCut])
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
@@ -2049,6 +2085,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
       if (fragment.nodes.length === 0) return null
       writeClipboardFragment(fragment)
+      // The newest clipboard intent wins: a plain copy lifts a pending cut.
+      setPendingCut(null)
       return fragment
     }
 
@@ -2064,25 +2102,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         new Set([selection.id, ...extraIds]),
         { cutId: crypto.randomUUID() },
       )
-      if (fragment.nodes.length === 0) return null
+      if (fragment.nodes.length === 0 || fragment.cut === undefined) return null
       writeClipboardFragment(fragment)
+      // Defer the delete: hold the originals as a ghost until the paste
+      // decides what the cut meant (move here, copy elsewhere, or nothing).
+      setPendingCut({
+        cutId: fragment.cut.id,
+        geometry: new Map(
+          fragment.nodes.map((node) => [
+            node.id,
+            { x: node.x, y: node.y, width: node.width, height: node.height },
+          ]),
+        ),
+      })
       return fragment
-    }
-
-    /** Remove the selection as ONE batch (one undo step). */
-    const deleteSelectionAsBatch = (): boolean => {
-      if (selection === undefined) return false
-      const ids = [selection.id, ...extraIds]
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: ids.map((id) => ({ kind: 'delete-node', id }) as const),
-      }
-      const running = applyCommand(canvasRef.current, command)
-      if (running === canvasRef.current) return false
-      onChange(running, command)
-      applySelection({ type: 'clear' })
-      setSelectedEdgeId(null)
-      return true
     }
 
     /** A note carrying pasted foreign text, at the viewport center. */
@@ -2115,6 +2148,41 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       at?: Point,
     ): boolean => {
       const current = canvasRef.current
+      // A paste that answers THIS canvas's pending cut is a MOVE: the held
+      // nodes keep their ids and just change place, so every edge — internal
+      // or boundary — survives without any reconnection machinery. One batch
+      // of move-node commands = one undo step that only moves them back.
+      if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
+        const held = current.nodes.filter((node) => pendingCut.geometry.has(node.id))
+        if (held.length > 0) {
+          let dx = DUPLICATE_OFFSET_PX
+          let dy = DUPLICATE_OFFSET_PX
+          if (at !== undefined) {
+            const minX = Math.min(...held.map((node) => node.x))
+            const minY = Math.min(...held.map((node) => node.y))
+            const maxX = Math.max(...held.map((node) => node.x + node.width))
+            const maxY = Math.max(...held.map((node) => node.y + node.height))
+            dx = Math.round(at.x - (minX + maxX) / 2)
+            dy = Math.round(at.y - (minY + maxY) / 2)
+          }
+          const moveCommand: EditorCommand = {
+            kind: 'batch',
+            commands: held.map((node) => ({
+              kind: 'move-node' as const,
+              id: node.id,
+              x: node.x + dx,
+              y: node.y + dy,
+            })),
+          }
+          setPendingCut(null)
+          const running = applyCommand(current, moveCommand)
+          if (running === current) return false
+          onChange(running, moveCommand)
+          applySelection({ type: 'set-members', ids: held.map((node) => node.id) })
+          setSelectedEdgeId(null)
+          return true
+        }
+      }
       // The cut surface reconnects while the document shows no trace of a
       // previous reconnection: as long as any edge a prior paste of this cut
       // created is still on THIS canvas, the fragment behaves as a plain
@@ -2263,6 +2331,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setSelectedEdgeId(null)
           return
         }
+      }
+      if (e.key === 'Escape' && gestureState.kind === 'idle' && pendingCut !== null) {
+        e.preventDefault()
+        // Escape lifts only the HOLD. The envelope stays: the clipboard
+        // keeps working as a plain copy, matching what the OS side already
+        // holds (which no Escape of ours could clear).
+        setPendingCut(null)
+        return
       }
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
@@ -2950,7 +3026,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           if (fragment === null) return
           e.preventDefault()
           e.clipboardData?.setData('text/plain', JSON.stringify(fragment))
-          deleteSelectionAsBatch()
         }}
         onPaste={(e) => {
           if (isTextEntryEvent(e.nativeEvent)) return
@@ -3158,7 +3233,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             openLinkNode={openLinkNode}
             copySelection={copySelection}
             cutSelection={cutSelection}
-            deleteSelectionAsBatch={deleteSelectionAsBatch}
             duplicateSelection={duplicateSelection}
             reorderSelection={reorderSelection}
           />
@@ -3390,6 +3464,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             ghost, so these outlines (boxes and internal-edge highlights,
             both derived from the committed scene) would mark geometry that
             is no longer drawn there. */}
+          {pendingCut !== null && (
+            <GhostOverlay
+              boxes={canvas.nodes.flatMap((n) =>
+                pendingCut.geometry.has(n.id)
+                  ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
+                  : [],
+              )}
+              zoom={viewport.zoom}
+            />
+          )}
           {isMultiSelection && gestureState.kind !== 'moving' && (
             <MemberOutlinesOverlay
               selectionMembers={selectionMembers}
