@@ -153,7 +153,7 @@ export type EditorLeafCommand =
  * multi-delete). The two-type split (rather than a self-referential union)
  * type-forbids nested batches, mirroring the sync layer's one-commit rule.
  * Application is a pure fold; the one-Loro-commit/one-undo-step guarantee
- * lives in canvas-sync-session's batch write path, not here.
+ * lives in document-sync-session's batch write path, not here.
  */
 export type EditorCommand =
   | EditorLeafCommand

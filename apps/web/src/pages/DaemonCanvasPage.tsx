@@ -25,8 +25,8 @@ import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
-import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
+import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -199,7 +199,7 @@ export function DaemonCanvasPage({
 
   // Backend identity is keyed on (workspaceId, path, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
-  // useCanvasSync's own effect cleanup (see BrowserLocalCanvasPage for the
+  // useDocumentSync's own effect cleanup (see BrowserLocalCanvasPage for the
   // same ownership split: this hook only decides WHEN to swap identity, not
   // how disconnect/connect ordering happens).
   const backend = useMemo(() => {
@@ -220,7 +220,7 @@ export function DaemonCanvasPage({
 
   // Holds the mounted SpatialEditor's imperative handle so a daemon-driven
   // viewport_request (see onViewportRequest below) can reach it without
-  // useCanvasSync/canvas-sync-session owning a DOM-facing ref themselves.
+  // useDocumentSync/document-sync-session owning a DOM-facing ref themselves.
   const spatialEditorRef = useRef<SpatialEditorHandle | null>(null)
 
   const {
@@ -242,7 +242,7 @@ export function DaemonCanvasPage({
     lockedEdgeIds,
     setEdgeLock,
     syncStatus,
-  } = useCanvasSync(backend, {
+  } = useDocumentSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
@@ -441,7 +441,7 @@ export function DaemonCanvasPage({
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
-      // identity-scoped event useCanvasSync fires on a broadcast — otherwise
+      // identity-scoped event useDocumentSync fires on a broadcast — otherwise
       // HeaderSaveDot never learns this save happened and stays dirty.
       dispatchIdentityEvent('excalidraw:wb_version_saved', canvas ?? undefined)
     } catch {

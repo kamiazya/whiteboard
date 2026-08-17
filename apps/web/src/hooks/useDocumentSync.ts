@@ -6,17 +6,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import {
-  type CanvasSyncSession,
-  createCanvasSyncSession,
+  createDocumentSyncSession,
   createGenerationCounters,
-} from '../lib/canvas-sync-session.js'
-import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
-import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
+  type DocumentSyncSession,
+} from '../lib/document-sync-session.js'
+import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
+import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 
-export type { UseCanvasSyncOptions }
+export type { UseDocumentSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook
-// module; the canonical definition lives in lib/canvas-sync-types.ts
+// module; the canonical definition lives in lib/document-sync-types.ts
 // alongside the session module that also needs it.
 export { dispatchIdentityEvent }
 
@@ -24,7 +24,7 @@ export { dispatchIdentityEvent }
 // only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
 export type SceneExportFormat = 'png' | 'svg'
 
-export interface UseCanvasSyncResult {
+export interface UseDocumentSyncResult {
   syncStatus: SyncStatus
   /**
    * True once the backend has published this canvas's document at least
@@ -119,14 +119,14 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 /**
- * useCanvasSync — canonical sync hook for both the browser-local backend and
+ * useDocumentSync — canonical sync hook for both the browser-local backend and
  * a daemon-backed connection.
  *
  * This hook is React glue only: state, the connect/teardown effect, and the
  * keyboard undo-redo intercept. All per-connection state (the LoroDoc, its
  * UndoManager, the debounced commit pipeline, queued export requests, and
- * the CanvasBackendHandlers wiring) lives in a `CanvasSyncSession` from
- * `../lib/canvas-sync-session.js` — a plain non-React module constructed
+ * the CanvasBackendHandlers wiring) lives in a `DocumentSyncSession` from
+ * `../lib/document-sync-session.js` — a plain non-React module constructed
  * fresh for every backend identity. This hook mirrors the session's
  * published canvas value into React state via `session.subscribe`, and
  * forwards `onChange(next, command)` — structurally the same signature as
@@ -156,22 +156,22 @@ function isEditingText(target: EventTarget | null): boolean {
  * into the session, precisely so staleness detection can span a session
  * teardown + the next session's construction.
  */
-export function useCanvasSync(
+export function useDocumentSync(
   backend: CanvasBackend | null,
-  options?: UseCanvasSyncOptions,
-): UseCanvasSyncResult {
+  options?: UseDocumentSyncOptions,
+): UseDocumentSyncResult {
   // Latest-prop mirrors deliberately excluded from the connect effect's
   // dependency array below: reading `backend`/`options` through these refs
   // (rather than as effect deps) means a fresh inline object passed on every
   // render never forces a reconnect.
   const backendRef = useRef<CanvasBackend | null>(backend)
   backendRef.current = backend
-  const optionsRef = useRef<UseCanvasSyncOptions>(options ?? {})
+  const optionsRef = useRef<UseDocumentSyncOptions>(options ?? {})
   optionsRef.current = options ?? {}
 
   // Handle to the live extracted session (null when backend is null / no
   // session has been created yet).
-  const sessionRef = useRef<CanvasSyncSession | null>(null)
+  const sessionRef = useRef<DocumentSyncSession | null>(null)
 
   // Hook-owned (not session-owned) generation counters — see this hook's
   // doc comment and `createGenerationCounters` for why they must survive a
@@ -227,7 +227,7 @@ export function useCanvasSync(
       return
     }
 
-    const session = createCanvasSyncSession(backend, {
+    const session = createDocumentSyncSession(backend, {
       getOptions: () => optionsRef.current,
       onStatusChange: setSyncStatus,
       onRestoreChange: (inProgress, label) => {

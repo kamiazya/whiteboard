@@ -36,7 +36,7 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useCanvasFileSeams } from '../hooks/use-canvas-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
-import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -350,7 +350,7 @@ export function BrowserLocalCanvasPage({
     [documentId, documentKind],
   )
 
-  // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
+  // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
   const {
@@ -367,7 +367,7 @@ export function BrowserLocalCanvasPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
-  } = useCanvasSync(backend)
+  } = useDocumentSync(backend)
 
   // Export rides the canvas row's operations kebab on this page (the top
   // bar keeps its export only in daemon mode, which has no canvas row).

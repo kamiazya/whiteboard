@@ -1,7 +1,7 @@
 /**
  * Reload-loses-elements regression (real IndexedDB).
  *
- * Root cause: useCanvasSync connected once to whichever backend it was first
+ * Root cause: useDocumentSync connected once to whichever backend it was first
  * given, then never reconnected — so BrowserLocalCanvasPage's placeholder
  * backend (used while the initial snapshot loads) stayed connected forever
  * and the real per-canvas backend's writes never happened. Nodes drawn

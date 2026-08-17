@@ -1,5 +1,5 @@
 /**
- * canvas-sync-session unit tests — jsdom layer.
+ * document-sync-session unit tests — jsdom layer.
  *
  * Exercises the session module directly (no React, no Excalidraw) against a
  * fake CanvasBackend and SpatialCanvas/EditorCommand fixtures — the
@@ -39,10 +39,10 @@ vi.mock('./app-logger.js', async (importOriginal) => {
 })
 
 import {
-  createCanvasSyncSession,
+  createDocumentSyncSession,
   createGenerationCounters,
   type SessionDeps,
-} from './canvas-sync-session.js'
+} from './document-sync-session.js'
 
 function emptyCanvas(): SpatialCanvas {
   return { nodes: [], edges: [] }
@@ -138,7 +138,7 @@ function twoNodeCanvas(): SpatialCanvas {
   return { nodes: [TEXT_NODE_A, TEXT_NODE_B], edges: [] }
 }
 
-describe('createCanvasSyncSession', () => {
+describe('createDocumentSyncSession', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     appLoggerSpies.warn.mockClear()
@@ -154,7 +154,7 @@ describe('createCanvasSyncSession', () => {
     const backend = makeFakeBackend()
     const sendReadySpy = vi.spyOn(backend, 'sendClientReady')
     const onStatusChange = vi.fn()
-    const session = createCanvasSyncSession(backend, makeDeps({ onStatusChange }))
+    const session = createDocumentSyncSession(backend, makeDeps({ onStatusChange }))
 
     session.connect()
 
@@ -169,7 +169,7 @@ describe('createCanvasSyncSession', () => {
     // here discards rather than records, or an implementation that resent just
     // the latest delta would pass.
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -199,7 +199,7 @@ describe('createCanvasSyncSession', () => {
 
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
 
     const canvas = twoNodeCanvas()
@@ -222,7 +222,7 @@ describe('createCanvasSyncSession', () => {
 
   it('onChange with a move-node command writes only that node into doc.getMap("nodes"), leaving a peer edit to the sibling node intact after merge', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -263,7 +263,7 @@ describe('createCanvasSyncSession', () => {
 
   it('onChange with connect-nodes writes only the new edge, leaving existing edges untouched', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     const initial: SpatialCanvas = {
       nodes: [TEXT_NODE_A, TEXT_NODE_B],
       edges: [{ id: 'e-existing', fromNode: 'n-a', toNode: 'n-b' }],
@@ -300,7 +300,7 @@ describe('createCanvasSyncSession', () => {
 
   it('onChange with create-node writes only the new node via writeSpatialNode, no fallback/log.warn', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -329,7 +329,7 @@ describe('createCanvasSyncSession', () => {
 
   it('onChange with delete-node writes only that deletion via deleteSpatialNode (cascading edges), no fallback/log.warn', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     const initial: SpatialCanvas = {
       nodes: [TEXT_NODE_A, TEXT_NODE_B],
       edges: [{ id: 'e-1', fromNode: 'n-a', toNode: 'n-b' }],
@@ -354,7 +354,7 @@ describe('createCanvasSyncSession', () => {
 
   it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(emptyCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -389,7 +389,7 @@ describe('createCanvasSyncSession', () => {
 
   it('debounce coalescing: move-node then delete-node for the same id dedupes to the delete', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -413,7 +413,7 @@ describe('createCanvasSyncSession', () => {
 
   it('falls back to a full writeSpatialCanvas resync when the command target is missing from `next`, still converging on `next`', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -433,7 +433,7 @@ describe('createCanvasSyncSession', () => {
 
   it('a fine-grained write that throws is contained by guardedCommit — the chain survives and the next firing still commits', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -472,7 +472,7 @@ describe('createCanvasSyncSession', () => {
 
   it('debounce coalescing: three rapid onChange calls produce exactly one commit, derived from the LAST pair', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -495,7 +495,7 @@ describe('createCanvasSyncSession', () => {
 
   it('debounce coalescing across DIFFERENT targets: edits to two different nodes within one window are both committed', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -529,7 +529,7 @@ describe('createCanvasSyncSession', () => {
 
   it('dispose() flushes a pending debounced edit into this session before disconnecting', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -554,7 +554,7 @@ describe('createCanvasSyncSession', () => {
     // This test intentionally re-implements the callback with the guard the
     // production code deliberately omits, to prove the omission matters —
     // it does not touch production code, but documents the exact failure
-    // mode the comment in createCanvasSyncSession warns about.
+    // mode the comment in createDocumentSyncSession warns about.
     let disposed = false
     const pushed: Uint8Array[] = []
     function guardedSubscriber(update: Uint8Array): void {
@@ -572,7 +572,7 @@ describe('createCanvasSyncSession', () => {
     const backendA = makeFakeBackend()
     const backendB = makeFakeBackend()
     const generations = createGenerationCounters()
-    const sessionA = createCanvasSyncSession(backendA, makeDeps({ generations }))
+    const sessionA = createDocumentSyncSession(backendA, makeDeps({ generations }))
     sessionA.connect()
     backendA._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -582,7 +582,7 @@ describe('createCanvasSyncSession', () => {
     // Before the 300ms debounce fires, session A is disposed and a new
     // session B is constructed against a different backend/doc.
     sessionA.dispose()
-    const sessionB = createCanvasSyncSession(backendB, makeDeps({ generations }))
+    const sessionB = createDocumentSyncSession(backendB, makeDeps({ generations }))
     sessionB.connect()
     backendB._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -597,7 +597,7 @@ describe('createCanvasSyncSession', () => {
 
   it('subscribeHistory fires when a committed edit pushes an undo step, and canUndo flips', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
     expect(session.canUndo()).toBe(false)
@@ -616,7 +616,7 @@ describe('createCanvasSyncSession', () => {
 
   it('clearUndo() (the restore-complete path) notifies history listeners so canUndo flips back', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -641,7 +641,7 @@ describe('createCanvasSyncSession', () => {
 
   it('undo() reverts the last committed edit and notifies subscribers with the "external" origin', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -664,7 +664,7 @@ describe('createCanvasSyncSession', () => {
 
   it('redo() re-applies an undone edit and notifies subscribers with the "external" origin', async () => {
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -688,7 +688,7 @@ describe('createCanvasSyncSession', () => {
   it('onEditorReady re-sends clientReady and flushes pending export requests, even with no doc yet', () => {
     const backend = makeFakeBackend()
     const sendReadySpy = vi.spyOn(backend, 'sendClientReady')
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
 
     // No snapshot has landed yet — onEditorReady must still send clientReady.
@@ -699,7 +699,7 @@ describe('createCanvasSyncSession', () => {
   it('restore lifecycle drives the injected restore callback and clears undo on complete', () => {
     const backend = makeFakeBackend()
     const onRestoreChange = vi.fn()
-    const session = createCanvasSyncSession(backend, makeDeps({ onRestoreChange }))
+    const session = createDocumentSyncSession(backend, makeDeps({ onRestoreChange }))
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot())
 
@@ -729,7 +729,7 @@ describe('createCanvasSyncSession', () => {
         callOrder.push('disconnect')
       },
     }
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -760,7 +760,7 @@ describe('createCanvasSyncSession', () => {
     // not behind any await — preserving the "callers do not await dispose()"
     // contract for the common no-edit teardown path.
     const backend = makeFakeBackend()
-    const session = createCanvasSyncSession(backend, makeDeps())
+    const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
 
     session.dispose()
@@ -772,7 +772,7 @@ describe('createCanvasSyncSession', () => {
     const backend = makeFakeBackend()
     const onStatusChange = vi.fn()
     const onAuthError = vi.fn()
-    const session = createCanvasSyncSession(
+    const session = createDocumentSyncSession(
       backend,
       makeDeps({ onStatusChange, getOptions: () => ({ onAuthError }) }),
     )
@@ -835,7 +835,7 @@ describe('createCanvasSyncSession', () => {
         vi.useFakeTimers()
         try {
           const backend = makeFakeBackend()
-          const session = createCanvasSyncSession(backend, makeDeps())
+          const session = createDocumentSyncSession(backend, makeDeps())
           session.connect()
           const snapshotBytes = makeSnapshot(baseCanvas())
           backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -888,7 +888,7 @@ describe('createCanvasSyncSession', () => {
       'a command sequence leaves the document equal to the canvas it produced',
       async (commands) => {
         const backend = makeFakeBackend()
-        const session = createCanvasSyncSession(backend, makeDeps())
+        const session = createDocumentSyncSession(backend, makeDeps())
         session.connect()
         const initial = baseCanvas()
         const snapshotBytes = makeSnapshot(initial)
@@ -924,7 +924,7 @@ describe('createCanvasSyncSession', () => {
   describe('batch commands', () => {
     it('a batch of create+connect+delete lands as ONE update payload and ONE undo step', async () => {
       const backend = makeFakeBackend()
-      const session = createCanvasSyncSession(backend, makeDeps())
+      const session = createDocumentSyncSession(backend, makeDeps())
       session.connect()
       backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
@@ -961,7 +961,7 @@ describe('createCanvasSyncSession', () => {
 
     it('a batch containing an unsupported member kind falls back to a full resync — still one undo step, converged on next', async () => {
       const backend = makeFakeBackend()
-      const session = createCanvasSyncSession(backend, makeDeps())
+      const session = createDocumentSyncSession(backend, makeDeps())
       session.connect()
       const snapshotBytes = makeSnapshot(twoNodeCanvas())
       backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -992,7 +992,7 @@ describe('createCanvasSyncSession', () => {
 
     it('a batched delete-edge removes exactly that edge (fine-grained, peer edits survive)', async () => {
       const backend = makeFakeBackend()
-      const session = createCanvasSyncSession(backend, makeDeps())
+      const session = createDocumentSyncSession(backend, makeDeps())
       session.connect()
       const base = applyCommand(twoNodeCanvas(), {
         kind: 'connect-nodes',
@@ -1036,7 +1036,7 @@ describe('createCanvasSyncSession', () => {
   describe('node lock', () => {
     it('hydration reports the persisted lock set, not an empty one (reload regression)', () => {
       const backend = makeFakeBackend()
-      const session = createCanvasSyncSession(backend, makeDeps())
+      const session = createDocumentSyncSession(backend, makeDeps())
       session.connect()
 
       // Bytes that already carry a lock, exactly as a reload would deliver.
@@ -1056,7 +1056,7 @@ describe('createCanvasSyncSession', () => {
 
     it('setNodeLock pushes the change to peers and notifies, without publishing a canvas', async () => {
       const backend = makeFakeBackend()
-      const session = createCanvasSyncSession(backend, makeDeps())
+      const session = createDocumentSyncSession(backend, makeDeps())
       session.connect()
       backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
       const before = backend._ctrl.pushLocalUpdateCalls.length

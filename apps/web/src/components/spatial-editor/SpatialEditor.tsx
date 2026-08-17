@@ -252,7 +252,7 @@ export interface SpatialEditorProps {
    * Omitted (the default) means every `canvas` prop change is treated as
    * local, matching this component's pre-existing continue-if-valid
    * behavior. A controlling hook that distinguishes origins (see
-   * `useCanvasSync`'s `externalVersion`) should always pass it, since an
+   * `useDocumentSync`'s `externalVersion`) should always pass it, since an
    * external replacement must cancel an in-flight gesture unconditionally —
    * see gestures.ts's `canvas-replaced` origin contract.
    */

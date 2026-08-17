@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DirtyEventDetail } from '../lib/canvas-sync-types.js'
+import type { DirtyEventDetail } from '../lib/document-sync-types.js'
 
 // Re-exported so existing call sites (e.g. WorkspaceTopBar) can keep
 // importing this from the hook module; the canonical definition lives in
-// lib/canvas-sync-types.ts alongside dispatchIdentityEvent, which produces it.
+// lib/document-sync-types.ts alongside dispatchIdentityEvent, which produces it.
 export type { DirtyEventDetail }
 
 // Track unsaved state with the same minimal affordance as a mail-style unread dot.

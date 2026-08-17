@@ -1,6 +1,6 @@
 /**
  * create-node/delete-node reload persistence (real IndexedDB), the page-level
- * complement to canvas-sync-session.test.ts's unit coverage: a node created
+ * complement to document-sync-session.test.ts's unit coverage: a node created
  * through the dedicated `create-node` fine-grained write survives a remount,
  * and a node removed through `delete-node` stays gone after another remount.
  *

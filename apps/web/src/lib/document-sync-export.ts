@@ -6,7 +6,7 @@ import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-cont
 // applyRestoreComplete/RestoreCompleteDeps were intentionally excluded —
 // daemon-only / trivially inlined at the call site instead).
 //
-// canvas-sync-session.ts wires `api: null` permanently (SpatialEditor has no
+// document-sync-session.ts wires `api: null` permanently (SpatialEditor has no
 // Excalidraw-shaped imperative API), so `sendExportResponse` below is
 // unreachable today and only the queueing path in
 // handleIncomingExportRequest/flushPendingExportRequests ever runs.

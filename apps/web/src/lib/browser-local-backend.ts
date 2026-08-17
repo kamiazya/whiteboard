@@ -110,7 +110,7 @@ export class BrowserLocalBackend implements CanvasBackend {
 
   /**
    * Persists each entry keyed by its tuple fileId (the dedupe key
-   * useCanvasSync already uses — never `data.id`, which a caller's
+   * useDocumentSync already uses — never `data.id`, which a caller's
    * BinaryFileDataLike is not guaranteed to agree with). Calls
    * onFileSuccess once per successfully stored entry. Rejects and routes
    * handlers.onError?.('storage-failure') on any store failure so a failed

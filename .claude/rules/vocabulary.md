@@ -84,10 +84,10 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
 
 - `Canvas` as the CONTAINER noun, across apps/web and mcp-server's HTTP side
   — `CanvasSnapshot` (a document row), `listCanvases`/`createCanvas`/
-  `renameCanvas`, `useCanvasSync`, `CanvasBackend`,
-  `BrowserLocalCanvasPage`, and the IndexedDB stores `canvases`/
-  `loroCanvases`/`canvasFiles`. The biggest by count and the one the standing
-  rule below is actually for: fix it where you already are, never as a sweep.
+  `renameCanvas`, `CanvasBackend`, `BrowserLocalCanvasPage`, and the
+  IndexedDB stores `canvases`/`loroCanvases`/`canvasFiles`. The biggest by
+  count and the one the standing rule below is actually for: fix it where you
+  already are, never as a sweep.
   `switchCanvas` is DONE (`switchDocument`), and WHY it went first is the
   useful part: it was the only member of that list with no wrapper — zero
   `onSwitchCanvas` props, no `useSwitchCanvas` hook — so renaming it left
@@ -98,6 +98,21 @@ Not a work queue — a lookup, so you can recognise one when you open a file.
   Pick the identifier with no family first; a rename that leaves its own
   callers behind makes a file LESS consistent, not more.
   `SpatialCanvas` and anything about the spatial surface is CORRECT and stays.
+
+  The `useCanvasSync` stack is DONE (`useDocumentSync`), and it is the
+  counter-lesson to `switchCanvas`: it HAD a family — `createCanvasSyncSession`,
+  `CanvasSyncSession`, `UseCanvasSyncOptions`/`Result`, the two
+  `CANVAS_SYNC_*_EVENT` constants, and three `canvas-sync-*.ts` modules — and
+  moved anyway, because every member was inside `apps/web` and none crossed a
+  published subpath. So the rule is not "no family"; it is **no member outside
+  the increment's own boundary**. That is what still holds `listCanvases` and
+  `CanvasBackend` back: both reach `packages/mcp-server/src/shared/`, which
+  publishes as `./api-contracts` / `./daemon-backend` / `./sse-backend`.
+  One thing did NOT move with the names: the window-event VALUES stay
+  `'excalidraw:doc_changed'` and `'excalidraw:wb_version_saved'`, because
+  `useDirtyState`, `HeaderBranchBanner`, `useBranches` and
+  `merge-committed-event` still match the raw string. `document-sync-types.test.ts`
+  pins both literals so a later rename cannot take the wire format with it.
 - `onOpenCanvas`, the React prop meaning "open this document" — 178
   occurrences across apps/web. It is the `Canvas`-as-container violation
   above wearing a handler name, so it belongs to the same standing rule and

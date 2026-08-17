@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import type { SceneExportFormat } from '@/hooks/useCanvasSync'
+import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 
 interface CanvasActionsMenuProps {
   canvasUrl: string

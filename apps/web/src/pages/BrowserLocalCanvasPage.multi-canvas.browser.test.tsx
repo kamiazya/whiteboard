@@ -3,7 +3,7 @@
  * fresh empty canvas B via the page's New-canvas control, switch back to A via
  * the switcher, and confirm A's node is restored. Proves the switcher/New
  * UI drives the S-C1 store+controller API end to end, including the
- * useCanvasSync reconnect-on-backend-identity-change path.
+ * useDocumentSync reconnect-on-backend-identity-change path.
  *
  * SpatialEditor is mocked (see BrowserLocalCanvasPage.reload-elements.browser.test.tsx's
  * doc comment for why) so edits are driven deterministically via onChange —

@@ -26,15 +26,15 @@ import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
   handleIncomingExportRequest,
-} from './canvas-sync-export.js'
+} from './document-sync-export.js'
 import {
-  CANVAS_SYNC_DOC_CHANGED_EVENT,
-  CANVAS_SYNC_VERSION_SAVED_EVENT,
+  DOCUMENT_SYNC_CHANGED_EVENT,
+  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   type SyncStatus,
-  type UseCanvasSyncOptions,
-} from './canvas-sync-types.js'
+  type UseDocumentSyncOptions,
+} from './document-sync-types.js'
 
-const log = getAppLogger('canvas-sync')
+const log = getAppLogger('document-sync')
 
 // Upper bound on dispose()'s drain phase (see `dispose()` below). Bounds the
 // wait for the flush-triggered commit's pushLocalUpdate invocation so a
@@ -81,7 +81,7 @@ function commandTargetKey(command: EditorCommand): string {
 }
 
 /**
- * Generation counters shared across every session a single `useCanvasSync`
+ * Generation counters shared across every session a single `useDocumentSync`
  * hook instance creates over its lifetime (one per backend connect/swap).
  *
  * They live outside any one session — not inside it — because staleness
@@ -114,14 +114,14 @@ export interface SessionDeps {
   // Never cached by the session: called fresh on each use so a caller
   // passing a new inline options object every render is picked up without
   // the session having to be recreated.
-  getOptions: () => UseCanvasSyncOptions
+  getOptions: () => UseDocumentSyncOptions
   onStatusChange: (status: SyncStatus) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
-  dispatchIdentityEvent: (eventName: string, identity: UseCanvasSyncOptions['identity']) => void
+  dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
 }
 
-export interface CanvasSyncSession {
+export interface DocumentSyncSession {
   connect(): void
   // Flushes any pending debounced edit into this session's own doc, then
   // defers closing the transport behind a short drain phase so the
@@ -339,16 +339,16 @@ function commitToDoc(doc: LoroDoc, next: SpatialCanvas, command: EditorCommand):
 }
 
 /**
- * One CanvasSyncSession = one live connection to one CanvasBackend. Owns
+ * One DocumentSyncSession = one live connection to one CanvasBackend. Owns
  * every piece of state that only makes sense for the lifetime of that single
  * connection (the LoroDoc, its UndoManager, the debounced commit pipeline,
  * queued export requests, published canvas value + subscribers). Constructing
  * a new session for a backend swap therefore resets all of that for free.
  */
-export function createCanvasSyncSession(
+export function createDocumentSyncSession(
   backend: CanvasBackend,
   deps: SessionDeps,
-): CanvasSyncSession {
+): DocumentSyncSession {
   const myGeneration = deps.generations.nextConnectionGeneration()
 
   let disposed = false
@@ -431,7 +431,7 @@ export function createCanvasSyncSession(
 
   function buildExportDeps(): ExportRequestHandlerDeps {
     return {
-      // lane B (canvas-sync-export.ts) owns replacing ExportRequestHandlerDeps's
+      // lane B (document-sync-export.ts) owns replacing ExportRequestHandlerDeps's
       // Excalidraw-shaped `api` entirely; this session has no imperative
       // editor handle to supply, so every export request only ever queues —
       // exportToBlobFn/blobToBase64Fn are consequently unreachable (they are
@@ -602,7 +602,7 @@ export function createCanvasSyncSession(
           // what counts as "the doc changed" — but never for the initial
           // snapshot import above, since that happens before this listener
           // is registered.
-          deps.dispatchIdentityEvent(CANVAS_SYNC_DOC_CHANGED_EVENT, deps.getOptions().identity)
+          deps.dispatchIdentityEvent(DOCUMENT_SYNC_CHANGED_EVENT, deps.getOptions().identity)
           // Every change, not just an import: a local UNDO rewrites the body
           // container without one, and the editor holding stale text is the
           // whole failure this notification exists to prevent. Re-notifying
@@ -632,7 +632,7 @@ export function createCanvasSyncSession(
 
       onVersionCreated(payload) {
         if (isStale()) return
-        deps.dispatchIdentityEvent(CANVAS_SYNC_VERSION_SAVED_EVENT, deps.getOptions().identity)
+        deps.dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, deps.getOptions().identity)
         try {
           deps.getOptions().onVersionCreated?.(payload)
         } catch (err) {

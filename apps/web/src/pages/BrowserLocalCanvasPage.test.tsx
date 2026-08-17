@@ -50,7 +50,7 @@ vi.mock('../lib/browser-local-backend.js', () => ({
   BrowserLocalBackend: class {
     connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {
       handlers.onConnected()
-      // Deliver a minimal empty snapshot so useCanvasSync has a doc.
+      // Deliver a minimal empty snapshot so useDocumentSync has a doc.
       const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
       handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
     }

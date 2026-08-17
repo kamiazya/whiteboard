@@ -65,7 +65,7 @@ export default defineConfig({
         // Deliberately NOT doing the same for loro-crdt (dropped after
         // apps/web/scripts/smoke-bundle-size.mjs caught it regressing the
         // critical path back to ~120KB): loro-crdt is only ever imported from
-        // lazy-reachable modules (useCanvasSync, browser-local-backend, the
+        // lazy-reachable modules (useDocumentSync, browser-local-backend, the
         // migration import panel), so Rollup's automatic chunking already
         // isolates it into a chunk those lazy consumers share — no manual
         // rule needed. Forcing it into one named `vendor-loro-crdt` chunk

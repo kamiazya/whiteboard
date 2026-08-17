@@ -5,8 +5,8 @@ import type {
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 // Shared contract types/helpers for the canvas sync stack. These are plain,
-// non-React values that both `hooks/useCanvasSync.ts` and
-// `lib/canvas-sync-session.ts` depend on — living here (rather than in
+// non-React values that both `hooks/useDocumentSync.ts` and
+// `lib/document-sync-session.ts` depend on — living here (rather than in
 // `hooks/`) keeps module imports flowing one direction only: hooks -> lib,
 // never lib -> hooks.
 
@@ -31,21 +31,21 @@ export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 // merge-committed-event) still match on the raw string and are out of this
 // slice's scope, so changing the constant's NAME here must never change its
 // VALUE.
-export const CANVAS_SYNC_DOC_CHANGED_EVENT = 'excalidraw:doc_changed'
-export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:wb_version_saved'
+export const DOCUMENT_SYNC_CHANGED_EVENT = 'excalidraw:doc_changed'
+export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'excalidraw:wb_version_saved'
 
 // Daemon-only callback seam. Every member is read via optionsRef in
-// useCanvasSync (see there) so passing a fresh inline object on every render
+// useDocumentSync (see there) so passing a fresh inline object on every render
 // never forces a backend reconnect. A browser-local backend never fires any
 // of these events, so none of them are called and the hook behaves exactly
 // as before this seam was added.
-export interface UseCanvasSyncOptions {
+export interface UseDocumentSyncOptions {
   onVersionCreated?: (payload: VersionCreatedPayload) => void
   onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
   // Daemon-driven viewport control (e.g. an MCP tool call asking the
   // connected browser to fit/move its view). The page holds a
   // SpatialEditorHandle ref and maps this payload onto it — see
-  // canvas-sync-session.ts's onViewportRequest forward.
+  // document-sync-session.ts's onViewportRequest forward.
   onViewportRequest?: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
   // transition on a WS auth failure (close 1008), so a daemon-backed page
@@ -68,7 +68,7 @@ export interface UseCanvasSyncOptions {
 // never wired the dirty-state contract and must see no events at all.
 export function dispatchIdentityEvent(
   eventName: string,
-  identity: UseCanvasSyncOptions['identity'],
+  identity: UseDocumentSyncOptions['identity'],
 ): void {
   if (typeof window === 'undefined') return
   if (!identity?.workspaceId || !identity.path) return

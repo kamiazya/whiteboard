@@ -60,7 +60,7 @@ const DaemonCanvasPage = lazy(() =>
 )
 
 // Lazy for the same reason: BrowserLocalCanvasPage statically imports
-// useCanvasSync (which imports loro-crdt), and it is the default render
+// useDocumentSync (which imports loro-crdt), and it is the default render
 // path (no daemon, no pairing fragment) — so it was the one making
 // loro-crdt part of every session's initial paint even though
 // DaemonCanvasPage above was already lazy.

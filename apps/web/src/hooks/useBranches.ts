@@ -23,7 +23,7 @@ import { ZodError } from 'zod'
 // Branch API helpers plus the React hook wrapper.
 // - branchesApi: pure request helpers that can be tested without React.
 // - useBranches: bundles list state and mutators. Callers notify the hook of
-//   an external HEAD change (e.g. useCanvasSync's onHeadChanged) by invoking
+//   an external HEAD change (e.g. useDocumentSync's onHeadChanged) by invoking
 //   the returned `refetch`; this hook does not subscribe to any event bus.
 
 export type { BranchMeta }
@@ -187,7 +187,7 @@ export function branchesApi(workspaceId: string, path: string, fetchFn: typeof f
 
 // React hook.
 // Expose refetch so callers can refresh on an externally observed HEAD
-// change (e.g. useCanvasSync's onHeadChanged callback).
+// change (e.g. useDocumentSync's onHeadChanged callback).
 export interface UseBranchesResult {
   state: BranchesState
   loading: boolean
@@ -271,7 +271,7 @@ export function useBranches(
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after
   // the component is gone. There is no window-event subscription here: the
-  // caller (e.g. CanvasPage via useCanvasSync's onHeadChanged option) invokes
+  // caller (e.g. CanvasPage via useDocumentSync's onHeadChanged option) invokes
   // `refetch` directly when it observes an external HEAD change.
   useEffect(() => {
     return () => {

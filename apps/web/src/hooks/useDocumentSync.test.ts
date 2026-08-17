@@ -1,10 +1,10 @@
 /**
- * useCanvasSync unit tests — jsdom layer.
+ * useDocumentSync unit tests — jsdom layer.
  *
  * No Excalidraw mocking: the hook's whole surface is now SpatialCanvas +
  * EditorCommand, driven by a fake CanvasBackend. Per-connection ordering/
  * drain semantics (commit chain, pendingCommitCount, fine-grained writes) are
- * exercised at the nearer canvas-sync-session.test.ts layer; this file
+ * exercised at the nearer document-sync-session.test.ts layer; this file
  * covers the hook's own React wiring: canvas state, subscribe/dispose,
  * keyboard undo/redo, identity events, and exportScene's editor-independent
  * derivation.
@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { applyCommand } from '../components/spatial-editor/commands.js'
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
-import { type UseCanvasSyncResult, useCanvasSync } from './useCanvasSync.js'
+import { type UseDocumentSyncResult, useDocumentSync } from './useDocumentSync.js'
 
 type FakeBackendControl = {
   handlers: CanvasBackendHandlers | null
@@ -112,7 +112,7 @@ async function hydrate(
 
 /** Applies a command through the hook's onChange and drains the commit debounce. */
 async function edit(
-  result: { current: UseCanvasSyncResult },
+  result: { current: UseDocumentSyncResult },
   before: SpatialCanvas,
   command: EditorCommand,
 ): Promise<void> {
@@ -131,7 +131,7 @@ function dispatchCtrlZ(): void {
   )
 }
 
-describe('useCanvasSync', () => {
+describe('useDocumentSync', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -141,7 +141,7 @@ describe('useCanvasSync', () => {
 
   it('seeds canvas to the empty canvas and updates it once a snapshot arrives', async () => {
     const backend = makeFakeBackend()
-    const { result } = renderHook(() => useCanvasSync(backend))
+    const { result } = renderHook(() => useDocumentSync(backend))
 
     expect(result.current.canvas).toEqual(emptyCanvas())
 
@@ -152,13 +152,13 @@ describe('useCanvasSync', () => {
 
   it('sets syncStatus to "connected" when onConnected fires', () => {
     const backend = makeFakeBackend()
-    const { result } = renderHook(() => useCanvasSync(backend))
+    const { result } = renderHook(() => useDocumentSync(backend))
     expect(result.current.syncStatus).toBe('connected')
   })
 
   it('sets syncStatus to "error" when onError fires', () => {
     const backend = makeFakeBackend()
-    const { result } = renderHook(() => useCanvasSync(backend))
+    const { result } = renderHook(() => useDocumentSync(backend))
 
     act(() => {
       backend._ctrl.handlers!.onError?.('storage-failure')
@@ -169,7 +169,7 @@ describe('useCanvasSync', () => {
 
   it('forwards onChange(next, command) straight through to the session', async () => {
     const backend = makeFakeBackend()
-    const { result } = renderHook(() => useCanvasSync(backend))
+    const { result } = renderHook(() => useDocumentSync(backend))
 
     await hydrate(backend, TEXT_CANVAS)
 
@@ -190,7 +190,7 @@ describe('useCanvasSync', () => {
 
   it('calls backend.disconnect on unmount', () => {
     const backend = makeFakeBackend()
-    const { unmount } = renderHook(() => useCanvasSync(backend))
+    const { unmount } = renderHook(() => useDocumentSync(backend))
     unmount()
     expect(backend._ctrl.disconnectCalled).toBe(true)
   })
@@ -198,7 +198,7 @@ describe('useCanvasSync', () => {
   it('disposes the old session and subscribes to the new one on a backend swap', async () => {
     const backendA = makeFakeBackend()
     const backendB = makeFakeBackend()
-    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: backendA as CanvasBackend },
     })
 
@@ -221,7 +221,7 @@ describe('useCanvasSync', () => {
 
   it('clears the locked set when the backend goes away', async () => {
     const backend = makeFakeBackend()
-    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: backend as CanvasBackend | null },
     })
 
@@ -238,7 +238,7 @@ describe('useCanvasSync', () => {
   })
 
   it('does not connect when backend is null, and onChange is a safe no-op', () => {
-    const { result } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: null as CanvasBackend | null },
     })
 
@@ -249,7 +249,7 @@ describe('useCanvasSync', () => {
   })
 
   it('undo/redo keyboard shortcuts are safe no-ops when backend is null', () => {
-    const { result } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: null as CanvasBackend | null },
     })
 
@@ -259,7 +259,7 @@ describe('useCanvasSync', () => {
 
   it('undo republishes the canvas after a keyboard undo', async () => {
     const backend = makeFakeBackend()
-    const { result } = renderHook(() => useCanvasSync(backend))
+    const { result } = renderHook(() => useDocumentSync(backend))
 
     await hydrate(backend, TEXT_CANVAS)
     await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
@@ -272,7 +272,7 @@ describe('useCanvasSync', () => {
 
   it('connects when backend changes from null to a real backend', () => {
     const backend = makeFakeBackend()
-    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: null as CanvasBackend | null },
     })
 
@@ -286,7 +286,7 @@ describe('useCanvasSync', () => {
 
   it('sets syncStatus to "error" and does not resurrect A when switching to a backend whose connect fails', () => {
     const backendA = makeFakeBackend()
-    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
       initialProps: { backend: backendA as CanvasBackend },
     })
 
@@ -325,7 +325,7 @@ describe('useCanvasSync', () => {
     it('delivers onVersionCreated payload to options.onVersionCreated', () => {
       const backend = makeFakeBackend()
       const onVersionCreated = vi.fn()
-      renderHook(() => useCanvasSync(backend, { onVersionCreated }))
+      renderHook(() => useDocumentSync(backend, { onVersionCreated }))
 
       const payload = versionCreatedPayload()
       act(() => {
@@ -340,7 +340,7 @@ describe('useCanvasSync', () => {
       const backendB = makeFakeBackend()
       const onVersionCreated = vi.fn()
       const { rerender } = renderHook(
-        ({ backend }) => useCanvasSync(backend, { onVersionCreated }),
+        ({ backend }) => useDocumentSync(backend, { onVersionCreated }),
         {
           initialProps: { backend: backendA as CanvasBackend },
         },
@@ -359,7 +359,7 @@ describe('useCanvasSync', () => {
     it('passes onHeadChanged payload through to options.onHeadChanged', () => {
       const backend = makeFakeBackend()
       const onHeadChanged = vi.fn()
-      renderHook(() => useCanvasSync(backend, { onHeadChanged }))
+      renderHook(() => useDocumentSync(backend, { onHeadChanged }))
 
       const payload = { head: 'branch-1' }
       act(() => {
@@ -371,7 +371,7 @@ describe('useCanvasSync', () => {
 
     it('sets restoreInProgress/restoreLabel on onRestoreStarted and clears them on onRestoreComplete', () => {
       const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
+      const { result } = renderHook(() => useDocumentSync(backend))
 
       expect(result.current.restoreInProgress).toBe(false)
       expect(result.current.restoreLabel).toBe(null)
@@ -394,7 +394,7 @@ describe('useCanvasSync', () => {
     it('resets restoreInProgress/restoreLabel when the restoring connection is superseded', () => {
       const backendA = makeFakeBackend()
       const backendB = makeFakeBackend()
-      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
         initialProps: { backend: backendA as CanvasBackend },
       })
 
@@ -413,7 +413,7 @@ describe('useCanvasSync', () => {
 
     it('clearLocalUndo() delegates to the session so undo becomes a no-op', async () => {
       const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
+      const { result } = renderHook(() => useDocumentSync(backend))
 
       await hydrate(backend, TEXT_CANVAS)
       await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
@@ -429,7 +429,7 @@ describe('useCanvasSync', () => {
 
     it('sets syncStatus to "error" when onAuthError fires', () => {
       const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
+      const { result } = renderHook(() => useDocumentSync(backend))
 
       act(() => {
         backend._ctrl.handlers!.onAuthError?.()
@@ -441,7 +441,7 @@ describe('useCanvasSync', () => {
     it('drops a stale-generation onAuthError from a torn-down connection', () => {
       const backendA = makeFakeBackend()
       const backendB = makeFakeBackend()
-      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
         initialProps: { backend: backendA as CanvasBackend },
       })
 
@@ -459,7 +459,7 @@ describe('useCanvasSync', () => {
     it('invokes options.onAuthError in addition to setting syncStatus to "error"', () => {
       const backend = makeFakeBackend()
       const onAuthError = vi.fn()
-      const { result } = renderHook(() => useCanvasSync(backend, { onAuthError }))
+      const { result } = renderHook(() => useDocumentSync(backend, { onAuthError }))
 
       act(() => {
         backend._ctrl.handlers!.onAuthError?.()
@@ -473,7 +473,7 @@ describe('useCanvasSync', () => {
       const backend = makeFakeBackend()
       const sendClientReadySpy = vi.spyOn(backend, 'sendClientReady')
 
-      renderHook(() => useCanvasSync(backend))
+      renderHook(() => useDocumentSync(backend))
 
       // Once on connect(), once on the hook's own onEditorReady() call —
       // there is no separate "editor mounted" event to gate on anymore, so
@@ -486,7 +486,7 @@ describe('useCanvasSync', () => {
     it('forwards the payload to the page-supplied onViewportRequest option', () => {
       const backend = makeFakeBackend()
       const onViewportRequest = vi.fn()
-      renderHook(() => useCanvasSync(backend, { onViewportRequest }))
+      renderHook(() => useDocumentSync(backend, { onViewportRequest }))
 
       const payload = { mode: 'fit' as const, requestId: 'req-1' }
       backend._ctrl.handlers!.onViewportRequest(payload)
@@ -496,7 +496,7 @@ describe('useCanvasSync', () => {
 
     it('is a no-op (never throws) with no onViewportRequest option supplied', () => {
       const backend = makeFakeBackend()
-      renderHook(() => useCanvasSync(backend))
+      renderHook(() => useDocumentSync(backend))
 
       expect(() => {
         backend._ctrl.handlers!.onViewportRequest({ mode: 'fit' } as never)
@@ -508,13 +508,13 @@ describe('useCanvasSync', () => {
     it('queues a request (never sent) since this session has no imperative editor handle to serve it', async () => {
       const backend = makeFakeBackend()
       const sendExportResponseSpy = vi.spyOn(backend, 'sendExportResponse')
-      renderHook(() => useCanvasSync(backend))
+      renderHook(() => useDocumentSync(backend))
 
       await act(async () => {
         await backend._ctrl.handlers!.onExportRequest({ requestId: 'req-1' } as never)
       })
 
-      // lane B (canvas-sync-export.ts) owns replacing the Excalidraw-shaped
+      // lane B (document-sync-export.ts) owns replacing the Excalidraw-shaped
       // ExportRequestHandlerDeps this queues against — until then, every
       // export request queues and is never actually served.
       expect(sendExportResponseSpy).not.toHaveBeenCalled()
@@ -535,7 +535,7 @@ describe('useCanvasSync', () => {
     it('does not dispatch doc_changed for the initial snapshot import', async () => {
       const backend = makeFakeBackend()
       const docChanged = listenFor('excalidraw:doc_changed')
-      renderHook(() => useCanvasSync(backend, { identity }))
+      renderHook(() => useDocumentSync(backend, { identity }))
 
       await hydrate(backend)
 
@@ -545,7 +545,7 @@ describe('useCanvasSync', () => {
     it('dispatches doc_changed on a local scene edit commit', async () => {
       const backend = makeFakeBackend()
       const docChanged = listenFor('excalidraw:doc_changed')
-      const { result } = renderHook(() => useCanvasSync(backend, { identity }))
+      const { result } = renderHook(() => useDocumentSync(backend, { identity }))
 
       await hydrate(backend, TEXT_CANVAS)
       await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
@@ -557,7 +557,7 @@ describe('useCanvasSync', () => {
     it('dispatches wb_version_saved with identity detail when a version_created broadcast arrives', () => {
       const backend = makeFakeBackend()
       const versionSaved = listenFor('excalidraw:wb_version_saved')
-      renderHook(() => useCanvasSync(backend, { identity }))
+      renderHook(() => useDocumentSync(backend, { identity }))
 
       act(() => {
         backend._ctrl.handlers!.onVersionCreated(versionCreatedPayload())
@@ -571,7 +571,7 @@ describe('useCanvasSync', () => {
       const backend = makeFakeBackend()
       const docChanged = listenFor('excalidraw:doc_changed')
       const versionSaved = listenFor('excalidraw:wb_version_saved')
-      renderHook(() => useCanvasSync(backend))
+      renderHook(() => useDocumentSync(backend))
 
       await hydrate(backend)
       await act(async () => {
@@ -589,7 +589,7 @@ describe('useCanvasSync', () => {
     it('changing the identity option between renders does not force a backend reconnect', () => {
       const backend = makeFakeBackend()
       const connectSpy = vi.spyOn(backend, 'connect')
-      const { rerender } = renderHook(({ id }) => useCanvasSync(backend, { identity: id }), {
+      const { rerender } = renderHook(({ id }) => useDocumentSync(backend, { identity: id }), {
         initialProps: { id: identity },
       })
 
@@ -603,7 +603,7 @@ describe('useCanvasSync', () => {
   describe('exportScene', () => {
     it("returns a non-empty 'svg' blob derived from the hook's own canvas value, with no editor ref ever supplied", async () => {
       const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
+      const { result } = renderHook(() => useDocumentSync(backend))
 
       await hydrate(backend, TEXT_CANVAS)
 
@@ -619,7 +619,7 @@ describe('useCanvasSync', () => {
 
     it('derives the svg from the empty canvas (still non-null) before any snapshot has arrived', async () => {
       const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
+      const { result } = renderHook(() => useDocumentSync(backend))
 
       const blob = await result.current.exportScene('svg')
 
@@ -629,12 +629,12 @@ describe('useCanvasSync', () => {
   })
 
   describe('type-level: no Excalidraw surface remains', () => {
-    it('UseCanvasSyncResult has no setExcalidrawAPI, and its onChange is assignable to SpatialEditorProps["onChange"]', () => {
-      expectTypeOf<UseCanvasSyncResult>().not.toHaveProperty('setExcalidrawAPI')
-      expectTypeOf<UseCanvasSyncResult['onChange']>().toEqualTypeOf<
+    it('UseDocumentSyncResult has no setExcalidrawAPI, and its onChange is assignable to SpatialEditorProps["onChange"]', () => {
+      expectTypeOf<UseDocumentSyncResult>().not.toHaveProperty('setExcalidrawAPI')
+      expectTypeOf<UseDocumentSyncResult['onChange']>().toEqualTypeOf<
         SpatialEditorProps['onChange']
       >()
-      expectTypeOf<UseCanvasSyncResult['canvas']>().not.toBeAny()
+      expectTypeOf<UseDocumentSyncResult['canvas']>().not.toBeAny()
     })
   })
 })
