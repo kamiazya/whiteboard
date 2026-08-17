@@ -4,7 +4,7 @@ import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
-import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -25,7 +25,8 @@ export function createCanvasDigestTool(deps: ServerDeps) {
     inputSchema: canvasDigestInputSchema,
     outputSchema: sceneDigestSchema,
     async execute(input: CanvasDigestInput): Promise<SceneDigest> {
-      const { canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'wb_scene_digest')
       const scene = composeCanvasScene(canvas, fallbackMeasureText)
       return sceneDigest(scene)
     },

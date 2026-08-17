@@ -60,7 +60,7 @@ const OPERATIONAL_FIELD_ALLOWLIST = new Set<string>([
 // excludes them, but listing the deny-list explicitly makes the
 // intent grep-friendly and gives a future producer that mistakenly
 // adds one of these names to the allow-list a second wall to hit.
-const CANVAS_PLAINTEXT_DENYLIST = new Set<string>([
+const DOCUMENT_PLAINTEXT_DENYLIST = new Set<string>([
   'canvasText',
   'elementText',
   'scene',
@@ -168,7 +168,7 @@ function pickAllowedFields(
   if (!input) return {}
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
-    if (CANVAS_PLAINTEXT_DENYLIST.has(key)) continue
+    if (DOCUMENT_PLAINTEXT_DENYLIST.has(key)) continue
     if (!OPERATIONAL_FIELD_ALLOWLIST.has(key)) continue
     out[key] = scrubValue(redactDiagnosticValue(value, options))
   }

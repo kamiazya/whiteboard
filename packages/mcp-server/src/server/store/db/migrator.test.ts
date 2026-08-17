@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Migrator } from 'kysely'
@@ -105,6 +105,28 @@ describe('runMigrations', () => {
     // The typed guard recognizes it.
     const err = await runMigrations(db).catch((e: unknown) => e)
     expect(isIncompatibleDatabaseError(err)).toBe(true)
+  })
+
+  // 0011-import-fs-blobs walks {dataDir}/blobs/<workspaceId>/canvas — an
+  // unreadable canvas directory (permissions changed on the data dir, a
+  // restrictive umask) rethrows out of the migration with a raw Node
+  // errno error. runMigrations must reframe it the same way it reframes
+  // the corrupted-migrations case, instead of surfacing the bare
+  // "EACCES ... scandir '<path>'" message with no recovery guidance.
+  it('reframes an EACCES readdir failure during migration into an actionable message', async () => {
+    const canvasDir = join(tempDir, 'blobs', 'ws-1', 'canvas')
+    await mkdir(canvasDir, { recursive: true })
+    await writeFile(join(canvasDir, 'doc-a.loro'), 'irrelevant')
+    await chmod(canvasDir, 0o000)
+
+    try {
+      const db = await getDb(tempDir)
+      await expect(runMigrations(db)).rejects.toThrow(/permission|blobs/i)
+      const err = await runMigrations(db).catch((e: unknown) => e)
+      expect((err as { cause?: unknown }).cause).toMatchObject({ code: 'EACCES' })
+    } finally {
+      await chmod(canvasDir, 0o755)
+    }
   })
 
   it('exposes the expected canvas + branches + versions schema after init', async () => {

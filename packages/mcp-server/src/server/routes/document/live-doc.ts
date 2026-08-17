@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import type {
-  CanvasExistsResponse,
+  DocumentExistsResponse,
   UpdateDocumentResponse,
 } from '../../../shared/api-contracts/document.js'
 import { getLogger } from '../../log.js'
@@ -34,7 +34,7 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
 
   onDocumentAction(app, 'get', 'exists', async (c, workspaceId, path) => {
-    const response: CanvasExistsResponse = { exists: await documentExists(workspaceId, path) }
+    const response: DocumentExistsResponse = { exists: await documentExists(workspaceId, path) }
     return c.json(response)
   })
 

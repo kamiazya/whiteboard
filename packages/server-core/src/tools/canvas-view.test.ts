@@ -6,12 +6,16 @@
 // no store of its own — it receives a snapshot and lays it out itself, so a
 // file node's referenced markdown can only reach it if the server puts it in
 // the payload.
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const WORKSPACE_ID = 'ws-1'
 
@@ -23,7 +27,7 @@ async function seedWorkspace(store: FakeDocumentStore) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
-    documentId: CANVAS_ID,
+    documentId: DOCUMENT_ID,
     kind: 'spatial',
   })
   store.documentIndex.seed({
@@ -33,7 +37,7 @@ async function seedWorkspace(store: FakeDocumentStore) {
     kind: 'markdown',
     name: 'Weekly',
   })
-  await seedDoc(store, CANVAS_ID, (doc) => {
+  await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
@@ -68,9 +72,9 @@ describe('canvas_view tool', () => {
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
-    expect(result.documentId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(DOCUMENT_ID)
     // Sorted: node order is whatever `readSpatialCanvas` gives back, not the
     // order they were written in. What this pins is that the whole document
     // reaches the widget, not a projection of it.
@@ -82,7 +86,7 @@ describe('canvas_view tool', () => {
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     const reference = result.references[NOTE_ID]
     expect(reference?.label).toBe('Weekly')
@@ -94,7 +98,7 @@ describe('canvas_view tool', () => {
     // so `references` is schematized rather than passed as unknown — a
     // hand-written type on the widget side is the drift this prevents.
     const parsed = canvasViewOutputSchema.safeParse({
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
       references: { [NOTE_ID]: { label: 'Weekly', body: { type: 'root', children: [] } } },
     })
@@ -103,7 +107,7 @@ describe('canvas_view tool', () => {
 
   test('rejects a reference body that is not a real mdast root', () => {
     const parsed = canvasViewOutputSchema.safeParse({
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
       references: { x: { body: { type: 'nonsense' } } },
     })
@@ -115,10 +119,10 @@ describe('canvas_view tool', () => {
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
       path: 'board',
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       kind: 'spatial',
     })
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
         nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
@@ -127,8 +131,24 @@ describe('canvas_view tool', () => {
     })
     const tool = createCanvasViewTool(makeDeps(store))
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.references).toEqual({})
+  })
+
+  test('refuses a markdown document instead of returning an empty scene to the widget', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, '# Real prose')
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
+    ).rejects.toMatchObject({
+      name: 'NotASpatialDocumentError',
+      message: expect.stringMatching(/markdown.*wb_document_get/s),
+    })
   })
 })

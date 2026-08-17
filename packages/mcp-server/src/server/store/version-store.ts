@@ -30,7 +30,7 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // entry. CRDT history cannot be forgotten, so route-level restore writes
 // reverse ops on top of the live doc rather than overwriting it.
 
-const MAX_AUTO_PER_CANVAS = 50
+const MAX_AUTO_PER_DOCUMENT = 50
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 
 export interface OperatorInfo {
@@ -464,8 +464,8 @@ export class FileVersionStore implements VersionStore {
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
       .execute()
-    if (autos.length <= MAX_AUTO_PER_CANVAS) return
-    const toRemove = autos.slice(MAX_AUTO_PER_CANVAS).map((r) => r.id)
+    if (autos.length <= MAX_AUTO_PER_DOCUMENT) return
+    const toRemove = autos.slice(MAX_AUTO_PER_DOCUMENT).map((r) => r.id)
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')

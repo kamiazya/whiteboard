@@ -14,7 +14,7 @@ import { createWorkspacesRouter } from './document/workspaces.js'
 
 export { createAutoVersionTrigger, setBroadcastFn }
 
-export interface CanvasRouterOptions {
+export interface DocumentRouterOptions {
   // Allow tests to replace the store. Production uses FileVersionStore.
   versionStore?: VersionStore
   // Auto-version interval in milliseconds. Tests can reduce it.
@@ -30,7 +30,7 @@ export interface CanvasRouterOptions {
 // optimize). Split by concern so each is independently testable; this file
 // only wires shared dependencies (versionStore, auto-version trigger,
 // auto-compact) between them.
-export function createDocumentRouter(options: CanvasRouterOptions = {}) {
+export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   const app = new Hono()
   const versionStore = options.versionStore ?? new FileVersionStore()
   const autoInterval = options.autoVersionIntervalMs ?? AUTO_VERSION_INTERVAL_MS

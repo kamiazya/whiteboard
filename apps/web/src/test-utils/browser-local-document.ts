@@ -13,7 +13,7 @@ import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 
 const DB_NAME = 'whiteboard'
-const CANVAS_STORE = 'loroDocuments'
+const DOCUMENT_STORE = 'loroDocuments'
 
 type DocumentEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
 
@@ -37,8 +37,8 @@ async function withDocumentStore<T>(read: (store: IDBObjectStore) => IDBRequest)
     openReq.onerror = () => reject(openReq.error)
     openReq.onsuccess = () => {
       const db = openReq.result
-      const tx = db.transaction(CANVAS_STORE, 'readonly')
-      const readReq = read(tx.objectStore(CANVAS_STORE))
+      const tx = db.transaction(DOCUMENT_STORE, 'readonly')
+      const readReq = read(tx.objectStore(DOCUMENT_STORE))
       readReq.onsuccess = () => {
         db.close()
         resolve(readReq.result as T)

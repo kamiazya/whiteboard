@@ -10,7 +10,7 @@ import {
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
 
-const VALID_CANVAS_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const VALID_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const VALID_WORKSPACE_ID = 'my-workspace'
 
 describe('wbDocumentCreateInputSchema', () => {
@@ -128,7 +128,7 @@ describe('wbDocumentCreateInputSchema', () => {
 describe('wbDocumentCreateOutputSchema', () => {
   it('accepts valid output', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
     })
     expect(result.success).toBe(true)
@@ -144,7 +144,7 @@ describe('wbDocumentCreateOutputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
       extra: 1,
     })
@@ -156,7 +156,7 @@ describe('wbDocumentResolveInputSchema', () => {
   it('accepts valid input', () => {
     const result = wbDocumentResolveInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(true)
   })
@@ -170,7 +170,7 @@ describe('wbDocumentResolveInputSchema', () => {
 
   it('rejects missing workspaceId', () => {
     const result = wbDocumentResolveInputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(false)
   })
@@ -178,7 +178,7 @@ describe('wbDocumentResolveInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentResolveInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       extra: true,
     })
     expect(result.success).toBe(false)
@@ -188,7 +188,7 @@ describe('wbDocumentResolveInputSchema', () => {
 describe('wbDocumentResolveOutputSchema', () => {
   it('accepts valid canvas detail', () => {
     const result = wbDocumentResolveOutputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
     })
     expect(result.success).toBe(true)
@@ -196,14 +196,14 @@ describe('wbDocumentResolveOutputSchema', () => {
 
   it('rejects a missing path', () => {
     const result = wbDocumentResolveOutputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(false)
   })
 
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentResolveOutputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
       extra: true,
     })
@@ -246,7 +246,7 @@ describe('wbDocumentListOutputSchema', () => {
   it('accepts array with valid canvas details', () => {
     const result = wbDocumentListOutputSchema.safeParse({
       documents: [
-        { documentId: VALID_CANVAS_ID, path: 'doc-a' },
+        { documentId: VALID_DOCUMENT_ID, path: 'doc-a' },
         { documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'doc-b' },
       ],
     })
@@ -255,7 +255,7 @@ describe('wbDocumentListOutputSchema', () => {
 
   it('rejects a canvas detail with no path', () => {
     const result = wbDocumentListOutputSchema.safeParse({
-      documents: [{ documentId: VALID_CANVAS_ID }],
+      documents: [{ documentId: VALID_DOCUMENT_ID }],
     })
     expect(result.success).toBe(false)
   })
@@ -273,14 +273,14 @@ describe('wbDocumentDeleteInputSchema', () => {
   it('accepts valid input', () => {
     const result = wbDocumentDeleteInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(true)
   })
 
   it('rejects missing workspaceId', () => {
     const result = wbDocumentDeleteInputSchema.safeParse({
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(false)
   })
@@ -295,7 +295,7 @@ describe('wbDocumentDeleteInputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentDeleteInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
-      documentId: VALID_CANVAS_ID,
+      documentId: VALID_DOCUMENT_ID,
       force: true,
     })
     expect(result.success).toBe(false)
@@ -316,7 +316,7 @@ describe('wbDocumentDeleteOutputSchema', () => {
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentDeleteOutputSchema.safeParse({
       deleted: true,
-      id: VALID_CANVAS_ID,
+      id: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(false)
   })

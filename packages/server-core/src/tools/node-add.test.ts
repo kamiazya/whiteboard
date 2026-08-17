@@ -13,7 +13,7 @@ import { loadDocument } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createNodeAddTool, NodeAlreadyExistsError } from './node-add.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(documentStore: FakeDocumentStore) {
@@ -33,20 +33,20 @@ const RECT = {
 describe('wb_node_add', () => {
   test('adds a node to an empty spatial canvas', async () => {
     const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
     })
     const tool = createNodeAddTool(makeDeps(store))
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       node: RECT,
     })
 
     expect(result.node.id).toBe('n1')
-    const canvas = (await loadDocument(makeDeps(store), CANVAS_ID)).canvas
+    const canvas = (await loadDocument(makeDeps(store), DOCUMENT_ID)).canvas
     expect(canvas.nodes).toHaveLength(1)
   })
 
@@ -54,26 +54,26 @@ describe('wb_node_add', () => {
     // The gap this closes is that the only previous way to get a node in was
     // wb_document_set, which replaced the whole canvas. Adding must add.
     const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [RECT], edges: [] })
     })
     const tool = createNodeAddTool(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       node: { ...RECT, id: 'n2', text: 'second' },
     })
 
-    const canvas = (await loadDocument(makeDeps(store), CANVAS_ID)).canvas
+    const canvas = (await loadDocument(makeDeps(store), DOCUMENT_ID)).canvas
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['n1', 'n2'])
   })
 
   test('refuses an id that is already taken rather than overwriting it', async () => {
     const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [RECT], edges: [] })
     })
     const tool = createNodeAddTool(makeDeps(store))
@@ -81,12 +81,12 @@ describe('wb_node_add', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         node: { ...RECT, text: 'clobber' },
       }),
     ).rejects.toThrow(NodeAlreadyExistsError)
 
-    const canvas = (await loadDocument(makeDeps(store), CANVAS_ID)).canvas
+    const canvas = (await loadDocument(makeDeps(store), DOCUMENT_ID)).canvas
     expect(canvas.nodes).toHaveLength(1)
     if (canvas.nodes[0].type === 'text') expect(canvas.nodes[0].text).toBe('hello')
   })
@@ -96,31 +96,31 @@ describe('wb_node_add', () => {
     // added beside it is content no OKF projection can represent — nodes are
     // JSON Canvas (ADR-0009 decision 3).
     const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
     })
     const tool = createNodeAddTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, node: RECT }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
-    expect((await loadDocument(makeDeps(store), CANVAS_ID)).canvas.nodes).toHaveLength(0)
+    expect((await loadDocument(makeDeps(store), DOCUMENT_ID)).canvas.nodes).toHaveLength(0)
   })
 
   test('a document predating kinds is recorded as spatial by the write', async () => {
     const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [], edges: [] })
     })
     const tool = createNodeAddTool(makeDeps(store))
 
-    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, node: RECT })
 
-    expect(readDocumentKind((await loadDocument(makeDeps(store), CANVAS_ID)).doc)).toBe('spatial')
+    expect(readDocumentKind((await loadDocument(makeDeps(store), DOCUMENT_ID)).doc)).toBe('spatial')
   })
 
   test('rejects when the canvas is not in the workspace', async () => {
@@ -128,7 +128,7 @@ describe('wb_node_add', () => {
     const tool = createNodeAddTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, node: RECT }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, node: RECT }),
     ).rejects.toThrow()
   })
 })

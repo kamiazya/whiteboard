@@ -38,7 +38,7 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
-import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
+import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
 import { createOpentypeMeasureText } from './measure-text.js'
 
 // Export never has its own theme switch (the composition root always
@@ -165,18 +165,23 @@ function buildSvg(
 async function buildExporter(): Promise<HeadlessExporter> {
   const measure = await createOpentypeMeasureText()
   const { Resvg } = await import('@resvg/resvg-js')
-  const fontPath = await resolveExportFontFile()
-  if (!fontPath) {
+  const faces = await resolveExportFontFaces()
+  if (!faces.regular) {
     // Silent system-font fallback would mask a regression that diverges
     // visually across machines, so log it once when the singleton is
     // built. Production daemons typically run with the bundled TTF.
     log.warning('Roboto TTF not found; rendering will fall back to system fonts.')
   }
-  // Skip resvg's system-font scan when we have the vendored font in hand.
+  // Skip resvg's system-font scan when we have the vendored fonts in hand.
   // The scan dominates first-call latency (~1s+) and no other family
-  // appears in the SVG canvas-render produces.
-  const fontOption = fontPath
-    ? { fontFiles: [fontPath], loadSystemFonts: false, defaultFontFamily: EXPORT_FONT_FAMILY }
+  // appears in the SVG canvas-render produces. All four faces register:
+  // resvg selects among them by the font-weight/font-style the SVG
+  // declares, and it does NOT synthesize a face it was not given.
+  const fontFiles = [faces.regular, faces.bold, faces.italic, faces.boldItalic].filter(
+    (path): path is string => path !== null,
+  )
+  const fontOption = faces.regular
+    ? { fontFiles, loadSystemFonts: false, defaultFontFamily: EXPORT_FONT_FAMILY }
     : { loadSystemFonts: true }
 
   return {

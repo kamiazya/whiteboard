@@ -45,7 +45,7 @@ export class ConflictError extends Error {
 // a document's path does not move blobs around.
 //
 // The `document/` segment matches the entity (ADR-0009). Migration
-// `0011-document-blob-dir` moves an existing tree off the older `canvas/`
+// `0012-document-blob-dir` moves an existing tree off the older `canvas/`
 // spelling at boot, so this module only ever needs to know the one name.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')

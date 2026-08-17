@@ -143,7 +143,7 @@ describe('layoutSpatialCanvas properties (PBT)', () => {
  * A fixed (not fc-generated) resolver keyed off `spatialNodeArb`'s file
  * pool: deterministic per file, so the property below exercises every
  * `composeFileFacets` path (usable card, degrades-to-nothing, no match)
- * across generated canvases without needing its own arbitrary.
+ * across generated documents without needing its own arbitrary.
  */
 function fakeResolveFacets(ref: string): ResolvedReference | undefined {
   if (ref === 'a.md') {
@@ -200,7 +200,7 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
 
 /**
  * Keyed off the same `spatialNodeArb` file pool as the facet resolver
- * above, so generated canvases exercise every `composeFileMarkdown` path:
+ * above, so generated documents exercise every `composeFileMarkdown` path:
  * a body that renders, an empty body that degrades, and a reference the
  * resolver does not know.
  */

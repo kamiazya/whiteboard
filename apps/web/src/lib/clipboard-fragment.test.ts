@@ -29,6 +29,19 @@ describe('extractClipboardFragment', () => {
     expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
   })
 
+  it('a cut extraction records boundary edges — the cut remembers its own cut surface', () => {
+    const fragment = extractClipboardFragment(canvas, new Set(['a', 'b']), { cutId: 'cut-1' })
+    expect(fragment.edges.map((edge) => edge.id)).toEqual(['ab'])
+    // 'bc' crosses the border (b in, c out): carried as a boundary edge so a
+    // same-canvas paste can reconnect it; a copy never records it.
+    expect(fragment.cut).toEqual({
+      id: 'cut-1',
+      boundaryEdges: [{ id: 'bc', fromNode: 'b', toNode: 'c' }],
+    })
+    expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
+    expect(extractClipboardFragment(canvas, new Set(['a', 'b'])).cut).toBeUndefined()
+  })
+
   it('an empty or unknown selection yields an empty (still valid) fragment', () => {
     const fragment = extractClipboardFragment(canvas, new Set(['ghost']))
     expect(fragment.nodes).toEqual([])

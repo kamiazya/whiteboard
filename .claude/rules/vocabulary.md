@@ -137,6 +137,15 @@ the wire format with it. User-visible UI copy still says "canvas" ("New
 canvas", "Canvas actions"): what the product calls a thing to its users is a
 product decision, not a code-vocabulary one, and this rule does not reach it.
 
+**One container-noun use is still open, deliberately.** The wiki-link scheme
+`[[canvas:<ULID>]]` (`CANVAS_ID_PREFIX` in `codec/src/references/resolve.ts`,
+emitted by `resolve-for-export.ts`) names the container, so by this rule it
+should be `document:`. It is left alone because it is the only one written
+into a document's own free-text BODY: there is no schema to migrate, so
+changing it silently breaks every link a user already typed. That is a
+product decision about content, not a code-vocabulary one — decide it
+explicitly rather than sweeping it.
+
 One duplication surfaced and was NOT merged, because collapsing it changes
 behaviour rather than names: three separate "not found" errors existed, two of
 them meaning the same thing. `render/load-spatial-canvas.ts`'s is now
@@ -195,7 +204,7 @@ will trust the next time it fires. Same reason `canvas` will never qualify.
 are gone — they are `onOpenDocument` now.)
 
 The blob tree's path segment is DONE: `{dataDir}/blobs/{workspaceId}/canvas/`
-is now `.../document/`, moved by migration `0011-document-blob-dir`. Two
+is now `.../document/`, moved by migration `0012-document-blob-dir`. Two
 things about it are worth knowing. It was recorded here as hardcoded by
 "`document-store.ts` and `file-gc-sweeper.ts` both", and that was wrong —
 the sweeper only mentions the layout in a comment and never joins the

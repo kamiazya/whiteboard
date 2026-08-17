@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ProviderState } from '../provider.js'
 
-export interface WhiteboardCommandCanvasIdentity {
+export interface WhiteboardCommandDocumentIdentity {
   workspaceId?: string
   documentId: string
   name: string
@@ -12,7 +12,7 @@ export interface WhiteboardCommandCanvasIdentity {
 // ref instead.
 export interface WhiteboardCommandDeps {
   provider: ProviderState
-  canvas: WhiteboardCommandCanvasIdentity | null
+  canvas: WhiteboardCommandDocumentIdentity | null
 }
 
 export type CommandErrorCode = 'invalid-input' | 'invalid-provider-state'

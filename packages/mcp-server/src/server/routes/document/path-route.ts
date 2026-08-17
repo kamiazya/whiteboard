@@ -7,10 +7,14 @@ import {
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 
-export const CANVAS_WILDCARD = '/api/w/:workspaceId/document/*'
+export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
 
-type CanvasHandler = (c: Context, workspaceId: string, path: string) => Promise<Response> | Response
-type CanvasFileHandler = (
+type DocumentHandler = (
+  c: Context,
+  workspaceId: string,
+  path: string,
+) => Promise<Response> | Response
+type DocumentFileHandler = (
   c: Context,
   workspaceId: string,
   path: string,
@@ -53,7 +57,7 @@ export function onDocumentAction(
   app: Hono,
   method: 'get' | 'post' | 'put',
   action: string,
-  handler: CanvasHandler,
+  handler: DocumentHandler,
   ...middleware: MiddlewareHandler[]
 ): void {
   const dispatch = async (c: Context, next: Next) => {
@@ -62,14 +66,14 @@ export function onDocumentAction(
     if (parsed === null || path === null) return next()
     return validated(c, parsed.workspaceId, path) ?? handler(c, parsed.workspaceId, path)
   }
-  app[method](CANVAS_WILDCARD, ...(middleware as []), dispatch)
+  app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
 }
 
 /** Same, for the `<document path>/file/<fileId>` tail. */
 export function onDocumentFile(
   app: Hono,
   method: 'get' | 'put',
-  handler: CanvasFileHandler,
+  handler: DocumentFileHandler,
   ...middleware: MiddlewareHandler[]
 ): void {
   const dispatch = async (c: Context, next: Next) => {
@@ -81,14 +85,14 @@ export function onDocumentFile(
       handler(c, parsed.workspaceId, file.path, file.fileId)
     )
   }
-  app[method](CANVAS_WILDCARD, ...(middleware as []), dispatch)
+  app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
 }
 
-export const CANVASES_WILDCARD = '/api/workspaces/:workspaceId/documents/*'
+export const DOCUMENTS_WILDCARD = '/api/workspaces/:workspaceId/documents/*'
 
-const CANVASES_PREFIX = /^\/api\/workspaces\/([^/]+)\/documents\/(.+)$/
+const DOCUMENTS_PREFIX = /^\/api\/workspaces\/([^/]+)\/documents\/(.+)$/
 
-type CanvasesHandler = (
+type DocumentsHandler = (
   c: Context,
   workspaceId: string,
   path: string,
@@ -108,12 +112,12 @@ export function onDocumentsRoute(
   app: Hono,
   method: 'get' | 'post' | 'put' | 'delete' | 'patch',
   suffixPattern: string[],
-  handler: CanvasesHandler,
+  handler: DocumentsHandler,
   options: { badRequest?: 'legacy' | 'problem-details' } = {},
   ...middleware: MiddlewareHandler[]
 ): void {
   const dispatch = async (c: Context, next: Next) => {
-    const match = c.req.path.match(CANVASES_PREFIX)
+    const match = c.req.path.match(DOCUMENTS_PREFIX)
     if (match === null) return next()
     const workspaceId = decodePathSegment(match[1] ?? '')
     const rawTail = (match[2] ?? '').replace(/\/$/, '').split('/')
@@ -134,7 +138,7 @@ export function onDocumentsRoute(
       validated(c, workspaceId, path, options.badRequest) ?? handler(c, workspaceId, path, params)
     )
   }
-  app[method](CANVASES_WILDCARD, ...(middleware as []), dispatch)
+  app[method](DOCUMENTS_WILDCARD, ...(middleware as []), dispatch)
 }
 
 function decodePathSegment(segment: string): string | null {

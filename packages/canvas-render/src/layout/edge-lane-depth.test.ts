@@ -56,7 +56,7 @@ describe('stub lane depth for shared sides', () => {
     expect(verticalOverlapLength(orange.path, red.path)).toBe(0)
   })
 
-  it('a lone end keeps the exact 20px stub — unshared canvases are unchanged', () => {
+  it('a lone end keeps the exact 20px stub — unshared documents are unchanged', () => {
     const pair = [node('a', 0, 0, 100, 100), node('b', 300, 300, 100, 100)]
     const e: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
     const anchors = assignEdgeAnchors(pair, [e])

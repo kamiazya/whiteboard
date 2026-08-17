@@ -1,6 +1,6 @@
 import type { OutputPathError } from '../output-path.js'
 
-export type CanvasOutputPathErrorBody = {
+export type DocumentOutputPathErrorBody = {
   status: 400 | 409
   body: { error: string; message: string }
 }
@@ -14,7 +14,7 @@ export type CanvasOutputPathErrorBody = {
 export function toDocumentOutputPathErrorBody(
   err: OutputPathError,
   workspaceId: string,
-): CanvasOutputPathErrorBody {
+): DocumentOutputPathErrorBody {
   if (err.code === 'output_exists') {
     return { status: 409, body: { error: err.code, message: 'Output file already exists.' } }
   }

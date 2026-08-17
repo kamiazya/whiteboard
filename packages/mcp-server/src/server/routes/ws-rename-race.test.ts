@@ -14,7 +14,7 @@ vi.mock('../config.js', () => ({
 }))
 
 // Mock doc-cache so getDoc can be gated to control interleaving against a
-// concurrent rename, mirroring canvas.test.ts's phantom-duplicate pin.
+// concurrent rename, mirroring canvas/workspaces.test.ts's phantom-duplicate pin.
 vi.mock('../store/doc-cache.js', async () => {
   const actual =
     await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')

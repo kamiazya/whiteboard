@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { syncFullscreenHash } from './canvas-fullscreen-hash.js'
 
-// The CanvasPage effect that mirrors `isFullscreen` into the URL hash used
+// The DocumentPage effect that mirrors `isFullscreen` into the URL hash used
 // to clobber any other hash on mount, breaking the add-library import
 // flow that opens the canvas with `#addLibrary=…`. The contract this
 // helper enforces:

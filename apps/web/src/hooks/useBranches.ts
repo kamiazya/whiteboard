@@ -271,7 +271,7 @@ export function useBranches(
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after
   // the component is gone. There is no window-event subscription here: the
-  // caller (e.g. CanvasPage via useDocumentSync's onHeadChanged option) invokes
+  // caller (e.g. DocumentPage via useDocumentSync's onHeadChanged option) invokes
   // `refetch` directly when it observes an external HEAD change.
   useEffect(() => {
     return () => {

@@ -73,6 +73,37 @@ describe('clipboardFragmentSchema', () => {
     ).toBe(false)
   })
 
+  it('accepts a cut fragment whose boundary edges each cross the selection border', () => {
+    const fragment = {
+      type: 'whiteboard/clipboard',
+      version: 1,
+      nodes: [NODE],
+      edges: [],
+      cut: {
+        id: 'cut-1',
+        // n1 is in the fragment; 'outside' is the peer left on the canvas.
+        boundaryEdges: [{ id: 'e-b', fromNode: 'n1', toNode: 'outside' }],
+      },
+    }
+    expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
+  })
+
+  it('rejects a boundary edge that does not cross the border (both endpoints in, or none)', () => {
+    const base = { type: 'whiteboard/clipboard', version: 1, nodes: [NODE, NODE2], edges: [] }
+    expect(
+      clipboardFragmentSchema.safeParse({
+        ...base,
+        cut: { id: 'cut-1', boundaryEdges: [{ id: 'e-b', fromNode: 'n1', toNode: 'n2' }] },
+      }).success,
+    ).toBe(false)
+    expect(
+      clipboardFragmentSchema.safeParse({
+        ...base,
+        cut: { id: 'cut-1', boundaryEdges: [{ id: 'e-b', fromNode: 'x', toNode: 'y' }] },
+      }).success,
+    ).toBe(false)
+  })
+
   it('rejects extra keys and malformed file assets (strict envelope)', () => {
     expect(
       clipboardFragmentSchema.safeParse({

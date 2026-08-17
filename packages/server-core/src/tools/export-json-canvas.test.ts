@@ -4,7 +4,7 @@ import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 const NODE_WITH_EXTENSION = {
@@ -28,12 +28,12 @@ function makeDeps(documentStore: FakeDocumentStore) {
 describe('exportJsonCanvas', () => {
   test('strict mode drops the x-whiteboard extension key', async () => {
     const store = new FakeDocumentStore()
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
     const result = await exportJsonCanvas(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       options: { strict: true },
     })
     const parsed = JSON.parse(result.json)
@@ -43,12 +43,12 @@ describe('exportJsonCanvas', () => {
 
   test('extended mode (default) round-trips the x-whiteboard extension losslessly', async () => {
     const store = new FakeDocumentStore()
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
     })
     const result = await exportJsonCanvas(makeDeps(store), {
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
     })
     const parsed = JSON.parse(result.json)
 
@@ -62,7 +62,7 @@ describe('exportJsonCanvas', () => {
     await expect(
       exportJsonCanvas(makeDeps(new FakeDocumentStore()), {
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
       }),
     ).rejects.toThrow(SnapshotNotFoundError)
   })

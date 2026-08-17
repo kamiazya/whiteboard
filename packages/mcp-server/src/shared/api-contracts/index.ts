@@ -34,8 +34,8 @@ export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime
 
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
-  wbDocumentListOutputSchema as _listCanvasesV1ResponseSchema,
+  wbDocumentListOutputSchema as _listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { z as _z } from 'zod'
 export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
-export type ListDocumentsV1Response = _z.infer<typeof _listCanvasesV1ResponseSchema>
+export type ListDocumentsV1Response = _z.infer<typeof _listDocumentsV1ResponseSchema>

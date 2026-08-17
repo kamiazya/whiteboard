@@ -80,7 +80,7 @@ export type LinkDialogState =
   | { readonly mode: 'create'; readonly point?: Point }
   | { readonly mode: 'edit'; readonly nodeId: string }
 
-export type CanvasPickerState =
+export type DocumentPickerState =
   | { readonly mode: 'create'; readonly point?: Point }
   | { readonly mode: 'retarget'; readonly nodeId: string }
 
@@ -102,7 +102,7 @@ export interface CanvasContextMenuProps {
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly fileRefOptions?: readonly FileRefOption[]
-  readonly setDocumentPicker: (state: CanvasPickerState | null) => void
+  readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   readonly onAddImage?: (file: File) => Promise<string | undefined>
   readonly pendingImagePointRef: MutableRefObject<Point | null>
   readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
@@ -118,7 +118,8 @@ export interface CanvasContextMenuProps {
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
   readonly copySelection: () => ClipboardFragment | null
-  readonly deleteSelectionAsBatch: () => boolean
+  /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
+  readonly cutSelection: () => ClipboardFragment | null
   readonly duplicateSelection: () => boolean
   readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
 }
@@ -157,7 +158,7 @@ export function CanvasContextMenu({
   onOpenFileRef,
   openLinkNode,
   copySelection,
-  deleteSelectionAsBatch,
+  cutSelection,
   duplicateSelection,
   reorderSelection,
 }: CanvasContextMenuProps) {
@@ -567,8 +568,9 @@ export function CanvasContextMenu({
           label: 'Cut',
           icon: <Scissors />,
           onSelect: () => {
-            // Menu path mirrors the native cut: copy, then remove.
-            if (copySelection() !== null) deleteSelectionAsBatch()
+            // The cut defers its delete: cutSelection holds the selection as
+            // a ghost until the paste resolves it.
+            cutSelection()
           },
         })
         verbs.push({

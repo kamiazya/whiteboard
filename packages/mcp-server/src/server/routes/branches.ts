@@ -13,6 +13,7 @@ import {
   setHeadRequestSchema,
 } from '../../shared/api-contracts/branches.js'
 import type { ApiErrorBody } from '../../shared/api-contracts/errors.js'
+import type { PerformMergeHookResult } from '../store/branch-merge.js'
 import {
   BranchConflictError,
   BranchNotFoundError,
@@ -57,25 +58,7 @@ export interface CreateBranchesRouterOptions {
     workspaceId: string,
     path: string,
     args: { source: string; into: string; dryRun: boolean },
-  ) => Promise<{
-    previewElementCount: number
-    // Optional target/source counts for the three MergeDialog columns.
-    targetElementCount?: number
-    sourceElementCount?: number
-    badges: Array<Record<string, unknown>>
-    committed: boolean
-    // For dry runs, include alive elements so MergeDialog can render a read-only preview.
-    previewElements?: unknown[]
-    // Element ids for post-merge UI highlighting.
-    newElementIds?: string[]
-    changedElementIds?: string[]
-    conflictElementIds?: string[]
-    // Version id of the pre-merge snapshot used for undo after commit.
-    preMergeVersionId?: string
-    // Post-merge cleanup metadata returned by app.ts.
-    switchedHead?: { from: string; to: string }
-    deletedSource?: string
-  }>
+  ) => Promise<PerformMergeHookResult>
   // Keep version-store branchName values in sync during PATCH /branches/:name rename.
   // If omitted, only branch metadata is renamed.
   renameInVersions?: (

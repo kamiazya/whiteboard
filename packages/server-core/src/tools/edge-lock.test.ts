@@ -10,7 +10,7 @@ import {
 import { createEdgeLockTool } from './edge-lock.js'
 import { EdgeNotFoundError } from './errors.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 const CANVAS: SpatialCanvas = {
@@ -25,12 +25,12 @@ const CANVAS: SpatialCanvas = {
 }
 
 async function seedCanvas(documentStore: FakeDocumentStore): Promise<void> {
-  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'document', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: DOCUMENT_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -43,7 +43,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
 
 async function loadLocks(documentStore: FakeDocumentStore): Promise<ReadonlySet<string>> {
   const stored = await documentStore.loadSnapshot({
-    docRef: { kind: 'document', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: DOCUMENT_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
@@ -59,16 +59,16 @@ describe('wb_edge_lock tool', () => {
 
     const locked = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       edgeId: 'e1',
       locked: true,
     })
-    expect(locked).toEqual({ documentId: CANVAS_ID, edgeId: 'e1', locked: true })
+    expect(locked).toEqual({ documentId: DOCUMENT_ID, edgeId: 'e1', locked: true })
     expect(await loadLocks(documentStore)).toEqual(new Set(['e1']))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       edgeId: 'e1',
       locked: false,
     })
@@ -83,7 +83,7 @@ describe('wb_edge_lock tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         edgeId: 'ghost',
         locked: true,
       }),
@@ -97,7 +97,7 @@ describe('wb_edge_lock tool', () => {
     const tool = createEdgeLockTool(makeDeps(documentStore))
     const input = {
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       edgeId: 'e2',
       locked: true,
     } as const
@@ -113,13 +113,13 @@ describe('wb_edge_lock tool', () => {
     const tool = createEdgeLockTool(makeDeps(documentStore))
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       edgeId: 'e1',
       locked: true,
     })
 
     const stored = await documentStore.loadSnapshot({
-      docRef: { kind: 'document', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: DOCUMENT_ID },
     })
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(stored!.manifest, stored!.chunks))

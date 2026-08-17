@@ -11,7 +11,7 @@ vi.mock('../../../config.js', () => ({
   getDataDir: () => dataDir,
 }))
 
-const { migration } = await import('./0011-document-blob-dir.js')
+const { migration } = await import('./0012-document-blob-dir.js')
 
 const OLD_SEGMENT = 'canvas'
 const NEW_SEGMENT = 'document'
@@ -35,7 +35,7 @@ beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-blob-dir-'))
 })
 
-describe('0011-document-blob-dir', () => {
+describe('0012-document-blob-dir', () => {
   it('moves every workspace‚Äôs blobs to the new segment, contents intact', async () => {
     // Two workspaces, because the walk is per-workspace: a migration that
     // only moved the first would leave the rest unreadable, and the store has

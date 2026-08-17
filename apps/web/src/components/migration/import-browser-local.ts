@@ -36,11 +36,11 @@ export function mergeToSnapshot(snapshot: Uint8Array, deltas: Uint8Array[]): Uin
   return doc.export({ mode: 'snapshot' })
 }
 
-export type ImportOneCanvasResult =
+export type ImportOneDocumentResult =
   | { kind: 'ok'; path: string }
   | { kind: 'failed'; reason: string }
 
-interface ImportOneCanvasOptions {
+interface ImportOneDocumentOptions {
   fetch: typeof globalThis.fetch
   daemonBaseUrl: string
   workspaceId: string
@@ -79,8 +79,8 @@ async function parseErrorTitle(res: Response): Promise<string> {
  * deletes the source browser-local data — the caller owns that lifecycle.
  */
 export async function importOneDocument(
-  options: ImportOneCanvasOptions,
-): Promise<ImportOneCanvasResult> {
+  options: ImportOneDocumentOptions,
+): Promise<ImportOneDocumentResult> {
   try {
     return await importOneDocumentUnsafe(options)
   } catch {
@@ -92,8 +92,8 @@ export async function importOneDocument(
 }
 
 async function importOneDocumentUnsafe(
-  options: ImportOneCanvasOptions,
-): Promise<ImportOneCanvasResult> {
+  options: ImportOneDocumentOptions,
+): Promise<ImportOneDocumentResult> {
   const { fetch, daemonBaseUrl, workspaceId, documentName, documentKind, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {

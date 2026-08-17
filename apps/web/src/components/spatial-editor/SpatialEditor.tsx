@@ -93,25 +93,31 @@ import {
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
-import { readClipboardFragment, writeClipboardFragment } from '../../lib/clipboard-store.js'
+import {
+  readClipboardFragment,
+  recordedReconnection,
+  recordReconnection,
+  writeClipboardFragment,
+} from '../../lib/clipboard-store.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
-  type CanvasPickerState,
   type ContextMenuTarget,
+  type DocumentPickerState,
   type LinkDialogState,
 } from './CanvasContextMenu.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
-import { applyCommand, buildFragmentInsertCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand, DUPLICATE_OFFSET_PX } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isFollowableUrl } from './followable-url.js'
+import { GhostOverlay } from './GhostOverlay.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import {
   distanceToPolyline,
@@ -153,6 +159,7 @@ import {
   resolveSpawnPoint,
   textNodeDefaults,
 } from './node-factories.js'
+import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import {
@@ -780,12 +787,38 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [scene],
     )
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+    /**
+     * A cut waiting for its paste — the front half of a move. Pure view
+     * state (never persisted or synced): the nodes stay in the document,
+     * dimmed by GhostOverlay, until a same-canvas paste MOVES them, or the
+     * hold is lifted (Escape, a newer copy/cut, or any edit that touches a
+     * held node). `snapshot` records each held node's full serialized value
+     * at cut time so ANY change — a drag, a text or color edit, a remote
+     * write, a delete — reads as "someone touched it" and cancels the hold;
+     * nothing is ever lost by a cancel, because nothing was deleted.
+     */
+    const [pendingCut, setPendingCut] = useState<{
+      readonly cutId: string
+      readonly snapshot: ReadonlyMap<string, string>
+    } | null>(null)
+    useEffect(() => {
+      // Anyone touching a held node — local drag, remote edit, delete —
+      // lifts the hold; the veil must never dim a node that changed under
+      // it. The move resolution clears the hold before it applies, so its
+      // own geometry change never races this.
+      if (pendingCut === null) return
+      const touched = [...pendingCut.snapshot].some(([id, frozen]) => {
+        const node = canvas.nodes.find((n) => n.id === id)
+        return node === undefined || JSON.stringify(node) !== frozen
+      })
+      if (touched) setPendingCut(null)
+    }, [canvas, pendingCut])
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
-    const [canvasPicker, setDocumentPicker] = useState<CanvasPickerState | null>(null)
+    const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -1793,6 +1826,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the press; a DOUBLE one creates a node here (resolved at the
           // release, consistent with the node-edit double-press rule).
           if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          // Tap-to-place (touch only): while a cut is pending, a stationary
+          // empty tap answers it HERE — one tap instead of long-press →
+          // menu → Paste here. Mice keep the explicit paste: an empty click
+          // is the deselect reflex, and hijacking it would misplace nodes.
+          // A tap that landed on an EDGE also starts a marquee (the press
+          // handler selects the edge and falls through here), so truly
+          // empty means no edge got selected — an edge tap keeps its normal
+          // meaning, and the hold survives it like any other interaction.
+          // Resetting the press memory keeps the NEXT tap from reading as a
+          // double press (which would also mint a note at the same spot).
+          else if (e.pointerType === 'touch' && pendingCut !== null && selectedEdgeId === null) {
+            lastPressRef.current = null
+            pasteClipboard(marquee.start)
+          }
           // Double press ON an edge line edits the OBJECT under the pointer
           // (the label), mirroring the node double-press-edits rule; node
           // creation stays the empty-space double press above.
@@ -2044,23 +2091,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
       if (fragment.nodes.length === 0) return null
       writeClipboardFragment(fragment)
+      // The newest clipboard intent wins: a plain copy lifts a pending cut.
+      setPendingCut(null)
       return fragment
     }
 
-    /** Remove the selection as ONE batch (one undo step). */
-    const deleteSelectionAsBatch = (): boolean => {
-      if (selection === undefined) return false
-      const ids = [selection.id, ...extraIds]
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: ids.map((id) => ({ kind: 'delete-node', id }) as const),
-      }
-      const running = applyCommand(canvasRef.current, command)
-      if (running === canvasRef.current) return false
-      onChange(running, command)
-      applySelection({ type: 'clear' })
-      setSelectedEdgeId(null)
-      return true
+    /**
+     * Cut-flavoured copy: the fragment also records the cut surface (the
+     * edges the deletion is about to sever), so the FIRST same-canvas paste
+     * reconnects them — a cut is the front half of a move, not a delete.
+     */
+    const cutSelection = (): ClipboardFragment | null => {
+      if (selection === undefined) return null
+      const fragment = extractClipboardFragment(
+        canvasRef.current,
+        new Set([selection.id, ...extraIds]),
+        { cutId: crypto.randomUUID() },
+      )
+      if (fragment.nodes.length === 0 || fragment.cut === undefined) return null
+      writeClipboardFragment(fragment)
+      // Defer the delete: hold the originals as a ghost until the paste
+      // decides what the cut meant (move here, copy elsewhere, or nothing).
+      setPendingCut({
+        cutId: fragment.cut.id,
+        snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
+      })
+      return fragment
     }
 
     /** A note carrying pasted foreign text, at the viewport center. */
@@ -2089,19 +2145,82 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
     const pasteFragment = (
-      fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+      fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
       at?: Point,
     ): boolean => {
       const current = canvasRef.current
+      // A paste that answers THIS canvas's pending cut is a MOVE: the held
+      // nodes keep their ids and just change place, so every edge — internal
+      // or boundary — survives without any reconnection machinery. One batch
+      // of move-node commands = one undo step that only moves them back.
+      if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
+        const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
+        if (held.length > 0) {
+          let dx = DUPLICATE_OFFSET_PX
+          let dy = DUPLICATE_OFFSET_PX
+          if (at !== undefined) {
+            const minX = Math.min(...held.map((node) => node.x))
+            const minY = Math.min(...held.map((node) => node.y))
+            const maxX = Math.max(...held.map((node) => node.x + node.width))
+            const maxY = Math.max(...held.map((node) => node.y + node.height))
+            dx = Math.round(at.x - (minX + maxX) / 2)
+            dy = Math.round(at.y - (minY + maxY) / 2)
+          }
+          const moveCommand: EditorCommand = {
+            kind: 'batch',
+            commands: held.map((node) => ({
+              kind: 'move-node' as const,
+              id: node.id,
+              x: node.x + dx,
+              y: node.y + dy,
+            })),
+          }
+          setPendingCut(null)
+          const running = applyCommand(current, moveCommand)
+          if (running === current) return false
+          onChange(running, moveCommand)
+          applySelection({ type: 'set-members', ids: held.map((node) => node.id) })
+          setSelectedEdgeId(null)
+          return true
+        }
+      }
+      // The cut surface reconnects while the document shows no trace of a
+      // previous reconnection: as long as any edge a prior paste of this cut
+      // created is still on THIS canvas, the fragment behaves as a plain
+      // copy (no second wire onto the peer). Undo removes those edges, so
+      // the next paste is a first paste again.
+      const cut =
+        fragment.cut !== undefined &&
+        !recordedReconnection(fragment.cut.id).some((id) =>
+          current.edges.some((edge) => edge.id === id),
+        )
+          ? fragment.cut
+          : undefined
       const command = buildFragmentInsertCommand(
         current,
-        fragment,
+        { nodes: fragment.nodes, edges: fragment.edges, cut },
         () => createId?.() ?? crypto.randomUUID(),
         at,
       )
       if (command === undefined) return false
       const running = applyCommand(current, command)
       if (running === current) return false
+      if (cut !== undefined && command.kind === 'batch') {
+        // The boundary edges are the created edges with an endpoint OUTSIDE
+        // the created node set — that endpoint is the surviving peer.
+        const createdNodeIds = new Set(
+          command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
+        )
+        recordReconnection(
+          cut.id,
+          command.commands.flatMap((c) =>
+            c.kind === 'create-edge' &&
+            (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
+              ? [c.edge.id]
+              : [],
+          ),
+        )
+      }
       onChange(running, command)
       const remintedIds =
         command.kind === 'batch'
@@ -2213,6 +2332,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setSelectedEdgeId(null)
           return
         }
+      }
+      if (e.key === 'Escape' && gestureState.kind === 'idle' && pendingCut !== null) {
+        e.preventDefault()
+        // Escape lifts only the HOLD. The envelope stays: the clipboard
+        // keeps working as a plain copy, matching what the OS side already
+        // holds (which no Escape of ours could clear).
+        setPendingCut(null)
+        return
       }
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
@@ -2896,11 +3023,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }}
         onCut={(e) => {
           if (isTextEntryEvent(e.nativeEvent)) return
-          const fragment = copySelection()
+          const fragment = cutSelection()
           if (fragment === null) return
           e.preventDefault()
           e.clipboardData?.setData('text/plain', JSON.stringify(fragment))
-          deleteSelectionAsBatch()
         }}
         onPaste={(e) => {
           if (isTextEntryEvent(e.nativeEvent)) return
@@ -2988,6 +3114,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
+        {pendingCut !== null && (
+          <PendingCutChip
+            count={pendingCut.snapshot.size}
+            coarse={typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches}
+            onCancel={() => setPendingCut(null)}
+          />
+        )}
         <ToolPalette
           // The dock does NOT change with the mode. Navigation belongs to the
           // viewport, not to whichever tool is armed, so nothing is exchanged
@@ -3107,7 +3240,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onOpenFileRef={onOpenFileRef}
             openLinkNode={openLinkNode}
             copySelection={copySelection}
-            deleteSelectionAsBatch={deleteSelectionAsBatch}
+            cutSelection={cutSelection}
             duplicateSelection={duplicateSelection}
             reorderSelection={reorderSelection}
           />
@@ -3339,6 +3472,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             ghost, so these outlines (boxes and internal-edge highlights,
             both derived from the committed scene) would mark geometry that
             is no longer drawn there. */}
+          {pendingCut !== null && (
+            <GhostOverlay
+              boxes={canvas.nodes.flatMap((n) =>
+                pendingCut.snapshot.has(n.id)
+                  ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
+                  : [],
+              )}
+              zoom={viewport.zoom}
+            />
+          )}
           {isMultiSelection && gestureState.kind !== 'moving' && (
             <MemberOutlinesOverlay
               selectionMembers={selectionMembers}

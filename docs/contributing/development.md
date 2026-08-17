@@ -16,50 +16,6 @@ pnpm exec playwright install --with-deps chromium
 
 This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.
 
-## Bundled skills install
-
-The MCP server ships three slash skills (`drawing-visuals`, `coauthoring-visuals`, `auditing-workspaces`) inside the npm package, but the `claude mcp add` / `npx` install paths only start the server. To make the skills available to the agent, install the package locally and symlink (or copy) them.
-
-```bash
-mkdir -p ~/tools/whiteboard && cd ~/tools/whiteboard
-npm init -y
-npm i @kamiazya/whiteboard-mcp
-```
-
-### macOS / Linux
-
-```bash
-PKG=$(pwd)/node_modules/@kamiazya/whiteboard-mcp
-mkdir -p ~/.claude/skills ~/.codex/skills
-ln -s "$PKG/skills/drawing-visuals"        ~/.claude/skills/drawing-visuals
-ln -s "$PKG/skills/coauthoring-visuals"    ~/.claude/skills/coauthoring-visuals
-ln -s "$PKG/skills/auditing-workspaces"    ~/.claude/skills/auditing-workspaces
-ln -s "$PKG/skills/drawing-visuals"        ~/.codex/skills/drawing-visuals
-ln -s "$PKG/skills/coauthoring-visuals"    ~/.codex/skills/coauthoring-visuals
-ln -s "$PKG/skills/auditing-workspaces"    ~/.codex/skills/auditing-workspaces
-```
-
-### Windows (junction or copy)
-
-```powershell
-$pkg = (Resolve-Path .\node_modules\@kamiazya\whiteboard-mcp).Path
-$skillRoots = @(
-    (Join-Path $HOME ".claude\skills"),
-    (Join-Path $HOME ".codex\skills")
-)
-$skills = "drawing-visuals", "coauthoring-visuals", "auditing-workspaces"
-$skillRoots | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
-foreach ($root in $skillRoots) {
-    foreach ($skill in $skills) {
-        cmd /c mklink /J (Join-Path $root $skill) (Join-Path $pkg "skills\$skill")
-    }
-}
-```
-
-If junctions are restricted, copy the skill directories instead. Restart Claude Code or Codex, then confirm `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` appear in the skill list.
-
-The bundled `skills/` inside `@kamiazya/whiteboard-mcp` remain the source of truth; the repo-local `.claude/skills/` directory contains internal-only project skills (smoke selection, restart triage) that are not part of the published artifact.
-
 ## Recommended: develop over HTTP MCP
 
 For active MCP development, connect Claude Code or Codex to the daemon-hosted `/mcp` endpoint over HTTP rather than wiring the client to `stdio` directly. A `tsx watch` daemon restart does not force the MCP client to reconnect.

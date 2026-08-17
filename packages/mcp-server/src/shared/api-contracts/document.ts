@@ -172,7 +172,7 @@ export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>
 export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
 export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
-export type CanvasExistsResponse = z.infer<typeof canvasExistsResponseSchema>
+export type DocumentExistsResponse = z.infer<typeof canvasExistsResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
 
 // GET /api/runtime/storage — response body.

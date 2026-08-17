@@ -7,7 +7,7 @@ import {
   RESERVED_ROOT_KEYS,
 } from './facets.js'
 import { documentIdSchema } from './ids.js'
-import { markdownCanvasSchema } from './markdown.js'
+import { markdownDocumentSchema } from './markdown.js'
 import {
   mdastFlowContentSchema,
   mdastPhrasingContentSchema,
@@ -64,8 +64,8 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
     expect(xWhiteboardSchema.safeParse(value).success).toBe(true)
   })
 
-  fcTest.prop([markdownCanvasArbitrary], withDefaults())('markdownCanvasSchema', (value) => {
-    expect(markdownCanvasSchema.safeParse(value).success).toBe(true)
+  fcTest.prop([markdownCanvasArbitrary], withDefaults())('markdownDocumentSchema', (value) => {
+    expect(markdownDocumentSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop([canonicalUlidArbitrary], withDefaults())('documentIdSchema', (value) => {

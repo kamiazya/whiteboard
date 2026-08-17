@@ -946,3 +946,21 @@ describe('embedPlaceholder rendering', () => {
     expect(svg).toContain('Missing note')
   })
 })
+
+describe('emphasis paints — the flags layout preserves must reach the SVG', () => {
+  const run = (extra: object) => ({
+    nodes: [
+      { kind: 'textRun' as const, bbox: { x: 0, y: 10, w: 20, h: 16 }, text: 'hi', ...extra },
+    ],
+  })
+
+  it('strong emits font-weight, emphasis font-style, deleted line-through', () => {
+    expect(renderSceneToSvg(run({ strong: true }))).toContain('font-weight="700"')
+    expect(renderSceneToSvg(run({ emphasis: true }))).toContain('font-style="italic"')
+    expect(renderSceneToSvg(run({ deleted: true }))).toContain('text-decoration="line-through"')
+    const plain = renderSceneToSvg(run({}))
+    expect(plain).not.toContain('font-weight')
+    expect(plain).not.toContain('font-style')
+    expect(plain).not.toContain('text-decoration')
+  })
+})

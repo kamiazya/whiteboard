@@ -12,7 +12,7 @@
  */
 export type DocumentTransport = 'websocket' | 'sse'
 
-export interface SelectCanvasTransportInput {
+export interface SelectDocumentTransportInput {
   /** `location.origin` of the page holding the connection. */
   pageOrigin: string
   /** Base URL of the daemon being connected to. */
@@ -27,7 +27,7 @@ function isSecure(url: string): boolean | null {
   }
 }
 
-export function selectDocumentTransport(input: SelectCanvasTransportInput): DocumentTransport {
+export function selectDocumentTransport(input: SelectDocumentTransportInput): DocumentTransport {
   const pageSecure = isSecure(input.pageOrigin)
   const daemonSecure = isSecure(input.daemonBaseUrl)
   // An unparseable origin gets the transport that works in strictly more

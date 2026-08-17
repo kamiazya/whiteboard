@@ -23,7 +23,7 @@ import { getLogger } from '../../../log.js'
 const OLD_SEGMENT = 'canvas'
 const NEW_SEGMENT = 'document'
 
-const log = getLogger('migration-0011')
+const log = getLogger('migration-0012')
 
 /**
  * Moves `blobs/<workspaceId>/<from>` to `blobs/<workspaceId>/<to>` for every
