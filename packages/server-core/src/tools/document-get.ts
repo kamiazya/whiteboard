@@ -41,7 +41,8 @@ export type DocumentGetOutput = z.infer<typeof documentGetOutputSchema>
 export class DocumentKindUnknownError extends Error {
   constructor(public readonly documentId: string) {
     super(
-      `Document ${documentId} records no kind, so there is no format to read it as. ` +
+      `Document ${documentId} records no kind, so there is no format to read it as ` +
+        '(checked both the document itself and its index row). ' +
         'Documents created before kinds existed are affected. Editing one records a kind: ' +
         'wb_node_add / wb_node_patch / wb_edge_patch record it as spatial and keep what it holds, ' +
         'and wb_document_set records it as markdown — which replaces its content, so it is ' +
@@ -69,7 +70,18 @@ export function createDocumentGetTool(deps: ServerDeps) {
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
       const doc = await loadOrCreateDocument(deps, input.documentId)
-      const kind = readDocumentKind(doc)
+      // A document created before kinds existed carries none on its own Loro
+      // doc. Its index row, written at creation time, may still have one —
+      // consult it before refusing. This is a read-only fallback: the kind
+      // is never written back onto the doc or the row.
+      const kind =
+        readDocumentKind(doc) ??
+        (
+          await deps.documentIndex.resolveDocumentById({
+            workspaceId: input.workspaceId,
+            documentId: input.documentId,
+          })
+        )?.kind
       if (kind === undefined) {
         throw new DocumentKindUnknownError(input.documentId)
       }
