@@ -18,7 +18,7 @@ function makeHost(text: string) {
     nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 260, height: 120, text }],
     edges: [],
   }
-  const latest: { canvas: SpatialCanvas } = { canvas: start }
+  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(start)
     latest.canvas = canvas
@@ -27,7 +27,11 @@ function makeHost(text: string) {
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
-          onChange={(next) => setCanvas(next)}
+          onChange={(next, command) => {
+            const flat = command.kind === 'batch' ? command.commands : [command]
+            latest.commands.push(...flat.map((c) => c.kind))
+            setCanvas(next)
+          }}
           theme="light"
         />
       </div>
@@ -117,4 +121,49 @@ it('Enter continues a list item, and Enter on an empty item exits the list', asy
     const node = latest.canvas.nodes[0]
     expect(node?.type === 'text' ? node.text : undefined).toBe('- alpha\n- beta\ndone')
   })
+})
+
+it('click-away commits EXACTLY once — unmount must not fire a second stale commit', async () => {
+  const { Host, latest } = makeHost('start')
+  const { container } = render(<Host />)
+  openEditor(container)
+  await vi.waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
+  await userEvent.keyboard(' typed')
+
+  // The everyday exit: click empty canvas. The gesture reducer commits the
+  // pending text itself and unmounts the editor; EditorView.destroy() then
+  // fires a native blur on the focused content, which must NOT commit again
+  // through the stale pre-unmount closure.
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 5,
+    clientX: r.left + 700,
+    clientY: r.top + 500,
+  })
+  fireEvent.pointerUp(root, { pointerId: 5, clientX: r.left + 700, clientY: r.top + 500 })
+
+  await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
+  const node = latest.canvas.nodes[0]
+  expect(node?.type === 'text' ? node.text : undefined).toBe('start typed')
+  expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(1)
+})
+
+it('a blur after Escape does not resurrect the cancelled edit as a commit', async () => {
+  const { Host, latest } = makeHost('keep me')
+  const { container } = render(<Host />)
+  openEditor(container)
+  await vi.waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
+  const content = container.querySelector('.cm-content') as HTMLElement
+
+  await userEvent.keyboard(' discarded')
+  content.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  // A stray blur may still fire while React unmounts the editor.
+  fireEvent.blur(content)
+
+  await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
+  const node = latest.canvas.nodes[0]
+  expect(node?.type === 'text' ? node.text : undefined).toBe('keep me')
+  expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(0)
 })

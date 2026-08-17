@@ -14,7 +14,12 @@
  *   just-created node).
  * `finishedRef` makes the commit/cancel transition terminal, exactly as
  * the textarea's doc described: once either has fired, the other is a
- * no-op, so Escape-then-blur cannot resurrect a discarded value.
+ * no-op, so Escape-then-blur cannot resurrect a discarded value. And
+ * `mountedRef` guards the unmount path the textarea also guarded:
+ * `EditorView.destroy()` blurs a focused content DOM, and on the everyday
+ * click-away exit the gesture reducer has ALREADY committed the pending
+ * text — a destroy-fired blur re-committing through this component's
+ * stale pre-unmount closure would write a duplicate set-text every time.
  *
  * The wrapper carries the node's own fill/font/padding (style parity with
  * the rendered SVG); an OPAQUE background is load-bearing — it is what
@@ -26,7 +31,7 @@ import { syntaxHighlighting } from '@codemirror/language'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
-import { type CSSProperties, useEffect, useRef } from 'react'
+import { type CSSProperties, useLayoutEffect, useRef } from 'react'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { markdownHighlightStyle, markdownStyleKeymap } from '../markdown-editor/SourcePane.js'
 import type { Box } from './geometry.js'
@@ -53,16 +58,23 @@ export function MarkdownNodeEditor({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const finishedRef = useRef(false)
+  const mountedRef = useRef(false)
   // Latest callbacks without recreating the EditorView per parent render.
   const callbacksRef = useRef({ onCommit, onCancel, onChange })
   callbacksRef.current = { onCommit, onCancel, onChange }
 
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: passive cleanups run AFTER React has
+  // detached the host DOM, and detaching a focused contentDOM fires a
+  // native blur while our handler is still attached and mountedRef is
+  // still true — the duplicate-commit hole in person. A layout cleanup
+  // runs BEFORE the detach, so destroy()'s own blur is the only one left,
+  // and the mounted guard retires it.
+  useLayoutEffect(() => {
     const host = hostRef.current
     if (host === null) return
 
     const commit = (view: EditorView) => {
-      if (finishedRef.current) return
+      if (!mountedRef.current || finishedRef.current) return
       finishedRef.current = true
       callbacksRef.current.onCommit(view.state.doc.toString())
     }
@@ -126,6 +138,7 @@ export function MarkdownNodeEditor({
         }),
       ],
     })
+    mountedRef.current = true
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
     view.focus()
@@ -134,6 +147,9 @@ export function MarkdownNodeEditor({
     view.dispatch({ selection: { anchor: view.state.doc.length } })
 
     return () => {
+      // BEFORE destroy: EditorView.destroy() blurs a focused content DOM,
+      // and that blur must find this editor already retired.
+      mountedRef.current = false
       viewRef.current = null
       view.destroy()
     }
