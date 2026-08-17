@@ -44,7 +44,9 @@ interface CanvasRow {
   path: string
   displayName: string
   updatedAt: string
-  kind: DocumentKind
+  // Absent when the daemon records no kind for the row (pre-kind documents):
+  // the list says nothing rather than claiming spatial.
+  kind?: DocumentKind
   pinned: boolean
   pinOrder: number
 }

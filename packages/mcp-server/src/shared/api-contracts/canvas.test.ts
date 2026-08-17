@@ -379,12 +379,24 @@ describe('canvasSummarySchema', () => {
     expect(result.kind).toBe('markdown')
   })
 
-  it('defaults kind to spatial when absent — back-compat for rows stored before this change', () => {
+  it('leaves kind ABSENT when the row records none, instead of defaulting it to spatial', () => {
+    // The default used to make "stored as spatial" and "never recorded"
+    // indistinguishable to every client. A summary now withholds the claim;
+    // a client that must render something decides for itself.
     const result = canvasSummarySchema.parse({
       path: 'canvas-1',
       updatedAt: '2024-01-01T00:00:00.000Z',
     })
-    expect(result.kind).toBe('spatial')
+    expect(result.kind).toBeUndefined()
+  })
+
+  it('still parses a recorded kind unchanged', () => {
+    const result = canvasSummarySchema.parse({
+      path: 'canvas-1',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      kind: 'markdown',
+    })
+    expect(result.kind).toBe('markdown')
   })
 
   it('rejects an unknown kind', () => {

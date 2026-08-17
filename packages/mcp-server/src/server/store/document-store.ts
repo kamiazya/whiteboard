@@ -810,6 +810,9 @@ export async function listDocuments(
     path: r.path,
     id: r.id,
     updatedAt: new Date(r.updatedAt).toISOString(),
-    kind: r.kind ?? 'spatial',
+    // No guess: an unrecorded kind is reported as absent (see
+    // canvasSummarySchema). The row is still listed — only the claim about
+    // its kind is withheld.
+    ...(r.kind ? { kind: r.kind } : {}),
   }))
 }

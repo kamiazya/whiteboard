@@ -144,9 +144,13 @@ export const canvasSummarySchema = z.object({
   // clients fall back to the path when the id is absent.
   id: z.string().min(1).optional(),
   updatedAt: z.string(),
-  // Rows stored before this field existed have no recorded kind and read
-  // back as spatial — the only kind that existed then.
-  kind: documentKindSchema.default('spatial'),
+  // ABSENT when the row records no kind. Defaulting it to 'spatial' used to
+  // hide that state: a caller could not tell a stored spatial document from
+  // one whose kind was never recorded, and the guess escaped into new rows
+  // (wb_version_restore forked it as stored fact). Every write path records
+  // a kind today, so an absent one is a pre-kind row — a caller that needs
+  // to render something decides for itself, in the open.
+  kind: documentKindSchema.optional(),
 })
 
 export const listCanvasesResponseSchema = z.object({
