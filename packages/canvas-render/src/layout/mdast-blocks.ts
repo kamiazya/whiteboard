@@ -5,6 +5,7 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
+import { loadDefaultJapaneseParser } from 'budoux'
 import { LineBreaker } from 'css-line-break'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
@@ -199,9 +200,68 @@ interface PhrasingLayout {
  * Each returned segment carries its own trailing whitespace.
  *
  * `wordBreak: 'normal'` is deliberate: `break-all` would also break English
- * mid-word, and an over-wide segment is handled where it arises (by code
- * point) rather than by loosening the rule for every string.
+ * mid-word, and an over-wide segment is handled where it arises (by finer
+ * segments, then by code point) rather than by loosening the rule for every
+ * string.
  */
+function uaxSegments(text: string): readonly string[] {
+  const breaker = LineBreaker(text, { lineBreak: 'strict', wordBreak: 'normal' })
+  const segments: string[] = []
+  for (let entry = breaker.next(); entry.done !== true; entry = breaker.next()) {
+    segments.push(entry.value.slice())
+  }
+  return segments
+}
+
+/**
+ * UAX #14 says a Japanese line MAY break between almost any two characters,
+ * which is enough to keep text inside its box and not enough to read well —
+ * it breaks mid-word, which no Japanese typesetter would. BudouX supplies
+ * phrase (文節) boundaries, a strict subset of those opportunities, so
+ * preferring them costs nothing in fit and buys a line that breaks where a
+ * reader would pause.
+ *
+ * Pure and DOM-free (verified in a worker before adopting), and its output is
+ * a total function of its input, which is what the byte-identical-SVG
+ * guarantee needs.
+ *
+ * Built on first Japanese text rather than at module load: the constructor
+ * turns a ~24KB model into a Map, and charging that to whichever lazily
+ * imported chunk happens to pull this module in makes every consumer pay for
+ * a script it may never lay out. Two apps/web browser tests went red on
+ * exactly that before this was made lazy.
+ */
+let japaneseParser: ReturnType<typeof loadDefaultJapaneseParser> | undefined
+
+function parseJapanesePhrases(text: string): readonly string[] {
+  japaneseParser ??= loadDefaultJapaneseParser()
+  return japaneseParser.parse(text)
+}
+
+/** Hiragana and katakana — the scripts the bundled BudouX model is trained on. */
+const KANA_PATTERN = /[\u3040-\u30ff]/
+
+/**
+ * The coarsest useful break opportunities: phrases where the text is Japanese,
+ * UAX #14 segments otherwise. Chinese and Korean deliberately stay on UAX #14
+ * — BudouX ships separate models for them and one model per script is weight
+ * this package has no evidence it needs yet.
+ */
+function breakSegments(text: string): readonly string[] {
+  return KANA_PATTERN.test(text) ? parseJapanesePhrases(text) : uaxSegments(text)
+}
+
+/**
+ * One level finer than `segment`, for when it does not fit a line of its own.
+ * A phrase resolves to its UAX #14 segments; something UAX #14 already calls
+ * atomic (a long identifier, a URL with no separator left) resolves to code
+ * points, which is the floor.
+ */
+function finerSegments(segment: string): readonly string[] {
+  const finer = uaxSegments(segment)
+  return finer.length > 1 ? finer : [...segment]
+}
+
 /**
  * A block's declared width. Normally the wrap width, but widened to cover an
  * atomic run that could not be split — the bbox has to describe what is
@@ -213,15 +273,6 @@ function blockWidth(maxWidth: number, inkWidth: number): number {
   return Number.isFinite(maxWidth) ? Math.max(maxWidth, inkWidth) : maxWidth
 }
 
-function breakSegments(text: string): readonly string[] {
-  const breaker = LineBreaker(text, { lineBreak: 'strict', wordBreak: 'normal' })
-  const segments: string[] = []
-  for (let entry = breaker.next(); entry.done !== true; entry = breaker.next()) {
-    segments.push(entry.value.slice())
-  }
-  return segments
-}
-
 /**
  * Flattens phrasing content into an ordered list of styled text runs,
  * starting at the block's top-left corner (`cursor.y`, x = 0).
@@ -231,18 +282,21 @@ function breakSegments(text: string): readonly string[] {
  * break (mdast `break`) always resets the cursor to the block's left edge
  * and advances to a new line one `fontSizePx` down.
  *
- * Word-wrap: a chunk of text that would exceed `options.maxWidth` on its
- * current line splits into per-word runs at whitespace boundaries, packed
- * greedily onto successive lines. A chunk that already fits (the common
- * case) stays a single run, unchanged from before wrapping existed — this
- * keeps wrapping's blast radius limited to the cases that actually overflow.
- * A single word wider than `maxWidth` on its own line is a deliberate
- * exception: it is left as one overflowing run rather than broken mid-word.
- * Wrapping is skipped entirely when `maxWidth` is non-finite or <= 0 (no
- * meaningful width to wrap against). Inline code, raw HTML, and inline math
- * runs are atomic — their source text may contain whitespace that is not a
- * word boundary (a code span's argument list, an HTML tag's attributes),
- * so they are always emitted as one run even when they overflow.
+ * Word-wrap: a chunk that would exceed `options.maxWidth` on its current line
+ * is packed greedily onto successive lines at the break opportunities
+ * `breakSegments` offers, and everything landing on one line is emitted as
+ * ONE run. A chunk that already fits (the common case) stays a single run
+ * measured once, so wrapping costs nothing for text that never overflows.
+ *
+ * A segment too wide for a line of its own steps down one level of
+ * granularity at a time (phrase -> UAX #14 segment -> code point); only a
+ * single code point wider than `maxWidth` is left to overflow, because there
+ * is nothing below it to split and dropping it would be worse. Wrapping is
+ * skipped entirely when `maxWidth` is non-finite or <= 0 (no meaningful width
+ * to wrap against). Inline code, raw HTML, and inline math runs are atomic —
+ * their source text may contain whitespace that is not a word boundary (a
+ * code span's argument list, an HTML tag's attributes) — so they are always
+ * emitted as one run even when they overflow.
  */
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
@@ -328,16 +382,16 @@ function layoutPhrasing(
         index -= 1
         continue
       }
-      // Alone at the start of a line and still too wide: there is no break
-      // opportunity inside this segment, so fall back to code points. A
-      // single code point wider than maxWidth is irreducible and is left to
-      // overflow rather than dropped.
-      const points = [...segment]
-      if (points.length <= 1) {
+      // Alone at the start of a line and still too wide: step down one level
+      // of granularity (phrase -> UAX #14 segments -> code points). A single
+      // code point wider than maxWidth is irreducible and is left to overflow
+      // rather than dropped.
+      const finer = finerSegments(segment)
+      if (finer.length <= 1) {
         buffered = candidate
         continue
       }
-      segments.splice(index, 1, ...points)
+      segments.splice(index, 1, ...finer)
       index -= 1
     }
     flush()

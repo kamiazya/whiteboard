@@ -501,6 +501,16 @@ paths:
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
+    On top of UAX #14, **`budoux` narrows the candidates to phrase (文節)
+    boundaries for Japanese**, a strict subset of the UAX opportunities, so
+    preferring them costs nothing in fit and buys a line that breaks where a
+    reader would pause rather than mid-word. Applied only to text containing
+    KANA — Chinese and Korean stay on UAX #14, since BudouX ships a separate
+    model per script and this package has no evidence yet that it needs them.
+    The parser is built on first Japanese text, NOT at module load: its
+    constructor turns a ~24KB model into a Map, and charging that to whichever
+    lazily-imported chunk pulls this module in turned two apps/web browser
+    tests red before it was made lazy.
     `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
     see the Tests section.
 

@@ -32,6 +32,9 @@ catalog:
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
   css-line-break: "^2.1.0"
+  # canvas-render: phrase-level break opportunities for Japanese, so a line
+  # breaks where a reader would pause rather than mid-word.
+  budoux: "^0.9.0"
   "@vitest/coverage-v8": "^4.1.10"
   # mcp-server's first InversifyJS composition root (DI wiring only, no
   # decorators/reflect-metadata) — pinned old enough to clear minimumReleaseAge.

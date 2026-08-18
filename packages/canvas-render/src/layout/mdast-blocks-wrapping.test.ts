@@ -124,6 +124,20 @@ describe('line breaking without spaces', () => {
     expect(runsOf(paragraphOf(JA))).toHaveLength(lines.length)
   })
 
+  it('breaks Japanese at phrase boundaries, not mid-word', () => {
+    // UAX #14 alone permits a break between almost any two Japanese
+    // characters, which fits but reads badly — it produced lines ending
+    // "これは日本語のノートで / す。". BudouX narrows the candidates to
+    // phrase (文節) boundaries, so a line ends where a reader would pause.
+    expect(linesOf(paragraphOf(JA))).toEqual([
+      'これは日本語の長い',
+      '文章です。ノードの幅を',
+      '超えても',
+      '折り返されるべきですが、',
+      '実際に測ります。',
+    ])
+  })
+
   it('leaves already-fitting English wrapping untouched', () => {
     expect(
       linesOf(paragraphOf('This is a fairly long English sentence that should wrap.')),
