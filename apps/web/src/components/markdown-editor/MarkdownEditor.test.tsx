@@ -163,7 +163,7 @@ describe('MarkdownEditor', () => {
     const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
-        value={`See [[canvas:${NOTE_ID}|the plan]] and [external](https://example.com).`}
+        value={`See [[${NOTE_ID}|the plan]] and [external](https://example.com).`}
         onChange={() => {}}
         onOpenDocument={onOpenDocument}
         previewDebounceMs={150}

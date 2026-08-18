@@ -18,7 +18,7 @@ export interface RenderMarkdownPreviewOptions {
   readonly background?: string
   /**
    * Maps `[[Name]]` aliases to canvas ids (codec's separate
-   * resolution pass over the parsed tree). Absent, only `[[canvas:ULID]]`
+   * resolution pass over the parsed tree). Absent, only a bare `[[ULID]]`
    * references resolve; unresolved aliases stay literal bracket text.
    */
   readonly resolveAlias?: AliasResolver

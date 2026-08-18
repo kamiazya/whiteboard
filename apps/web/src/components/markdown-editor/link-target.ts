@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, documentIdSchema } from '@kamiazya/whiteboard-model'
 
 /** A document this editor can link to, as the composition root knows it. */
 export interface LinkTarget {
@@ -40,11 +40,20 @@ export function rankLinkTargets(
 /**
  * Names the codec's own reference parser would read as something other than a
  * plain name: `]]` closes the reference early, a line break cannot appear in
- * an inline one, `|` begins the alias half (`[[target|alias]]`), and a
- * leading `canvas:` is parsed as a direct document id — which then fails id
- * validation and drops the link entirely.
+ * an inline one, and `|` begins the alias half (`[[target|alias]]`).
  */
-const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]|^canvas:/
+const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]/
+
+/**
+ * A name shaped exactly like a document id, which the parser reads as one
+ * rather than as a name. Vanishingly unlikely for a human-typed title — a
+ * canonical ULID is 26 characters of Crockford base32 — but the picker can
+ * check it for free, and the alternative is a link that silently points at
+ * whatever document carries that id.
+ */
+function readsAsDocumentId(name: string): boolean {
+  return documentIdSchema.safeParse(name).success
+}
 
 /**
  * What to write in the body for a chosen target.
@@ -54,13 +63,16 @@ const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]|^canvas:/
  * document carries that name (see `createSnapshotAliasResolver`), so a
  * duplicate name would produce a link that silently stays literal text. The
  * picker is the one place that KNOWS which document was chosen, so it spends
- * that knowledge here: the opaque `[[canvas:<id>]]` form appears only when
- * the readable one would be wrong.
+ * that knowledge here: the opaque `[[<id>]]` form appears only when the
+ * readable one would be wrong.
  */
 export function linkMarkupFor(target: LinkTarget, all: readonly LinkTarget[]): string {
   const sameName = all.filter((candidate) => candidate.name === target.name)
-  const unambiguous = sameName.length === 1 && !UNWRITABLE_IN_BRACKETS.test(target.name)
-  return unambiguous ? `[[${target.name}]]` : `[[canvas:${target.id}]]`
+  const unambiguous =
+    sameName.length === 1 &&
+    !UNWRITABLE_IN_BRACKETS.test(target.name) &&
+    !readsAsDocumentId(target.name)
+  return unambiguous ? `[[${target.name}]]` : `[[${target.id}]]`
 }
 
 /**

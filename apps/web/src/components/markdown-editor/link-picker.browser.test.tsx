@@ -114,7 +114,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.fill(input, 'untitled')
     await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE1]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[01JDUPE1]]')
   })
 
   it('offers the URL when what you typed is one', async () => {
@@ -199,7 +199,7 @@ describe('the link picker (real browser)', () => {
     expect(options[1]?.getAttribute('aria-selected')).toBe('true')
     await userEvent.keyboard('{Enter}')
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE2]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[01JDUPE2]]')
   })
 
   it('says so when nothing matches, and Enter does nothing', async () => {

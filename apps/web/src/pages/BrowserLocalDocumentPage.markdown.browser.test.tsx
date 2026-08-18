@@ -585,7 +585,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     // Blank line after the reference: a single newline is a markdown SOFT
     // break, which would fold the trailing text into the embed's paragraph
     // and turn it into an INLINE run instead of a block embed.
-    await userEvent.keyboard(`![[[[canvas:${TARGET_ID}]]{Enter}{Enter}and more typing`)
+    await userEvent.keyboard(`![[[[${TARGET_ID}]]{Enter}{Enter}and more typing`)
 
     // The preview loads the target body asynchronously and lays it out
     // inline through the render pipeline's embed seam.
@@ -700,7 +700,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
         { timeout: 10_000 },
       )
       editable.focus()
-      await userEvent.keyboard(`![[[[canvas:${LEGACY_ID}]]{Enter}{Enter}trailing`)
+      await userEvent.keyboard(`![[[[${LEGACY_ID}]]{Enter}{Enter}trailing`)
 
       await waitFor(
         () => {

@@ -52,21 +52,23 @@ describe('linkMarkupFor', () => {
   // The picker knows which one was chosen; the reader of `[[untitled]]`
   // would not, and codec resolves an ambiguous alias to nothing.
   it('falls back to the id when two documents share the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[canvas:01JDUPE1]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1]]')
   })
 
   // Every character sequence the codec's own reference parser would read as
   // something other than a plain name: `]]` closes the reference, a newline
-  // cannot appear in an inline one, `|` starts the alias half, and a leading
-  // `canvas:` is parsed as a direct document id instead of a name.
+  // cannot appear in an inline one, and `|` starts the alias half. The last
+  // one is a name shaped exactly like a document id — with the scheme gone,
+  // that IS the id syntax, so writing it as a name would link somewhere else
+  // entirely.
   it.each([
     ['weird ]] name'],
     ['two\nlines'],
     ['A|B'],
-    ['canvas:not-an-id'],
+    ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
   ])('uses the id when the name cannot be written inside brackets: %s', (name) => {
     const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
-    expect(linkMarkupFor(odd, [odd])).toBe('[[canvas:01JODD]]')
+    expect(linkMarkupFor(odd, [odd])).toBe('[[01JODD]]')
   })
 })
 
