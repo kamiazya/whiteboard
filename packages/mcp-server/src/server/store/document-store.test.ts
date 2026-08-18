@@ -674,6 +674,28 @@ describe('listDocuments', () => {
     expect(entry?.kind).toBe('markdown')
   })
 
+  // A path is an auto-generated address ('untitled-2'); the display name is
+  // the only identifier the user ever chose. A client that lists documents
+  // to resolve a `[[Name]]` link, or to offer link targets, has to be able
+  // to read the name from the SAME list it renders — fetching it separately
+  // is what let the two disagree.
+  it('carries the display name when one is recorded', async () => {
+    await saveDocument('session1', 'untitled-2', new LoroDoc())
+    const { setDocumentDisplayName } = await import('./names-store.js')
+    await setDocumentDisplayName('session1', 'untitled-2', '週次レビュー')
+
+    const [entry] = await listDocuments('session1')
+
+    expect(entry?.path).toBe('untitled-2')
+    expect(entry?.displayName).toBe('週次レビュー')
+  })
+
+  it('omits the display name for a document that was never renamed', async () => {
+    await saveDocument('session1', 'untitled', new LoroDoc())
+    const [entry] = await listDocuments('session1')
+    expect(entry?.displayName).toBeUndefined()
+  })
+
   it('returns an empty array for an empty session', async () => {
     const list = await listDocuments('session1')
     expect(list).toHaveLength(0)

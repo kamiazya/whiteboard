@@ -803,17 +803,20 @@ export async function renameDocumentPath(
 // ── list documents from the documents table ──
 export async function listDocuments(
   workspaceId: string,
-): Promise<Pick<DocumentSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
+): Promise<Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
     .selectFrom('documents')
-    .select(['path', 'id', 'updatedAt', 'kind'])
+    .select(['path', 'id', 'displayName', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
   return rows.map((r) => ({
     path: r.path,
     id: r.id,
+    // Absent rather than null when unset, the same shape rule `kind` follows
+    // below: a document nobody renamed has no name of its own to report.
+    ...(r.displayName ? { displayName: r.displayName } : {}),
     updatedAt: new Date(r.updatedAt).toISOString(),
     // No guess: an unrecorded kind is reported as absent (see
     // canvasSummarySchema). The row is still listed — only the claim about

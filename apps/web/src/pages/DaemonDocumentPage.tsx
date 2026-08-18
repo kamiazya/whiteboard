@@ -10,6 +10,7 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
@@ -336,21 +337,16 @@ export function DaemonDocumentPage({
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
 
-  // `[[Name]]` aliases resolve against the same list the user can see; the
-  // daemon summary carries no display name yet, so the path doubles as one.
+  // `[[Name]]` aliases resolve against the same list the user can see — by
+  // display name AND by path, since only the path is addressable and only
+  // the name is the user's own word for the document.
   const resolveAlias = useMemo(
-    () =>
-      createSnapshotAliasResolver(
-        controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
-      ),
+    () => createSnapshotAliasResolver(daemonLinkEntries(controller.documents)),
     [controller.documents],
   )
-  // The same list the alias resolver reads, carried with ids so the picker
-  // can fall back to one when a name is ambiguous.
-  const linkTargets = useMemo(
-    () => controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
-    [controller.documents],
-  )
+  // The same list, one row per document, carried with ids so the picker can
+  // fall back to one when a name is ambiguous.
+  const linkTargets = useMemo(() => daemonLinkTargets(controller.documents), [controller.documents])
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
