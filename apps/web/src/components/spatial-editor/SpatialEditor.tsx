@@ -322,6 +322,14 @@ export interface SpatialEditorProps {
   /** Follows a file node's reference (navigation). Absent → follow hides. */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   /**
+   * Opens a text node's body on a surface the HOST owns — the composition
+   * root already holds the seams a full markdown editor needs (alias
+   * resolution, link targets, embeds), so the canvas hands over the node and
+   * its text and stays out of it. Absent means no such surface exists, and
+   * the catalog does not offer the verb.
+   */
+  readonly onOpenInEditor?: (nodeId: string, text: string) => void
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -462,6 +470,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedEdgeIds,
       onToggleEdgeLock,
       onToggleNodeLock,
+      onOpenInEditor,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -3230,6 +3239,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
             isLocked={isLocked}
             onToggleNodeLock={onToggleNodeLock}
+            onOpenInEditor={onOpenInEditor}
             applyBoxMoves={applyBoxMoves}
             extraIds={extraIds}
             selectedId={selectedId}
