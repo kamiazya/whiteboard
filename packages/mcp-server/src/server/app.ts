@@ -32,8 +32,8 @@ import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
-import { createCanvasRouter } from './routes/canvas.js'
 import { createDebugRouter } from './routes/debug.js'
+import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import {
@@ -67,7 +67,7 @@ import {
 import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { performBranchMerge } from './store/branch-merge.js'
-import { loadCanvasBranches } from './store/branches-store.js'
+import { loadDocumentBranches } from './store/branches-store.js'
 import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
 import { documentExists, saveDocument } from './store/document-store.js'
@@ -394,11 +394,11 @@ export function createApp(options: AppOptions) {
 
   app.route(
     '/',
-    createCanvasRouter({
+    createDocumentRouter({
       // Attach the current HEAD branch name to saved versions when available.
       getHeadBranch: async (sid, path) => {
         try {
-          const state = await loadCanvasBranches(sid, path)
+          const state = await loadDocumentBranches(sid, path)
           return state.head
         } catch (error) {
           if (isCorruptStoredDataError(error)) {

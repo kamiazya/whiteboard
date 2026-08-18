@@ -1,4 +1,4 @@
-import { canvasesApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { documentsApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
@@ -19,12 +19,12 @@ const log = getAppLogger('merge-toast')
 // - Auto-dismiss: 5 seconds by default; pause while hovered
 // - Undo hides the toast immediately and restores preMergeVersionId
 //
-// MergeDialog dispatches excalidraw:merge_committed, and CanvasPage mounts this so it stays local to the canvas view.
+// MergeDialog dispatches excalidraw:merge_committed, and DocumentPage mounts this so it stays local to the canvas view.
 
 export interface MergeToastProps {
   workspaceId: string
   path: string
-  // Called after a successful restore so CanvasPage can clear its local undo stack.
+  // Called after a successful restore so DocumentPage can clear its local undo stack.
   onRestored?: () => void
 }
 
@@ -97,7 +97,7 @@ export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): 
       // Restore the canvas the merge actually happened on, not whichever
       // canvas is currently selected — the toast can outlive a canvas switch.
       const res = await fetchFn(
-        canvasesApiUrl(
+        documentsApiUrl(
           mergeWorkspaceId,
           mergePath,
           `versions/${encodeURIComponent(preMergeVersionId)}/restore`,

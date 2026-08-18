@@ -1,4 +1,4 @@
-import { canvasesApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { documentsApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import type { AppLogger } from '@/lib/app-logger'
@@ -37,7 +37,7 @@ export function useSaveVersion({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await daemonFetch(canvasesApiUrl(workspaceId, path, 'versions'), {
+        const res = await daemonFetch(documentsApiUrl(workspaceId, path, 'versions'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ label }),
@@ -59,7 +59,7 @@ export function useSaveVersion({
           try {
             const blob = await getThumbnailBlob()
             if (blob) {
-              await daemonFetch(canvasesApiUrl(workspaceId, path, `versions/${id}/thumbnail`), {
+              await daemonFetch(documentsApiUrl(workspaceId, path, `versions/${id}/thumbnail`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'image/png' },
                 body: blob,

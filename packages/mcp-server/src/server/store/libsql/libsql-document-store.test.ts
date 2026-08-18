@@ -7,7 +7,7 @@ import { createIsolatedDb } from '../db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql-document-store.js'
 
 function canvasRef(documentId: string): DocRef {
-  return { kind: 'canvas', documentId }
+  return { kind: 'document', documentId }
 }
 
 let tempDir: string

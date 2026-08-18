@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 import { readSpatialCanvas, writeSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
-import { canvasApiUrl } from '../../src/shared/api-contracts/canvas-url.js'
+import { documentApiUrl } from '../../src/shared/api-contracts/document-url.js'
 import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../src/shared/ws-protocol.js'
 import { waitForEventWithTimeout } from './lib/wait-for-event.mjs'
 
@@ -291,7 +291,7 @@ async function main() {
   // ── Step 3: read the SAME document with no mocks through the HTTP path-
   //    snapshot route and the WS route — the exact shape of the drift bug ──
   const snapshotRes = await fetch(
-    `http://127.0.0.1:${port}${canvasApiUrl(WORKSPACE_ID, DOCUMENT_PATH, 'snapshot')}`,
+    `http://127.0.0.1:${port}${documentApiUrl(WORKSPACE_ID, DOCUMENT_PATH, 'snapshot')}`,
     { headers: { Authorization: `Bearer ${TOKEN}` } },
   )
   if (!snapshotRes.ok) {

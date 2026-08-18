@@ -18,7 +18,7 @@ vi.mock('../config.js', () => ({
 const { clearCache } = await import('../store/doc-cache.js')
 const { loadDocument, saveDocument } = await import('../store/document-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
-const { createAutoVersionTrigger } = await import('./canvas.js')
+const { createAutoVersionTrigger } = await import('./document.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
   await import('./ws.js')
 const { captureLogsForTests } = await import('../log.js')

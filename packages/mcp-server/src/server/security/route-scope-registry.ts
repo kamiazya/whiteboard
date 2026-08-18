@@ -63,19 +63,19 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // File routes: reading/writing a canvas's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
   // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
-  if (/^\/api\/w\/[^/]+\/canvas\/.+\/file\/[^/]+$/.test(path)) {
+  if (/^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'files:write' : 'files:read'] }
   }
 
   // Canvas write operations that arrive as POST but mutate state.
-  if (/^\/api\/w\/[^/]+\/canvas\/.+\/(update|export)$/.test(path) && method === 'POST') {
+  if (/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['canvas:write'] }
   }
-  // Remaining /api/w/:workspaceId/canvas/* routes: honor the write/read
+  // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
   // split so a mutating POST (e.g. /viewport) isn't authorized by
   // canvas:read alone. The specific write routes above still take
   // precedence via ordering.
-  if (/^\/api\/w\/[^/]+\/canvas\//.test(path)) {
+  if (/^\/api\/w\/[^/]+\/document\//.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
   }
 
@@ -100,14 +100,14 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // Version history, thumbnails, restore, compact — version-control
   // operations scoped to a single canvas.
   if (
-    /^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
+    /^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
   ) {
     return { kind: 'scoped', scopes: [isWrite ? 'versions:write' : 'versions:read'] }
   }
 
   // Branch and checkpoint routes — version-control operations at the
   // workspace level.
-  if (/^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/branches/.test(path)) {
+  if (/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'versions:write' : 'versions:read'] }
   }
   if (/^\/api\/workspaces\/[^/]+\/checkpoints$/.test(path)) {
@@ -125,7 +125,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   if (/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['files:write'] }
   }
-  if (/^\/api\/workspaces\/[^/]+\/canvases\/optimize-all$/.test(path) && method === 'POST') {
+  if (/^\/api\/workspaces\/[^/]+\/documents\/optimize-all$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 

@@ -113,7 +113,7 @@ function main() {
 
   // ── _redirects copied (SPA fallback) ──────────────────────────────────────────
   // apps/web has client-side routes with no matching dist/ file
-  // (/canvas/:workspaceId/:path, /w/:workspaceId, /local/:canvasId); without this
+  // (/document/:workspaceId/:path, /w/:workspaceId, /local/:documentId); without this
   // rule Cloudflare Pages 404s a direct load or reload of any of them.
   console.log('\n[smoke-artifact] _redirects (SPA fallback)')
   const redirects = readDist('_redirects')

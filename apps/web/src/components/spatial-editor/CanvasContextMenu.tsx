@@ -53,10 +53,10 @@ import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { hasClipboardFragment } from '../../lib/clipboard-store.js'
 import type { BoxMove } from './align.js'
 import { alignableBoxesOf, alignBoxes, distributeBoxes } from './align.js'
-import type { FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
+import type { FileRefOption } from './DocumentPickerDialog.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { Point } from './viewport.js'
 
@@ -80,7 +80,7 @@ export type LinkDialogState =
   | { readonly mode: 'create'; readonly point?: Point }
   | { readonly mode: 'edit'; readonly nodeId: string }
 
-export type CanvasPickerState =
+export type DocumentPickerState =
   | { readonly mode: 'create'; readonly point?: Point }
   | { readonly mode: 'retarget'; readonly nodeId: string }
 
@@ -102,7 +102,7 @@ export interface CanvasContextMenuProps {
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly fileRefOptions?: readonly FileRefOption[]
-  readonly setCanvasPicker: (state: CanvasPickerState | null) => void
+  readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   readonly onAddImage?: (file: File) => Promise<string | undefined>
   readonly pendingImagePointRef: MutableRefObject<Point | null>
   readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
@@ -142,7 +142,7 @@ export function CanvasContextMenu({
   createGroupAtViewportCenter,
   setLinkDialog,
   fileRefOptions,
-  setCanvasPicker,
+  setDocumentPicker,
   onAddImage,
   pendingImagePointRef,
   imageInputRef,
@@ -398,7 +398,7 @@ export function CanvasContextMenu({
             emptyItems.push({
               label: CREATION_LABELS.document,
               icon: <FileBox />,
-              onSelect: () => setCanvasPicker({ mode: 'create', point: contextMenu.point }),
+              onSelect: () => setDocumentPicker({ mode: 'create', point: contextMenu.point }),
             })
           }
           if (onAddImage !== undefined) {
@@ -511,7 +511,7 @@ export function CanvasContextMenu({
             verbs.push({
               label: 'Change target',
               icon: <FileBox />,
-              onSelect: () => setCanvasPicker({ mode: 'retarget', nodeId: node.id }),
+              onSelect: () => setDocumentPicker({ mode: 'retarget', nodeId: node.id }),
             })
           }
         }

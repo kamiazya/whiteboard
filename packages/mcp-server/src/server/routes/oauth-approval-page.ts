@@ -130,8 +130,8 @@ ${body}
 }
 
 // Scopes that let the grantee change something, as opposed to only read it.
-// The consent screen calls these out visually: "read my canvases" and "rewrite
-// my canvases" are not the same decision and must not look the same.
+// The consent screen calls these out visually: "read my documents" and "rewrite
+// my documents" are not the same decision and must not look the same.
 const WRITE_SCOPES: ReadonlySet<AuthScope> = new Set<AuthScope>([
   'canvas:write',
   'workspace:write',

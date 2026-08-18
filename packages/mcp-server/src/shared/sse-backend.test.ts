@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import type { CanvasBackendHandlers } from './canvas-backend-contract.js'
+import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
 
 function sseFrame(event: string, data: string): string {
@@ -67,7 +67,7 @@ function createHandlers() {
       onHeadChanged: () => {},
       onViewportRequest: () => {},
       onExportRequest: () => {},
-    } satisfies CanvasBackendHandlers,
+    } satisfies DocumentBackendHandlers,
     snapshots,
     updates,
     connectedCount: () => connected,
@@ -90,7 +90,7 @@ describe('SseBackend', () => {
     await vi.waitFor(() => expect(snapshots.length).toBe(1))
 
     expect(snapshots[0]).toEqual(new Uint8Array([7, 7, 7]))
-    expect(fake.calls.some((c) => c.url.includes('/api/w/ws-1/canvas/canvas-a/snapshot'))).toBe(
+    expect(fake.calls.some((c) => c.url.includes('/api/w/ws-1/document/canvas-a/snapshot'))).toBe(
       true,
     )
     backend.disconnect()
@@ -215,7 +215,7 @@ describe('SseBackend', () => {
 
     await vi.waitFor(() => {
       const post = fake.calls.find(
-        (c) => c.url.includes('/api/w/ws-1/canvas/canvas-a/update') && c.method === 'POST',
+        (c) => c.url.includes('/api/w/ws-1/document/canvas-a/update') && c.method === 'POST',
       )
       expect(post).toBeDefined()
     })
@@ -257,7 +257,7 @@ describe('SseBackend', () => {
       onHeadChanged: () => {},
       onViewportRequest: () => {},
       onExportRequest: () => {},
-    } satisfies CanvasBackendHandlers
+    } satisfies DocumentBackendHandlers
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
 
     backend.connect(handlers)

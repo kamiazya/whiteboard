@@ -40,7 +40,7 @@ function makeApp(options: { timeoutMs?: number } = {}) {
   return app
 }
 
-describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () => {
+describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-viewport-test-'))
     mockGetClientCount.mockReset()
@@ -56,7 +56,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     const app = makeApp()
 
     const start = Date.now()
-    const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', { method: 'POST' })
+    const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
     const elapsed = Date.now() - start
 
     expect(res.status).toBe(503)
@@ -67,7 +67,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
   it('includes a canvas_open hint in the zero-client error JSON', async () => {
     mockGetClientCount.mockReturnValue(0)
     const app = makeApp()
-    const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', { method: 'POST' })
+    const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
     const body = (await res.json()) as { error: string; message: string; hint?: string }
     expect(body.error).toBe('no_client')
     expect(body.message.toLowerCase()).toContain('no browser')
@@ -78,7 +78,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     mockGetClientCount.mockReturnValue(1)
     const app = makeApp({ timeoutMs: 50 })
 
-    const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', { method: 'POST' })
+    const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
 
     expect(res.status).toBe(504)
     const body = (await res.json()) as { error: string; message: string }
@@ -94,7 +94,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', {
+    const res = await app.request('/api/w/s1/document/canvas-a/viewport', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -123,7 +123,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     })
     const app = makeApp()
 
-    await app.request('/api/w/s1/canvas/canvas-a/viewport', {
+    await app.request('/api/w/s1/document/canvas-a/viewport', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'move', scrollX: 100, scrollY: 200, zoom: 1.5 }),
@@ -144,7 +144,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', { method: 'POST' })
+    const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
     expect(res.status).toBe(200)
     // The browser side falls back to its default mode when the body is empty.
     const call = mockSendViewportRequest.mock.calls[0]
@@ -163,7 +163,7 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
 
     vi.useFakeTimers()
     try {
-      const res = await app.request('/api/w/s1/canvas/canvas-a/viewport', { method: 'POST' })
+      const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
       expect(res.status).toBe(200)
       // A leaked timer would still be pending here, ticking until timeoutMs.
       expect(vi.getTimerCount()).toBe(0)
@@ -176,12 +176,12 @@ describe('POST /api/w/:workspaceId/canvas/:path/viewport - error handling', () =
     mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
 
-    const badSession = await app.request('/api/w/bad.sid/canvas/canvas-a/viewport', {
+    const badSession = await app.request('/api/w/bad.sid/document/canvas-a/viewport', {
       method: 'POST',
     })
     expect(badSession.status).toBe(400)
 
-    const badPath = await app.request('/api/w/s1/canvas/bad.path/viewport', {
+    const badPath = await app.request('/api/w/s1/document/bad.path/viewport', {
       method: 'POST',
     })
     expect(badPath.status).toBe(400)

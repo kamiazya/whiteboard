@@ -46,7 +46,7 @@ describe('getDoc', () => {
     expect(doc1).toBe(doc2)
   })
 
-  it('returns different instances for different canvases', async () => {
+  it('returns different instances for different documents', async () => {
     const docA = await getDoc('session1', 'canvas-a')
     const docB = await getDoc('session1', 'canvas-b')
     expect(docA).not.toBe(docB)

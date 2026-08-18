@@ -2,7 +2,7 @@
 // functions (no React Router import) so the shape is unit-testable without a
 // router context and has exactly one place that can drift from
 // DaemonDetectedBanner's deep link (which builds the same
-// `/w/:workspaceId/canvas/*` shape independently, since it runs on a
+// `/w/:workspaceId/document/*` shape independently, since it runs on a
 // different origin — the daemon's — and cannot import a client-side route
 // table).
 export function indexPath(): string {
@@ -19,37 +19,37 @@ export function workspacePath(workspaceId: string): string {
 // the hierarchy the workspace shows into one opaque URL segment.
 export function canvasPath(workspaceId: string, path: string): string {
   const tail = path.split('/').map(encodeURIComponent).join('/')
-  return `${workspacePath(workspaceId)}/canvas/${tail}`
+  return `${workspacePath(workspaceId)}/document/${tail}`
 }
 
 export function browserLocalIndexPath(): string {
   return '/local'
 }
 
-export function browserLocalCanvasPath(documentId: string): string {
+export function browserLocalDocumentPath(documentId: string): string {
   return `/local/${encodeURIComponent(documentId)}`
 }
 
 export type DaemonRoute =
   | { kind: 'index'; workspaceId?: string }
-  | { kind: 'canvas'; workspaceId: string; path: string }
+  | { kind: 'document'; workspaceId: string; path: string }
 
 // Deliberately regex-based rather than react-router's matchPath: App.tsx
 // needs this result inside a useState lazy initializer (before any Route
 // tree exists to match against), and keeping it framework-agnostic lets it
 // be unit-tested without a Router context.
 export function parseDaemonRoute(pathname: string): DaemonRoute | null {
-  // The canvas branch is checked first: `/w/:ws` and `/w/:ws/canvas/...`
+  // The canvas branch is checked first: `/w/:ws` and `/w/:ws/document/...`
   // share a prefix, and the workspace pattern below is anchored so it cannot
   // swallow a canvas URL either way.
-  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/canvas\/(.+?)\/?$/)
+  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/document\/(.+?)\/?$/)
   if (canvasMatch) {
     const workspaceId = decodeSegment(canvasMatch[1])
     const segments = (canvasMatch[2] as string).split('/').map(decodeSegment)
     if (workspaceId === null || segments.some((segment) => segment === null || segment === '')) {
       return null
     }
-    return { kind: 'canvas', workspaceId, path: segments.join('/') }
+    return { kind: 'document', workspaceId, path: segments.join('/') }
   }
   const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
   if (workspaceMatch) {
@@ -63,7 +63,7 @@ export function parseDaemonRoute(pathname: string): DaemonRoute | null {
 }
 
 // decodeURIComponent throws URIError on a malformed percent sequence
-// (`/w/w%1/canvas/main`). These parsers run inside render-phase lazy
+// (`/w/w%1/document/main`). These parsers run inside render-phase lazy
 // initializers, so a throw here takes down the whole app; an unparseable URL
 // is a not-a-route, not a crash.
 function decodeSegment(segment: string): string | null {
@@ -78,7 +78,7 @@ function decodeSegment(segment: string): string | null {
 // back into the URL it should be addressable at, so App.tsx's state->URL
 // sync and parseDaemonRoute can never drift from each other.
 export function daemonRoutePath(route: DaemonRoute): string {
-  if (route.kind === 'canvas') return canvasPath(route.workspaceId, route.path)
+  if (route.kind === 'document') return canvasPath(route.workspaceId, route.path)
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 

@@ -7,8 +7,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const nodeAddInputSchema = z
@@ -57,7 +57,7 @@ export function createNodeAddTool(deps: ServerDeps) {
     inputSchema: nodeAddInputSchema,
     outputSchema: nodeAddOutputSchema,
     execute: async (input: NodeAddInput): Promise<NodeAddOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // A markdown document keeps its OKF body in a text node, so a node
@@ -85,7 +85,7 @@ export function createNodeAddTool(deps: ServerDeps) {
       })
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, node: input.node }
     },

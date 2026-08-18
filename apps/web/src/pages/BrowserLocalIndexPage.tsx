@@ -1,21 +1,21 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CanvasListView } from '../components/canvas-list/CanvasListView.js'
-import { DeleteCanvasDialog } from '../components/canvas-list/DeleteCanvasDialog.js'
+import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DocumentListView } from '../components/document-list/DocumentListView.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
   store: BrowserLocalStore
-  onOpenCanvas: (documentId: string) => void
+  onOpenDocument: (documentId: string) => void
 }
 
 // The browser-local landing surface: the same shared list the daemon gallery
 // renders, minus its daemon-only capabilities (no thumbnails, no workspace
 // selector). Rows come straight from the store; the editor page owns
-// everything after onOpenCanvas fires.
-export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndexPageProps) {
-  const [snapshots, setSnapshots] = useState<CanvasSnapshot[] | null>(null)
+// everything after onOpenDocument fires.
+export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalIndexPageProps) {
+  const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // The `disabled` attribute (via createDisabled) is the whole double-press
   // mechanism: React flushes this state before a second click can dispatch,
@@ -26,12 +26,12 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
   useEffect(() => {
     let cancelled = false
     store
-      .listCanvases()
+      .listDocuments()
       .then((all) => {
         if (!cancelled) setSnapshots(all)
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load canvases from this browser.')
+        if (!cancelled) setError('Failed to load documents from this browser.')
       })
     return () => {
       cancelled = true
@@ -67,8 +67,8 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
       // Unconditional removal by id. If this was the canvas the default
       // pointer resumes into, the pointer dangles deliberately — the
       // editor's resume path already falls back safely on a dead id.
-      await store.removeCanvas?.(pendingDelete.id)
-      setSnapshots(await store.listCanvases())
+      await store.removeDocument?.(pendingDelete.id)
+      setSnapshots(await store.listDocuments())
       setPendingDelete(null)
     } catch {
       setDeleteError('Failed to delete the canvas from this browser.')
@@ -82,7 +82,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
       setCreating(true)
       try {
         const id = store.generateId()
-        const fresh: CanvasSnapshot = {
+        const fresh: DocumentSnapshot = {
           id,
           name: 'untitled',
           updatedAt: new Date().toISOString(),
@@ -91,15 +91,15 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
         await store.save(fresh)
         // Repointed so a later plain load resumes in the new canvas — the
         // same contract the editor's own create/switch flows keep.
-        await store.setDefaultCanvasId(id)
-        onOpenCanvas(id)
+        await store.setDefaultDocumentId(id)
+        onOpenDocument(id)
       } catch {
         setError('Failed to create a canvas in this browser.')
       } finally {
         setCreating(false)
       }
     },
-    [store, onOpenCanvas],
+    [store, onOpenDocument],
   )
 
   return (
@@ -113,7 +113,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
       {snapshots === null && !error ? (
         <div
           role="status"
-          aria-label="Loading canvases"
+          aria-label="Loading documents"
           className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
         >
           {[0, 1, 2, 3].map((i) => (
@@ -123,9 +123,9 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
           ))}
         </div>
       ) : snapshots !== null ? (
-        <CanvasListView
+        <DocumentListView
           rows={rows}
-          onOpen={onOpenCanvas}
+          onOpen={onOpenDocument}
           onCreate={(kind) => void handleCreate(kind)}
           createDisabled={creating}
           renderActions={(row) => (
@@ -156,7 +156,7 @@ export function BrowserLocalIndexPage({ store, onOpenCanvas }: BrowserLocalIndex
           Create a canvas
         </button>
       )}
-      <DeleteCanvasDialog
+      <DeleteDocumentDialog
         pending={pendingDelete}
         busy={deleting}
         error={deleteError}

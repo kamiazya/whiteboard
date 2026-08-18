@@ -9,11 +9,11 @@
  *
  * It holds no DOM API of its own so it can be tested directly and reused
  * verbatim inside a SharedWorker, which is what makes the sharing span tabs
- * rather than just the canvases within one tab.
+ * rather than just the documents within one tab.
  */
 
 import type { z } from 'zod'
-import { canvasApiUrl } from './api-contracts/canvas-url.js'
+import { documentApiUrl } from './api-contracts/document-url.js'
 import {
   syncMessageEventSchema,
   syncReadyEventSchema,
@@ -177,11 +177,11 @@ export function toBase64(bytes: Uint8Array): string {
  * anything holding just the key can address this route. First slash only: a
  * path may contain more, a workspace id never does.
  */
-export function canvasUpdateUrl(baseUrl: string, doc: string): string | null {
+export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
   return canvasDocUrl(baseUrl, doc, 'update')
 }
 
-/** The snapshot twin of `canvasUpdateUrl`, splitting on the same first slash. */
+/** The snapshot twin of `documentUpdateUrl`, splitting on the same first slash. */
 export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
   return canvasDocUrl(baseUrl, doc, 'snapshot')
 }
@@ -189,10 +189,10 @@ export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
 function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot'): string | null {
   const slash = doc.indexOf('/')
   if (slash <= 0 || slash === doc.length - 1) return null
-  // Raw halves: canvasApiUrl encodes per segment itself.
+  // Raw halves: documentApiUrl encodes per segment itself.
   const workspaceId = doc.slice(0, slash)
   const path = doc.slice(slash + 1)
-  return `${baseUrl.replace(/\/$/, '')}${canvasApiUrl(workspaceId, path, action)}`
+  return `${baseUrl.replace(/\/$/, '')}${documentApiUrl(workspaceId, path, action)}`
 }
 
 export class SseStreamHub implements SseStreamSource {
@@ -268,7 +268,7 @@ export class SseStreamHub implements SseStreamSource {
    * endpoint of its own.
    */
   async push(doc: string, update: Uint8Array): Promise<void> {
-    const url = canvasUpdateUrl(this.options.baseUrl, doc)
+    const url = documentUpdateUrl(this.options.baseUrl, doc)
     if (url === null) throw new Error(`not a document key: ${doc}`)
     const res = await this.options.fetch(url, {
       method: 'POST',

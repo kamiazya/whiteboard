@@ -175,7 +175,7 @@ it('the link context menu offers Open link and Edit URL rewrites the target', as
 
 // The model schema's z.url() accepts any parseable URL — including
 // javascript: — because JSON Canvas doesn't restrict the field. FOLLOWING
-// one is this editor's decision, and canvases arrive via sync/import, so
+// one is this editor's decision, and documents arrive via sync/import, so
 // the guard must live at the open sink, not only in the dialog.
 it('a javascript: URL is neither followable nor accepted by the dialog', async () => {
   const hostile: SpatialCanvas = {

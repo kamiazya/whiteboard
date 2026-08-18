@@ -75,7 +75,7 @@ function projectProviderMode(
  * `depsRef` carries the runtime dependencies (which canvas is open, which
  * provider is active) as a mutable ref rather than plain arguments. A
  * command can be long-running (an in-flight fetch, a slow scene read) while
- * the surrounding React tree re-renders, switches canvases, or unmounts;
+ * the surrounding React tree re-renders, switches documents, or unmounts;
  * reading `depsRef.current` fresh at the start of every call — and
  * capturing it into a local before doing any async work — means a call in
  * flight keeps running against the identity it started with, while the next

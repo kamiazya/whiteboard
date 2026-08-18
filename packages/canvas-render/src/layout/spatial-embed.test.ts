@@ -194,16 +194,16 @@ describe('file-node inline embeds', () => {
   })
 
   it('caps recursion depth at 3', () => {
-    const canvases: Record<string, SpatialCanvas> = {}
+    const documents: Record<string, SpatialCanvas> = {}
     for (let i = 0; i < 6; i += 1) {
-      canvases[`c${i}`] = { nodes: [fileNode({ id: `f${i}`, file: `c${i + 1}` })], edges: [] }
+      documents[`c${i}`] = { nodes: [fileNode({ id: `f${i}`, file: `c${i + 1}` })], edges: [] }
     }
-    canvases.c6 = { nodes: [], edges: [] }
+    documents.c6 = { nodes: [], edges: [] }
     const scene = layoutSpatialCanvas(
-      canvases.c0 as SpatialCanvas,
+      documents.c0 as SpatialCanvas,
       baseOptions({
         resolveReference: (ref) => {
-          const canvas = canvases[ref]
+          const canvas = documents[ref]
           return canvas === undefined ? undefined : { canvas }
         },
         expandFileNode: () => true,

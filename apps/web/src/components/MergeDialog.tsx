@@ -1,6 +1,6 @@
 import {
   type BranchMeta,
-  canvasesApiUrl,
+  documentsApiUrl,
   listVersionsResponseSchema,
   type MergeRequest,
   type MergeResponse,
@@ -262,7 +262,7 @@ export function MergeDialog({
     setThumbsLoading(true)
     ;(async () => {
       try {
-        const res = await fetchFn(canvasesApiUrl(workspaceId, path, 'versions'))
+        const res = await fetchFn(documentsApiUrl(workspaceId, path, 'versions'))
         if (!res.ok) {
           if (!cancelled) setThumbs({ target: null, source: null })
           return

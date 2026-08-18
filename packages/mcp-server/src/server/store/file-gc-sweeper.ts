@@ -119,7 +119,7 @@ async function discoverFsWorkspaces(): Promise<string[]> {
 
     // 'blobs' is a valid workspace id (validateWorkspaceId permits it) and
     // document-store.ts also uses <dataDir>/blobs as the snapshot root
-    // (<dataDir>/blobs/<workspaceId>/canvas/...), so this directory serves
+    // (<dataDir>/blobs/<workspaceId>/document/...), so this directory serves
     // double duty. The snapshot layout has no files/ child of its own, so
     // this containment check alone already tells the two apart: only an
     // upload-only workspace literally named 'blobs' — which the upload

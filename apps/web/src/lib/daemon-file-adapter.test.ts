@@ -78,7 +78,7 @@ describe('createDaemonFileAdapter', () => {
 
     const url = await adapter.loadImageUrl('asset:file-abc')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/${path}/file/file-abc`)
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/${path}/file/file-abc`)
     expect(url).toBe(FAKE_OBJECT_URL)
   })
 
@@ -109,7 +109,7 @@ describe('createDaemonFileAdapter', () => {
 
     expect(ref).toBe(`asset:${FAKE_UUID}`)
     const [url, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`${BASE}/api/w/${WS}/canvas/${path}/file/${FAKE_UUID}`)
+    expect(url).toBe(`${BASE}/api/w/${WS}/document/${path}/file/${FAKE_UUID}`)
     expect(init.method).toBe('PUT')
     // The route rejects an unrecognised Content-Type with 415, so the
     // picked file's own type has to travel.
@@ -143,7 +143,7 @@ describe('createDaemonFileAdapter', () => {
 
     const loaded = await adapter.loadDocument('sibling')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/sibling/snapshot`)
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/sibling/snapshot`)
     expect(loaded?.canvas?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
   })
 
@@ -242,7 +242,7 @@ describe('createDaemonFileAdapter', () => {
 
     await adapter.loadDocument('a b')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/canvas/a%20b/snapshot`)
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/a%20b/snapshot`)
   })
 })
 
@@ -259,7 +259,7 @@ describe('createDaemonFileAdapter — id references', () => {
     const loaded = await adapter.loadDocument('nanoid-123')
     expect(loaded).toBeDefined()
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/canvas/renamed-canvas/snapshot',
+      '/api/w/ws-1/document/renamed-canvas/snapshot',
     )
   })
 
@@ -275,7 +275,7 @@ describe('createDaemonFileAdapter — id references', () => {
     const loaded = await adapter.loadDocument('old-path-ref')
     expect(loaded).toBeDefined()
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/canvas/old-path-ref/snapshot',
+      '/api/w/ws-1/document/old-path-ref/snapshot',
     )
   })
 })

@@ -7,8 +7,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
 
 export const bodyPatchRangeSchema = z
@@ -83,7 +83,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
     inputSchema: bodyPatchInputSchema,
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
@@ -126,7 +126,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
         throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
-      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, node: updatedNode }
     },

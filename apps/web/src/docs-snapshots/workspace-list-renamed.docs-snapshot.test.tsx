@@ -13,7 +13,7 @@ import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
-// CanvasThumb fires its own daemonFetch(.../latest-thumbnail) per card and
+// DocumentThumb fires its own daemonFetch(.../latest-thumbnail) per card and
 // calls setFailed(true) once the 404 response resolves. That render commit
 // happens on a microtask hop AFTER this counter increments, so waitFor
 // below also needs a settle tick (see the rAF loop) — counting requests
@@ -33,18 +33,18 @@ beforeEach(() => {
           workspaces: [{ workspaceId: 'ws_main' }, { workspaceId: 'ws_sketches' }],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_main/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_main/documents')) {
         return jsonResponse({
-          canvases: [
+          documents: [
             { path: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
             { path: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
             { path: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
           ],
         })
       }
-      if (url.endsWith('/api/workspaces/ws_sketches/canvases')) {
+      if (url.endsWith('/api/workspaces/ws_sketches/documents')) {
         return jsonResponse({
-          canvases: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
+          documents: [{ path: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
       // The "renamed" half: every canvas has a friendly display name and a
@@ -52,7 +52,7 @@ beforeEach(() => {
       if (url.endsWith('/api/workspaces/ws_main/names')) {
         return jsonResponse({
           workspace: 'Production designs',
-          canvases: {
+          documents: {
             'design/login-flow': 'Auth signup flow',
             'design/onboarding': 'New user onboarding',
             'architecture/overview': 'System architecture',
@@ -63,7 +63,7 @@ beforeEach(() => {
       if (url.endsWith('/api/workspaces/ws_sketches/names')) {
         return jsonResponse({
           workspace: 'Quick sketches',
-          canvases: { inbox: "Today's inbox" },
+          documents: { inbox: "Today's inbox" },
           pinned: [],
         })
       }
@@ -94,7 +94,7 @@ describe('docs snapshot — workspace list (renamed)', () => {
           <DaemonIndexPage
             daemonBaseUrl="http://127.0.0.1:3099"
             initialWorkspaceId="ws_main"
-            onOpenCanvas={() => undefined}
+            onOpenDocument={() => undefined}
           />
         </div>
       </MemoryRouter>,
@@ -105,7 +105,7 @@ describe('docs snapshot — workspace list (renamed)', () => {
       if (!titleText.includes('Auth signup flow')) {
         throw new Error('renamed canvas display name not yet rendered')
       }
-      const cards = container.querySelectorAll('[data-testid="canvas-list-card"]')
+      const cards = container.querySelectorAll('[data-testid="document-list-card"]')
       if (cards.length !== 3) throw new Error('canvas grid not yet rendered')
       if (thumbnailFetchCount < 3) throw new Error('thumbnail fetches not yet started')
     })

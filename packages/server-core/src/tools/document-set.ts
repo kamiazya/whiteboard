@@ -11,7 +11,7 @@ import {
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 
@@ -68,7 +68,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
     inputSchema: documentSetInputSchema,
     outputSchema: documentSetOutputSchema,
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 
       const parsed = parseOkf(input.markdown)
       if (!parsed.ok) {

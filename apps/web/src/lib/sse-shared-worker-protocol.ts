@@ -48,7 +48,7 @@ export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
 export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message'), doc: z.string(), raw: z.string() }),
   // Whether a stream is currently carrying this document. Addressed like the
-  // others so a tab watching several canvases routes it the same way; the
+  // others so a tab watching several documents routes it the same way; the
   // worker owns the stream, so this is the only way a tab can know.
   z.object({ type: z.literal('status'), doc: z.string(), connected: z.boolean() }),
   // The authority's current state, for a tab that is forking from it. Answers

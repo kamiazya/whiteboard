@@ -116,7 +116,7 @@ describe('createOAuthResourceServerAuthStrategy — validator success path', () 
     const strategy = createOAuthResourceServerAuthStrategy({ validator })
     const decision = await strategy.authorize({
       method: 'POST',
-      path: '/api/canvases',
+      path: '/api/documents',
       authorizationHeader: 'Bearer eyJ.payload.sig',
       requiredScopes: ['canvas:write'],
     })
@@ -174,7 +174,7 @@ describe('createOAuthResourceServerAuthStrategy — defence-in-depth scope subse
     const strategy = createOAuthResourceServerAuthStrategy({ validator })
     const decision = await strategy.authorize({
       method: 'POST',
-      path: '/api/canvases',
+      path: '/api/documents',
       authorizationHeader: 'Bearer eyJ.payload.sig',
       requiredScopes: ['canvas:write'],
     })

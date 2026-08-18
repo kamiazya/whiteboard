@@ -2,7 +2,7 @@
  * The two header rows own different SCOPES.
  *
  * Row one is where you ARE — the application and the workspace. Row two
- * (CanvasProperties) is the canvas itself: its title, its state, its
+ * (DocumentProperties) is the canvas itself: its title, its state, its
  * operations. Anything canvas-shaped in row one is a duplicate of something
  * row two already owns, and the canvas name was appearing in both.
  */
@@ -13,7 +13,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { MemoryStore } from '../lib/browser-local-store.js'
-import { BrowserLocalCanvasPage } from '../pages/BrowserLocalCanvasPage.js'
+import { BrowserLocalDocumentPage } from '../pages/BrowserLocalDocumentPage.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
 
@@ -25,8 +25,8 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="local"
         path="my-canvas"
-        canvases={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
-        onNavigateToCanvas={() => {}}
+        documents={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
+        onNavigateToDocument={() => {}}
         {...props}
       />
     </div>,
@@ -86,7 +86,7 @@ describe('fullscreen ground', () => {
     render(
       <div style={{ height: '400px' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalCanvasPage store={new MemoryStore()} />
+          <BrowserLocalDocumentPage store={new MemoryStore()} />
         </MemoryRouter>
       </div>,
     )

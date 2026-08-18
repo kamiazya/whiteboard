@@ -4,7 +4,7 @@
 // web-app-boundary.test.ts scans every file under src/shared/api-contracts/
 // for browser-safety, but it does not — and structurally cannot — assert
 // what the barrel itself re-exports. Without this test, someone could add
-// `export * from './canvas-runtime.js'` (or daemon-doctor / export /
+// `export * from './document-runtime.js'` (or daemon-doctor / export /
 // libraries) to the barrel and widen the public semver surface without any
 // test noticing.
 
@@ -33,11 +33,11 @@ describe('api-contracts barrel scope', () => {
     expect(specifiers).toEqual([
       '@kamiazya/whiteboard-server-core',
       './branches.js',
-      './canvas.js',
-      // canvas-url: the live-canvas API's URL shape, exported so apps/web
+      './document.js',
+      // document-url: the live-canvas API's URL shape, exported so apps/web
       // builds request URLs through the same function the daemon's own
       // clients use instead of re-deriving the shape by hand.
-      './canvas-url.js',
+      './document-url.js',
       // errors: the ONE daemon error-body contract (title | error+message),
       // exported so every client error surface reads through the same
       // parser instead of hand-rolled per-file field checks.

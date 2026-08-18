@@ -1,6 +1,6 @@
 /**
  * Content loading for markdown `![[embed]]`s, the markdown sibling of
- * `useCanvasFileSeams`: the layout's `resolveEmbed` seam is SYNCHRONOUS by
+ * `useDocumentFileSeams`: the layout's `resolveEmbed` seam is SYNCHRONOUS by
  * contract, so this hook pre-fetches referenced bodies (direct and
  * transitive, naturally bounded by the layout's depth cap plus the cache)
  * and hands the preview a cache lookup. Totality mirrors the seam: a load
@@ -15,7 +15,7 @@ import {
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { loadMarkdownEmbedSource } from '../lib/canvas-embed-content.js'
+import { loadMarkdownEmbedSource } from '../lib/document-embed-content.js'
 import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 const log = getAppLogger('markdown-embed-content')

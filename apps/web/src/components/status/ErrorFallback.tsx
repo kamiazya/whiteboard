@@ -14,7 +14,7 @@ export function ErrorFallback({ onRetry }: { onRetry: () => void }): JSX.Element
     <StatusPageLayout
       mark={<ErrorMark className="text-muted-foreground" />}
       title="Something went wrong"
-      description="The whiteboard hit an error it couldn't recover from. Your saved canvases are safe."
+      description="The whiteboard hit an error it couldn't recover from. Your saved documents are safe."
       actions={
         <>
           <StatusPageButton label="Try again" onClick={onRetry} primary />

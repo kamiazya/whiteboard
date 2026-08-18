@@ -3,23 +3,26 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
-import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+} from '../test-utils/fake-document-store.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument } from './document-io.js'
 import { DocumentNotFoundError, NodeLockedError, NodeNotFoundError } from './errors.js'
 import { createNodeLockTool } from './node-lock.js'
 import { createNodePatchTool, nodePatchInputSchema } from './node-patch.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: DOCUMENT_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -41,7 +44,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       patch: { x: 42, y: 7, width: 200, height: 90, color: '2' },
     })
@@ -58,7 +61,7 @@ describe('wb_node_patch tool', () => {
     })
 
     const reloaded = await documentStore.loadSnapshot({
-      docRef: { kind: 'canvas', documentId: CANVAS_ID },
+      docRef: { kind: 'document', documentId: DOCUMENT_ID },
     })
     expect(reloaded).not.toBeNull()
   })
@@ -73,7 +76,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'g1',
       patch: { label: 'My Group' },
     })
@@ -91,7 +94,7 @@ describe('wb_node_patch tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       patch: { label: 'ignored' },
     })
@@ -110,7 +113,7 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         nodeId: 'missing',
         patch: { x: 1 },
       }),
@@ -119,20 +122,20 @@ describe('wb_node_patch tool', () => {
 
   test('throws DocumentNotFoundError when no snapshot exists yet', async () => {
     const documentStore = new FakeDocumentStore()
-    await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
     const tool = createNodePatchTool(makeDeps(documentStore))
 
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         nodeId: 'n1',
         patch: { x: 1 },
       }),
     ).rejects.toThrow(DocumentNotFoundError)
   })
 
-  test('throws CanvasNotFoundError when workspaceId does not actually own documentId', async () => {
+  test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
     const documentStore = new FakeDocumentStore()
     await seedCanvas(documentStore, {
       nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
@@ -143,17 +146,17 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: 'ws-other',
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         nodeId: 'n1',
         patch: { x: 1 },
       }),
-    ).rejects.toThrow(CanvasNotFoundError)
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   test('rejects a negative width at the input-schema level', () => {
     const result = nodePatchInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       patch: { width: -5 },
     })
@@ -170,7 +173,7 @@ describe('wb_node_patch tool', () => {
     const lockTool = createNodeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       locked: true,
     })
@@ -179,14 +182,14 @@ describe('wb_node_patch tool', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: CANVAS_ID,
+        documentId: DOCUMENT_ID,
         nodeId: 'n1',
         patch: { x: 999 },
       }),
     ).rejects.toBeInstanceOf(NodeLockedError)
 
     // And nothing was written.
-    const { canvas } = await loadDocument(makeDeps(documentStore), CANVAS_ID)
+    const { canvas } = await loadDocument(makeDeps(documentStore), DOCUMENT_ID)
     expect(canvas.nodes[0]).toMatchObject({ x: 0 })
   })
 
@@ -199,13 +202,13 @@ describe('wb_node_patch tool', () => {
     const lockTool = createNodeLockTool(makeDeps(documentStore))
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       locked: true,
     })
     await lockTool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       locked: false,
     })
@@ -213,7 +216,7 @@ describe('wb_node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(documentStore))
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       nodeId: 'n1',
       patch: { x: 42 },
     })

@@ -10,12 +10,12 @@ describe('pwaOptions', () => {
     const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
     expect(denylist.length).toBeGreaterThan(0)
 
-    const positiveCases = ['/api/canvases', '/api', '/mcp', '/ws']
+    const positiveCases = ['/api/documents', '/api', '/mcp', '/ws']
     for (const path of positiveCases) {
       expect(denylist.some((re) => re.test(path))).toBe(true)
     }
 
-    const negativeCases = ['/', '/canvas/abc']
+    const negativeCases = ['/', '/document/abc']
     for (const path of negativeCases) {
       expect(denylist.some((re) => re.test(path))).toBe(false)
     }
@@ -23,7 +23,7 @@ describe('pwaOptions', () => {
 
   it('does not deny the client-side routes added by app-routes.ts — an offline deep link gets the app shell, not a network error', () => {
     const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
-    const clientRoutes = ['/canvas/w1/main', '/w/w1', '/local/abc-123']
+    const clientRoutes = ['/document/w1/main', '/w/w1', '/local/abc-123']
     for (const path of clientRoutes) {
       expect(denylist.some((re) => re.test(path))).toBe(false)
     }

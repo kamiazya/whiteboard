@@ -41,7 +41,7 @@ const { clearCache, getDoc } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 const { saveDocument } = await import('./store/document-store.js')
-const { loadCanvasBranches, saveCanvasBranches } = await import('./store/branches-store.js')
+const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
 
 function createRuntimeOptions() {
   return {
@@ -100,15 +100,15 @@ describe('performMerge vs rename race', () => {
     // feature's tip freezes the rect-1-only state.
     const featureTipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
 
-    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const state = await loadCanvasBranches('session1', 'canvas-a')
+    const state = await loadDocumentBranches('session1', 'canvas-a')
     const feature = state.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = featureTipFrontiers
-    await saveCanvasBranches('session1', 'canvas-a', state)
+    await saveDocumentBranches('session1', 'canvas-a', state)
 
     // Add rect-2 directly on top so main's empty tip (== "current live doc")
     // diverges from feature's frozen rect-1-only tip. Merging feature into
@@ -134,7 +134,7 @@ describe('performMerge vs rename race', () => {
     })
 
     const mergePromise = app.request(
-      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +145,7 @@ describe('performMerge vs rename race', () => {
     await getDocCalled
 
     // Fire the rename while the merge is stalled mid-flight.
-    const renamePromise = app.request('/api/workspaces/session1/canvases/canvas-a/path', {
+    const renamePromise = app.request('/api/workspaces/session1/documents/canvas-a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'canvas-b' }),
@@ -161,8 +161,8 @@ describe('performMerge vs rename race', () => {
     // Exactly one canvas must survive -- at the post-rename path. The merge
     // must not have silently inserted a phantom duplicate back at the old
     // path.
-    const listRes = await app.request('/api/workspaces/session1/canvases')
-    const listJson = (await listRes.json()) as { canvases: { path: string }[] }
-    expect(listJson.canvases.map((c) => c.path)).toEqual(['canvas-b'])
+    const listRes = await app.request('/api/workspaces/session1/documents')
+    const listJson = (await listRes.json()) as { documents: { path: string }[] }
+    expect(listJson.documents.map((c) => c.path)).toEqual(['canvas-b'])
   })
 })

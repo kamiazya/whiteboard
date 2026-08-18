@@ -1,6 +1,6 @@
 import {
   listWorkspacesResponseSchema,
-  optimizeAllCanvasesResponseSchema,
+  optimizeAllDocumentsResponseSchema,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
   type StorageReportPayload,
@@ -207,7 +207,7 @@ export function StorageReportCard() {
     void refresh()
   }, [refresh])
 
-  // Optimize all canvases across every workspace. Loops sequentially so the
+  // Optimize all documents across every workspace. Loops sequentially so the
   // doc-cache eviction inside each compact stays coherent. Refreshes the
   // storage report at the end so the user sees the new totals without a
   // separate Refresh click.
@@ -227,14 +227,14 @@ export function StorageReportCard() {
       let savings = 0
       let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
-        const res = await fetchApi(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
+        const res = await fetchApi(`/api/workspaces/${workspaceId}/documents/optimize-all`, {
           method: 'POST',
         })
         if (!res.ok) {
           failedWorkspaces += 1
           continue
         }
-        const body = optimizeAllCanvasesResponseSchema.parse(await res.json())
+        const body = optimizeAllDocumentsResponseSchema.parse(await res.json())
         savings += body.totalBeforeBytes - body.totalAfterBytes
       }
       if (!mountedRef.current) return
@@ -532,7 +532,7 @@ export function StorageReportCard() {
                       className="h-7 gap-1.5"
                       onClick={() => void optimizeAll()}
                       disabled={optimizing}
-                      aria-label="Optimize all canvases"
+                      aria-label="Optimize all documents"
                     >
                       <Sparkles className={optimizing ? 'size-3.5 animate-pulse' : 'size-3.5'} />
                       <span className="text-xs">{optimizing ? 'Optimizing…' : 'Optimize'}</span>
@@ -639,8 +639,8 @@ export function StorageReportCard() {
             <DialogTitle>User libraries</DialogTitle>
             <DialogDescription>
               Installed library packs. Removing a pack deletes its <code>.excalidrawlib</code> file
-              from disk and drops the registry row — canvases that referenced it keep their embedded
-              copies of any item already inserted.
+              from disk and drops the registry row — documents that referenced it keep their
+              embedded copies of any item already inserted.
             </DialogDescription>
           </DialogHeader>
           {libsLoading ? (

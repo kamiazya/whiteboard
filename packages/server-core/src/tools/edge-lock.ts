@@ -2,7 +2,7 @@ import { setEdgeLock } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { EdgeNotFoundError } from './errors.js'
 
@@ -44,7 +44,7 @@ export function createEdgeLockTool(deps: ServerDeps) {
     inputSchema: edgeLockInputSchema,
     outputSchema: edgeLockOutputSchema,
     execute: async (input: EdgeLockInput): Promise<EdgeLockOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // Reject a ghost id rather than storing a lock nothing can ever

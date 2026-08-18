@@ -43,7 +43,7 @@ export interface MarkdownEditorProps {
   theme?: ResolvedTheme
   /**
    * Core OKF facets, rendered as the document header in Read mode —
-   * display-only; facet editing stays in `CanvasProperties`.
+   * display-only; facet editing stays in `DocumentProperties`.
    */
   meta?: StoredCoreFacets
   /**
@@ -61,7 +61,7 @@ export interface MarkdownEditorProps {
    * in the preview. The host owns navigation; without it, wikiLink anchors
    * are inert (their href is a bare ULID, not a URL).
    */
-  onOpenCanvas?: (documentId: string) => void
+  onOpenDocument?: (documentId: string) => void
   /**
    * Resolves `![[embed]]` targets' parsed bodies so block embeds render
    * inline (canvas-render's layout seam; the host pre-fetches, see
@@ -156,7 +156,7 @@ function countWords(value: string): number {
  * v4 UUIDs — both reach the preview through the alias resolver.
  */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isCanvasIdHref(href: string): boolean {
+function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
@@ -216,7 +216,7 @@ export function MarkdownEditor({
   meta,
   title,
   resolveAlias,
-  onOpenCanvas,
+  onOpenDocument,
   resolveEmbed,
   fragmentLoaders,
   sourceExtensions,
@@ -235,13 +235,13 @@ export function MarkdownEditor({
   // meaningless as a URL, meaningful to the host. Intercept exactly those;
   // ordinary http(s) anchors keep default browser behavior.
   const onPreviewClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!onOpenCanvas) return
+    if (!onOpenDocument) return
     const anchor = event.target instanceof Element ? event.target.closest('a') : null
     if (!anchor) return
     const href = anchor.getAttribute('href')
-    if (href === null || !isCanvasIdHref(href)) return
+    if (href === null || !isDocumentIdHref(href)) return
     event.preventDefault()
-    onOpenCanvas(href)
+    onOpenDocument(href)
   }
 
   const [mode, setMode] = useState<MarkdownViewMode>(readStoredViewMode)

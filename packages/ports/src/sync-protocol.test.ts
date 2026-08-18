@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { syncMessageSchema } from './sync-protocol.js'
 
-const canvasRef = { kind: 'canvas' as const, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
+const canvasRef = { kind: 'document' as const, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
 const frontier = new Uint8Array([1])
 
 describe('syncMessageSchema', () => {

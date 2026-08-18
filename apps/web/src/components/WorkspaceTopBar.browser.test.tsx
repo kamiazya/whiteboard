@@ -12,7 +12,7 @@ function mkNamesResponse(): Response {
   return new Response(
     JSON.stringify({
       workspace: 'Design review',
-      canvases: {
+      documents: {
         'design/login-flow': 'Login flow',
         'design/settings-flow': 'Settings flow',
       },
@@ -88,13 +88,13 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        canvases={[
+        documents={[
           { path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
           { path: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
         ]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToCanvas={() => {}}
+        onNavigateToDocument={() => {}}
         {...props}
       />
     </div>,
@@ -138,7 +138,7 @@ describe('WorkspaceTopBar browser mode', () => {
       if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      if (url.includes('/canvases') && init?.method === 'POST') {
+      if (url.includes('/documents') && init?.method === 'POST') {
         callCount++
         if (callCount === 1) {
           // First activation → 409 Problem Details with title.
@@ -168,8 +168,8 @@ describe('WorkspaceTopBar browser mode', () => {
     // First activation: immediate POST (no dialog ever appears), derived inside the
     // current group — the 409 title surfaces in the alert line.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Canvas "design/untitled" already exists')).toBeTruthy()
     })
@@ -182,8 +182,8 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // Second activation: 500 without title → generic fallback, internals never shown.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
     })

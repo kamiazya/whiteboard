@@ -11,7 +11,7 @@
 //   3.  Start container A with a fresh source data volume.
 //   4.  Seed via valid JWT:
 //         - workspace + canvas (Loro snapshot via canvas POST)
-//         - file blob  (PUT /api/w/:ws/canvas/:path/file/:fileId)
+//         - file blob  (PUT /api/w/:ws/document/:path/file/:fileId)
 //         - manual version + thumbnail
 //         - palette entry  (PUT /api/workspaces/:ws/palette, no auth needed)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
@@ -379,7 +379,7 @@ try {
     // Create workspace + canvas (workspace:write).
     const createRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       jwt,
       {
         method: 'POST',
@@ -395,19 +395,21 @@ try {
     // Verify canvas list (workspace:read).
     const listRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       jwt,
     )
     if (!listRes.ok) fail(`scenario 3: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
-    if (!(list?.canvases ?? []).some((c) => c.path === CANVAS_PATH)) {
-      fail('scenario 3: seeded canvas not in list', { canvasCount: (list?.canvases ?? []).length })
+    if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
+      fail('scenario 3: seeded canvas not in list', {
+        documentCount: (list?.documents ?? []).length,
+      })
     }
 
     // Capture Loro snapshot bytes (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok) fail(`scenario 3: snapshot fetch failed with ${snapshotRes.status}`)
@@ -417,7 +419,7 @@ try {
     // Upload file blob (files:write).
     const uploadRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
       jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
@@ -426,7 +428,7 @@ try {
     // Save manual version (versions:write).
     const versionRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_PATH)}/versions`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions`,
       jwt,
       {
         method: 'POST',
@@ -445,7 +447,7 @@ try {
     // Save version thumbnail (versions:write).
     const thumbRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
       jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
@@ -559,22 +561,22 @@ try {
     // Canvas list (workspace:read).
     const listRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       jwt,
     )
     if (!listRes.ok)
       fail(`scenario 7: canvas list on restored server failed with ${listRes.status}`)
     const list = await listRes.json()
-    if (!(list?.canvases ?? []).some((c) => c.path === CANVAS_PATH)) {
+    if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 7: seeded canvas missing from restored server', {
-        canvasCount: (list?.canvases ?? []).length,
+        documentCount: (list?.documents ?? []).length,
       })
     }
 
     // Snapshot byte-equality (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok)
@@ -596,7 +598,7 @@ try {
     // File blob (files:read).
     const fileRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
       jwt,
     )
     if (!fileRes.ok) fail(`scenario 7: file GET on restored server failed with ${fileRes.status}`)
@@ -611,7 +613,7 @@ try {
     // Version list (versions:read).
     const versionsRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_PATH)}/versions`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions`,
       jwt,
     )
     if (!versionsRes.ok)
@@ -632,7 +634,7 @@ try {
     // Version thumbnail (versions:read).
     const thumbRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
       jwt,
     )
     if (!thumbRes.ok)
@@ -667,7 +669,7 @@ try {
 
     // No auth → 401.
     const noAuthRes = await fetch(
-      `${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      `${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     )
     if (noAuthRes.status !== 401) fail(`scenario 8: no-auth expected 401, got ${noAuthRes.status}`)
     assertNoLeak('scenario 8 no-auth body', await noAuthRes.text(), SMOKE_PATH_LITERALS)
@@ -676,7 +678,7 @@ try {
     const wrongJwt = makeJwt(privateKey, 'workspace:read')
     const wrongScopeRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       wrongJwt,
       {
         method: 'POST',

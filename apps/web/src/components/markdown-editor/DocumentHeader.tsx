@@ -13,7 +13,7 @@ export interface DocumentHeaderProps {
 /**
  * The rendered projection of the OKF core facets, shown above the document
  * body in Read mode. Display-only by design: facet EDITING stays in
- * `CanvasProperties` (the header row), which owns the whole-`StoredCoreFacets`
+ * `DocumentProperties` (the header row), which owns the whole-`StoredCoreFacets`
  * emit contract — a second editor here would race it.
  */
 export function DocumentHeader({ title, meta }: DocumentHeaderProps) {

@@ -5,7 +5,7 @@
  * second time against the STALE pre-navigation pathname ('/'), overwrite
  * the payload-derived canvas view with 'index', and (in a live browser)
  * the two sync effects then chased each other's one-step-old snapshots
- * forever — remounting DaemonCanvasPage and reopening its WebSocket ~170
+ * forever — remounting DaemonDocumentPage and reopening its WebSocket ~170
  * times per second against a real daemon.
  *
  * MemoryRouter cannot reproduce this (act() flushes its state before the
@@ -60,8 +60,8 @@ vi.mock('react-router-dom', () => ({
 }))
 
 let indexPageMounts = 0
-vi.mock('./pages/DaemonCanvasPage.js', () => ({
-  DaemonCanvasPage: () => <div data-testid="daemon-canvas-page" />,
+vi.mock('./pages/DaemonDocumentPage.js', () => ({
+  DaemonDocumentPage: () => <div data-testid="daemon-document-page" />,
 }))
 vi.mock('./pages/DaemonIndexPage.js', () => ({
   DaemonIndexPage: () => {
@@ -130,11 +130,11 @@ describe('App route sync against an asynchronously-propagating router', () => {
         vi.runAllTimers()
       })
     }
-    expect(screen.getByTestId('daemon-canvas-page')).toBeTruthy()
-    expect(fakeLocation.pathname).toBe('/w/w1/canvas/main')
+    expect(screen.getByTestId('daemon-document-page')).toBeTruthy()
+    expect(fakeLocation.pathname).toBe('/w/w1/document/main')
     // The payload said "open this canvas": the gallery must never flash in,
     // and one navigation ('/' -> canvas URL) is all the sync needs.
     expect(indexPageMounts).toBe(0)
-    expect(navigateCalls).toEqual(['/w/w1/canvas/main'])
+    expect(navigateCalls).toEqual(['/w/w1/document/main'])
   })
 })

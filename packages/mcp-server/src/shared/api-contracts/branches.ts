@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Request / response schemas for the /api/workspaces/:sid/canvases/:path/branches
+// Request / response schemas for the /api/workspaces/:sid/documents/:path/branches
 // family. Imported by the route handler (validates incoming bodies + types its
 // `c.json(...)` responses) and the React client (parses fetch responses) so a
 // wire-format change has exactly one place to update.
@@ -14,7 +14,7 @@ export const branchMetaSchema = z.object({
   createdAt: z.string(),
 })
 
-export const canvasBranchesStateSchema = z.object({
+export const documentBranchesStateSchema = z.object({
   branches: z.array(branchMetaSchema),
   head: z.string(),
 })
@@ -81,7 +81,7 @@ export const mergeResponseSchema = z.object({
 })
 
 export type BranchMeta = z.infer<typeof branchMetaSchema>
-export type CanvasBranchesState = z.infer<typeof canvasBranchesStateSchema>
+export type DocumentBranchesState = z.infer<typeof documentBranchesStateSchema>
 export type CreateBranchRequest = z.infer<typeof createBranchRequestSchema>
 export type CreateBranchResponse = z.infer<typeof createBranchResponseSchema>
 export type DeleteBranchResponse = z.infer<typeof deleteBranchResponseSchema>

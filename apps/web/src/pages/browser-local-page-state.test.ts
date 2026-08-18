@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
-import type { BrowserLocalPersistenceState } from './use-browser-local-canvas-controller.js'
+import type { BrowserLocalPersistenceState } from './use-browser-local-document-controller.js'
 
-const snapshot: CanvasSnapshot = {
+const snapshot: DocumentSnapshot = {
   id: 'canvas-A',
   name: 'untitled',
   updatedAt: '2026-05-04T00:00:00.000Z',

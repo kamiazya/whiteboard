@@ -96,7 +96,7 @@ describe('StorageReportCard', () => {
           jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }] }),
         )
       }
-      if (init?.method === 'POST' && url.endsWith('/canvases/optimize-all')) {
+      if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
         return Promise.resolve(
           jsonResponse({
             results: [],
@@ -134,12 +134,12 @@ describe('StorageReportCard', () => {
           u: typeof u === 'string' ? u : u instanceof URL ? u.toString() : (u as Request).url,
           method: (i as RequestInit | undefined)?.method,
         }))
-        .filter((c) => c.method === 'POST' && c.u.endsWith('/canvases/optimize-all'))
+        .filter((c) => c.method === 'POST' && c.u.endsWith('/documents/optimize-all'))
         .map((c) => c.u)
         .sort()
       expect(optimizeUrls).toEqual([
-        '/api/workspaces/ws_a/canvases/optimize-all',
-        '/api/workspaces/ws_b/canvases/optimize-all',
+        '/api/workspaces/ws_a/documents/optimize-all',
+        '/api/workspaces/ws_b/documents/optimize-all',
       ])
     })
 
@@ -720,7 +720,7 @@ describe('StorageReportCard', () => {
           jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }] }),
         )
       }
-      if (init?.method === 'POST' && url.endsWith('/canvases/optimize-all')) {
+      if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
         if (url.includes('ws_a')) {
           return Promise.resolve(new Response(null, { status: 500 }))
         }

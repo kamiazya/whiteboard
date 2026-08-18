@@ -195,7 +195,7 @@ function isForbiddenNodeBuiltin(specifier: string): boolean {
 const ALLOWED_SHARED_EXACT = new Set([
   'api-client.js', // fetch transport wrapper — DOM/global-only, no Node APIs
   'browser-tracing.js', // optional browser-side OpenTelemetry init — DOM/global-only, no Node APIs
-  'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
+  'document-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
   'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
   'sse-stream-hub.js', // shared SSE stream + per-document refcounting, no Node APIs
@@ -298,7 +298,7 @@ describe('extractImportSpecifiers parser coverage', () => {
 
   it('server re-export is caught by the cross-boundary check', () => {
     const fakeFile = resolve(FIXTURE_BROWSER_APP_DIR, 'lib/dummy.ts')
-    const specifiers = extractImportSpecifiers("export * from '../../server/routes/canvas.js'")
+    const specifiers = extractImportSpecifiers("export * from '../../server/routes/document.js'")
     const violations = specifiers
       .map((s) => forbiddenResolvedPath(fakeFile, s, FIXTURE_BROWSER_APP_DIR))
       .filter((v) => v !== null)
@@ -318,12 +318,12 @@ describe('src/shared allowlist', () => {
     forbiddenResolvedPath(fakeAppFile, specifier, FIXTURE_BROWSER_APP_DIR)
 
   it('api-contracts/* imports are allowed', () => {
-    expect(check('../../shared/api-contracts/canvas.js')).toBeNull()
+    expect(check('../../shared/api-contracts/document.js')).toBeNull()
     expect(check('../../shared/api-contracts/branches.js')).toBeNull()
   })
 
   it('explicitly listed browser-safe helpers are allowed', () => {
-    expect(check('../../shared/canvas-backend-contract.js')).toBeNull()
+    expect(check('../../shared/document-backend-contract.js')).toBeNull()
     expect(check('../../shared/external-url-policy.js')).toBeNull()
     expect(check('../../shared/ws-messages.js')).toBeNull()
     expect(check('../../shared/ws-protocol.js')).toBeNull()
@@ -604,7 +604,7 @@ describe('checkSubpathImportViolations', () => {
   it('a TEST_ONLY_SUBPATHS import from a non-test file is a violation', () => {
     const violations = checkSubpathImportViolations(
       resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.tsx'),
-      `${MCP_PACKAGE_SPECIFIER}/canvas-backend-contract-suite`,
+      `${MCP_PACKAGE_SPECIFIER}/document-backend-contract-suite`,
     )
     expect(
       violations.some((v) => v.includes('is test-only, forbidden from a production source file')),
@@ -614,7 +614,7 @@ describe('checkSubpathImportViolations', () => {
   it('the same TEST_ONLY_SUBPATHS import from a test file is not a violation', () => {
     const violations = checkSubpathImportViolations(
       resolve(APPS_WEB_SRC_DIR, 'pages/SomePage.test.tsx'),
-      `${MCP_PACKAGE_SPECIFIER}/canvas-backend-contract-suite`,
+      `${MCP_PACKAGE_SPECIFIER}/document-backend-contract-suite`,
     )
     expect(violations).toEqual([])
   })
@@ -726,9 +726,9 @@ function resolveMcpSubpathEntry(
 // resolve straight to the test-utils source that owns the shared behavioural
 // contract, and are only legitimate to import from a test file.
 const TEST_ONLY_SUBPATHS: Record<string, string> = {
-  'canvas-backend-contract-suite': resolve(
+  'document-backend-contract-suite': resolve(
     PACKAGE_SRC_DIR,
-    'shared/test-utils/canvas-backend-contract.ts',
+    'shared/test-utils/document-backend-contract.ts',
   ),
   'sse-stream-source-contract': resolve(
     PACKAGE_SRC_DIR,

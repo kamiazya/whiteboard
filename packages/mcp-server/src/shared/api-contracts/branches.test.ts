@@ -17,14 +17,14 @@ import {
   type BranchStatsResponse,
   branchMetaSchema,
   branchStatsResponseSchema,
-  type CanvasBranchesState,
   type CreateBranchRequest,
   type CreateBranchResponse,
-  canvasBranchesStateSchema,
   createBranchRequestSchema,
   createBranchResponseSchema,
   type DeleteBranchResponse,
+  type DocumentBranchesState,
   deleteBranchResponseSchema,
+  documentBranchesStateSchema,
   type MergeRequest,
   type MergeResponse,
   mergeRequestSchema,
@@ -65,8 +65,8 @@ describe('branchMetaSchema', () => {
   })
 })
 
-describe('canvasBranchesStateSchema', () => {
-  const valid: CanvasBranchesState = {
+describe('documentBranchesStateSchema', () => {
+  const valid: DocumentBranchesState = {
     branches: [
       { name: 'main', tipFrontiers: 'abc', color: '#fff', createdAt: '2024-01-01T00:00:00.000Z' },
     ],
@@ -74,18 +74,18 @@ describe('canvasBranchesStateSchema', () => {
   }
 
   it('parses a well-formed value', () => {
-    const result: CanvasBranchesState = canvasBranchesStateSchema.parse(valid)
+    const result: DocumentBranchesState = documentBranchesStateSchema.parse(valid)
     expect(result.head).toBe('main')
   })
 
   it('roundtrip preserves branches array', () => {
-    const result: CanvasBranchesState = roundtrip(canvasBranchesStateSchema, valid)
+    const result: DocumentBranchesState = roundtrip(documentBranchesStateSchema, valid)
     expect(result).toEqual(valid)
   })
 
   it('rejects missing head', () => {
     const { head: _omit, ...missing } = valid
-    expect(canvasBranchesStateSchema.safeParse(missing).success).toBe(false)
+    expect(documentBranchesStateSchema.safeParse(missing).success).toBe(false)
   })
 })
 

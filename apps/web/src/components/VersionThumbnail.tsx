@@ -1,4 +1,4 @@
-import { canvasesApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { documentsApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useEffect, useState } from 'react'
 import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
 
@@ -41,7 +41,7 @@ export function VersionThumbnail({
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
-  const src = canvasesApiUrl(
+  const src = documentsApiUrl(
     workspaceId,
     path,
     `versions/${encodeURIComponent(versionId)}/thumbnail`,
