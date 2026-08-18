@@ -433,6 +433,40 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
   })
 
+  // The store computes WHICH path actually collided; rebuilding the message
+  // from the requested path names one that is free, which is worse than
+  // saying nothing — the caller retries a rename that was never the problem.
+  it('names the descendant that collided, not the free path the caller asked for', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+    await saveDocument('session1', 'c/x', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'c' }),
+    })
+
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toContain('c/x')
+  })
+
+  it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'a/x' }),
+    })
+
+    expect(res.status).toBe(400)
+  })
+
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const app = createDocumentRouter()

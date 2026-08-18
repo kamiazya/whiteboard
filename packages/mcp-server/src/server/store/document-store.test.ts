@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { DocumentHasDescendantsError } from '@kamiazya/whiteboard-ports'
+import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -1625,6 +1625,34 @@ describe('renameDocumentPath', () => {
 
     const paths = (await listDocuments('session1')).map((c) => c.path).sort()
     expect(paths).toEqual(['design-system', 'product'])
+  })
+
+  // The one rule `planSubtreeMove` deliberately does NOT enforce, so each
+  // caller has to. Without it the depth-ordered write — correct for the
+  // upward move it was written for — is inverted, and the shallow row lands
+  // on a path its own descendant has not vacated yet.
+  it('refuses to move a document inside itself rather than raising a raw constraint error', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+
+    await expect(renameDocumentPath('session1', 'a', 'a/x')).rejects.toThrow(
+      DocumentMoveIntoSelfError,
+    )
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/x'])
+  })
+
+  it('refuses to nest a document inside itself even when the destination is free', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/b', new LoroDoc())
+
+    await expect(renameDocumentPath('session1', 'a', 'a/nested')).rejects.toThrow(
+      DocumentMoveIntoSelfError,
+    )
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/b'])
   })
 
   it('rejects a rename that would collide with an existing descendant path', async () => {

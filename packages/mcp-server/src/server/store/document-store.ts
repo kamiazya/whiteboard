@@ -27,6 +27,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
   DocumentHasDescendantsError,
+  DocumentMoveIntoSelfError,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
@@ -43,7 +44,7 @@ import {
 import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { findDescendantPath, planSubtreeMove } from './document-path-tree.js'
+import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
@@ -797,6 +798,14 @@ export async function renameDocumentPath(
     const documentId = await getDocumentIdByPath(db, workspaceId, oldPath)
     if (!documentId) return null
     if (oldPath === newPath) return { documentId }
+    // The one rule planSubtreeMove leaves to its callers, and the index's
+    // moveDocument already enforces. Without it the depth-ordered write —
+    // correct for an upward move — is inverted, and the shallow row lands on
+    // a path its own descendant has not vacated, surfacing as a raw unique
+    // constraint error instead of an answer the caller can act on.
+    if (isSelfOrDescendant(newPath, oldPath)) {
+      throw new DocumentMoveIntoSelfError(oldPath, newPath)
+    }
 
     const rows = await db
       .selectFrom('documents')
