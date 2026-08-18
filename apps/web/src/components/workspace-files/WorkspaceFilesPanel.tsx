@@ -94,6 +94,19 @@ export function WorkspaceFilesPanel({
     }
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
+  /**
+   * Moving the contents pane always empties the preview.
+   *
+   * A document can only be opened from the folder it lives in, so a preview
+   * that survives a folder change is always showing something the contents
+   * pane no longer lists — and the pane has no row left to mark, so nothing
+   * on screen says which document it belongs to.
+   */
+  const selectFolder = (path: string) => {
+    setFolder(path)
+    setPreview({ kind: 'idle' })
+  }
+
   const openDocument = (entry: WorkspaceDocumentEntry) => {
     setPreview({ kind: 'loading', path: entry.path })
     getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
@@ -140,19 +153,19 @@ export function WorkspaceFilesPanel({
       <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
         <WorkspaceFolderTree
           documents={documents}
-          onSelectFolder={setFolder}
+          onSelectFolder={selectFolder}
           selectedFolder={folder}
         />
       </div>
       <div className="w-full shrink-0 overflow-y-auto md:w-64 md:border-r md:pr-3">
-        <FolderBreadcrumb folder={folder} onSelect={setFolder} />
+        <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
         <div data-testid="folder-contents">
           <FolderContentsList
             documents={documents}
             folder={folder}
             selectedPath={preview.kind === 'idle' ? undefined : preview.path}
             onOpen={(target) =>
-              target.kind === 'folder' ? setFolder(target.path) : openDocument(target.document)
+              target.kind === 'folder' ? selectFolder(target.path) : openDocument(target.document)
             }
             renderIcon={(entry) => (
               <DocumentMinimap

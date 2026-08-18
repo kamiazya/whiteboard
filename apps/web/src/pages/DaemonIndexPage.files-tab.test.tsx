@@ -151,6 +151,36 @@ describe('DaemonIndexPage tree view', () => {
     })
   })
 
+  // The three panes are driven left to right, so a preview showing a
+  // document the contents pane does not list is the one way they can
+  // disagree — and the contents pane has no row to mark, so nothing on
+  // screen says which document the preview belongs to.
+  it('drops the preview when navigating to another folder', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('Select a document')
+    })
+    expect(screen.getByTestId('okf-preview').textContent).not.toContain('# Palette decisions')
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
