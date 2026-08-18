@@ -141,7 +141,12 @@ describe('DaemonDocumentPage markdown editing', () => {
     // A click lands the cursor wherever the pointer hit; pin it to the end
     // so the typed suffix has one deterministic destination.
     await userEvent.keyboard('{Control>}{End}{/Control}')
-    await userEvent.keyboard(' — edited here')
+    // ASCII only: a character with no keycode (an em dash, say) is
+    // synthesized separately from the plain keystrokes around it, and under
+    // load it is the one that goes missing — observed as
+    // `'# Hello from an agent  edited here'`, both spaces present and the
+    // dash gone, which reads like a lost edit rather than a lost keystroke.
+    await userEvent.keyboard(' - edited here')
 
     // The edit reaches the backend through the session's own local-update
     // forwarding: replaying pushed updates over the original snapshot must
@@ -154,7 +159,7 @@ describe('DaemonDocumentPage markdown editing', () => {
         const replay = new LoroDoc()
         replay.import(backend.snapshot)
         for (const update of backend.pushed) replay.import(update)
-        expect(replay.getText(MARKDOWN_BODY_KEY).toString()).toBe(`${BODY} — edited here`)
+        expect(replay.getText(MARKDOWN_BODY_KEY).toString()).toBe(`${BODY} - edited here`)
       },
       { timeout: 10_000 },
     )
