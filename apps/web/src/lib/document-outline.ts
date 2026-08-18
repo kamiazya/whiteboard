@@ -50,7 +50,28 @@ export function outlineFromScene(scene: Scene): FaviconRect[] {
   for (const node of scene.nodes as readonly SceneNode[]) {
     const bbox = (node as { bbox?: { x: number; y: number; w: number; h: number } }).bbox
     if (bbox === undefined || !isDrawable(bbox)) continue
-    rects.push({ x: bbox.x, y: bbox.y, w: bbox.w, h: bbox.h })
+    rects.push({ x: bbox.x, y: bbox.y, w: inkWidth(node) ?? bbox.w, h: bbox.h })
   }
   return rects
+}
+
+/**
+ * How far a block's text actually reaches, which is NOT its box: layout
+ * gives every top-level block the full column width, so a heading of three
+ * words and a paragraph of forty declare the same one.
+ *
+ * That difference is the entire reason to draw an outline rather than a
+ * plain scrollbar — a column of equal bars carries no information about the
+ * document. `undefined` for a block with no runs to measure (a rule, an
+ * image), whose own box is the honest answer.
+ */
+function inkWidth(node: SceneNode): number | undefined {
+  const runs = (node as { runs?: readonly { bbox: { x: number; w: number } }[] }).runs
+  if (runs === undefined || runs.length === 0) return undefined
+  let widest = 0
+  for (const run of runs) {
+    const right = run.bbox.x + run.bbox.w
+    if (Number.isFinite(right) && right > widest) widest = right
+  }
+  return widest > 0 ? widest : undefined
 }

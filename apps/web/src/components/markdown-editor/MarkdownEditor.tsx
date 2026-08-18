@@ -22,7 +22,7 @@ import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
-import { MinimapRail } from './MinimapRail.js'
+import { MinimapRail, RAIL_WIDTH_PX } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
 import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
@@ -378,6 +378,40 @@ export function MarkdownEditor({
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [value])
 
+  const seekPreview = useCallback((documentY: number) => {
+    const preview = previewScrollRef.current
+    if (preview === null) return
+    const svg = preview.querySelector('svg')
+    const svgTop =
+      svg instanceof SVGElement
+        ? svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
+        : 0
+    // Centre what was pointed at, the way a minimap press does — landing it
+    // at the very top would hide the context just above it.
+    preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
+  }, [])
+
+  // Layout width the preview typesets at: what the pane can actually offer
+  // (minus the document column's padding), clamped to a readable measure.
+  const horizontalPadding = 48
+  // The rail is a sibling of the preview, so the width it occupies is width
+  // the preview does not get. Typesetting against the container's full width
+  // instead overflows by exactly the rail — the document is then clipped at
+  // the very edge the rail is drawn on.
+  const railWidth = effectiveMode !== 'write' && debouncedValue.trim() !== '' ? RAIL_WIDTH_PX : 0
+  const paneWidth =
+    containerWidth === null
+      ? maxWidth
+      : effectiveMode === 'split'
+        ? containerWidth * (1 - splitRatio) - railWidth
+        : containerWidth - railWidth
+  // Quantized so a divider drag re-typesets the whole document at 64px
+  // steps instead of on every pointermove.
+  const previewWidth = Math.max(
+    MIN_PREVIEW_WIDTH,
+    Math.min(maxWidth, Math.round((paneWidth - horizontalPadding) / 64) * 64),
+  )
+
   /**
    * Keeps the rail in step with the preview it maps.
    *
@@ -404,39 +438,11 @@ export function MarkdownEditor({
     sync()
     preview.addEventListener('scroll', sync, { passive: true })
     return () => preview.removeEventListener('scroll', sync)
-    // Not keyed on previewWidth: it is declared below this effect, and a
-    // width change re-renders the preview anyway, which lands here through
-    // debouncedValue.
-  }, [effectiveMode, debouncedValue])
-
-  const seekPreview = useCallback((documentY: number) => {
-    const preview = previewScrollRef.current
-    if (preview === null) return
-    const svg = preview.querySelector('svg')
-    const svgTop =
-      svg instanceof SVGElement
-        ? svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
-        : 0
-    // Centre what was pointed at, the way a minimap press does — landing it
-    // at the very top would hide the context just above it.
-    preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
-  }, [])
-
-  // Layout width the preview typesets at: what the pane can actually offer
-  // (minus the document column's padding), clamped to a readable measure.
-  const horizontalPadding = 48
-  const paneWidth =
-    containerWidth === null
-      ? maxWidth
-      : effectiveMode === 'split'
-        ? containerWidth * (1 - splitRatio)
-        : containerWidth
-  // Quantized so a divider drag re-typesets the whole document at 64px
-  // steps instead of on every pointermove.
-  const previewWidth = Math.max(
-    MIN_PREVIEW_WIDTH,
-    Math.min(maxWidth, Math.round((paneWidth - horizontalPadding) / 64) * 64),
-  )
+    // previewWidth belongs here: a resize re-typesets the document and
+    // changes every block, and debouncedValue does NOT change with it —
+    // reading the ref without it leaves the rail describing the layout the
+    // previous width produced.
+  }, [effectiveMode, debouncedValue, previewWidth])
 
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {

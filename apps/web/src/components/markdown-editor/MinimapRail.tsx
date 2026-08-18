@@ -31,7 +31,7 @@ export interface MinimapRailProps {
   readonly className?: string
 }
 
-const RAIL_WIDTH_PX = 56
+export const RAIL_WIDTH_PX = 56
 
 export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
@@ -91,13 +91,16 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
       {geometry.rows.map((row, index) => (
         <div
           key={`${row.top}-${index}`}
-          className="bg-muted-foreground/35 absolute rounded-[1px]"
+          className="bg-muted-foreground/45 absolute rounded-[1px]"
           style={{ top: row.top, left: row.left, width: row.width, height: row.height }}
         />
       ))}
       <div
         data-testid="markdown-minimap-viewport"
-        className="border-foreground/25 bg-foreground/5 pointer-events-none absolute inset-x-0 border-y"
+        // The rail IS the scrollbar, so where you are has to read at a glance
+        // against the bars behind it — a marker subtle enough to hunt for
+        // fails at the one job it has.
+        className="border-foreground/40 bg-foreground/10 pointer-events-none absolute inset-x-0 border-y"
         style={{ top: frame.top, height: frame.height }}
       />
     </div>
