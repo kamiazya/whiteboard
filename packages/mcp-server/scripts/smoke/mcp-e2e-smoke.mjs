@@ -136,6 +136,7 @@ const EXPECTED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
   'wb_canvas_snapshot',
+  'wb_canvas_edit',
   'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
@@ -427,6 +428,64 @@ async function main() {
     )
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
+
+  // wb_canvas_edit is the whole spatial-mutation surface, so the smoke has
+  // to reach the parts a unit test cannot: the batch's structuredContent vs
+  // its outputSchema through the real MCP SDK, and — because this tool
+  // decides ids and coordinates the caller never supplied — that what it
+  // REPORTS placing is what it actually stored.
+  const applied = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      { op: 'node.add', node: { id: 'batch-a', type: 'text', text: 'batched A' } },
+      { op: 'node.add', node: { id: 'batch-b', type: 'text', text: 'batched B' } },
+      { op: 'edge.add', edge: { id: 'batch-e', fromNode: 'batch-a', toNode: 'batch-b' } },
+    ],
+  })
+  if (applied.applied !== 3 || !applied.touched.nodes.includes('batch-a')) {
+    throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(applied)}`)
+  }
+  const placedA = applied.geometry.find((entry) => entry.id === 'batch-a')
+  if (placedA === undefined) {
+    throw new Error(
+      `wb_canvas_edit placed a node with no coordinates but did not report it: ${JSON.stringify(applied.geometry)}`,
+    )
+  }
+  const inSnapshot = applied.snapshot.nodes.find((node) => node.id === 'batch-a')
+  if (inSnapshot?.x !== placedA.x || inSnapshot?.y !== placedA.y) {
+    throw new Error(
+      `wb_canvas_edit reported a placement its own snapshot disagrees with: ${JSON.stringify({ placedA, inSnapshot })}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_edit → 3 ops in one transaction, placement reported and stored')
+
+  // All-or-nothing across the real wire: the second op cannot apply, so the
+  // first must not survive either.
+  await expectToolError(
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'batch-rollback', type: 'text', text: 'should not persist' },
+        },
+        { op: 'node.patch', id: 'no-such-node', patch: { x: 1 } },
+      ],
+    },
+    'with a second op that cannot apply',
+    'ops[1]',
+  )
+  const afterRollback = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  if (afterRollback.nodes.some((node) => node.id === 'batch-rollback')) {
+    throw new Error('wb_canvas_edit persisted the first op of a batch it rejected')
+  }
+  console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
 
   // wb_canvas_tidy: what this asserts is the full pipeline (input parse →
   // doc load → tidy → structuredContent vs outputSchema), which is the drift
