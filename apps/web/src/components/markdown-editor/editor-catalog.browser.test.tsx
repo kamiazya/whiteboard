@@ -72,6 +72,29 @@ describe('the editor catalog (real browser)', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('- [x] ship it')
   })
 
+  // The whole point of the doorway: on a phone the catalog must arrive as a
+  // bottom sheet, where a thumb already is. Pinned the same way the spatial
+  // canvas pins its own ⋯ (edit-handle.browser.test.tsx), because the branch
+  // is silently width-dependent — a regression degrades to a point-anchored
+  // popover on phones with every other test still green.
+  it('opens as a bottom sheet in a narrow container', async () => {
+    const { container, getByRole } = render(
+      <div style={{ width: 390, height: 640 }}>
+        <MarkdownEditor value="make this bold" onChange={() => {}} />
+      </div>,
+    )
+    await caretInto(container, 6)
+    await userEvent.click(getByRole('button', { name: 'More actions' }))
+
+    const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+    expect(menu).not.toBeNull()
+    expect(menu.dataset.variant).toBe('sheet')
+
+    // Still a working catalog, not just the right shell.
+    await userEvent.click(getByRole('menuitem', { name: 'Bold' }))
+    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+  })
+
   it('right-click opens the catalog when there IS a selection', async () => {
     const { container, queryByTestId } = render(
       <MarkdownEditor value="make this bold" onChange={() => {}} />,

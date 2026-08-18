@@ -1,37 +1,27 @@
 import type { EditorState } from '@codemirror/state'
 
 /**
- * Word segmentation via `Intl.Segmenter`, with a whitespace-run fallback.
+ * Word segmentation via `Intl.Segmenter`, with no fallback.
  *
- * The fallback is deliberately the SECOND choice rather than the only one:
- * Japanese writes no spaces, so a whitespace run there is a whole clause,
- * and "bold the word under the caret" would bold the sentence. Every
- * browser this app targets ships Segmenter; the fallback exists so an
- * environment without it degrades to something usable rather than throwing.
+ * A whitespace split is not an acceptable substitute and there is no third
+ * option: Japanese writes no spaces, so a whitespace run there is a whole
+ * clause, and "bold the word under the caret" would bold the sentence. A
+ * degraded path that quietly does that is worse than none.
+ *
+ * Requiring it costs nothing this app does not already require — Segmenter
+ * has shipped since Chrome 87, Safari 14.1 and Firefox 125, all older than
+ * the OPFS / SharedWorker / file-picker floor apps/web already sits on.
  */
-const segmenter: Intl.Segmenter | null = (() => {
-  try {
-    return new Intl.Segmenter(undefined, { granularity: 'word' })
-  } catch {
-    return null
-  }
-})()
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
 
 /** The word-like run covering `offset` within `text`, or null if there is none. */
 function wordWithin(text: string, offset: number): { from: number; to: number } | null {
-  if (segmenter !== null) {
-    for (const seg of segmenter.segment(text)) {
-      const from = seg.index
-      const to = from + seg.segment.length
-      if (seg.isWordLike === true && offset >= from && offset <= to) return { from, to }
-    }
-    return null
+  for (const seg of segmenter.segment(text)) {
+    const from = seg.index
+    const to = from + seg.segment.length
+    if (seg.isWordLike === true && offset >= from && offset <= to) return { from, to }
   }
-  let from = offset
-  let to = offset
-  while (from > 0 && !/\s/.test(text[from - 1] as string)) from--
-  while (to < text.length && !/\s/.test(text[to] as string)) to++
-  return from === to ? null : { from, to }
+  return null
 }
 
 /**
