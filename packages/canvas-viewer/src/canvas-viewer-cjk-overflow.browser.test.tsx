@@ -43,12 +43,14 @@ describe('a text node with CJK prose (real browser)', () => {
     const texts = [...(container.querySelectorAll('svg text') ?? [])]
     expect(texts.length).toBeGreaterThan(0)
 
-    // `y` on a <text> is its BASELINE, so descenders sit below it; the frame
-    // bottom is the bound that matters and the baseline must clear it.
+    // Measured as PAINTED ink, not as the baseline: `y` on a <text> is where
+    // the glyphs sit ON, so descenders fall below it and a baseline-only
+    // assertion is weaker than this test's own claim. `getBBox()` is the
+    // rendered bound, which is the thing that must stay inside the frame.
     for (const text of texts) {
-      const y = Number(text.getAttribute('y'))
-      expect(Number.isFinite(y)).toBe(true)
-      expect(y).toBeLessThanOrEqual(NODE_BOTTOM)
+      const box = (text as SVGGraphicsElement).getBBox()
+      expect(Number.isFinite(box.y + box.height)).toBe(true)
+      expect(box.y + box.height).toBeLessThanOrEqual(NODE_BOTTOM)
     }
   })
 })
