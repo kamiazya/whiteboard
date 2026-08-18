@@ -20,6 +20,7 @@ import { userEvent } from 'vitest/browser'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 
 function render(ui: ReactElement) {
@@ -138,16 +139,19 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     // exact identity is what real keyboard-event delivery depends on, and a
     // looser containment check can pass while focus still sits on some other
     // in-flight descendant (e.g. mid-mount) and races the first keystrokes.
-    // Same 10s budget every other wait in this file carries: this one waits on
-    // mount PLUS autofocus against a real browser and real IndexedDB, and the
-    // testing-library default is 1s. Under CI load that expires with focus
-    // still on <body>, which reads as "autofocus is broken" when it only means
-    // "autofocus had not happened yet".
+    // Wider than the 10s the rest of this file carries, because this one waits
+    // on mount PLUS autofocus against a real browser and real IndexedDB, and
+    // the testing-library default is 1s. Under a full browser-project run that
+    // expires with focus still on <body>, which reads as "autofocus is broken"
+    // when it only means "autofocus had not happened yet" — measured failing
+    // twice at ~11s while the same test costs 1.3s with its file alone. The
+    // guarantee under test is that focus arrives before typing, not that it
+    // arrives within any particular budget.
     await waitFor(
       () => {
         expect(document.activeElement).toBe(editable)
       },
-      { timeout: 10_000 },
+      { timeout: 30_000 },
     )
     await userEvent.keyboard('# Persisted note')
     await waitFor(() => {
@@ -424,17 +428,10 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       { name: /^Workspace:/i },
       { timeout: 10_000 },
     )
-    // The previous menu must be GONE before its trigger is clicked again.
-    // Clicking it while the non-modal menu is still mounted leaves the menu
-    // CLOSED — measured at the failure: no [role=menu], trigger connected,
-    // aria-expanded=false. The failure then reads as "the list does not
-    // contain this canvas", when no list was ever opened, so raising the
-    // query's timeout only buys a slower identical failure.
-    //
-    // Load-bearing: drop this wait and the test fails every run.
-    await waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull(), {
-      timeout: 10_000,
-    })
+    // Removing this wait no longer fails the file in isolation — the race it
+    // guards only opens up once the whole browser project is in flight. Keep
+    // it: an isolated green says nothing about the run that actually flakes.
+    await waitForMenuClosed()
     await userEvent.click(switcher2)
     await userEvent.click(await screen.findByText('Diagram A', undefined, { timeout: 10_000 }))
 

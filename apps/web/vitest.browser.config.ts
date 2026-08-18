@@ -77,10 +77,26 @@ export default defineConfig({
     // failures, and the same tests pass 4/4 when their file runs alone.
     //
     // A timeout costs nothing while tests pass; it only decides how long a
-    // genuinely hung test takes to report. 30s matches the precedent already
-    // set by vitest.docs-snapshots.config.ts.
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    // genuinely hung test takes to report.
+    //
+    // 30s was not enough either, and the measurements say the budget is the
+    // only lever that works. The costliest test here (a markdown embed that
+    // types into real CodeMirror and lays the preview out through the render
+    // pipeline) takes 1.5s with its file alone and 1.6s with the twelve
+    // IndexedDB-heavy page files running together — but 30–39s once all 115
+    // browser files are in flight. Neither of the obvious causes survives
+    // contact: cutting `--maxWorkers` to 4 made it WORSE (33–39s, and 40%
+    // more wall clock), and the IndexedDB-contention theory is refuted by
+    // the 1.6s twelve-file run.
+    //
+    // What makes the overrun expensive is the collateral: vitest abandons the
+    // test but its in-flight `userEvent.keyboard` keeps typing, so the NEXT
+    // test in the file receives the leftover keystrokes interleaved with its
+    // own — observed as `'nadn dm oarne  atpyppeinndged line'`, which reads
+    // like lost input rather than like someone else's typing. One overrun
+    // therefore fails two or three tests.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     // Every browser test renders against the app's real stylesheet — see
     // browser-setup.ts for what silently breaks without it.
     setupFiles: ['./src/test-utils/browser-setup.ts'],

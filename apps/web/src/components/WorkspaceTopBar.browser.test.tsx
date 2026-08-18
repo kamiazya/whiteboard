@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
@@ -181,6 +182,7 @@ describe('WorkspaceTopBar browser mode', () => {
     })
 
     // Second activation: 500 without title → generic fallback, internals never shown.
+    await waitForMenuClosed()
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await waitFor(() => screen.getByTestId('new-document-menu-item'))
     fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
