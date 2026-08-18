@@ -37,6 +37,11 @@ export function LinkPickerDialog({
   onCancel,
 }: LinkPickerDialogProps) {
   const [query, setQuery] = useState(initialQuery)
+  // Empty, not seeded: the default differs by destination — a document link
+  // shows the document's own name, an external one shows the text that was
+  // already there. Leaving this alone reproduces both, so the field only ever
+  // means "instead of the default".
+  const [display, setDisplay] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
   // Focus on open rather than via `autoFocus`: this dialog is opened by an
@@ -61,10 +66,11 @@ export function LinkPickerDialog({
   const commit = (index: number) => {
     const row = rows[index]
     if (row === undefined) return
+    const wanted = display.trim()
     onPick(
       row.kind === 'url'
-        ? externalLinkMarkup(linkText, row.url)
-        : linkMarkupFor(row.target, targets),
+        ? externalLinkMarkup(wanted === '' ? linkText : wanted, row.url)
+        : linkMarkupFor(row.target, targets, wanted),
     )
   }
 
@@ -105,6 +111,7 @@ export function LinkPickerDialog({
       }}
     >
       <input
+        id="link-picker-search"
         ref={inputRef}
         role="combobox"
         aria-expanded
@@ -119,6 +126,25 @@ export function LinkPickerDialog({
         aria-label="Search documents, or paste a URL"
         className="border-input focus-visible:ring-ring w-full rounded-md border px-2 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
       />
+      <label
+        htmlFor="link-picker-text"
+        className="text-muted-foreground mt-1.5 flex items-center gap-2 px-0.5 text-xs"
+      >
+        Text
+        <input
+          id="link-picker-text"
+          value={display}
+          onChange={(event) => setDisplay(event.target.value)}
+          placeholder={
+            rows[activeIndex]?.kind === 'url'
+              ? linkText.trim() === ''
+                ? 'The URL itself'
+                : linkText
+              : (rows[activeIndex]?.target.name ?? 'Same as the document name')
+          }
+          className="border-input focus-visible:ring-ring text-foreground min-w-0 flex-1 rounded-md border px-2 py-1 text-sm focus-visible:ring-2 focus-visible:outline-none"
+        />
+      </label>
       <div
         id="link-picker-list"
         role="listbox"

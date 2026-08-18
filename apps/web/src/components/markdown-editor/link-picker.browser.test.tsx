@@ -74,7 +74,7 @@ describe('the link picker (real browser)', () => {
 
     const picker = await openPicker(container, getByRole)
     expect(picker).not.toBeNull()
-    expect((picker.querySelector('input') as HTMLInputElement).value).toBe('weekly')
+    expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     await userEvent.keyboard('{Enter}')
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[Weekly review]] notes')
@@ -88,7 +88,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 1)
 
     const picker = await openPicker(container, getByRole)
-    const input = picker.querySelector('input') as HTMLInputElement
+    const input = picker.querySelector('#link-picker-search') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.fill(input, 'sprint')
 
@@ -109,12 +109,13 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 1)
 
     const picker = await openPicker(container, getByRole)
-    const input = picker.querySelector('input') as HTMLInputElement
+    const input = picker.querySelector('#link-picker-search') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.fill(input, 'untitled')
     await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE1]]')
+    // The id resolves; the alias is what makes it readable.
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE1|untitled]]')
   })
 
   it('offers the URL when what you typed is one', async () => {
@@ -125,7 +126,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 5) // inside "docs"
 
     const picker = await openPicker(container, getByRole)
-    const input = picker.querySelector('input') as HTMLInputElement
+    const input = picker.querySelector('#link-picker-search') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.fill(input, 'https://example.com/guide')
 
@@ -148,7 +149,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 3) // inside "weekly"
 
     const picker = await openPicker(container, getByRole)
-    expect((picker.querySelector('input') as HTMLInputElement).value).toBe('weekly')
+    expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     // Back into the document, caret to the end, then pick from the still-open
     // dialog.
@@ -170,7 +171,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 3) // inside "weekly"
 
     const picker = await openPicker(container, getByRole)
-    expect((picker.querySelector('input') as HTMLInputElement).value).toBe('weekly')
+    expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     // Type at the very start of the document while the picker is open.
     const editable = container.querySelector('[contenteditable="true"]') as HTMLElement
@@ -190,7 +191,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 1)
 
     const picker = await openPicker(container, getByRole)
-    const input = picker.querySelector('input') as HTMLInputElement
+    const input = picker.querySelector('#link-picker-search') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.fill(input, 'untitled')
     await userEvent.keyboard('{ArrowDown}')
@@ -199,7 +200,7 @@ describe('the link picker (real browser)', () => {
     expect(options[1]?.getAttribute('aria-selected')).toBe('true')
     await userEvent.keyboard('{Enter}')
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE2]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE2|untitled]]')
   })
 
   it('says so when nothing matches, and Enter does nothing', async () => {
@@ -210,7 +211,7 @@ describe('the link picker (real browser)', () => {
     await caretInto(container, 1)
 
     const picker = await openPicker(container, getByRole)
-    const input = picker.querySelector('input') as HTMLInputElement
+    const input = picker.querySelector('#link-picker-search') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.fill(input, 'nothing by this name')
 
@@ -219,6 +220,63 @@ describe('the link picker (real browser)', () => {
     await userEvent.keyboard('{Enter}')
     expect(onChange).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="link-picker"]')).not.toBeNull()
+  })
+
+  it('uses the display-text field for both kinds of link', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="see weekly notes" onChange={onChange} linkTargets={targets} />,
+    )
+    await caretInto(container, 6) // inside "weekly"
+
+    const picker = await openPicker(container, getByRole)
+    // Empty by default — its placeholder shows what will be used instead, so
+    // leaving it alone reproduces the pre-field behaviour.
+    const display = picker.querySelector('#link-picker-text') as HTMLInputElement
+    expect(display.value).toBe('')
+    expect(display.placeholder).toBe('Weekly review')
+
+    await userEvent.fill(display, 'last week')
+    await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[Weekly review|last week]] notes')
+  })
+
+  it('applies the display text to an external link too', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+    )
+    await caretInto(container, 1)
+
+    const picker = await openPicker(container, getByRole)
+    const search = picker.querySelector('#link-picker-search') as HTMLInputElement
+    await userEvent.clear(search)
+    await userEvent.fill(search, 'https://example.com/guide')
+    const display = picker.querySelector('#link-picker-text') as HTMLInputElement
+    // For a URL the default is the text that was already there.
+    expect(display.placeholder).toBe('x')
+    await userEvent.fill(display, 'the guide')
+    await userEvent.click(picker.querySelector('[role="option"]') as HTMLElement)
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[the guide](https://example.com/guide)')
+  })
+
+  // With the caret on whitespace there is no word to carry the link, so an
+  // external one degrades to a bare autolink — the placeholder has to say so
+  // rather than showing an empty default.
+  it('says the URL will carry itself when there is no text to use', async () => {
+    const { container, getByRole } = render(
+      <MarkdownEditor value="a  b" onChange={() => {}} linkTargets={targets} />,
+    )
+    await caretInto(container, 2) // the gap between the words
+
+    const picker = await openPicker(container, getByRole)
+    const search = picker.querySelector('#link-picker-search') as HTMLInputElement
+    await userEvent.fill(search, 'https://example.com')
+
+    const display = picker.querySelector('#link-picker-text') as HTMLInputElement
+    expect(display.placeholder).toBe('The URL itself')
   })
 
   it('closes on Escape without touching the document', async () => {
