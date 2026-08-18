@@ -51,6 +51,33 @@ describe('FolderContentsList', () => {
     expect(screen.queryByRole('list')).toBeNull()
   })
 
+  // The capability slot: this component never fetches or renders a
+  // document, so the miniature has to arrive from the caller. It is the only
+  // thing that distinguishes one row from another at a glance, and nothing
+  // above this component notices when it stops arriving.
+  it('draws the caller’s miniature instead of the kind icon', () => {
+    render(
+      <FolderContentsList
+        documents={docs}
+        folder="design"
+        onOpen={vi.fn()}
+        renderIcon={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
+      />,
+    )
+    expect(screen.getByTestId('custom-icon').textContent).toBe('d1')
+    expect(document.querySelector('[data-kind]')).toBeNull()
+  })
+
+  it('falls back to the kind, which the list already carries', () => {
+    render(<FolderContentsList documents={docs} folder="" onOpen={vi.fn()} />)
+    expect(
+      screen
+        .getByRole('button', { name: /Roadmap/ })
+        .querySelector('[data-kind]')
+        ?.getAttribute('data-kind'),
+    ).toBe('spatial')
+  })
+
   it('labels a document by its path segment when nobody named it', () => {
     const unnamed: WorkspaceDocumentEntry[] = [{ documentId: 'd9', path: 'design/untitled-3' }]
     render(<FolderContentsList documents={unnamed} folder="design" onOpen={vi.fn()} />)

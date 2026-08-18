@@ -7,6 +7,7 @@ import {
 } from '../../lib/daemon-api-client.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -144,7 +145,7 @@ export function WorkspaceFilesPanel({
         />
       </div>
       <div className="w-full shrink-0 overflow-y-auto md:w-64 md:border-r md:pr-3">
-        <Breadcrumb folder={folder} onSelect={setFolder} />
+        <FolderBreadcrumb folder={folder} onSelect={setFolder} />
         <div data-testid="folder-contents">
           <FolderContentsList
             documents={documents}
@@ -188,49 +189,5 @@ export function WorkspaceFilesPanel({
         )}
       </div>
     </div>
-  )
-}
-
-/** Where the middle pane is, and the way back up. */
-function Breadcrumb({ folder, onSelect }: { folder: string; onSelect: (path: string) => void }) {
-  const segments = folder === '' ? [] : folder.split('/')
-  return (
-    <nav aria-label="Folder path" className="mb-1 flex flex-wrap items-center gap-0.5 text-xs">
-      <BreadcrumbLink label="Workspace" path="" current={folder === ''} onSelect={onSelect} />
-      {segments.map((segment, i) => (
-        <span key={segments.slice(0, i + 1).join('/')} className="flex items-center gap-0.5">
-          <span className="text-muted-foreground">/</span>
-          <BreadcrumbLink
-            label={segment}
-            path={segments.slice(0, i + 1).join('/')}
-            current={i === segments.length - 1}
-            onSelect={onSelect}
-          />
-        </span>
-      ))}
-    </nav>
-  )
-}
-
-function BreadcrumbLink({
-  label,
-  path,
-  current,
-  onSelect,
-}: {
-  label: string
-  path: string
-  current: boolean
-  onSelect: (path: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      aria-current={current ? 'true' : undefined}
-      onClick={() => onSelect(path)}
-      className="hover:text-foreground text-muted-foreground aria-[current]:text-foreground rounded px-1 py-0.5 aria-[current]:font-medium"
-    >
-      {label}
-    </button>
   )
 }

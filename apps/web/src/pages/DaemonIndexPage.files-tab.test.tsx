@@ -120,6 +120,14 @@ describe('DaemonIndexPage tree view', () => {
       expect(screen.getByTestId('folder-contents').textContent).toContain('design')
     })
 
+    // The breadcrumb says WHICH folder is open, not merely which are above
+    // it: the deepest segment is current and every ancestor is a way back.
+    const crumbs = within(screen.getByRole('navigation', { name: 'Folder path' }))
+    expect(crumbs.getByRole('button', { name: 'notes' }).getAttribute('aria-current')).toBe('true')
+    expect(
+      crumbs.getByRole('button', { name: 'Workspace' }).getAttribute('aria-current'),
+    ).toBeNull()
+
     // The breadcrumb walks back out, and the tree drives the middle pane too.
     fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
     await waitFor(() => {
