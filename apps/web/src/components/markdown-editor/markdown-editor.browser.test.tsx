@@ -43,7 +43,7 @@ describe('MarkdownEditor (real browser)', () => {
     await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}')
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     await userEvent.click(getByRole('menuitem', { name: 'Bold' }))
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('make **this** bold')
 

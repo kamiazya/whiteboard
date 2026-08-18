@@ -107,13 +107,18 @@ export interface SourcePaneApi {
   /** Heading level of the line the caret sits on; 0 for body text. */
   headingLevel: () => number
   /**
-   * The text an inline verb would act on — the selection, else the caret's
-   * word. What the link picker seeds its search box with, so the gesture
-   * that used to wrap that word still ends in one keystroke.
+   * The range an inline verb would act on — the selection, else the caret's
+   * word — with the text it currently holds.
+   *
+   * Handed out rather than kept internal because a surface that ASKS the
+   * user something (the link picker) commits later, and the caret can move
+   * under a non-modal dialog in between. The range the user was shown must
+   * be the range that gets written, so the caller pins this and passes it
+   * back to `replaceRange`.
    */
-  scopeText: () => string
-  /** Replaces that same range with `markup`, leaving the caret after it. */
-  replaceScope: (markup: string) => void
+  scopeRange: () => { from: number; to: number; text: string }
+  /** Replaces a pinned range with `markup`, leaving the caret after it. */
+  replaceRange: (range: { from: number; to: number }, markup: string) => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -256,15 +261,20 @@ export function SourcePane({
           view.focus()
         },
         headingLevel: () => headingLevelAt(view.state),
-        scopeText: () => {
+        scopeRange: () => {
           const scope = rangeToActOn(view.state)
-          return view.state.doc.sliceString(scope.from, scope.to)
+          return { ...scope, text: view.state.doc.sliceString(scope.from, scope.to) }
         },
-        replaceScope: (markup) => {
-          const scope = rangeToActOn(view.state)
+        replaceRange: (range, markup) => {
+          // Clamped because the pinned range predates whatever else may have
+          // been typed: a stale offset past the end would throw rather than
+          // write.
+          const end = view.state.doc.length
+          const from = Math.min(range.from, end)
+          const to = Math.min(Math.max(range.to, from), end)
           view.dispatch({
-            changes: { from: scope.from, to: scope.to, insert: markup },
-            selection: { anchor: scope.from + markup.length },
+            changes: { from, to, insert: markup },
+            selection: { anchor: from + markup.length },
             scrollIntoView: true,
             userEvent: 'input',
           })

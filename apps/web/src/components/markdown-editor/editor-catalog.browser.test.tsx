@@ -39,7 +39,7 @@ describe('the editor catalog (real browser)', () => {
     )
     await caretInto(container, 6) // inside "this"
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     await userEvent.click(getByRole('menuitem', { name: 'Bold' }))
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('make **this** bold')
@@ -52,7 +52,7 @@ describe('the editor catalog (real browser)', () => {
     )
     await caretInto(container, 5)
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     expect(getByRole('menuitemradio', { name: 'H2' }).getAttribute('aria-checked')).toBe('true')
     await userEvent.click(getByRole('menuitemradio', { name: 'H1' }))
 
@@ -66,7 +66,7 @@ describe('the editor catalog (real browser)', () => {
     )
     await caretInto(container, 6) // inside "weekly"
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     // With no targets supplied there is nothing to pick from, so the verb
     // keeps the selection-free wrap (the picker's own file covers the rest).
     await userEvent.click(getByRole('menuitem', { name: 'Link' }))
@@ -81,7 +81,7 @@ describe('the editor catalog (real browser)', () => {
     )
     await caretInto(container, 8)
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     await userEvent.click(getByRole('menuitem', { name: 'Toggle task' }))
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('- [x] ship it')
@@ -99,7 +99,7 @@ describe('the editor catalog (real browser)', () => {
       </div>,
     )
     await caretInto(container, 6)
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
 
     const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
     expect(menu).not.toBeNull()

@@ -30,7 +30,7 @@ async function caretInto(container: HTMLElement, right: number): Promise<void> {
 }
 
 async function openPicker(container: HTMLElement, getByRole: RenderResult['getByRole']) {
-  await userEvent.click(getByRole('button', { name: 'More actions' }))
+  await userEvent.click(getByRole('button', { name: 'Editing actions' }))
   await userEvent.click(getByRole('menuitem', { name: 'Link' }))
   return container.querySelector('[data-testid="link-picker"]') as HTMLElement
 }
@@ -109,6 +109,69 @@ describe('the link picker (real browser)', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('the [docs](https://example.com/guide)')
   })
 
+  // The dialog is not modal, so the caret can move under it — and the range
+  // the verb showed you is the range it must write to. Re-deriving it at
+  // commit time splices the markup wherever the caret ended up, silently
+  // destroying whatever was there.
+  it('writes to the range it was opened for, even if the caret moved meanwhile', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="weekly beta" onChange={onChange} linkTargets={targets} />,
+    )
+    await caretInto(container, 3) // inside "weekly"
+
+    const picker = await openPicker(container, getByRole)
+    expect((picker.querySelector('input') as HTMLInputElement).value).toBe('weekly')
+
+    // Back into the document, caret to the end, then pick from the still-open
+    // dialog.
+    const editable = container.querySelector('[contenteditable="true"]') as HTMLElement
+    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+    await userEvent.keyboard('{Control>}{End}{/Control}')
+    await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[Weekly review]] beta')
+  })
+
+  it('moves the highlight with the arrow keys and commits the active row', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+    )
+    await caretInto(container, 1)
+
+    const picker = await openPicker(container, getByRole)
+    const input = picker.querySelector('input') as HTMLInputElement
+    await userEvent.clear(input)
+    await userEvent.fill(input, 'untitled')
+    await userEvent.keyboard('{ArrowDown}')
+
+    const options = picker.querySelectorAll('[role="option"]')
+    expect(options[1]?.getAttribute('aria-selected')).toBe('true')
+    await userEvent.keyboard('{Enter}')
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[canvas:01JDUPE2]]')
+  })
+
+  it('says so when nothing matches, and Enter does nothing', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+    )
+    await caretInto(container, 1)
+
+    const picker = await openPicker(container, getByRole)
+    const input = picker.querySelector('input') as HTMLInputElement
+    await userEvent.clear(input)
+    await userEvent.fill(input, 'nothing by this name')
+
+    expect(picker.querySelectorAll('[role="option"]')).toHaveLength(0)
+    expect(picker.textContent).toContain('No document matches')
+    await userEvent.keyboard('{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="link-picker"]')).not.toBeNull()
+  })
+
   it('closes on Escape without touching the document', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
@@ -133,7 +196,7 @@ describe('the link picker (real browser)', () => {
     )
     await caretInto(container, 6)
 
-    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
     await userEvent.click(getByRole('menuitem', { name: 'Link' }))
 
     expect(container.querySelector('[data-testid="link-picker"]')).toBeNull()

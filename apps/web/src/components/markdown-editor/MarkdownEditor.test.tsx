@@ -112,13 +112,13 @@ describe('MarkdownEditor', () => {
     // nothing to act on: the doorway goes away rather than opening onto
     // disabled entries.
     const { getByRole, queryByRole } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
-    expect(queryByRole('button', { name: 'More actions' })).not.toBeNull()
+    expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Read' }))
-    expect(queryByRole('button', { name: 'More actions' })).toBeNull()
+    expect(queryByRole('button', { name: 'Editing actions' })).toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Write' }))
-    expect(queryByRole('button', { name: 'More actions' })).not.toBeNull()
+    expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
   })
 
   it('falls back from Split to Write in a narrow container, reflecting it in the toolbar without overwriting the stored preference', () => {

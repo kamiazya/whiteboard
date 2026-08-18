@@ -274,7 +274,12 @@ export function MarkdownEditor({
    * The open catalog and where it is anchored, in coordinates relative to
    * the editor root (ContextMenu positions against its offsetParent).
    */
-  const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
+  const [linkPicker, setLinkPicker] = useState<{
+    query: string
+    text: string
+    /** Pinned at open: the caret may move under this non-modal dialog. */
+    range: { from: number; to: number }
+  } | null>(null)
   const [catalog, setCatalog] = useState<{
     x: number
     y: number
@@ -457,10 +462,10 @@ export function MarkdownEditor({
           linkTargets === undefined || linkTargets.length === 0
             ? wrap('[[', ']]')
             : () => {
-                const api = sourceApiRef.current
-                const text = api?.scopeText() ?? ''
+                const scope = sourceApiRef.current?.scopeRange()
+                if (scope === undefined) return
                 setCatalog(null)
-                setLinkPicker({ query: text, text })
+                setLinkPicker({ query: scope.text, text: scope.text, range: scope })
               },
       },
       { kind: 'separator' },
@@ -567,7 +572,7 @@ export function MarkdownEditor({
           initialQuery={linkPicker.query}
           linkText={linkPicker.text}
           onPick={(markup) => {
-            sourceApiRef.current?.replaceScope(markup)
+            sourceApiRef.current?.replaceRange(linkPicker.range, markup)
             setLinkPicker(null)
           }}
           onCancel={() => {
