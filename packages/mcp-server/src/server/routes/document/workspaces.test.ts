@@ -309,6 +309,22 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     expect(snapshotRes.status).toBe(404)
   })
 
+  // A refusal the caller can act on, not a server failure: 409 with the
+  // offending descendant named, so the UI can say which one to deal with.
+  it('returns 409 naming a descendant rather than stranding it', async () => {
+    await saveDocument('session1', 'design', new LoroDoc())
+    await saveDocument('session1', 'design/login', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/design', {
+      method: 'DELETE',
+    })
+
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toContain('design/login')
+  })
+
   it('returns 404 with Problem Details { title } for a missing canvas', async () => {
     const app = createDocumentRouter()
     const res = await app.request('/api/workspaces/session1/documents/never-created', {
