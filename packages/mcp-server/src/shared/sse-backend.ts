@@ -133,6 +133,7 @@ export class SseBackend implements DocumentBackend {
     else if (message.type === 'head_changed') handlers.onHeadChanged(message)
     else if (message.type === 'viewport_request') handlers.onViewportRequest(message)
     else if (message.type === 'export_request') handlers.onExportRequest(message)
+    else if (message.type === 'agent_activity') handlers.onAgentActivity?.(message)
   }
 
   disconnect(): void {

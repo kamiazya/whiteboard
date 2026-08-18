@@ -669,6 +669,15 @@ export function createDocumentSyncSession(
         }
       },
 
+      onAgentActivity(payload) {
+        if (isStale()) return
+        try {
+          deps.getOptions().onAgentActivity?.(payload)
+        } catch (err) {
+          log.error('onAgentActivity callback threw', err)
+        }
+      },
+
       async onExportRequest(payload) {
         if (isStale()) return
         try {
