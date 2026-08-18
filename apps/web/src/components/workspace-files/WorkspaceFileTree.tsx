@@ -1,10 +1,19 @@
-import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
 export interface WorkspaceFileTreeDocument {
   readonly documentId: string
   readonly path: string
+  /**
+   * What the document is called. Absent when nobody named it, which is when
+   * the path's last segment is the honest label — never a fallback invented
+   * from the name (a path derived from one collapses every non-Latin title
+   * to `untitled-N`, which ADR-0008 measured and rejected).
+   */
+  readonly name?: string
+  /** Which editor opens it, and which shape its icon takes. */
+  readonly kind?: 'spatial' | 'markdown'
 }
 
 export interface WorkspaceFileTreeProps {
@@ -14,6 +23,7 @@ export interface WorkspaceFileTreeProps {
 }
 
 interface TreeNode {
+  /** The path segment — a folder has nothing else, and it never has a name. */
   readonly name: string
   readonly path: string
   /** Set when this exact path is a canvas; an intermediate segment that no
@@ -75,7 +85,7 @@ function TreeItem({
       role="treeitem"
       tabIndex={-1}
       aria-expanded={hasChildren ? expanded : undefined}
-      aria-label={node.name}
+      aria-label={node.canvas?.name ?? node.name}
     >
       <div className="flex items-center gap-1">
         {hasChildren ? (
@@ -101,8 +111,23 @@ function TreeItem({
             onClick={() => node.canvas && onOpen(node.canvas)}
             className="hover:bg-accent hover:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
           >
-            <FileText className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="truncate">{node.name}</span>
+            {/* The kind the list already carries, which the row was
+                discarding. A miniature of the document's own shape replaces
+                this icon in the increment that gives the tree minimaps; two
+                distinguishable icons is what the plumbing can honestly buy
+                today. */}
+            {node.canvas.kind === 'spatial' ? (
+              <LayoutGrid data-kind="spatial" className="text-muted-foreground size-3.5 shrink-0" />
+            ) : (
+              <FileText
+                data-kind={node.canvas.kind ?? 'markdown'}
+                className="text-muted-foreground size-3.5 shrink-0"
+              />
+            )}
+            {/* The display name, which is what every other surface shows and
+                what a `[[reference]]` resolves by. The segment is the
+                fallback, not the label. */}
+            <span className="truncate">{node.canvas.name ?? node.name}</span>
           </button>
         ) : (
           <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5 text-sm">

@@ -9,10 +9,8 @@ import {
   documentOkfV1ResponseSchema,
   documentsApiUrl,
   type ListDocumentsResponse,
-  type ListDocumentsV1Response,
   type ListWorkspacesResponse,
   listDocumentsResponseSchema,
-  listDocumentsV1ResponseSchema,
   listWorkspacesResponseSchema,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
@@ -174,18 +172,6 @@ export function setDocumentDisplayName(
 }
 
 // ---- /api/v1 document surface (documentId + derived alias world) ----
-
-export function listDocumentsV1(
-  fetchFn: typeof globalThis.fetch,
-  daemonBaseUrl: string,
-  workspaceId: string,
-): Promise<ListDocumentsV1Response> {
-  return fetchAndParse(
-    fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents`,
-    listDocumentsV1ResponseSchema,
-  )
-}
 
 export function getDocumentOkfV1(
   fetchFn: typeof globalThis.fetch,

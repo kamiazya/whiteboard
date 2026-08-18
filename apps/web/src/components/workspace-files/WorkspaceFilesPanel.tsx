@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DaemonApiError, getDocumentOkfV1, listDocumentsV1 } from '../../lib/daemon-api-client.js'
+import { DaemonApiError, getDocumentOkfV1, listDocuments } from '../../lib/daemon-api-client.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -37,9 +37,22 @@ export function WorkspaceFilesPanel({
     setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
-    listDocumentsV1(daemonFetch, daemonBaseUrl, workspaceId)
+    // The RICH list, not /api/v1's: that one carries only {documentId, path},
+    // so the tree could label a row by nothing but its path segment and had
+    // no way to know a document's kind. Both are things the tree has to show.
+    listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
-        if (!cancelled) setDocuments(res.documents)
+        if (cancelled) return
+        setDocuments(
+          res.documents.map((entry) => ({
+            // An older daemon omits the id; the path stands in, as it does
+            // everywhere else that reads this list.
+            documentId: entry.id ?? entry.path,
+            path: entry.path,
+            ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          })),
+        )
       })
       .catch((err) => {
         if (cancelled) return
