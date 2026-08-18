@@ -93,6 +93,30 @@ host with an unknown-tool error while the control looked live.
 - `BANNED_PATTERNS` in `skills-tool-surface.test.ts` now carries the seven names,
   beside `Excalidraw` and `/api/debug`, so prose teaching the old
   one-call-per-edit shape fails loudly rather than quietly going stale.
+- **`viewport` joins ADR-0009's entity list.** `wb_viewport_set` points a
+  watching browser at part of a canvas — the `viewport_request` WebSocket
+  message has existed since the HTTP viewport route was added, and until now
+  nothing exposed it to an agent while `routes/viewport.ts`'s own no-client
+  hint told callers to "run viewport_set", a tool that did not exist. A
+  viewport is not a document-model noun like the rest of that list: it
+  belongs to a client, not to stored content. It stays inside the `wb_`
+  plane anyway, because that plane is "an agent asking the daemon to do
+  something", which this is. ADR-0009 point 7's exemption is narrower than
+  it looks — it covers tools the MCP Apps HOST renders (`canvas_view`,
+  `canvas_open`), not everything that touches a UI.
+- **`ServerDeps` grows an optional `clientNotifier`.** It is optional so that
+  every existing composition, and every test, remains a valid server without
+  one; a tool that needed a browser to be present would stop being headless.
+  `wb_canvas_edit` announces what it touched and follows it with a viewport
+  fit (opt out with `follow: false`); `wb_viewport_set` answers
+  `delivered: false` rather than failing when nobody is watching.
+- **`agent_activity` is one message, not a begin/end pair.** A batch is
+  atomic and lands in milliseconds, so a paired form would only flicker, and
+  an `end` lost to a dropped socket would strand the indicator on forever.
+  Presence is the client's job: hold "an agent is editing" for a few seconds
+  after the last message and let it lapse. This is also why `wb_node_lock`
+  could not have been reused for presence — a lock is durable sidecar state,
+  so an agent that crashes leaves one behind for a human to clear.
 
 ## Alternatives considered
 

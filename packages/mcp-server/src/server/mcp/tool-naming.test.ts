@@ -22,6 +22,13 @@ const ENTITIES = [
   'facet',
   'node',
   'scene',
+  // Added by ADR-0010. Not a document-model noun like the rest — a viewport
+  // belongs to a client, not to stored content — but `wb_viewport_set` is
+  // still an agent asking the DAEMON to do something, which is what the
+  // `wb_` plane is. ADR-0009 point 7's exemption does not apply: that one is
+  // for tools the MCP Apps HOST renders (`canvas_view`, `canvas_open`), and
+  // this one talks to the daemon's own WebSocket clients.
+  'viewport',
   'version',
 ] as const
 

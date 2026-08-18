@@ -20,7 +20,7 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import type { ServerDeps } from '../server-deps.js'
+import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { canvasSnapshotSchema, projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
@@ -145,6 +145,13 @@ export const canvasEditInputSchema = z
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     ops: z.array(canvasOpSchema).min(1).max(MAX_OPS),
+    /**
+     * Move a watching browser's viewport onto what this batch touched.
+     * Defaults to true: an agent editing a board a human is looking at
+     * should not leave them hunting for the change. Set false for
+     * housekeeping edits that do not deserve to steal someone's view.
+     */
+    follow: z.boolean().optional(),
   })
   .strict()
 type CanvasEditInput = z.infer<typeof canvasEditInputSchema>
@@ -190,6 +197,35 @@ type CanvasEditOutput = z.infer<typeof canvasEditOutputSchema>
  */
 function fail(opIndex: number, op: string, detail: string): never {
   throw new CanvasEditError(opIndex, op, detail)
+}
+
+/**
+ * One human-readable line for the toast a browser shows. Counted from the
+ * OPS rather than from `touched`, because "added 3 nodes" and "moved 3
+ * nodes" are the same set of ids and a human needs to know which happened.
+ */
+function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
+  const counts = { added: 0, changed: 0, removed: 0, locked: 0, unlocked: 0 }
+  let tidied = false
+  for (const op of ops) {
+    if (op.op === 'node.add' || op.op === 'edge.add') counts.added += 1
+    else if (op.op === 'node.patch' || op.op === 'edge.patch') counts.changed += 1
+    else if (op.op === 'node.remove' || op.op === 'edge.remove') counts.removed += 1
+    else if (op.op === 'node.lock' || op.op === 'edge.lock') {
+      if (op.locked) counts.locked += 1
+      else counts.unlocked += 1
+    } else if (op.op === 'tidy') tidied = true
+  }
+  const parts: string[] = []
+  if (counts.added > 0) parts.push(`added ${counts.added}`)
+  if (counts.changed > 0) parts.push(`changed ${counts.changed}`)
+  if (counts.removed > 0) parts.push(`removed ${counts.removed}`)
+  if (counts.locked > 0) parts.push(`locked ${counts.locked}`)
+  if (counts.unlocked > 0) parts.push(`unlocked ${counts.unlocked}`)
+  if (tidied) parts.push('tidied the layout')
+  // `ops` is `.min(1)`, and every op kind above contributes, so this is
+  // unreachable rather than a fallback anyone should see.
+  return parts.length === 0 ? 'edited the canvas' : parts.join(', ')
 }
 
 function contentBottomLeft(nodes: readonly SpatialNode[]): { x: number; y: number } {
@@ -486,13 +522,53 @@ export function createCanvasEditTool(deps: ServerDeps) {
       for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, edgeLocks.has(edge.id))
       await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
+      const touched = {
+        nodes: [...touchedNodes].sort(),
+        edges: [...touchedEdges].sort(),
+      }
+
+      // Only now, with the write committed. A human must never be shown an
+      // edit that was refused, so nothing above this line notifies.
+      //
+      // Both calls are wrapped because the batch is already on disk by the
+      // time anyone is told: letting a broken socket surface as a tool error
+      // would report a failure for an edit that succeeded. The
+      // implementation is expected to handle its own transport errors — this
+      // is the belt, and server-core has no logger of its own to record it.
+      const notifier = deps.clientNotifier
+      if (notifier !== undefined) {
+        try {
+          notifier.agentActivity({
+            workspaceId: input.workspaceId,
+            documentId: input.documentId,
+            touched,
+            summary: summarizeOps(input.ops),
+          })
+        } catch {
+          // best effort
+        }
+        // An empty `elementIds` with `mode: 'fit'` fits the WHOLE board,
+        // which is a jarring jump for an edit that only touched an edge —
+        // so a batch that moved no node moves no viewport either.
+        if (input.follow !== false && touched.nodes.length > 0) {
+          try {
+            await notifier.requestViewport({
+              workspaceId: input.workspaceId,
+              documentId: input.documentId,
+              mode: 'fit',
+              elementIds: touched.nodes,
+              animate: true,
+            })
+          } catch {
+            // best effort
+          }
+        }
+      }
+
       return {
         documentId: input.documentId,
         applied: input.ops.length,
-        touched: {
-          nodes: [...touchedNodes].sort(),
-          edges: [...touchedEdges].sort(),
-        },
+        touched,
         geometry: [...geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
         snapshot: projectCanvasSnapshot(input.documentId, parsed.data, nodeLocks, edgeLocks),
       }

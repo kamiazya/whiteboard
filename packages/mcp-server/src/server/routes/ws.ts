@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http'
 import { SpanKind } from '@opentelemetry/api'
 import type { LoroDoc } from 'loro-crdt'
 import type { RawData, WebSocket } from 'ws'
-import type { ServerTextMessage } from '../../shared/ws-messages.js'
+import type { AgentActivityMessage, ServerTextMessage } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 import { extractContextFromHeaders, getTracer } from '../observability/tracing.js'
 import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
@@ -146,6 +146,20 @@ export function sendRestoreEvent(
       ? { type: 'restore_started', ...omitUndefined({ label }) }
       : { type: 'restore_complete' }
   broadcastTextMessage(workspaceId, path, message)
+}
+
+/**
+ * Announce what an agent just did. Broadcast to every connected client, not
+ * just ready ones, and never cached: a tab that connects later already has
+ * the edit itself through the Loro snapshot, so replaying the announcement
+ * would highlight a change it has always had.
+ */
+export function sendAgentActivity(
+  workspaceId: string,
+  path: string,
+  payload: Omit<AgentActivityMessage, 'type'>,
+): void {
+  broadcastTextMessage(workspaceId, path, { type: 'agent_activity', ...payload })
 }
 
 export function sendHeadChanged(workspaceId: string, path: string, head: string): void {

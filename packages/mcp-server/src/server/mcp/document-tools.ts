@@ -166,6 +166,24 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
+    tools.viewportSet.name,
+    {
+      description: tools.viewportSet.description,
+      inputSchema: tools.viewportSet.inputSchema.shape,
+      outputSchema: tools.viewportSet.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.viewportSet.inputSchema.parse(args)
+      // No document write lock: this changes nothing stored, it only asks a
+      // browser to look somewhere. Queueing it behind an in-flight batch
+      // would make "show me this" wait on an unrelated edit.
+      const result = await tools.viewportSet.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.canvasEdit.name,
     {
       description: tools.canvasEdit.description,

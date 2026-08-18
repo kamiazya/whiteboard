@@ -35,6 +35,7 @@
 
 // Authoritative list — keep in sync with registerDocumentTools calls.
 export const ALL_REGISTERED_TOOLS = [
+  'wb_viewport_set',
   'wb_body_patch',
   'wb_scene_digest',
   'wb_canvas_snapshot',
@@ -54,6 +55,7 @@ export const ALL_REGISTERED_TOOLS = [
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
+  'wb_viewport_set',
   'wb_document_set',
   'wb_canvas_snapshot',
   'wb_canvas_edit',

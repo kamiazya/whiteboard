@@ -9,6 +9,7 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import type { AgentActivity, ViewportRequest } from '../server-deps.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -686,5 +687,171 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
 
     expect(second.geometry).toEqual([])
     expect(second.touched).toEqual({ nodes: [], edges: [] })
+  })
+})
+
+/**
+ * Telling a human what an agent just did. Everything here is best effort:
+ * a daemon with no browser attached is the normal case, so a batch must
+ * apply identically whether or not anyone is listening.
+ */
+describe('wb_canvas_edit — telling the browser what happened', () => {
+  function makeNotifier() {
+    const activities: AgentActivity[] = []
+    const viewports: ViewportRequest[] = []
+    return {
+      activities,
+      viewports,
+      notifier: {
+        agentActivity: (activity: AgentActivity) => {
+          activities.push(activity)
+        },
+        requestViewport: async (request: ViewportRequest) => {
+          viewports.push(request)
+          return true
+        },
+      },
+    }
+  }
+
+  test('reports what it touched, and moves the viewport onto it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const { activities, viewports, notifier } = makeNotifier()
+    const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
+        { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
+      ],
+    })
+
+    expect(activities).toHaveLength(1)
+    expect(activities[0]).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      touched: { nodes: ['a', 'b'], edges: [] },
+    })
+    // The summary is what a human reads in a toast, so it has to say
+    // something — an empty string would render as a blank notification.
+    expect(activities[0].summary).toMatch(/\S/)
+
+    expect(viewports).toHaveLength(1)
+    expect(viewports[0]).toMatchObject({
+      documentId: DOCUMENT_ID,
+      mode: 'fit',
+      elementIds: ['a', 'b'],
+    })
+  })
+
+  test('says nothing at all when the batch was rejected', async () => {
+    // A human must never be shown an edit that did not happen.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const { activities, viewports, notifier } = makeNotifier()
+    const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
+          { op: 'node.patch', id: 'ghost', patch: { x: 1 } },
+        ],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError' })
+
+    expect(activities).toEqual([])
+    expect(viewports).toEqual([])
+  })
+
+  test('follow:false reports the edit but leaves the viewport alone', async () => {
+    // Moving someone's viewport is an interruption. It stays opt-out.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const { activities, viewports, notifier } = makeNotifier()
+    const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
+      follow: false,
+    })
+
+    expect(activities).toHaveLength(1)
+    expect(viewports).toEqual([])
+  })
+
+  test('does not move the viewport when the batch touched no node', async () => {
+    // `mode: 'fit'` with an empty elementIds list fits the WHOLE board,
+    // which is a jarring jump for an edit that only removed an edge.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
+        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+      ],
+      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    })
+    const { activities, viewports, notifier } = makeNotifier()
+    const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'edge.remove', id: 'e' }],
+    })
+
+    expect(activities).toHaveLength(1)
+    expect(activities[0].touched).toEqual({ nodes: [], edges: ['e'] })
+    expect(viewports).toEqual([])
+  })
+
+  test('applies identically with no notifier wired at all', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
+    })
+
+    expect(result.applied).toBe(1)
+  })
+
+  test('a notifier that throws does not fail the batch that already landed', async () => {
+    // The write is committed by the time anyone is told. Letting a broken
+    // socket surface as a tool error would tell the agent its edit failed
+    // when the edit is on disk.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool({
+      ...makeDeps(store),
+      clientNotifier: {
+        agentActivity: () => {
+          throw new Error('socket exploded')
+        },
+        requestViewport: async () => {
+          throw new Error('socket exploded')
+        },
+      },
+    })
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
+    })
+
+    expect(result.applied).toBe(1)
+    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
   })
 })

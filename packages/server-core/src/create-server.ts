@@ -33,6 +33,7 @@ import { createFacetSetTool } from './tools/facet-set.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
+import { createViewportSetTool } from './tools/viewport-set.js'
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
@@ -134,6 +135,7 @@ export function createServer(deps: ServerDeps) {
     canvasDigest: createCanvasDigestTool(deps),
     canvasSnapshot: createCanvasSnapshotTool(deps),
     canvasEdit: createCanvasEditTool(deps),
+    viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
