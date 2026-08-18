@@ -47,7 +47,15 @@ export function rankLinkTargets(
 const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]|^canvas:/
 
 /**
- * What to write in the body for a chosen target.
+ * Sequences an ALIAS cannot contain. Shorter than the target's list: an alias
+ * runs from `|` to the closing bracket, so `|` and a leading `canvas:` are
+ * ordinary text there and only the bracket close and a line break break it.
+ */
+const UNWRITABLE_AS_ALIAS = /]]|[\r\n]/
+
+/**
+ * What to write in the body for a chosen target, optionally displaying
+ * `text` instead of the target's own name.
  *
  * The readable form wins where it works, because the reference is prose the
  * author will read again — but `[[Name]]` resolves only when exactly one
@@ -56,11 +64,29 @@ const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]|^canvas:/
  * picker is the one place that KNOWS which document was chosen, so it spends
  * that knowledge here: the opaque `[[canvas:<id>]]` form appears only when
  * the readable one would be wrong.
+ *
+ * That form is unambiguous and unreadable, so it always carries an alias —
+ * the display text if there is one, else the name it could not use as the
+ * target. A reader gets prose either way; only the resolution changes.
  */
-export function linkMarkupFor(target: LinkTarget, all: readonly LinkTarget[]): string {
+export function linkMarkupFor(
+  target: LinkTarget,
+  all: readonly LinkTarget[],
+  text?: string,
+): string {
+  const wanted = (text ?? '').trim()
+  const alias = wanted === '' || UNWRITABLE_AS_ALIAS.test(wanted) ? null : wanted
   const sameName = all.filter((candidate) => candidate.name === target.name)
-  const unambiguous = sameName.length === 1 && !UNWRITABLE_IN_BRACKETS.test(target.name)
-  return unambiguous ? `[[${target.name}]]` : `[[canvas:${target.id}]]`
+  const nameIsWritable = sameName.length === 1 && !UNWRITABLE_IN_BRACKETS.test(target.name)
+  if (nameIsWritable) {
+    return alias === null || alias === target.name
+      ? `[[${target.name}]]`
+      : `[[${target.name}|${alias}]]`
+  }
+  const fallbackAlias = alias ?? (UNWRITABLE_AS_ALIAS.test(target.name) ? null : target.name)
+  return fallbackAlias === null
+    ? `[[canvas:${target.id}]]`
+    : `[[canvas:${target.id}|${fallbackAlias}]]`
 }
 
 /**
