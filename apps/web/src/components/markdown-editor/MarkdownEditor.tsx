@@ -55,7 +55,7 @@ export interface MarkdownEditorProps {
   title?: string
   /**
    * Maps `[[Name]]` aliases to canvas ids for the preview (codec's
-   * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
+   * separate resolution pass). Absent, only a bare `[[ULID]]` resolves.
    */
   resolveAlias?: AliasResolver
   /**

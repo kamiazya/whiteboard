@@ -9,14 +9,12 @@ import type {
   MdastTableRow,
 } from '@kamiazya/whiteboard-model/mdast'
 
-const CANVAS_ID_PREFIX = 'canvas:'
-
 export type AliasResolver = (alias: string) => string | null
 
 interface ReferenceMatch {
   /** Index of the match start (the `!` when present, otherwise the first `[`). */
   index: number
-  /** Full matched text, e.g. `[[canvas:ID]]` or `![[target|alias]]`. */
+  /** Full matched text, e.g. `[[ID]]` or `![[target|alias]]`. */
   full: string
   isEmbed: boolean
   target: string
@@ -88,11 +86,13 @@ function findNextReference(value: string, cursor: number): ReferenceMatch | unde
  * Splits a plain-text node's value on `[[...]]`/`![[...]]` occurrences,
  * resolving each one independently. A leading `!` marks an embed
  * (transclusion) rather than a wikiLink — mirrors to-remark.ts's inverse
- * serialization (`wikiLink` -> `[[canvas:ID]]`, `embed` -> `![[canvas:ID]]`).
- * `[[canvas:ULID]]` always resolves directly (no resolver needed);
- * `[[alias]]` only resolves through the injected resolver — malformed refs
- * (an unresolved alias, or a `canvas:` target that isn't a valid ULID) stay
- * as literal text rather than being dropped.
+ * serialization (`wikiLink` -> `[[ID]]`, `embed` -> `![[ID]]`).
+ *
+ * There is no scheme: `[[<ULID>]]` resolves directly (no resolver needed)
+ * and everything else goes to the injected resolver as a NAME, which is the
+ * one bracket form authors elsewhere already know. An unresolved target stays
+ * as literal text rather than being dropped, so a link this version cannot
+ * honour is visible rather than silently missing.
  */
 function splitTextReferences(
   value: string,
@@ -127,10 +127,14 @@ function resolveTarget(
   resolver: AliasResolver | undefined,
   isEmbed: boolean,
 ): MdastPhrasingContent | undefined {
-  if (target.startsWith(CANVAS_ID_PREFIX)) {
-    const documentId = target.slice(CANVAS_ID_PREFIX.length)
-    if (!documentIdSchema.safeParse(documentId).success) return undefined
-    return isEmbed ? { type: 'embed', documentId } : { type: 'wikiLink', documentId, alias }
+  // A document id is a canonical ULID — 26 characters of Crockford base32
+  // starting 0-7 — so it identifies itself without a scheme to announce it.
+  // The id reading wins over the resolver: a document NAMED like a ULID would
+  // be shadowed, which is the right trade for a shape no one types by hand.
+  if (documentIdSchema.safeParse(target).success) {
+    return isEmbed
+      ? { type: 'embed', documentId: target }
+      : { type: 'wikiLink', documentId: target, alias }
   }
 
   if (resolver === undefined) return undefined
@@ -205,7 +209,7 @@ function resolveTableCell(
  * Resolves `[[...]]` references across an already-parsed document. Pure and
  * single-document: the resolver is injected so this package never needs to
  * know how aliases map to canvas ids. With no resolver, only direct
- * `[[canvas:ULID]]` references parse — everything else stays literal text.
+ * bare `[[ULID]]` references parse — everything else stays literal text.
  */
 export function resolveReferences(root: MdastRoot, resolver?: AliasResolver): MdastRoot {
   return { ...root, children: root.children.map((child) => resolveFlow(child, resolver)) }

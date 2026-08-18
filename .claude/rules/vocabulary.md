@@ -195,14 +195,30 @@ plain rename would have got wrong:
   swapping `substr` for a blanket `REPLACE` left it green. A fixture for a SET
   expression has to survive the WHERE clause first.
 
-**One container-noun use is still open, deliberately.** The wiki-link scheme
-`[[canvas:<ULID>]]` (`CANVAS_ID_PREFIX` in `codec/src/references/resolve.ts`,
-emitted by `resolve-for-export.ts`) names the container, so by this rule it
-should be `document:`. It is left alone because it is the only one written
-into a document's own free-text BODY: there is no schema to migrate, so
-changing it silently breaks every link a user already typed. That is a
-product decision about content, not a code-vocabulary one — decide it
-explicitly rather than sweeping it.
+**The wiki-link scheme is DONE, and it was settled by DELETING the word
+rather than replacing it.** `[[canvas:<ULID>]]` was the one container-noun
+use written into a document's own free-text BODY, which is why it waited for
+a product decision rather than a sweep: no schema to migrate, and every link
+a user already typed is at stake.
+
+The decision was that the scheme should not exist at all. Obsidian — the
+convention these brackets borrow — has no scheme, and a document id is a
+canonical ULID, 26 characters of Crockford base32 starting 0-7, so it
+identifies itself without one. `resolveTarget` now reads a target that parses
+as a document id AS that id and sends everything else to the name resolver.
+One bracket form, and the container noun is gone from the user's surface
+instead of renamed there.
+
+Two consequences worth knowing:
+
+- A name shaped exactly like a ULID is shadowed by the id reading. The link
+  picker (`linkMarkupFor`) checks for it and falls back to the id form, so
+  the one path that could produce such a link does not.
+- A body still carrying `[[canvas:<ULID>]]` reaches the name resolver, finds
+  no document called that, and stays as the literal text the author typed.
+  That is the deliberate outcome — a link this version cannot honour is
+  visible rather than silently missing — and `resolve.test.ts` pins it, which
+  is why that file still contains the old spelling on purpose.
 
 One duplication surfaced and was NOT merged, because collapsing it changes
 behaviour rather than names: three separate "not found" errors existed, two of

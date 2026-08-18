@@ -11,7 +11,7 @@ describe('useMarkdownEmbedContent', () => {
       id === B ? { body: 'embedded body', title: 'Note B' } : undefined,
     )
     const { result } = renderHook(() =>
-      useMarkdownEmbedContent({ body: `before\n\n![[canvas:${B}]]\n`, load }),
+      useMarkdownEmbedContent({ body: `before\n\n![[${B}]]\n`, load }),
     )
     await waitFor(() => {
       expect(result.current(B)).toBeDefined()
@@ -24,13 +24,11 @@ describe('useMarkdownEmbedContent', () => {
 
   it('follows transitive embeds so nested bodies resolve too', async () => {
     const docs: Record<string, { body: string; title?: string }> = {
-      [B]: { body: `![[canvas:${C}]]\n` },
+      [B]: { body: `![[${C}]]\n` },
       [C]: { body: 'leaf body' },
     }
     const load = vi.fn(async (id: string) => docs[id])
-    const { result } = renderHook(() =>
-      useMarkdownEmbedContent({ body: `![[canvas:${B}]]\n`, load }),
-    )
+    const { result } = renderHook(() => useMarkdownEmbedContent({ body: `![[${B}]]\n`, load }))
     await waitFor(() => {
       expect(result.current(C)).toBeDefined()
     })
@@ -53,9 +51,7 @@ describe('useMarkdownEmbedContent', () => {
 
   it('a failed load resolves to undefined without retry storms', async () => {
     const load = vi.fn(async () => undefined)
-    const { result } = renderHook(() =>
-      useMarkdownEmbedContent({ body: `![[canvas:${B}]]\n`, load }),
-    )
+    const { result } = renderHook(() => useMarkdownEmbedContent({ body: `![[${B}]]\n`, load }))
     await waitFor(() => {
       expect(load).toHaveBeenCalled()
     })
@@ -76,13 +72,13 @@ describe('useMarkdownEmbedContent', () => {
     const load = vi.fn(() => gate)
     const { result, rerender } = renderHook(
       ({ body }: { body: string }) => useMarkdownEmbedContent({ body, load }),
-      { initialProps: { body: `![[canvas:${B}]]\n` } },
+      { initialProps: { body: `![[${B}]]\n` } },
     )
     await waitFor(() => {
       expect(load).toHaveBeenCalledTimes(1)
     })
     // A keystroke lands while the load is still in flight.
-    rerender({ body: `![[canvas:${B}]]\nx` })
+    rerender({ body: `![[${B}]]\nx` })
     release({ body: 'late but wanted' })
     await waitFor(() => {
       expect(result.current(B)).toBeDefined()

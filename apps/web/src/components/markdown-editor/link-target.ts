@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, documentIdSchema } from '@kamiazya/whiteboard-model'
 
 /** A document this editor can link to, as the composition root knows it. */
 export interface LinkTarget {
@@ -45,15 +45,27 @@ export function rankLinkTargets(
  * accepts the reference only if the very next character is another one, so a
  * single bracket either kills the whole reference or truncates it and leaves
  * the remainder as literal text. A line break cannot appear in an inline
- * reference, `|` begins the alias half, and a leading `canvas:` is parsed as
- * a direct document id — which then fails id validation and drops the link.
+ * reference, and `|` begins the alias half.
  */
-const UNWRITABLE_IN_BRACKETS = /[\]\r\n|]|^canvas:/
+const UNWRITABLE_IN_BRACKETS = /[\]\r\n|]/
+
+/**
+ * A name shaped exactly like a document id, which the scanner reads as one
+ * rather than as a name — the references syntax carries no scheme, so the id
+ * form IS a bare target. Vanishingly unlikely for a human-typed title (a
+ * canonical ULID is 26 characters of Crockford base32), but the picker can
+ * check it for free, and the alternative is a link pointing somewhere else
+ * entirely.
+ */
+function readsAsDocumentId(name: string): boolean {
+  return documentIdSchema.safeParse(name).success
+}
 
 /**
  * What an ALIAS cannot contain. Shorter than the target's list — `|` and a
- * leading `canvas:` are ordinary text once the target half is closed — but
- * the bracket rule is the same and for the same reason: the scanner stops at
+ * document-id-shaped string are ordinary text once the target half is
+ * closed — but the bracket rule is the same and for the same reason: the
+ * scanner stops at
  * the first `]` and requires the next character to be one too.
  */
 const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
@@ -67,8 +79,8 @@ const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
  * document carries that name (see `createSnapshotAliasResolver`), so a
  * duplicate name would produce a link that silently stays literal text. The
  * picker is the one place that KNOWS which document was chosen, so it spends
- * that knowledge here: the opaque `[[canvas:<id>]]` form appears only when
- * the readable one would be wrong.
+ * that knowledge here: the opaque `[[<id>]]` form appears only when the
+ * readable one would be wrong.
  *
  * That form is unambiguous and unreadable, so it always carries an alias —
  * the display text if there is one, else the name it could not use as the
@@ -82,16 +94,17 @@ export function linkMarkupFor(
   const wanted = (text ?? '').trim()
   const alias = wanted === '' || UNWRITABLE_AS_ALIAS.test(wanted) ? null : wanted
   const sameName = all.filter((candidate) => candidate.name === target.name)
-  const nameIsWritable = sameName.length === 1 && !UNWRITABLE_IN_BRACKETS.test(target.name)
+  const nameIsWritable =
+    sameName.length === 1 &&
+    !UNWRITABLE_IN_BRACKETS.test(target.name) &&
+    !readsAsDocumentId(target.name)
   if (nameIsWritable) {
     return alias === null || alias === target.name
       ? `[[${target.name}]]`
       : `[[${target.name}|${alias}]]`
   }
   const fallbackAlias = alias ?? (UNWRITABLE_AS_ALIAS.test(target.name) ? null : target.name)
-  return fallbackAlias === null
-    ? `[[canvas:${target.id}]]`
-    : `[[canvas:${target.id}|${fallbackAlias}]]`
+  return fallbackAlias === null ? `[[${target.id}]]` : `[[${target.id}|${fallbackAlias}]]`
 }
 
 /**
