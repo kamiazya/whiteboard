@@ -94,6 +94,16 @@ paths:
    `measureText` in the browser). Layout never passes a string containing
    a newline to `measure`, and clamps any non-finite `advanceWidth` to `0`
    (`clampAdvance`) before it reaches geometry.
+   `constantRatioMeasureText` — the measurer of last resort — lives here
+   too, beside the contract it satisfies. Three composition roots had grown
+   their own copy (server-core is forbidden from loading a font at all,
+   mcp-server needs one when the vendored asset is missing, canvas-viewer
+   when the realm has no Canvas 2D context) with three DIFFERENT constant
+   sets, so the same canvas measured differently depending on which
+   degraded path produced it. The ratios are arbitrary; the point is that
+   they are arbitrary in one place. It matches no real font by
+   construction — a scene laid out with it is degraded, never
+   byte-reproducible against a measured one.
 4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
    internal/versioned shape consumed later by loro-adapter's View-
    resolution layer. Root depth is `0`; a 4th nesting level is the cap

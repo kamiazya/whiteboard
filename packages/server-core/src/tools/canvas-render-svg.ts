@@ -1,8 +1,7 @@
-import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText, renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
-import { fallbackMeasureText } from '../render/fallback-measure.js'
 import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -45,7 +44,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
       const references = input.embedReferences
         ? await resolveFileReferences(deps, input.workspaceId, canvas)
         : undefined
-      const scene = composeCanvasScene(canvas, fallbackMeasureText, {
+      const scene = composeCanvasScene(canvas, constantRatioMeasureText, {
         ...(references === undefined ? {} : { references }),
       })
       const { width, height } = computeSceneDimensions(scene)

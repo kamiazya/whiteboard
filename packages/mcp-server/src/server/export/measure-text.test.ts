@@ -2,11 +2,7 @@ import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-re
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { resolveExportFontFaces } from './export-font.js'
-import {
-  _resetExportMeasureTextCacheForTests,
-  createConstantRatioMeasureText,
-  createOpentypeMeasureText,
-} from './measure-text.js'
+import { _resetExportMeasureTextCacheForTests, createOpentypeMeasureText } from './measure-text.js'
 
 const NO_FACES = { regular: null, bold: null, italic: null, boldItalic: null }
 
@@ -196,28 +192,5 @@ describe('createOpentypeMeasureText', () => {
     } finally {
       capture.restore()
     }
-  })
-})
-
-describe('createConstantRatioMeasureText', () => {
-  it('satisfies the same contract as the real measurer', () => {
-    const measure = createConstantRatioMeasureText()
-
-    expect(measure('', font(16)).advanceWidth).toBe(0)
-
-    const base = measure('Fallback test', font(16))
-    const doubled = measure('Fallback test', font(32))
-    expectFiniteNonNegativeMetrics(base)
-    expect(doubled.advanceWidth).toBeCloseTo(base.advanceWidth * 2, 5)
-    expect(doubled.ascent).toBeCloseTo(base.ascent * 2, 5)
-    expect(doubled.descent).toBeCloseTo(base.descent * 2, 5)
-    expect(doubled.lineGap).toBeCloseTo(base.lineGap * 2, 5)
-  })
-
-  it('is monotonic under appending characters', () => {
-    const measure = createConstantRatioMeasureText()
-    const shorter = measure('abc', font(16)).advanceWidth
-    const longer = measure('abcdef', font(16)).advanceWidth
-    expect(longer).toBeGreaterThan(shorter)
   })
 })

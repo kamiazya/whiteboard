@@ -1,4 +1,5 @@
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 
 function fontCss(font: FontDescriptor): string {
   const family = [font.family, ...font.fallbackChain].filter((name) => name.length > 0).join(', ')
@@ -34,25 +35,6 @@ function measureWithContext(
       font.sizePx * DESCENT_RATIO,
   )
   return { advanceWidth: clampMetric(metrics.width), ascent, descent, lineGap: 0 }
-}
-
-/**
- * Approximates advance width as a fixed ratio of font size per character.
- * Not visually accurate — only used when no real Canvas 2D context is
- * available (e.g. jsdom, which has no canvas backend by default) — but it
- * still satisfies MeasureText's contract: finite, non-negative, linear in
- * sizePx, empty string measures to 0.
- */
-const FALLBACK_CHAR_WIDTH_RATIO = 0.6
-
-function fallbackMeasure(text: string, font: FontDescriptor): TextMetrics {
-  if (text === '') return EMPTY_METRICS
-  return {
-    advanceWidth: text.length * font.sizePx * FALLBACK_CHAR_WIDTH_RATIO,
-    ascent: font.sizePx * ASCENT_RATIO,
-    descent: font.sizePx * DESCENT_RATIO,
-    lineGap: 0,
-  }
 }
 
 /**
@@ -97,6 +79,6 @@ export function createBrowserMeasureText(): MeasureText {
 
   return (text: string, font: FontDescriptor): TextMetrics => {
     const ctx = getContext()
-    return ctx ? measureWithContext(ctx, text, font) : fallbackMeasure(text, font)
+    return ctx ? measureWithContext(ctx, text, font) : constantRatioMeasureText(text, font)
   }
 }

@@ -41,3 +41,43 @@ export type MeasureText = (text: string, font: FontDescriptor) => TextMetrics
 export function clampAdvance(advanceWidth: number): number {
   return Number.isFinite(advanceWidth) && advanceWidth >= 0 ? advanceWidth : 0
 }
+
+/**
+ * Ratios of an em box for a rough Latin sans-serif face. Not any real
+ * font's metrics — see `constantRatioMeasureText`.
+ */
+const RATIO_ADVANCE = 0.55
+const RATIO_ASCENT = 0.75
+const RATIO_DESCENT = 0.25
+const RATIO_LINE_GAP = 0.1
+
+function clampNonNegative(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+/**
+ * The measurer of last resort: what a caller uses when no real one is
+ * reachable — the export font asset failed to load, the realm has no
+ * Canvas 2D context (jsdom), or the layer is forbidden from loading a font
+ * at all (server-core).
+ *
+ * It lives here, in the package that DEFINES `MeasureText`, because every
+ * one of those callers needs the same thing: a deterministic estimate that
+ * satisfies the contract (finite, non-negative, `advanceWidth('') === 0`,
+ * linear in `sizePx`). Three composition roots grew their own copy with
+ * three different constant sets, so the same canvas measured differently
+ * depending on which degraded path produced it — the numbers are arbitrary,
+ * but they must be arbitrary in ONE way.
+ *
+ * Its output matches no real font, and that is the point: a scene laid out
+ * with it is degraded, never byte-reproducible against a measured one.
+ */
+export const constantRatioMeasureText: MeasureText = (text, font) => {
+  const sizePx = clampNonNegative(font.sizePx)
+  return {
+    advanceWidth: clampNonNegative(text.length * sizePx * RATIO_ADVANCE),
+    ascent: sizePx * RATIO_ASCENT,
+    descent: sizePx * RATIO_DESCENT,
+    lineGap: sizePx * RATIO_LINE_GAP,
+  }
+}
