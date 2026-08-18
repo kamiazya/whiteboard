@@ -592,10 +592,32 @@ paths:
     byte-identical. Verified honoured by resvg (the PNG export path) as well
     as browsers. A page embedding several of these SVGs repeats the mask id,
     which is harmless precisely because every copy is byte-identical.
-    NOT done, and deliberately: `sceneDigest` does not report truncation. A
-    fade says "there is more" without saying how much, and the digest carries
-    no text content to be inconsistent with — add it when a reader has a
-    reason to act on it.
+    **The SIGNAL is one fact with three readers, and that is the part to keep
+    uniform.** The POLICIES above differ for reasons — math is not cut, an
+    edge label has no box, a single code point has nothing below it to split.
+    The signal differing had none, and it left the commonest case silent:
+    three paragraphs in a box holding two rendered as a tidy two-paragraph
+    box, while a cut LINE faded. Anything removed now marks the last surviving
+    run (`markLastRun`), so a dropped block, a trimmed list item and a cut
+    line all say the same thing.
+    `sceneDigest` DOES report it now, as `truncated` on the node entry. This
+    reverses the earlier "add it when a reader has a reason to act on it" —
+    an agent authoring and reading canvases is that reader, and the fade is
+    only legible to someone looking at pixels. The fact rides the chrome
+    SHAPE because a node's content is a SIBLING of its chrome in the flat
+    scene list, so a digest walking top-level nodes could never correlate the
+    two on its own.
+    **Where the cut is DECIDED is `mdast-blocks.ts`** (`fitBlocksToHeight`),
+    not the spatial fitter that calls it: "which part of a block is a line"
+    is that module's own knowledge. Granularity steps down blocks -> lines
+    (a paragraph's runs) -> list items; `blockquote`/`table`/`code` stay
+    whole-block, their children not being lines. Whole-block alone leaves the
+    commonest body unbounded — a single long paragraph is ONE block, measured
+    at 112px in a 60px node before lines were reachable. Keep-first ("a text
+    node never renders empty") stays in `spatial-canvas.ts`, being a
+    spatial-node policy rather than a block one.
+    `layout/frame-containment-quality.test.ts` counts what the law hides —
+    a bound says nothing about how often its escape is taken.
     `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
     see the Tests section.
 

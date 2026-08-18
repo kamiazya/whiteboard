@@ -19,7 +19,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
 
   // GC the op-log before the oldest retained version frontiers using shallow-snapshot.
   // Side effects: replace the on-disk .loro file and evict doc-cache so the next getDoc reloads the shallow doc.
-  // Avoid calling this frequently on highly active multi-peer documents because concurrent applyAndPersist calls can race.
+  // Avoid calling this frequently on highly active multi-peer documents because concurrent saves can race.
   onDocumentsRoute(app, 'post', ['compact'], async (c, workspaceId, path) => {
     try {
       const result = await compactDocument(workspaceId, path, versionStore)

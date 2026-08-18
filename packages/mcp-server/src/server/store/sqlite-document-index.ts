@@ -22,6 +22,7 @@ import {
 import { getLogger } from '../log.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -41,16 +42,6 @@ function toEntry(row: {
     ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
   }
-}
-
-/** How many segments a path has. */
-function depth(path: string): number {
-  return path.split('/').length
-}
-
-/** Whether `path` is `ancestor` itself or sits below it. */
-function isSelfOrDescendant(path: string, ancestor: string): boolean {
-  return path === ancestor || path.startsWith(`${ancestor}/`)
 }
 
 /**
@@ -212,46 +203,19 @@ export class SqliteDocumentIndex implements DocumentIndex {
           .where('workspaceId', '=', workspaceId)
           .execute()
 
-        const moving = rows.filter((row) => isSelfOrDescendant(row.path, from))
-        if (moving.length === 0) {
-          throw new DocumentNotFoundError(workspaceId, from)
+        const plan = planSubtreeMove(rows, from, to)
+        if (!plan.ok) {
+          throw plan.reason === 'not-found'
+            ? new DocumentNotFoundError(workspaceId, from)
+            : new DocumentPathTakenError(workspaceId, plan.path)
         }
-        const occupied = new Set(rows.map((row) => row.path))
-        const rewritten = moving.map((row) => ({
-          id: row.id,
-          from: row.path,
-          path: `${to}${row.path.slice(from.length)}`,
-        }))
-        // Every produced path, not just `to`: moving `a` onto a free `c`
-        // still collides when `a/d` and `c/d` both exist. Paths the move is
-        // vacating do not count as occupied, or relocating a subtree would
-        // always collide with itself.
-        const vacating = new Set(moving.map((row) => row.path))
-        for (const row of rewritten) {
-          if (occupied.has(row.path) && !vacating.has(row.path)) {
-            throw new DocumentPathTakenError(workspaceId, row.path)
-          }
-        }
-
-        // Shallowest source first, by DEPTH — not by path order. A move up
-        // into its own ancestor namespace sends a deeper row onto the path a
-        // shallower one is vacating, so the shallower write has to land
-        // first or the unique index rejects a move the contract requires to
-        // succeed. The two contending rows need not be ancestor and
-        // descendant of each other (`a/b/x` and `a/b/b/x` both branch below
-        // `a/b`), which is why segment-wise path order is not enough here: it
-        // would put `a/b/b/x` first because `b` precedes `x`. Only the depth
-        // difference is guaranteed, and it is: the row producing a contested
-        // path is always deeper than the row vacating it, by exactly the
-        // number of segments the move removes.
-        rewritten.sort((left, right) => depth(left.from) - depth(right.from))
 
         const now = Date.now()
-        for (const row of rewritten) {
+        for (const move of plan.moves) {
           await trx
             .updateTable('documents')
-            .set({ path: row.path, updatedAt: now })
-            .where('id', '=', row.id)
+            .set({ path: move.path, updatedAt: now })
+            .where('id', '=', move.id)
             .execute()
         }
       })
@@ -260,16 +224,16 @@ export class SqliteDocumentIndex implements DocumentIndex {
 
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
     await withWorkspaceWriteLock(workspaceId, async () => {
-      const descendant = await this.db
+      const rows = await this.db
         .selectFrom('documents')
-        .select('path')
+        .select(['id', 'path'])
         .where('workspaceId', '=', workspaceId)
-        .where('path', 'like', `${path}/%`)
-        .executeTakeFirst()
-      if (descendant) {
+        .execute()
+      const descendant = findDescendantPath(rows, path)
+      if (descendant !== undefined) {
         throw new DocumentHasDescendantsError(
           path,
-          `Delete "${descendant.path}" and any others below it first.`,
+          `Delete "${descendant}" and any others below it first.`,
         )
       }
       await this.db

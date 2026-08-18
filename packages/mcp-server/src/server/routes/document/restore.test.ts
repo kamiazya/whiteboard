@@ -16,8 +16,8 @@ vi.mock('../../config.js', () => ({
 const tmp = withTempDataDir('whiteboard-restore-test-')
 
 const { createRestoreRouter } = await import('./restore.js')
-const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const { saveDocument, getDocumentKind, loadDocument } = await import(
+const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+const { getDoc, saveDocument, getDocumentKind, loadDocument } = await import(
   '../../store/document-store.js'
 )
 const { countAliveNodes } = await import('../../store/count-alive-nodes.js')

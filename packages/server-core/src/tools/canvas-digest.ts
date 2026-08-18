@@ -6,9 +6,10 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
-import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
@@ -28,7 +29,7 @@ export function createCanvasDigestTool(deps: ServerDeps) {
     inputSchema: canvasDigestInputSchema,
     outputSchema: sceneDigestSchema,
     async execute(input: CanvasDigestInput): Promise<SceneDigest> {
-      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'wb_scene_digest')
       const scene = composeCanvasScene(canvas, (await deps.measure?.()) ?? constantRatioMeasureText)
       return sceneDigest(scene)

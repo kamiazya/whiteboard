@@ -78,249 +78,85 @@ knowing before doing it:
   recorded in the database, and every table and column it names is the name
   as it stood at that point in the log.
 
-## Known violations, largest first
+## Correct uses that look like violations
 
-Not a work queue — a lookup, so you can recognise one when you open a file.
+ADR-0009's vocabulary has landed: no known violation is open. What is left is
+the opposite lookup — the places `canvas` and the old spellings are RIGHT, so
+a later sweep does not "fix" them.
 
-`Canvas` as the CONTAINER noun — once the largest entry here — is DONE, in
-five increments: four that moved the bulk (`switchDocument`, the
-`useDocumentSync` stack, the apps/web UI surface, the browser stores, and the
-server contracts + HTTP routes) and a fifth that swept the tail those four
-left behind. `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
-`CanvasContextMenu`, `CanvasDisplaySettings`, `CanvasViewer`, `canvasRef`,
-`screenToCanvas`, `wb_canvas_tidy` and the render/layout helpers are CORRECT
-and stay: they name the spatial surface, which is what the word means.
+- **The spatial surface.** `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
+  `CanvasViewer`, `canvasRef`, `screenToCanvas`, `wb_canvas_tidy`, the
+  render/layout helpers, and the MCP Apps UI tools `canvas_open`/`canvas_view`.
+  The word means the surface; only the CONTAINER sense was retired.
+- **Judge by the RETURN TYPE, not the owner.** `documentSyncSession.getCanvas()`
+  answers with a `SpatialCanvas`, so `Canvas` is correct even though a
+  document-shaped object owns the method.
+- **Window-event VALUES** stay `'excalidraw:doc_changed'` /
+  `'excalidraw:wb_version_saved'`; four modules match the raw strings and
+  `document-sync-types.test.ts` pins both so a rename cannot take the wire
+  format with it.
+- **User-visible copy** ("New canvas", "Canvas actions"). What the product
+  calls a thing to its users is a product decision this rule does not reach.
+- **Assertions ABOUT the old word.** `resolve.test.ts` still writes
+  `[[canvas:<ULID>]]` — it exists to prove that spelling has no meaning left.
+  `model/src/spatial.ts` comments that a format saying `canvasId` teaches the
+  wrong thing. Rewriting either inverts what it says.
+- **Migrations, their fixtures, and the ADRs.** Each names the shape as it
+  stood at its point in the log. ADR-0007/0008/0009 keep `slug` and
+  `OpenCanvas` behind a dated note: a decision record is history, and
+  rewriting the reasoning would misreport what was decided.
 
-**The tail is the part worth knowing about, because the four big increments
-were reported as DONE while it was still there.** Renaming the ROUTE
-`/w/:ws/canvas/:path` to `/document/` had left the helper that builds it
-called `canvasPath`; renaming the wire key `canvases` to `documents` had left
-`listCanvasesV1` and `getCanvasSnapshot` fetching them. A sweep keyed on the
-noun finds the nouns and misses the VERBS and HELPERS wrapped around them —
-so after one lands, re-grep for the identifiers that touch what you renamed
-(`get*`, `list*`, `*Path`, `*Url`), not for the word you replaced. The
-survivors here were `canvasPath`, `canvasUrl`/`onCopyCanvasUrl`,
-`listCanvasesV1`, `getCanvasOkfV1`, `getCanvasSnapshot`, a
-`listDocuments as listCanvasesApi` import alias, and
-`canvasPathForAction`/`canvasPathForFile` on the published
-`./api-contracts` subpath.
+`slug` is the one word retired outright, and `vocabulary-check.test.ts` in
+`tools/arch-lint` keeps it retired — the only part of this rule that is not
+prose. Add a word there only when it has no legitimate meaning left. `canvas`
+never will, and `OpenCanvas` cannot either: the guard would need an ADR
+carve-out, and a guard that needs one is a guard nobody trusts when it fires.
 
-**One name that reads like a survivor and is not**:
-`documentSyncSession.getCanvas()` returns a `SpatialCanvas` — the spatial
-surface — so `Canvas` is the right word and it stays. The rule to apply is
-the RETURN TYPE, not the owner: a method on a document-shaped object may
-still legitimately answer with a canvas.
+## Renaming a stored shape
 
-Four things about how it went are worth keeping.
+The mechanical half is easy and the traps are not. Everything below cost a
+real defect at least once.
 
-**Order the increments by BOUNDARY, not by size.** `switchCanvas` went first
-because it was the only name with no wrapper at all — zero `onSwitchCanvas`
-props, no `useSwitchCanvas` hook — so renaming it left nothing calling it by
-the old noun. But the `useCanvasSync` stack moved next as ONE increment
-despite a six-member family, because every member lived inside `apps/web` and
-none crossed a published subpath. So the rule is not "no family"; it is **no
-member outside the increment's own boundary**. `listCanvases` and
-`CanvasBackend` waited for their own increment for exactly that reason — both
-were exported through `./api-contracts` / `./daemon-backend` / `./sse-backend`.
+- **Order increments by BOUNDARY, not by size.** A six-member family inside
+  one package is one increment; a single name exported through a published
+  subpath is its own. The question is not "how many call sites" but "does any
+  member leave this increment's boundary".
+- **Check first whether the shape is on its way out.** A name you are deleting
+  does not need to be right, and moving it can break the deletion — a blob-tree
+  rename was written, tested, and WITHDRAWN because a sweeper that reads the
+  old literal would have been left walking an empty directory.
+- **The old name is load-bearing in exactly two places**, and a bulk rename
+  destroys both silently: a migration's own SOURCE names, and the fixtures that
+  seed a pre-migration database. The check is
+  `git diff origin/main -- .../migrations/` coming back empty — not an
+  exclusion list, which a merge resets. The same trap bites plain tests: a
+  fixture asserting the OLD word is load-bearing too.
+- **A boot-time writer can undo a migration.** `prepareDataDir` runs migrations
+  and THEN re-invokes `importFsBlobs`, so a routine still holding the old
+  literal re-seeds rows the migration just corrected. Pass the prefix as a
+  parameter: the migration passes the value it was RECORDED with, the boot path
+  passes the live one.
+- **`pragma defer_foreign_keys` fails misleadingly.** It reads back as `1` and
+  the UPDATE still raises `FOREIGN KEY constraint failed`, because the pragma
+  only has effect inside an explicit transaction and kysely's Migrator does not
+  open one. Rewrite structurally instead — copy under the new key, then delete
+  the old parent and let `on delete cascade` take its children — so every
+  statement is valid on its own.
+- **After a rename lands, re-grep for what TOUCHES it**, not for the word you
+  replaced. Four increments retired the container noun and each left the verbs
+  and helpers wrapped around it (`canvasPath` building a `/document/` route,
+  `listCanvasesV1` fetching a `documents` key). Search `get*`, `list*`,
+  `*Path`, `*Url`.
+- **Mutation-check the guard, and check the fixture reaches it.** A test that
+  pinned "rewrite only the prefix" seeded a key the `like 'canvas:%'` filter
+  excluded outright, so swapping `substr` for a blanket `REPLACE` left it
+  green. A fixture for a SET expression has to survive the WHERE clause first.
 
-**A stored or published shape moves with a migration, or not at all.** The
-apps/web IndexedDB stores went `canvases`/`loroCanvases`/`canvasFiles` ->
-`documents`/`loroDocuments`/`documentFiles` and the pointer key
-`defaultCanvasId` -> `defaultDocumentId` at DB_VERSION 6 -> 7. IndexedDB has
-no rename, so each store is created, copied record by record, and the old one
-DELETED once its cursor is exhausted — a store left in place keeps a second
-copy of every document readable by anything that still remembers the name.
-The HTTP surface moved in the same spirit and without a migration, since
-server and clients ship together: `/api/workspaces/:ws/canvases/...` ->
-`/documents/...`, `/api/w/:ws/canvas/...` -> `/document/...`, the browser
-route `/w/:ws/canvas/:path` -> `/document/:path`, and the `canvases` array
-key in three payloads (`wb_document_list`, the list response, the `/names`
-response) -> `documents`.
+Two invariants were fixed by removing the place wrong state could live, rather
+than by correcting a call site — keep them that way:
 
-**The old name is load-bearing in exactly two places, and a bulk rename
-destroys both silently.** A migration's SOURCE names, and the fixtures that
-seed a pre-migration database. Both happened here: one pass rewrote
-`['canvases', 'documents']` to `['documents', 'documents']`, and another
-rewrote every legacy fixture in `browser-idb-migration.browser.test.tsx` to
-the new vocabulary — leaving the migration untested while every assertion
-still passed. A third rewrote `/canvas/i.test(name)` in
-`0009-document-vocabulary.test.ts`, inverting an assertion that no table is
-still named for a canvas. A fourth pass — after a merge, when the exclusion
-list had been rebuilt — renamed a TABLE and a COLUMN inside
-`0004-workspace-index` (`workspaceIndexCanvasList`, `toCanvasId`), the drop
-in `0006`, and a stored `docKey` read in `0007`. Each would have broken the
-migration chain against a real database while typecheck and most of the suite
-stayed green. Exclude `migrations/`, migration tests, and any regex whose
-subject is the OLD word — then `git diff origin/main -- .../migrations/` and
-confirm it is empty except for the migration you are ADDING. That one command
-is the check; the exclusion list alone is not, because a merge resets it.
-
-**What deliberately did NOT move.** The window-event VALUES stay
-`'excalidraw:doc_changed'` and `'excalidraw:wb_version_saved'` —
-`useDirtyState`, `HeaderBranchBanner`, `useBranches` and
-`merge-committed-event` still match the raw strings, and
-`document-sync-types.test.ts` pins both literals so a later rename cannot take
-the wire format with it. User-visible UI copy still says "canvas" ("New
-canvas", "Canvas actions"): what the product calls a thing to its users is a
-product decision, not a code-vocabulary one, and this rule does not reach it.
-
-**The `docKey` prefix is DONE, and it is the worked example of a stored shape
-that needs more than a migration.** `docRefKey()` now emits
-`document:<documentId>`, and `0013-document-dockey-prefix` rewrites the
-`docKey` column of `documentSnapshots` / `documentSnapshotChunks` /
-`documentFrontiers` / `documentDeltas`. Three things it took, each of which a
-plain rename would have got wrong:
-
-- **A migration alone was not enough.** `prepareDataDir` runs migrations and
-  THEN re-invokes `importFsBlobs` on every boot, so that routine is the one
-  writer that can still land a row after the migration corrected every stored
-  key. Left on the old literal it would re-seed an orphan copy of every blob
-  the sweep had not yet removed — invisible to the read path and
-  indistinguishable from a clean boot. The prefix is now a PARAMETER:
-  `migration.up` passes the frozen `canvas:` it was recorded with, so a replay
-  reproduces its original rows, and the boot path passes the live one.
-  `sweepImportedFsBlobs` follows the live one too, since it verifies what the
-  boot import just wrote.
-- **`pragma defer_foreign_keys` does not rescue an in-place UPDATE here**, and
-  it fails in the most misleading way: it reads back as `1` and the UPDATE
-  still raises `FOREIGN KEY constraint failed`. The pragma only has effect
-  inside an explicit transaction, and kysely's Migrator does not open one, so
-  each statement commits on its own and takes the check with it. The fix is
-  structural — copy the rows under the new key, then delete the old parent and
-  let `on delete cascade` take its children — so every statement is valid on
-  its own regardless of transaction handling.
-- **The anchoring test was vacuous on the first try.** It seeded
-  `workspace-tree:has-canvas:inside` to prove the rewrite touches only the
-  prefix, but that key does not match the `like 'canvas:%'` filter at all, so
-  swapping `substr` for a blanket `REPLACE` left it green. A fixture for a SET
-  expression has to survive the WHERE clause first.
-
-**The wiki-link scheme is DONE, and it was settled by DELETING the word
-rather than replacing it.** `[[canvas:<ULID>]]` was the one container-noun
-use written into a document's own free-text BODY, which is why it waited for
-a product decision rather than a sweep: no schema to migrate, and every link
-a user already typed is at stake.
-
-The decision was that the scheme should not exist at all. Obsidian — the
-convention these brackets borrow — has no scheme, and a document id is a
-canonical ULID, 26 characters of Crockford base32 starting 0-7, so it
-identifies itself without one. `resolveTarget` now reads a target that parses
-as a document id AS that id and sends everything else to the name resolver.
-One bracket form, and the container noun is gone from the user's surface
-instead of renamed there.
-
-Two consequences worth knowing:
-
-- A name shaped exactly like a ULID is shadowed by the id reading. The link
-  picker (`linkMarkupFor`) checks for it and falls back to the id form, so
-  the one path that could produce such a link does not.
-- A body still carrying `[[canvas:<ULID>]]` reaches the name resolver, finds
-  no document called that, and stays as the literal text the author typed.
-  That is the deliberate outcome — a link this version cannot honour is
-  visible rather than silently missing — and `resolve.test.ts` pins it, which
-  is why that file still contains the old spelling on purpose.
-
-One duplication surfaced and was NOT merged, because collapsing it changes
-behaviour rather than names: three separate "not found" errors existed, two of
-them meaning the same thing. `render/load-spatial-canvas.ts`'s is now
-`SnapshotNotFoundError` (the alias `create-server.ts` had already given it),
-`tools/document-crud.errors.ts`'s is `WorkspaceDocumentNotFoundError` (the
-workspace index has no such document), and `tools/errors.ts` keeps
-`DocumentNotFoundError` — which documents itself as "no saved snapshot", i.e.
-the same condition as the first. `create-server.ts` maps classes to status
-codes, so merging them is its own increment.
-
-The four mis-prefixed package names are DONE: `@kamiazya/whiteboard-{model,
-codec,ports,loro-adapter}`, with directories and vitest projects following.
-`render` and `viewer` keep `canvas-` because they ARE about the spatial scene.
-
-The fourth took two tries, and both wrong answers are worth knowing.
-Dropping the prefix from `canvas-workspace` gives `workspace`, a domain noun
-this rule defines as the tree that holds documents — and that package
-explicitly knows nothing about placement. Its own comments came out reading
-`workspace's withSpatialBatch`, indistinguishable from the dozens of correct
-uses of the domain word around them. `crdt` fixed the collision but named a
-technique rather than a role, and left the package's place in the
-architecture unsaid.
-
-`loro-adapter` names what it adapts. The distinction that settles it: this
-package depends on `loro-crdt` and NOT on `ports` — it implements no port
-and its whole production surface is one file, `loro-bridge.ts`. The store and
-sync ports are implemented in the composition roots, so "adapter" here can
-only mean an adapter of the vendor library, and the name says so. Renaming it
-to suggest a port relationship would have stated the opposite of the
-dependency graph.
-
-`OpenCanvas` is retired and DONE outside the ADRs. It was never a spec: the
-formats are OKF Markdown and [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/),
-which `packages/model/src/spatial.ts` already cites by URL and the whole of
-`packages/codec/src/spatial/` already spells correctly. `OpenCanvas` was this
-project's working name for the post-Excalidraw document world — the thing
-ADR-0009 named a **Document** — so the fix was mostly to DELETE the word, not
-to substitute another spec name for it. It also collided with a real,
-unrelated infinite-canvas interchange spec (OCIF, canvasprotocol.org), which
-made it an actively wrong signal in the npm `keywords`.
-
-Gone from: every published manifest (npm description + keywords, the Claude
-and Codex plugin manifests, `server.json`, the Gemini extension), the READMEs
-and user docs, one piece of user-visible UI copy (*"This workspace has no
-OpenCanvas tree yet"*), and the internal identifiers
-`registerOpenCanvasTools` -> `registerDocumentTools`, `opencanvas-tools.ts` ->
-`document-tools.ts`, `createOpenCanvasServer` -> `createDocumentServer`.
-ADR-0007/0008/0009 keep it and carry a dated vocabulary note instead, exactly
-like `slug`: a decision record is history, and rewriting the reasoning would
-misreport what was decided.
-
-It gets no executable rung. `vocabulary-check.test.ts` would have to exclude
-the ADR directory, and a guard that needs a carve-out to pass is one nobody
-will trust the next time it fires. Same reason `canvas` will never qualify.
-(The 178 `onOpenCanvas` handlers this note once listed as the OTHER carve-out
-are gone — they are `onOpenDocument` now.)
-
-**The blob tree's path segment is the one entry here that was WITHDRAWN, and
-why is the useful part.** `{dataDir}/blobs/{workspaceId}/canvas/` names the
-container, so it read like an ordinary stored-shape fix: a migration that
-walks each workspace and renames the child directory. One was written,
-tested, and carried through three merges as `0011` -> `0012` -> `0013`.
-
-Then the identity-convergence work landed and made the whole tree LEGACY.
-`prepareDataDir` now runs, on every boot: migrations, then
-`importFsBlobs` (reads `blobs/*/canvas/*.loro`, a frozen literal), then
-`sweepImportedFsBlobs`, which deletes each file — and then the `canvas/`
-directory, the workspace directory, and `blobs/` itself — once its bytes are
-proven to live in Libsql. Migrations run BEFORE the sweep in that same call,
-so the rename would have moved every legacy blob to a directory the sweeper
-never looks in: neither verified nor cleaned up, orphaned for good, and a
-`document/` tree nothing owns.
-
-The rule that generalises: **before correcting the name of a stored shape,
-check whether that shape is on its way out.** A name you are deleting does
-not need to be right, and moving it can break the deletion. Nothing about the
-vocabulary argument was wrong — it just stopped being worth anything.
-`document-store.ts` records the reason at `documentBlobPath` so the next
-reader does not re-open it.
-
-`slug` is retired outright, and `vocabulary-check.test.ts` in `tools/arch-lint`
-is what keeps it retired — the one part of this rule that could stop being
-prose. Adding a word there is only right when it has no legitimate meaning
-left; `canvas` will never qualify, because it is correct for the spatial
-surface and wrong only as the container noun.
-
-MCP tool names (ADR-0009 point 5) are DONE, along with point 4's collapse of
-the two exporters into a kind-branching `wb_document_get`. The registered
-surface is `wb_<entity>_<action>` throughout, plus the MCP Apps UI tools
-`canvas_open`/`canvas_view` that point 7 deliberately keeps.
-
-Two more are done and worth knowing HOW, because both were fixed by removing
-the place the wrong state could live rather than by correcting a call site:
-
-- **A document's name stored twice.** `storedCoreFacetsSchema` omits `title`,
-  so `writeCoreFacets` cannot be handed one and `readCoreFacets` does not
-  surface one an older writer left. The name is the workspace's; OKF
-  frontmatter `title` is projected from it on export and applied to it on
-  import.
-- **Core facets written to spatial documents.** `readCoreFacets` answers
-  `undefined` for a document whose kind is `spatial`, and apps/web's spatial
-  canvas row passes no facets at all rather than hiding the disclosure while
-  still writing through it. A document with no kind is still allowed through,
-  exactly as `wb_facet_set` allows one.
+- `storedCoreFacetsSchema` omits `title`, so a document's name cannot be
+  written twice. OKF frontmatter `title` is projected from the workspace name
+  on export and applied back on import.
+- `readCoreFacets` answers `undefined` for a `spatial` document, so core facets
+  cannot be written to one.

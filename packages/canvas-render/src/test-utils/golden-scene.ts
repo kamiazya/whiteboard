@@ -87,7 +87,7 @@ export function buildDeterminismGoldenScene(): Scene {
 export const DETERMINISM_GOLDEN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg">' +
   '<g><text x="0" y="0">Title &amp; &lt;more&gt;</text></g>' +
-  '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40">link text</text></a></g>' +
+  '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40" text-decoration="underline">link text</text></a></g>' +
   '<rect x="0" y="64" width="600" height="1" role="presentation"/>' +
   '<svg x="0" y="72" width="40" height="40" overflow="visible"><circle cx="20" cy="20" r="19.999"/></svg>' +
   '<g><g><g><text x="0" y="120">Col1</text></g>' +
@@ -113,7 +113,7 @@ export const DETERMINISM_GOLDEN_DOCUMENT_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="620" height="188" viewBox="-10 -10 620 188">' +
   '<rect x="-10" y="-10" width="620" height="188" fill="#eef2ff" role="presentation"/>' +
   '<g><text x="0" y="0">Title &amp; &lt;more&gt;</text></g>' +
-  '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40">link text</text></a></g>' +
+  '<g><a href="https://example.com/a?b=1&amp;c=2"><text x="0" y="40" text-decoration="underline">link text</text></a></g>' +
   '<rect x="0" y="64" width="600" height="1" role="presentation"/>' +
   '<svg x="0" y="72" width="40" height="40" overflow="visible"><circle cx="20" cy="20" r="19.999"/></svg>' +
   '<g><g><g><text x="0" y="120">Col1</text></g>' +

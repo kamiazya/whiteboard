@@ -1,4 +1,5 @@
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
 import { Hono } from 'hono'
 import { LoroDoc as LoroDocCtor } from 'loro-crdt'
 import type { z } from 'zod'
@@ -149,6 +150,10 @@ export function createWorkspacesRouter() {
         const response: DeleteDocumentResponse = { ok: true }
         return c.json(response)
       } catch (err) {
+        // A refusal, not a failure: the caller has to name what it destroys.
+        if (err instanceof DocumentHasDescendantsError) {
+          return c.json({ title: err.message } satisfies ApiErrorBody, 409)
+        }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
         getLogger('document').error({ err: err as Error }, 'deleteDocument failed unexpectedly')
@@ -194,8 +199,17 @@ export function createWorkspacesRouter() {
         const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {
+        // A move into the document's own subtree is an unusable target, not
+        // a race with another document — 400, not 409.
+        if (err instanceof DocumentMoveIntoSelfError) {
+          return c.json({ title: err.message } satisfies ApiErrorBody, 400)
+        }
+        // Forward the store's message rather than rebuilding one from
+        // newPath: a subtree move collides on a PRODUCED path, so the path
+        // the caller asked for is often free and naming it sends them to
+        // retry the one thing that was never the problem.
         if (err instanceof ConflictError) {
-          return c.json({ title: `Canvas "${newPath}" already exists` }, 409)
+          return c.json({ title: err.message } satisfies ApiErrorBody, 409)
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)

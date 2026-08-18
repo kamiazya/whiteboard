@@ -100,7 +100,16 @@ function emphasisAttrs(run: TextRunNode): string {
   const parts: string[] = []
   if (run.strong === true) parts.push('font-weight="700"')
   if (run.emphasis === true) parts.push('font-style="italic"')
-  if (run.deleted === true) parts.push('text-decoration="line-through"')
+  // A link is underlined rather than recolored because this backend is never
+  // handed a palette: a run's fill is INHERITED from whatever host group the
+  // SVG is dropped into, which is what lets one scene render on the editor's
+  // light and dark surfaces and through resvg unchanged. Underline survives
+  // all three, and color alone would not satisfy WCAG 1.4.1 anyway.
+  const decorations = [
+    ...(run.deleted === true ? ['line-through'] : []),
+    ...(run.link ? ['underline'] : []),
+  ]
+  if (decorations.length > 0) parts.push(`text-decoration="${decorations.join(' ')}"`)
   return parts.length > 0 ? ` ${parts.join(' ')}` : ''
 }
 
