@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -1276,6 +1277,29 @@ describe('deleteDocument', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
+  // The MCP surface already refuses this, and for a stated reason: deletion
+  // is the operation with nothing to undo it, so the caller has to name what
+  // it is destroying. The HTTP surface deleting the same document silently
+  // strands every child under a prefix nothing owns.
+  it('refuses to delete a document that still has descendants', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/child', new LoroDoc())
+
+    await expect(deleteDocument('session1', 'a')).rejects.toThrow(DocumentHasDescendantsError)
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/child'])
+  })
+
+  it('deletes a document whose name merely prefixes a sibling', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a-sibling', new LoroDoc())
+
+    await expect(deleteDocument('session1', 'a')).resolves.toBe(true)
+
+    expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
+  })
+
   it('removes the documents row, cascades branches/versions rows, deletes the Libsql snapshot rows, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch } = await import('./branches-store.js')
@@ -1573,6 +1597,90 @@ describe('renameDocumentPath', () => {
 
     const list = await listDocuments('session1')
     expect(list.map((c) => c.path)).toEqual(['a'])
+  })
+
+  // A path IS the hierarchy, so renaming one carries everything under it.
+  // Moving only the named row leaves its children addressed below a prefix
+  // no document owns — reachable by nothing the UI can show, and produced by
+  // the ordinary act of renaming a group.
+  it('carries every descendant with the renamed path', async () => {
+    await saveDocument('session1', 'design', new LoroDoc())
+    await saveDocument('session1', 'design/login', new LoroDoc())
+    await saveDocument('session1', 'design/deep/notes', new LoroDoc())
+    await saveDocument('session1', 'designs-elsewhere', new LoroDoc())
+
+    await renameDocumentPath('session1', 'design', 'product')
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['designs-elsewhere', 'product', 'product/deep/notes', 'product/login'])
+  })
+
+  // The prefix test above would pass with a blind string replace; this one
+  // fails unless the rewrite is anchored at a segment boundary.
+  it('does not carry a sibling that merely shares the name as a prefix', async () => {
+    await saveDocument('session1', 'design', new LoroDoc())
+    await saveDocument('session1', 'design-system', new LoroDoc())
+
+    await renameDocumentPath('session1', 'design', 'product')
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['design-system', 'product'])
+  })
+
+  // The one rule `planSubtreeMove` deliberately does NOT enforce, so each
+  // caller has to. Without it the depth-ordered write — correct for the
+  // upward move it was written for — is inverted, and the shallow row lands
+  // on a path its own descendant has not vacated yet.
+  it('refuses to move a document inside itself rather than raising a raw constraint error', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+
+    await expect(renameDocumentPath('session1', 'a', 'a/x')).rejects.toThrow(
+      DocumentMoveIntoSelfError,
+    )
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/x'])
+  })
+
+  it('refuses to nest a document inside itself even when the destination is free', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/b', new LoroDoc())
+
+    await expect(renameDocumentPath('session1', 'a', 'a/nested')).rejects.toThrow(
+      DocumentMoveIntoSelfError,
+    )
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/b'])
+  })
+
+  it('rejects a rename that would collide with an existing descendant path', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+    await saveDocument('session1', 'c/x', new LoroDoc())
+
+    // `a` -> `c` is free at the top, and still collides: `a/x` would land on
+    // the occupied `c/x`.
+    await expect(renameDocumentPath('session1', 'a', 'c')).rejects.toThrow(ConflictError)
+
+    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    expect(paths).toEqual(['a', 'a/x', 'c/x'])
+  })
+
+  it('evicts every moved path from the cache, not only the two named ones', async () => {
+    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    clearCache()
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/child', new LoroDoc())
+    await getDoc('session1', 'a/child')
+    expect(peekDoc('session1', 'a/child')).not.toBeUndefined()
+
+    await renameDocumentPath('session1', 'a', 'b')
+
+    // A stale instance cached under the old child path would be resurrected
+    // by the next read through it, shadowing the moved document.
+    expect(peekDoc('session1', 'a/child')).toBeUndefined()
   })
 
   it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {

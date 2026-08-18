@@ -48,6 +48,7 @@ export {
   wbDocumentResolveInputSchema,
   wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
+export { SnapshotNotFoundError } from './tools/document-io.js'
 export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
 export {
   createDocumentSetTool,
@@ -71,7 +72,6 @@ export {
   edgePatchOutputSchema,
 } from './tools/edge-patch.js'
 export {
-  DocumentNotFoundError,
   EdgeLockedError,
   EdgeNotFoundError,
   NodeLockedError,
