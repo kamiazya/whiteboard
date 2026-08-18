@@ -40,7 +40,7 @@ snapshot instead.
 
 Removed. The control called an `annotate` tool that no longer exists, so it could
 only ever fail. Restoring it is not just re-wiring: the document model has no `annotate`
-equivalent, and a sticky note is a `wb_node_add` of a text node — so it needs a
+equivalent, and a sticky note is a `node.add` op on `wb_canvas_edit` — so it needs a
 decision about whether this widget should mutate a document at all, given that it
 is otherwise strictly read-only. See the `TODO(annotate)` note in
 `packages/canvas-viewer/src/widget-entry.ts`.

@@ -278,15 +278,15 @@ async function main() {
     height: 100,
     text: 'node A — created via MCP',
   }
-  const addedA = await callTool('wb_node_add', {
+  const addedA = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    node: NODE_A,
+    ops: [{ op: 'node.add', node: NODE_A }],
   })
-  if (addedA.node?.id !== 'node-a') {
-    throw new Error(`wb_node_add(A) returned unexpected shape: ${JSON.stringify(addedA)}`)
+  if (!addedA.touched?.nodes.includes('node-a')) {
+    throw new Error(`wb_canvas_edit(A) returned unexpected shape: ${JSON.stringify(addedA)}`)
   }
-  log('[e2e] wb_node_add → node A')
+  log('[e2e] wb_canvas_edit → node A')
 
   // ── Step 3: read the SAME document with no mocks through the HTTP path-
   //    snapshot route and the WS route — the exact shape of the drift bug ──
@@ -344,15 +344,15 @@ async function main() {
     height: 100,
     text: 'node C — added via MCP while the WS session is open',
   }
-  const addedC = await callTool('wb_node_add', {
+  const addedC = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    node: NODE_C,
+    ops: [{ op: 'node.add', node: NODE_C }],
   })
-  if (addedC.node?.id !== 'node-c') {
-    throw new Error(`wb_node_add(C) returned unexpected shape: ${JSON.stringify(addedC)}`)
+  if (!addedC.touched?.nodes.includes('node-c')) {
+    throw new Error(`wb_canvas_edit(C) returned unexpected shape: ${JSON.stringify(addedC)}`)
   }
-  log('[e2e] wb_node_add → node C (while WS session stays open)')
+  log('[e2e] wb_canvas_edit → node C (while WS session stays open)')
 
   // web-edit shape: import the connect-time snapshot into a fresh LoroDoc,
   // write a node through loro-adapter's writeSpatialNode (the same bridge

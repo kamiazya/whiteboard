@@ -58,9 +58,6 @@ export {
 } from './tools/document-set.js'
 export {
   DocumentNotFoundError,
-  EdgeLockedError,
-  EdgeNotFoundError,
-  NodeLockedError,
   NodeNotFoundError,
   NotATextNodeError,
   PatchValidationError,

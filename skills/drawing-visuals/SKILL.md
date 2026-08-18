@@ -1,6 +1,6 @@
 ---
 name: drawing-visuals
-description: Draw diagrams with your AI agent on a shared JSON Canvas whiteboard. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone. Covers node/edge placement and SVG rendering only — no icon libraries, no other export formats, no per-element delete.
+description: Draw diagrams with your AI agent on a shared JSON Canvas whiteboard. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone. Covers node/edge editing and SVG rendering only — no icon libraries, no other export formats.
 ---
 
 # drawing-visuals
@@ -9,20 +9,18 @@ Like a whiteboard on the wall of a meeting room, this is a tool for AI and human
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the document and can be revisited and refined later.
 
-**Coverage note.** The whiteboard MCP surface is deliberately small: place nodes and edges,
+**Coverage note.** The whiteboard MCP surface is deliberately small: edit nodes and edges,
 tidy the layout, render SVG, save/restore versions. There is no icon or template library, no
-align/distribute, no viewport control, and — today — no way to delete a single node or edge once
-added. Plan the diagram with that ceiling in mind rather than assuming a full-featured drawing-app
-tool set.
+align/distribute, and no viewport control. Plan the diagram with that ceiling in mind rather than
+assuming a full-featured drawing-app tool set.
 
 Use these tools:
 
 - `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
-- `wb_node_add` / `wb_node_patch` / `wb_node_lock` — place and adjust nodes
-- `wb_edge_add` / `wb_edge_patch` / `wb_edge_lock` — connect nodes
-- `wb_canvas_tidy` — auto re-layout
+- `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction
+- `wb_canvas_snapshot` — read what is on a canvas: node types, text, geometry and lock state, plus every edge
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
-- `wb_scene_digest` — a text summary of the scene, for when you cannot see the rendered image
+- `wb_scene_digest` — the laid-out geometry (overlaps, clusters, free regions), for judging whether a board is tidy
 - `wb_version_save` / `wb_version_list` / `wb_version_restore` — checkpoint and roll back
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -112,52 +110,66 @@ wb_document_create({ workspaceId, path: "diagrams/checkout-flow", kind: "spatial
 
 ### Step 3: Place Nodes And Edges
 
-Every node needs an id, integer `x`/`y`/`width`/`height`, and an optional `color` (either a hex string
-like `#1971c2` or a JSON Canvas preset `"1"`-`"6"` — there is no semantic color name like `"primary"`).
-There is no auto-sizing or auto-wrap: pick a width generous enough for the label up front.
+**Draw the whole diagram in one `wb_canvas_edit` call.** The ops apply in order as a single
+transaction: either all of them land or none does, and a refusal names the op that failed by index.
+Do not issue one call per node.
 
 ```js
-wb_node_add({
+wb_canvas_edit({
   workspaceId, documentId,
-  node: { id: "client", type: "text", x: 40, y: 40, width: 160, height: 60, text: "Client", color: "#1971c2" },
-})
-wb_node_add({
-  workspaceId, documentId,
-  node: { id: "server", type: "text", x: 320, y: 40, width: 160, height: 60, text: "Server" },
-})
-wb_edge_add({
-  workspaceId, documentId,
-  edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" },
+  ops: [
+    { op: "node.add", node: { id: "client", type: "text", text: "Client", color: "#1971c2" } },
+    { op: "node.add", node: { id: "server", type: "text", text: "Server" } },
+    { op: "edge.add", edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" } },
+  ],
 })
 ```
 
-Edges reference node ids, not coordinates — `wb_edge_add` fails if either endpoint does not already
-exist on the canvas. There is no coordinate math to do for the edge itself: `fromSide`/`toSide`
-(`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd` (`none`/`arrow`) are the only routing hints, and
-`wb_scene_render` computes the actual drawn path.
+**Geometry is optional.** A node with no `x`/`y`/`width`/`height` is placed for you in a grid below
+whatever is already on the board, and the position chosen comes back under `geometry`. Supply
+coordinates only when the layout itself carries meaning — a comparison matrix, a deliberate
+left-to-right flow. For everything else, let placement happen and finish with a `tidy` op.
 
-**Fails if the id is taken.** `wb_node_add` / `wb_edge_add` never overwrite an existing id — use
-`wb_node_patch` / `wb_edge_patch` to change something already placed.
+`color` is either a hex string like `#1971c2` or a JSON Canvas preset `"1"`-`"6"`; there is no
+semantic color name like `"primary"`. There is no auto-wrap, so if you do set a width, pick one
+generous enough for the label.
 
-**Use a rigid grid.** Do not hand-calculate coordinates case by case. Pick `column * 220 + 40` for x
-and `row * 140 + 40` for y (or similar), assign a row/column to every node, then fill in the numbers.
-See [`style-reference.md`](./style-reference.md) for sizing and color guidance.
+Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
+canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
+worth naming yourself. `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd`
+(`none`/`arrow`) are the only routing hints; `wb_scene_render` computes the actual drawn path.
+
+**Ids you omit are minted for you** and reported under `touched`. Name them yourself for any node an
+edge has to reach.
+
+**Adds never overwrite.** An `add` whose id is already on the canvas fails the whole batch — use a
+`node.patch` / `edge.patch` op to change something already placed.
+
+**If you set coordinates, use a rigid grid.** Do not hand-calculate case by case: pick
+`column * 220 + 40` for x and `row * 140 + 40` for y (or similar), assign a row/column to every node,
+then fill in the numbers. See [`style-reference.md`](./style-reference.md) for sizing and color
+guidance.
 
 ### Step 4: Tidy And Render
 
+Tidy is an op, so it usually belongs at the END of the same call that drew the diagram rather than
+in a call of its own:
+
 ```js
-wb_canvas_tidy({ workspaceId, documentId })
+wb_canvas_edit({ workspaceId, documentId, ops: [ /* ...adds... */, { op: "tidy" } ] })
+
 // Re-tidy only a subset, leaving everything else as a fixed obstacle:
-wb_canvas_tidy({ workspaceId, documentId, scope: ["client", "server"] })
+wb_canvas_edit({ workspaceId, documentId, ops: [{ op: "tidy", scope: ["client", "server"] }] })
 
 wb_scene_render({ workspaceId, documentId })
 // Resolve `file` node references (e.g. a node that embeds another document) inline:
 wb_scene_render({ workspaceId, documentId, embedReferences: true })
 ```
 
-`wb_canvas_tidy` re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
+The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
 parameters — it is a one-shot auto-arrange, not a configurable layout engine. It refuses a markdown
-document (there is nothing spatial to tidy) and treats a locked node (see `wb_node_lock`) as fixed.
+document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it moved
+comes back under `geometry`.
 
 `wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format, and
 there is no way to render only one section of the document; the whole canvas renders every time.
@@ -169,23 +181,38 @@ Open the returned SVG (or write it to a file and view it) to inspect it visually
 - are colors distinct and legible enough?
 - are gaps between nodes wide enough?
 
-If you cannot see the rendered image, call `wb_scene_digest({ workspaceId, documentId })` instead —
-it summarizes the laid-out scene (node/edge counts, bounding boxes, and similar) as structured data.
+If you cannot see the rendered image, read the board instead. The two reads answer different
+questions and neither replaces the other:
+
+- `wb_canvas_snapshot({ workspaceId, documentId })` — **what is on the board**: each node's type,
+  text, geometry and lock state, plus every edge. Long text and very large boards are cut, and the
+  real totals come back alongside so a capped read never looks complete.
+- `wb_scene_digest({ workspaceId, documentId })` — **whether the board is tidy**: laid-out geometry,
+  overlaps, clusters and free regions. It carries no text at all.
+
+You rarely need either right after an edit: `wb_canvas_edit` already returns the resulting board
+under `snapshot`.
 
 ### Step 5: Fine-Tune Or Redraw
 
-| Situation | Best Action |
+Every one of these is an op inside a `wb_canvas_edit` call, and several can travel together:
+
+| Situation | Op |
 | --- | --- |
-| change a node's position, size, color, or label | `wb_node_patch({ nodeId, patch: { ... } })` |
-| change an edge's endpoints, sides, arrowheads, color, or label | `wb_edge_patch({ edgeId, patch: { ... } })` |
-| protect a node/edge from further edits (by anyone) | `wb_node_lock` / `wb_edge_lock` |
-| re-run automatic layout | `wb_canvas_tidy` (optionally scoped) |
+| change a node's position, size, color, or label | `{ op: "node.patch", id, patch: { ... } }` |
+| change an edge's endpoints, sides, arrowheads, color, or label | `{ op: "edge.patch", id, patch: { ... } }` |
+| remove a node | `{ op: "node.remove", id }` — its edges go with it |
+| remove an edge | `{ op: "edge.remove", id }` |
+| protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
+| re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | structure or intent is wrong | create a fresh document with `wb_document_create` and redraw |
 
-**There is no delete tool for a single node or edge.** Once placed, a node or edge stays on the
-document; the only way to "remove" it today is to `wb_node_patch` it into something harmless (a
-small notice) or to start over with a new document via `wb_document_create`. Plan placement
-conservatively rather than expecting to prune afterward.
+**A lock binds you too.** A `patch` or `remove` on a locked element fails the batch. Unlocking is the
+one op a locked element still accepts, so you can lift your own lock in the same call:
+`[{ op: "node.lock", id: "x", locked: false }, { op: "node.patch", id: "x", patch: { x: 40 } }]`.
+
+Pruning is cheap now, so plan placement normally rather than defensively — but prefer redrawing on a
+fresh document when the STRUCTURE is wrong, not just a few elements.
 
 After each fix, go back to Step 4 and render again.
 Redrawing on a fresh document is normal whiteboard behavior when the structure is wrong, not failure.
@@ -196,12 +223,13 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 
 - [ ] did you write down the one question the diagram should answer before drawing?
 - [ ] did you choose the diagram family from [`visual-vocabulary.md`](./visual-vocabulary.md)?
-- [ ] did you plan a rigid coordinate grid before calling `wb_node_add`?
-- [ ] did you size boxes generously, since there is no auto-wrap?
+- [ ] did you draw the whole diagram in ONE `wb_canvas_edit` call rather than one call per node?
+- [ ] if you set coordinates at all, did you plan a rigid grid — or let placement happen and finish with a `tidy` op?
+- [ ] if you set widths, did you size boxes generously, since there is no auto-wrap?
 - [ ] did you use semantic, consistent colors even though the tool has no named color keys?
 - [ ] can the main path / supporting info / problem / proposal be distinguished visually?
 - [ ] are edge labels duplicating what node text already says?
-- [ ] did you render with `wb_scene_render` (or summarize with `wb_scene_digest`) and inspect it?
+- [ ] did you render with `wb_scene_render` (or read the board with `wb_canvas_snapshot`) and inspect it?
 - [ ] if structure or intent needed rethinking, did you redraw on a new document instead of trying to prune the old one?
 
 ---
@@ -209,9 +237,10 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 ## Notes
 
 - **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
-  separate "commit" step and no local undo. Save a `wb_version_save({ documentId, label })` before a
-  risky batch of edits and call `wb_version_restore({ workspaceId, documentId, versionId })` to roll
-  back if it goes wrong.
+  separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
+  leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
+  `wb_version_save({ documentId, label })` before a risky one and call
+  `wb_version_restore({ workspaceId, documentId, versionId })` to roll back if it goes wrong.
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;

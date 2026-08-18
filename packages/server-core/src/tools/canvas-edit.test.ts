@@ -273,7 +273,7 @@ describe('wb_canvas_edit tool', () => {
       ops: [{ op: 'node.lock', id: 'a', locked: true }],
     })
     // An agent has to be able to lift its own mistake without a human at
-    // the keyboard (the rule wb_node_lock already established).
+    // the keyboard (the rule the retired wb_node_lock established).
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,

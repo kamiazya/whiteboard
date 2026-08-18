@@ -65,7 +65,7 @@ export const COVERED_TOOLS = [
   'canvas_view',
 ] as const
 
-// Empty since wb_edge_add gave wb_edge_lock an edge to lock: every tool
+// Empty since the seeding batch gives every later step something to act on: every tool
 // either reaches its success path in the smoke or is listed below.
 export const ERROR_PATH_ONLY_TOOLS = [] as const
 

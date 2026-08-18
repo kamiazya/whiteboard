@@ -27,13 +27,14 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 
 ## Local Surgery
 
-- overlap: widen the gap, shift one node down a row, or shorten the label — `wb_node_patch`
+- overlap: widen the gap, shift one node down a row, or shorten the label — a `node.patch` op (or
+  just a `tidy` op, which separates overlaps for you)
 - clipped label: widen the node (`width`/`height`) or shorten the text
-- dangling connection: `wb_edge_patch` the `fromSide`/`toSide` hint, or nudge the node it targets
+- dangling connection: `edge.patch` the `fromSide`/`toSide` hint, or nudge the node it targets
 - edge-through-node: move the intervening node aside, since edges have no manual routing points to bend around it
 - stacked parallel edges: offset the nodes vertically, or demote one edge into a side path
-- stray element: `wb_node_patch` it back near the rest of the diagram (there is no delete tool, so
-  an unwanted node has to be moved or repurposed rather than removed)
+- stray element: `node.remove` it if it should not be there, or `node.patch` it back near the rest
+  of the diagram if it should
 - shell collapse: before rebuilding the shell, re-fix only the outer boundary and reading direction
 
 ## Smells

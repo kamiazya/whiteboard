@@ -1,5 +1,5 @@
 // The digest is what an AI reads to decide what to change, and the only way
-// it can act on what it read is `wb_node_patch` against a node id. Numbering
+// it can act on what it read is a `node.patch` op against a node id. Numbering
 // the entries by array position gave it names that mean nothing outside the
 // digest and that shift whenever a node is added or removed — the reader
 // could see "these two overlap" and had no way to say which two.

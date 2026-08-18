@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
   DocumentNotFoundError,
-  EdgeNotFoundError,
   NodeNotFoundError,
   NotATextNodeError,
   PatchValidationError,
@@ -23,16 +22,6 @@ describe('server-core tool errors', () => {
     expect(err.documentId).toBe('canvas-1')
     expect(err.nodeId).toBe('node-1')
     expect(err.message).toContain('node-1')
-    expect(err.message).toContain('canvas-1')
-  })
-
-  test('EdgeNotFoundError carries documentId and edgeId', () => {
-    const err = new EdgeNotFoundError('canvas-1', 'edge-1')
-    expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('EdgeNotFoundError')
-    expect(err.documentId).toBe('canvas-1')
-    expect(err.edgeId).toBe('edge-1')
-    expect(err.message).toContain('edge-1')
     expect(err.message).toContain('canvas-1')
   })
 
