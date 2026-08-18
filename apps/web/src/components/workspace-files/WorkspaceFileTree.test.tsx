@@ -46,6 +46,32 @@ describe('WorkspaceFileTree', () => {
     expect(diagram.querySelector('[data-kind]')?.getAttribute('data-kind')).toBe('spatial')
   })
 
+  // A capability slot, like DocumentListView's renderThumb: the tree never
+  // fetches or renders a document itself, so it stays usable by a caller
+  // that has no daemon to fetch from.
+  it('lets the caller supply a row’s icon', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' }]}
+        onOpen={() => {}}
+        renderIcon={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
+      />,
+    )
+    expect(screen.getByTestId('custom-icon').textContent).toBe('c1')
+  })
+
+  it('keeps the kind icon when the caller supplies none', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' }]}
+        onOpen={() => {}}
+      />,
+    )
+    expect(
+      screen.getByRole('treeitem', { name: 'Prose' }).querySelector('[data-kind]'),
+    ).not.toBeNull()
+  })
+
   it('falls back to the segment for a document nobody named', () => {
     render(
       <WorkspaceFileTree
