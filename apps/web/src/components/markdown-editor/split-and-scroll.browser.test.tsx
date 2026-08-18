@@ -21,10 +21,63 @@ function mount(value = '') {
   return utils
 }
 
+/**
+ * The editor's on-screen state, for a failure that would otherwise only say
+ * an element was missing.
+ *
+ * This file fails intermittently in CI and has never reproduced locally, so
+ * the next failure has to explain itself. The discriminator is the mode
+ * group: `EditorToolbar` OMITS the Split button entirely when
+ * `splitAvailable` is false, so a run where Split is absent measured its
+ * container under `SPLIT_MIN_WIDTH` and fell back to Write — which removes
+ * the divider AND the preview pane, and is a different bug from the panes
+ * being present but unlaid-out.
+ */
+function editorState(): string {
+  const box = (el: Element | null): string => {
+    if (el === null) return 'absent'
+    const r = el.getBoundingClientRect()
+    return `${Math.round(r.width)}x${Math.round(r.height)}`
+  }
+  const modes = [...document.querySelectorAll('[aria-label="View mode"] button')]
+    .map((b) => `${b.getAttribute('aria-label')}:${b.getAttribute('aria-pressed')}`)
+    .join(',')
+  const scroller = document.querySelector('.cm-scroller')
+  return [
+    `modes=[${modes}]`,
+    `sourceWrap=${box(document.querySelector('[data-testid="markdown-source-wrap"]'))}`,
+    `cmScroller=${box(scroller)}`,
+    scroller === null ? '' : `cmScroll=${scroller.scrollHeight}/${scroller.clientHeight}`,
+    `preview=${box(document.querySelector('[data-testid="markdown-preview-scroll"]'))}`,
+    `viewport=${window.innerWidth}x${window.innerHeight}`,
+  ]
+    .filter((part) => part !== '')
+    .join(' ')
+}
+
+/** `getByTestId`'s own error names the id and nothing else. */
+function requireDivider(getByTestId: (id: string) => HTMLElement): HTMLElement {
+  try {
+    return getByTestId('markdown-split-divider')
+  } catch {
+    throw new Error(`split divider missing — ${editorState()}`)
+  }
+}
+
+/** A scroller that reports 0/0 is unlaid-out, not merely short. */
+function requireScrollable(selector: string): HTMLElement {
+  const el = document.querySelector(selector) as HTMLElement | null
+  if (el === null) throw new Error(`${selector} absent — ${editorState()}`)
+  expect(el.scrollHeight, `${selector} is not scrollable — ${editorState()}`).toBeGreaterThan(
+    el.clientHeight,
+  )
+  return el
+}
+
 describe('MarkdownEditor split & scroll sync (real browser)', () => {
   it('dragging the divider resizes the source pane', async () => {
     const { getByTestId } = mount()
-    const divider = getByTestId('markdown-split-divider')
+    const divider = requireDivider(getByTestId)
     const source = getByTestId('markdown-source-pane')
     const before = source.getBoundingClientRect().width
 
@@ -63,7 +116,7 @@ describe('MarkdownEditor split & scroll sync (real browser)', () => {
 
   it('the divider is keyboard-operable (arrow keys move the split)', async () => {
     const { getByTestId } = mount()
-    const divider = getByTestId('markdown-split-divider')
+    const divider = requireDivider(getByTestId)
     const source = getByTestId('markdown-source-pane')
     const before = source.getBoundingClientRect().width
 
@@ -76,16 +129,10 @@ describe('MarkdownEditor split & scroll sync (real browser)', () => {
 
   it('scrolling the source proportionally scrolls the preview', async () => {
     mount(LONG_DOC)
-    const scroller = await vi.waitFor(() => {
-      const el = document.querySelector('.cm-scroller') as HTMLElement
-      expect(el.scrollHeight).toBeGreaterThan(el.clientHeight)
-      return el
-    })
-    const preview = await vi.waitFor(() => {
-      const el = document.querySelector('[data-testid="markdown-preview-scroll"]') as HTMLElement
-      expect(el.scrollHeight).toBeGreaterThan(el.clientHeight)
-      return el
-    })
+    const scroller = await vi.waitFor(() => requireScrollable('.cm-scroller'))
+    const preview = await vi.waitFor(() =>
+      requireScrollable('[data-testid="markdown-preview-scroll"]'),
+    )
 
     scroller.scrollTop = scroller.scrollHeight
     scroller.dispatchEvent(new Event('scroll'))
@@ -119,16 +166,10 @@ describe('MarkdownEditor split & scroll sync (real browser)', () => {
         />
       </div>,
     )
-    const scroller = await vi.waitFor(() => {
-      const el = document.querySelector('.cm-scroller') as HTMLElement
-      expect(el.scrollHeight).toBeGreaterThan(el.clientHeight)
-      return el
-    })
-    const preview = await vi.waitFor(() => {
-      const el = document.querySelector('[data-testid="markdown-preview-scroll"]') as HTMLElement
-      expect(el.scrollHeight).toBeGreaterThan(el.clientHeight)
-      return el
-    })
+    const scroller = await vi.waitFor(() => requireScrollable('.cm-scroller'))
+    const preview = await vi.waitFor(() =>
+      requireScrollable('[data-testid="markdown-preview-scroll"]'),
+    )
     // Wait for the diagram fragment to land (the preview grows past 600px).
     const markerText = await vi.waitFor(() => {
       expect(preview.querySelector('svg[overflow="visible"]')).not.toBeNull()
