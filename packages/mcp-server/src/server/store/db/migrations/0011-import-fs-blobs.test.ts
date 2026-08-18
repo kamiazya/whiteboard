@@ -239,7 +239,10 @@ describe('0011-import-fs-blobs', () => {
     try {
       // Mutation check: divergence keyed on row-existence (rather than byte
       // inequality) would warn here every time, since a row now exists.
-      await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], dataDir)
+      // This file migrates only as far as 0011, so its rows are the ones the
+      // migration recorded — the prefix has to match that world, not the live
+      // one. prepare.test.ts covers the boot path, which passes the live prefix.
+      await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], dataDir, 'canvas:')
       expect(capture.records).toHaveLength(0)
     } finally {
       capture.restore()
@@ -341,7 +344,7 @@ describe('0011-import-fs-blobs', () => {
     const lateBytes = snapshotBytes('written after migration ran')
     await writeBlob(dataDir, 'ws-1', 'doc-late', lateBytes)
 
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], dataDir)
+    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], dataDir, 'canvas:')
 
     const reassembled = await reassembledRow(db, 'canvas:doc-late')
     expect(reassembled).toEqual(lateBytes)

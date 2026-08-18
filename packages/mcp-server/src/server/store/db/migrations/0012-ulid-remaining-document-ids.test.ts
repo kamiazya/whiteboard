@@ -160,7 +160,10 @@ describe('0012-ulid-remaining-document-ids', () => {
       .executeTakeFirstOrThrow()) as { documentId: string }
     expect(branch.documentId).toBe(row.id)
 
-    const newDocKey = `canvas:${row.id}`
+    // migrateToHead now runs 0013 too, which rewrites the prefix this
+    // migration wrote. The SEED above stays `canvas:` — it reproduces a
+    // pre-0013 database, and rewriting it would leave 0013 untested.
+    const newDocKey = `document:${row.id}`
     for (const table of [
       'documentSnapshots',
       'documentSnapshotChunks',

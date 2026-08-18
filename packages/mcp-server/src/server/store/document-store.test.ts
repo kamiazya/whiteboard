@@ -1349,6 +1349,7 @@ describe('deleteDocument', () => {
   it('deletes cleanly a document whose FS blob was already removed by sweepImportedFsBlobs', async () => {
     const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
     const { importFsBlobs } = await import('./db/migrations/0011-import-fs-blobs.js')
+    const { DOCUMENT_DOC_KEY_PREFIX } = await import('./doc-ref-key.js')
     const { sweepImportedFsBlobs } = await import('./db/sweep-imported-fs-blobs.js')
     const { mkdir, writeFile, access } = await import('node:fs/promises')
     const { getDb } = await import('./db/index.js')
@@ -1382,7 +1383,11 @@ describe('deleteDocument', () => {
     const blobPath = join(blobDir, `${documentId}.loro`)
     await writeFile(blobPath, blobDoc.export({ mode: 'snapshot' }))
 
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
     await sweepImportedFsBlobs(db, tempDir)
     await expect(access(blobPath)).rejects.toThrow() // pins the sweep precondition itself
 

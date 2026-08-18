@@ -21,7 +21,7 @@ const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 function docRefKey(docRef: DocRef): string {
   return docRef.kind === 'document'
-    ? `canvas:${docRef.documentId}`
+    ? `document:${docRef.documentId}`
     : `workspace-tree:${docRef.workspaceId}`
 }
 

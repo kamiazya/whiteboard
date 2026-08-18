@@ -1,3 +1,4 @@
+import { DOCUMENT_DOC_KEY_PREFIX } from '../store/doc-ref-key.js'
 // Regression test for tmp/issues/ws-real-socket-e2e-needs-injectable-data-dir.md:
 // exercises a REAL WebSocketServer + real `ws` client (not the FakeWebSocket
 // used elsewhere in ws.test.ts) so a Loro binary update travels over an
@@ -252,7 +253,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     const snapshotRow = await db
       .selectFrom('documentSnapshots')
       .select(['docKey'])
-      .where('docKey', '=', `canvas:${documentId}`)
+      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}${documentId}`)
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 

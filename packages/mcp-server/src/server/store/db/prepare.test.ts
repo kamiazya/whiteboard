@@ -140,4 +140,39 @@ describe('prepareDataDir', () => {
       await chmod(canvasDir, 0o755)
     }
   })
+
+  // prepareDataDir runs migrations and THEN re-invokes the FS-blob import, so
+  // the import is the one writer that can still land a row after
+  // `0013-document-dockey-prefix` has corrected every stored key. Handing it
+  // the prefix migration 0011 was recorded with would re-seed an orphan copy
+  // of every blob the sweep had not yet removed — invisible to the live read
+  // path, and indistinguishable from a successful boot.
+  it('never leaves a row under the retired docKey prefix after importing a legacy blob', async () => {
+    const workspaceId = 'ws-prefix'
+    const documentId = generateDocumentId()
+    const doc = new LoroDoc()
+    doc.getText('content').insert(0, 'legacy blob imported after the prefix migration')
+    doc.commit()
+    const canvasDir = join(tempDir, 'blobs', workspaceId, 'canvas')
+    await mkdir(canvasDir, { recursive: true })
+    await writeFile(join(canvasDir, `${documentId}.loro`), doc.export({ mode: 'snapshot' }))
+
+    await prepareDataDir(tempDir)
+
+    const db = await getDb(tempDir)
+    for (const table of [
+      'documentSnapshots',
+      'documentSnapshotChunks',
+      'documentDeltas',
+      'documentFrontiers',
+    ] as const) {
+      const rows = await db.selectFrom(table).select('docKey').execute()
+      expect(rows.map((row) => row.docKey).filter((key) => key.startsWith('canvas:'))).toEqual([])
+    }
+
+    // ...and the import is still reachable, so the assertion above is not
+    // passing merely because nothing was written at all.
+    const store = new LibsqlDocumentStore(db)
+    expect(await store.loadSnapshot({ docRef: { kind: 'document', documentId } })).not.toBeNull()
+  })
 })
