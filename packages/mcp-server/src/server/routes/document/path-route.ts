@@ -1,7 +1,7 @@
 import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
 import {
-  canvasPathForAction,
-  canvasPathForFile,
+  documentPathForAction,
+  documentPathForFile,
   parseDocumentApiPath,
 } from '../../../shared/api-contracts/document-url.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
@@ -62,7 +62,7 @@ export function onDocumentAction(
 ): void {
   const dispatch = async (c: Context, next: Next) => {
     const parsed = parseDocumentApiPath(c.req.path)
-    const path = parsed === null ? null : canvasPathForAction(parsed.tail, action)
+    const path = parsed === null ? null : documentPathForAction(parsed.tail, action)
     if (parsed === null || path === null) return next()
     return validated(c, parsed.workspaceId, path) ?? handler(c, parsed.workspaceId, path)
   }
@@ -78,7 +78,7 @@ export function onDocumentFile(
 ): void {
   const dispatch = async (c: Context, next: Next) => {
     const parsed = parseDocumentApiPath(c.req.path)
-    const file = parsed === null ? null : canvasPathForFile(parsed.tail)
+    const file = parsed === null ? null : documentPathForFile(parsed.tail)
     if (parsed === null || file === null) return next()
     return (
       validated(c, parsed.workspaceId, file.path) ??

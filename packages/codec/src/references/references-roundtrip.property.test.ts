@@ -81,13 +81,13 @@ describe('references export/import round-trip properties', () => {
     [fc.uniqueArray(canonicalUlidArbitrary, { minLength: 2, maxLength: 2 })],
     withDefaults(),
   )(
-    'a non-bijective resolver (two canvasIds mapping to the same path) never throws and exports both',
-    ([canvasIdA, canvasIdB]) => {
+    'a non-bijective resolver (two document ids mapping to the same path) never throws and exports both',
+    ([documentIdA, documentIdB]) => {
       const collidingPath = '/notes/shared.md'
       const resolver = () => collidingPath
 
-      const exportedA = resolveReferencesForExport(wikiLinkRoot(canvasIdA, undefined), resolver)
-      const exportedB = resolveReferencesForExport(wikiLinkRoot(canvasIdB, undefined), resolver)
+      const exportedA = resolveReferencesForExport(wikiLinkRoot(documentIdA, undefined), resolver)
+      const exportedB = resolveReferencesForExport(wikiLinkRoot(documentIdB, undefined), resolver)
 
       expect(firstParagraphChild(exportedA)).toEqual({
         type: 'text',

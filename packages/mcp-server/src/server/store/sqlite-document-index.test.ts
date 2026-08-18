@@ -61,7 +61,7 @@ describe('SqliteDocumentIndex', () => {
   })
 })
 
-describe('rows written before canvasIds were ULIDs', () => {
+describe('rows written before document ids were ULIDs', () => {
   // A daemon that predates ADR-0007 decision 5 has nanoid ids in `documents`.
   // The index reads that table directly now, so such a row reaches every
   // caller — and `wb_document_list` declares an outputSchema the MCP SDK

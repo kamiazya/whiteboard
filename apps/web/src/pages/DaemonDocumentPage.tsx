@@ -343,8 +343,8 @@ export function DaemonDocumentPage({
     [controller.documents],
   )
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
-    async (canvasId) => {
-      const target = await fileAdapter.loadDocument(canvasId)
+    async (documentId) => {
+      const target = await fileAdapter.loadDocument(documentId)
       if (target?.body === undefined) return undefined
       // Body only. A document's title is the workspace's (ADR-0009 decision
       // 2) and the daemon summary carries no display name, so there is none

@@ -71,7 +71,7 @@ export function DocumentDropdown({
     [filteredCanvases, effectiveNames.pinned],
   )
 
-  // Group by path prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
+  // Group by path prefix (the first segment). Documents without "/" stay in the ungrouped bucket.
   // Preserve recency order within each group and exclude anything already shown in the pinned section.
   const groupedDocuments = useMemo(
     () => groupCanvases(filteredCanvases, pinnedSet),

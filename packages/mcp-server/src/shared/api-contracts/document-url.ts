@@ -65,13 +65,13 @@ export function parseDocumentApiPath(
 }
 
 /** The document path when the tail ends in `action`, else null. */
-export function canvasPathForAction(tail: string[], action: string): string | null {
+export function documentPathForAction(tail: string[], action: string): string | null {
   if (tail.length < 2 || tail[tail.length - 1] !== action) return null
   return tail.slice(0, -1).join('/')
 }
 
 /** The document path + fileId when the tail is `<path>/file/<fileId>`, else null. */
-export function canvasPathForFile(tail: string[]): { path: string; fileId: string } | null {
+export function documentPathForFile(tail: string[]): { path: string; fileId: string } | null {
   if (tail.length < 3 || tail[tail.length - 2] !== 'file') return null
   return { path: tail.slice(0, -2).join('/'), fileId: tail[tail.length - 1] as string }
 }

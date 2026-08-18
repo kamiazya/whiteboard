@@ -2,7 +2,7 @@ import type { DocumentSummary, WorkspaceSummary } from '@kamiazya/whiteboard-mcp
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createDocument as createCanvasApi,
-  listDocuments as listCanvasesApi,
+  listDocuments,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 
@@ -88,10 +88,10 @@ export function useDaemonDocumentController(
         }
         setWorkspaceId(wid)
 
-        const { documents: canvasList } = await listCanvasesApi(daemonFetch, daemonBaseUrl, wid)
+        const { documents } = await listDocuments(daemonFetch, daemonBaseUrl, wid)
         if (cancelled || seq !== switchSeqRef.current) return
-        setDocuments(canvasList)
-        setPath(options.path ?? canvasList[0]?.path ?? null)
+        setDocuments(documents)
+        setPath(options.path ?? documents[0]?.path ?? null)
       } catch (err) {
         if (!cancelled && seq === switchSeqRef.current) setLoadError(errorMessage(err))
       } finally {
@@ -120,11 +120,7 @@ export function useDaemonDocumentController(
       setCreateError(null)
       setSwitchError(null)
       try {
-        const { documents: list } = await listCanvasesApi(
-          daemonFetch,
-          daemonBaseUrl,
-          nextWorkspaceId,
-        )
+        const { documents: list } = await listDocuments(daemonFetch, daemonBaseUrl, nextWorkspaceId)
         if (seq !== switchSeqRef.current) return
         setWorkspaceId(nextWorkspaceId)
         setDocuments(list)
@@ -145,7 +141,7 @@ export function useDaemonDocumentController(
       setCreateError(null)
       try {
         const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newPath)
-        const { documents: refreshed } = await listCanvasesApi(
+        const { documents: refreshed } = await listDocuments(
           daemonFetch,
           daemonBaseUrl,
           workspaceId,
@@ -158,7 +154,7 @@ export function useDaemonDocumentController(
         // already stale (another client took the path) — without a refresh, a retry re-derives
         // the SAME losing path from the same stale list and collides forever. Best-effort:
         // leaving the previous (possibly stale) list is no worse than not trying.
-        await listCanvasesApi(daemonFetch, daemonBaseUrl, workspaceId)
+        await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
           .then(({ documents: refreshed }) => setDocuments(refreshed))
           .catch(() => {})
       }
