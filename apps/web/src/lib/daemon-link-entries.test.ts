@@ -5,9 +5,9 @@ const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const OTHER = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
 
 describe('daemonLinkEntries', () => {
-  // The defect this exists for: the daemon summary's path doubled as the
-  // name, so `[[週次レビュー]]` — the only identifier the UI ever shows —
-  // could not resolve, while `[[untitled-2]]` could.
+  // The display name is the only identifier any screen shows, so it is the
+  // one a reference is written with. The path is an auto-generated address
+  // nothing invites you to type.
   it('resolves a reference by the display name the user can see', () => {
     const entries = daemonLinkEntries([
       { path: 'untitled-2', id: ID, displayName: '週次レビュー', updatedAt: '' },

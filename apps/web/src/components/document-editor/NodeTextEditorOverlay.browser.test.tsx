@@ -162,5 +162,11 @@ describe('the node text overlay (real browser)', () => {
 
     expect(onOpenDocument).toHaveBeenCalledWith(TARGET_ID)
     expect(onCommit).toHaveBeenCalledWith(`See [[${TARGET_NAME}]]!`)
+    // The ORDER is the design: navigating first would leave the host writing
+    // the edit into a document it has already switched away from. Both being
+    // called says nothing about that.
+    expect(onCommit.mock.invocationCallOrder[0]).toBeLessThan(
+      onOpenDocument.mock.invocationCallOrder[0],
+    )
   })
 })
