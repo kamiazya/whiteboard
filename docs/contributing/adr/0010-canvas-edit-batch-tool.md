@@ -110,6 +110,12 @@ host with an unknown-tool error while the control looked live.
   `wb_canvas_edit` announces what it touched and follows it with a viewport
   fit (opt out with `follow: false`); `wb_viewport_set` answers
   `delivered: false` rather than failing when nobody is watching.
+- **The browser holds presence, the server does not.** `useAgentActivity`
+  keeps "an agent is editing" up for 8s after the last message and the
+  outline for 3s, both restarting on each new one. Lapsing is the whole
+  point: nothing ever says "the agent is done", so a crashed agent
+  disappears on its own instead of leaving an indicator a human must
+  dismiss.
 - **`agent_activity` is one message, not a begin/end pair.** A batch is
   atomic and lands in milliseconds, so a paired form would only flicker, and
   an `end` lost to a dropped socket would strand the indicator on forever.

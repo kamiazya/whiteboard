@@ -16,6 +16,14 @@ export interface MemberOutlinesOverlayProps {
   }[]
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
+  /**
+   * Outline colour. Defaults to the manipulation accent, which is what a
+   * SELECTION means. An agent's recent edit reuses this overlay with a
+   * different colour, because "these boxes, outlined" is the same drawing —
+   * only what it means differs.
+   */
+  readonly stroke?: string
+  readonly testId?: string
 }
 
 export function MemberOutlinesOverlay({
@@ -23,10 +31,12 @@ export function MemberOutlinesOverlay({
   edges,
   edgePaths,
   zoom,
+  stroke = 'var(--manipulation)',
+  testId = 'member-outlines',
 }: MemberOutlinesOverlayProps) {
   return (
     <svg
-      data-testid="member-outlines"
+      data-testid={testId}
       aria-hidden="true"
       style={{
         position: 'absolute',
@@ -54,7 +64,7 @@ export function MemberOutlinesOverlay({
               data-edge-id={id}
               points={path.map((p) => `${p.x},${p.y}`).join(' ')}
               fill="none"
-              stroke="var(--manipulation)"
+              stroke={stroke}
               strokeWidth={2.5 / zoom}
               strokeLinecap="round"
               opacity={0.5}
@@ -69,7 +79,7 @@ export function MemberOutlinesOverlay({
           width={box.width}
           height={box.height}
           fill="none"
-          stroke="var(--manipulation)"
+          stroke={stroke}
           strokeWidth={1.5 / zoom}
           opacity={0.7}
         />

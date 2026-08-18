@@ -314,6 +314,12 @@ export interface SpatialEditorProps {
   /** Absent → the edge-lock affordance hides and no edge is blocked. */
   readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
   /**
+   * Node ids an agent just changed, outlined so a human can see WHERE the
+   * board moved under them. Purely decorative — it blocks nothing and
+   * selects nothing, and the caller clears it on its own schedule.
+   */
+  readonly agentTouchedNodeIds?: ReadonlySet<string>
+  /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (browser-local canvas id,
    * daemon alias path). Absent → the Document affordance hides.
@@ -468,6 +474,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       initialTool,
       lockedNodeIds,
       lockedEdgeIds,
+      agentTouchedNodeIds,
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
@@ -3500,6 +3507,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               selectionMembers={selectionMembers}
               edges={canvas.edges}
               edgePaths={edgePaths}
+              zoom={viewport.zoom}
+            />
+          )}
+          {/* The same drawing as above in a different colour: "these boxes,
+            outlined". `edges` is empty on purpose — an agent reports the
+            edges it touched, but an edge outline is far less legible than a
+            box one and the nodes are what actually moved. Add it if edge-only
+            batches turn out to be a real case. */}
+          {agentTouchedNodeIds !== undefined && agentTouchedNodeIds.size > 0 && (
+            <MemberOutlinesOverlay
+              testId="agent-touch-outlines"
+              stroke="var(--accent-foreground)"
+              selectionMembers={boxes.filter((entry) => agentTouchedNodeIds.has(entry.id))}
+              edges={[]}
+              edgePaths={[]}
               zoom={viewport.zoom}
             />
           )}

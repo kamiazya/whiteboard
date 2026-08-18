@@ -1,4 +1,5 @@
 import type {
+  AgentActivityPayload,
   HeadChangedPayload,
   VersionCreatedPayload,
   ViewportRequestPayload,
@@ -47,6 +48,10 @@ export interface UseDocumentSyncOptions {
   // SpatialEditorHandle ref and maps this payload onto it — see
   // document-sync-session.ts's onViewportRequest forward.
   onViewportRequest?: (payload: Omit<ViewportRequestPayload, 'type'>) => void
+  // An agent changed this document. The change itself arrives as an ordinary
+  // Loro update; this says who did it and what to draw attention to, so the
+  // page can show a presence chip and outline what moved.
+  onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.
