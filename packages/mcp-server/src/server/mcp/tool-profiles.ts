@@ -38,6 +38,10 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_scene_digest: { profile: READ_ONLY, title: 'Summarise the laid-out scene' },
+  wb_canvas_snapshot: {
+    profile: READ_ONLY,
+    title: 'Read a spatial canvas as a compact snapshot',
+  },
   wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
   wb_document_create: { profile: MUTATING, title: 'Create a document' },

@@ -135,6 +135,7 @@ const WORKSPACE_ID = 'e2e'
 const EXPECTED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
+  'wb_canvas_snapshot',
   'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
@@ -399,6 +400,33 @@ async function main() {
     )
   }
   console.log('[e2e] wb_scene_digest → digest naming the seeded node by document id')
+
+  // wb_canvas_snapshot answers the question wb_scene_digest cannot: WHAT is
+  // on the board. The digest above carries geometry only, so this is the
+  // runtime guard that the semantic projection (node text, type, lock
+  // state, edges) still validates against canvasSnapshotSchema through the
+  // real MCP SDK. It also pins the honesty of the caps — nodeCount is the
+  // board's real total, not the returned length.
+  const snapshot = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  const seeded = Array.isArray(snapshot.nodes)
+    ? snapshot.nodes.find((node) => node.id === 'lockable')
+    : undefined
+  if (seeded === undefined || seeded.type !== 'text' || typeof seeded.text !== 'string') {
+    throw new Error(`wb_canvas_snapshot returned unexpected shape: ${JSON.stringify(snapshot)}`)
+  }
+  if (snapshot.nodeCount !== snapshot.nodes.length || snapshot.truncated !== false) {
+    throw new Error(
+      `wb_canvas_snapshot miscounted an uncapped board: ${JSON.stringify({
+        nodeCount: snapshot.nodeCount,
+        returned: snapshot.nodes.length,
+        truncated: snapshot.truncated,
+      })}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
 
   // wb_canvas_tidy: what this asserts is the full pipeline (input parse →
   // doc load → tidy → structuredContent vs outputSchema), which is the drift
