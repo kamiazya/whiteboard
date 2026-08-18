@@ -45,7 +45,7 @@ export function createDaemonFileAdapter({
   path,
   resolveRefPath,
 }: DaemonFileAdapterOptions): DocumentFileAdapter {
-  const canvasPath = (target: string) =>
+  const documentPath = (target: string) =>
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/document/${encodeURIComponent(target)}`
 
   return {
@@ -54,7 +54,7 @@ export function createDaemonFileAdapter({
     async loadDocument(ref) {
       try {
         const target = resolveRefPath?.(ref) ?? ref
-        const res = await daemonFetch(`${canvasPath(target)}/snapshot`)
+        const res = await daemonFetch(`${documentPath(target)}/snapshot`)
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))
@@ -77,7 +77,7 @@ export function createDaemonFileAdapter({
       try {
         // This canvas's own path, not the reference: the file route scopes
         // reads by the canvas that owns the workspace's file directory.
-        const res = await daemonFetch(`${canvasPath(path)}/file/${imageRefId(ref)}`)
+        const res = await daemonFetch(`${documentPath(path)}/file/${imageRefId(ref)}`)
         if (!res.ok) return undefined
         return URL.createObjectURL(await res.blob())
       } catch (err) {
@@ -89,7 +89,7 @@ export function createDaemonFileAdapter({
     async storeImage(file) {
       const id = crypto.randomUUID()
       try {
-        const res = await daemonFetch(`${canvasPath(path)}/file/${id}`, {
+        const res = await daemonFetch(`${documentPath(path)}/file/${id}`, {
           method: 'PUT',
           // The route answers 415 for a Content-Type it has no extension
           // mapping for, so the picked file's own type has to travel.

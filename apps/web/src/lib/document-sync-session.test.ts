@@ -1061,8 +1061,8 @@ describe('createDocumentSyncSession', () => {
       backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
       const before = backend._ctrl.pushLocalUpdateCalls.length
 
-      const canvasListener = vi.fn()
-      session.subscribe(canvasListener)
+      const documentListener = vi.fn()
+      session.subscribe(documentListener)
       const lockListener = vi.fn()
       session.subscribeLocks(lockListener)
 
@@ -1074,7 +1074,7 @@ describe('createDocumentSyncSession', () => {
       // The lock reaches peers...
       expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(before)
       // ...but it is not canvas content, so no canvas publish fires.
-      expect(canvasListener).not.toHaveBeenCalled()
+      expect(documentListener).not.toHaveBeenCalled()
     })
   })
 })

@@ -17,7 +17,7 @@ export function workspacePath(workspaceId: string): string {
 // The tail is the document's path, one URL segment per path segment: each
 // segment is encoded, the separators are not — encoding them would collapse
 // the hierarchy the workspace shows into one opaque URL segment.
-export function canvasPath(workspaceId: string, path: string): string {
+export function documentPath(workspaceId: string, path: string): string {
   const tail = path.split('/').map(encodeURIComponent).join('/')
   return `${workspacePath(workspaceId)}/document/${tail}`
 }
@@ -78,7 +78,7 @@ function decodeSegment(segment: string): string | null {
 // back into the URL it should be addressable at, so App.tsx's state->URL
 // sync and parseDaemonRoute can never drift from each other.
 export function daemonRoutePath(route: DaemonRoute): string {
-  if (route.kind === 'document') return canvasPath(route.workspaceId, route.path)
+  if (route.kind === 'document') return documentPath(route.workspaceId, route.path)
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 

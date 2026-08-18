@@ -11,9 +11,9 @@ import { Input } from '@/components/ui/input'
 import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 
 interface DocumentActionsMenuProps {
-  canvasUrl: string
+  documentUrl: string
   copyStatus: 'idle' | 'copied' | 'error'
-  onCopyCanvasUrl: () => void
+  onCopyDocumentUrl: () => void
   onResetCopyStatus: () => void
   onStartRename: () => void
   onExport: ((format: SceneExportFormat) => void) | undefined
@@ -24,9 +24,9 @@ interface DocumentActionsMenuProps {
 // (keeping the menu open so the copy confirmation is visible) are specific
 // to this menu and do not belong split across separate files.
 export function DocumentActionsMenu({
-  canvasUrl,
+  documentUrl,
   copyStatus,
-  onCopyCanvasUrl,
+  onCopyDocumentUrl,
   onResetCopyStatus,
   onStartRename,
   onExport,
@@ -66,7 +66,7 @@ export function DocumentActionsMenu({
               // actually visible — Radix closes the menu on select by
               // default, which is exactly the silent-feedback bug.
               e.preventDefault()
-              onCopyCanvasUrl()
+              onCopyDocumentUrl()
             }}
             className="gap-2"
           >
@@ -140,7 +140,7 @@ export function DocumentActionsMenu({
             <p>Couldn't copy automatically. Select and copy the link below:</p>
             <Input
               readOnly
-              value={canvasUrl}
+              value={documentUrl}
               onClick={(e) => {
                 e.stopPropagation()
                 e.currentTarget.select()

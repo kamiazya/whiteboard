@@ -31,7 +31,7 @@ export function derivePinnedCanvases(
 
 // Groups by path prefix (the first "/"-delimited segment); documents without
 // a "/" land in the ungrouped bucket (empty-string key). Group headers sort
-// alphabetically, with the ungrouped bucket always last. Canvases already
+// alphabetically, with the ungrouped bucket always last. Documents already
 // present in `pinnedPaths` are excluded so they are not shown twice.
 export function groupCanvases(
   documents: readonly DocumentInfo[],

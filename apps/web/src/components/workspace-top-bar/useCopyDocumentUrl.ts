@@ -12,7 +12,7 @@ import type { AppLogger } from '@/lib/app-logger'
 // React StrictMode's dev-only setup->cleanup->setup double-invoke it would
 // stay permanently false and silently stop reporting copy status.
 export function useCopyDocumentUrl(
-  canvasUrl: string,
+  documentUrl: string,
   log: AppLogger | undefined,
   mountedRef: MutableRefObject<boolean>,
 ) {
@@ -37,7 +37,7 @@ export function useCopyDocumentUrl(
 
   const copyDocumentUrl = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(canvasUrl)
+      await navigator.clipboard.writeText(documentUrl)
       if (!mountedRef.current) return
       setCopyStatus('copied')
       scheduleCopyStatusReset(2000)
@@ -52,7 +52,7 @@ export function useCopyDocumentUrl(
       // fallback instructions and select the URL manually.
       scheduleCopyStatusReset(8000)
     }
-  }, [canvasUrl, log, scheduleCopyStatusReset])
+  }, [documentUrl, log, scheduleCopyStatusReset])
 
   return { copyStatus, copyDocumentUrl, resetCopyStatus }
 }

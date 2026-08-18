@@ -125,7 +125,7 @@ export function deleteDocument(
 // GET /api/w/:workspaceId/document/:path/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
 // which always calls res.json().
-export async function getCanvasSnapshot(
+export async function getDocumentSnapshot(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
@@ -175,7 +175,7 @@ export function setDocumentDisplayName(
 
 // ---- /api/v1 document surface (documentId + derived alias world) ----
 
-export function listCanvasesV1(
+export function listDocumentsV1(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
@@ -187,7 +187,7 @@ export function listCanvasesV1(
   )
 }
 
-export function getCanvasOkfV1(
+export function getDocumentOkfV1(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,

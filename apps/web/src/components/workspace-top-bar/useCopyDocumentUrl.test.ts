@@ -5,9 +5,9 @@ import { useCopyDocumentUrl } from './useCopyDocumentUrl'
 
 // Every call site owns a mountedRef the way WorkspaceTopBar does (created
 // fresh per test, defaulted to "mounted").
-function useMountedCopyCanvasUrl(canvasUrl: string) {
+function useMountedCopyDocumentUrl(documentUrl: string) {
   const mountedRef = useRef(true)
-  return useCopyDocumentUrl(canvasUrl, undefined, mountedRef)
+  return useCopyDocumentUrl(documentUrl, undefined, mountedRef)
 }
 
 describe('useCopyDocumentUrl', () => {
@@ -19,7 +19,7 @@ describe('useCopyDocumentUrl', () => {
   it('sets copyStatus to "copied" on a successful clipboard write', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const { result } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
+      useMountedCopyDocumentUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
@@ -32,7 +32,7 @@ describe('useCopyDocumentUrl', () => {
       clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
     const { result } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
+      useMountedCopyDocumentUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
@@ -45,7 +45,7 @@ describe('useCopyDocumentUrl', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
     const { result, unmount } = renderHook(() =>
-      useMountedCopyCanvasUrl('https://example.test/document/ws/foo'),
+      useMountedCopyDocumentUrl('https://example.test/document/ws/foo'),
     )
     await act(async () => {
       await result.current.copyDocumentUrl()
