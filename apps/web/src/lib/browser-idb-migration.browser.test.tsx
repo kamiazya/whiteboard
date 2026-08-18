@@ -328,7 +328,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
   })
 })
 
-describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', () => {
+describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
   const LEGACY_RECONNECT_SECRET_KEY = 'whiteboard.reconnect-secret.v1'
 
   beforeEach(clearDb)
@@ -341,7 +341,7 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
     expect(DB_VERSION).toBeGreaterThanOrEqual(6)
   })
 
-  it('removes the reconnectKeypairs store and the legacy localStorage secret while preserving canvases/loroCanvases/canvasFiles/meta', async () => {
+  it('drops the store and the legacy localStorage secret, preserving the rest', async () => {
     const documentId = 'canvas-migrate-v6'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
@@ -404,7 +404,7 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
   })
 })
 
-describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
+describe('IndexedDB v4 -> v5', () => {
   beforeEach(clearDb)
   afterEach(clearDb)
 
@@ -412,7 +412,7 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(5)
   })
 
-  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/documents/meta contents', async () => {
+  it('opening a v4 database at the current version preserves every other store', async () => {
     const documentId = 'canvas-migrate-v5'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })

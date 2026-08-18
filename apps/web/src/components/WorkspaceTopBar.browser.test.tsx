@@ -226,7 +226,7 @@ describe('WorkspaceTopBar browser mode', () => {
     window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
-  it('dispatches excalidraw:wb_version_saved with {workspaceId, path} on a schema-conforming save, clearing the useDirtyState-driven HeaderSaveDot', async () => {
+  it('dispatches wb_version_saved on a conforming save, clearing HeaderSaveDot', async () => {
     // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
       const url =

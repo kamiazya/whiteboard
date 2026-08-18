@@ -80,7 +80,7 @@ async function openRenameInput(): Promise<HTMLElement> {
   return allTitleInputs[allTitleInputs.length - 1]!
 }
 
-describe('BrowserLocalDocumentPage rename (browser — real IndexedDB)', () => {
+describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
   })
@@ -117,7 +117,7 @@ describe('BrowserLocalDocumentPage rename (browser — real IndexedDB)', () => {
     expect(container.clientWidth).toBeGreaterThan(600)
   })
 
-  it("keyboard isolation: Enter/Escape/Backspace/Delete typed in the title do not reach the spatial editor's document-level shortcut handlers", async () => {
+  it("keyboard isolation: title keys never reach the editor's shortcut handlers", async () => {
     await renderLoaded()
     const documentKeyDown = vi.fn()
     document.addEventListener('keydown', documentKeyDown)
