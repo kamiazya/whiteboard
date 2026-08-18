@@ -7,7 +7,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
-import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import {
   canvasSnapshotSchema,
@@ -16,6 +15,7 @@ import {
   SNAPSHOT_MAX_NODES,
   SNAPSHOT_TEXT_MAX_CHARS,
 } from './canvas-snapshot.js'
+import { SnapshotNotFoundError } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
