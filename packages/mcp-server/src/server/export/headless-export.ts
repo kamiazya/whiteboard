@@ -13,7 +13,7 @@ import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { getLogger } from '../log.js'
-import { getDoc } from '../store/doc-cache.js'
+import { getDoc } from '../store/document-store.js'
 import {
   type HeadlessExportResult,
   type HeadlessSvgExportResult,

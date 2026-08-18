@@ -6,8 +6,8 @@ import type {
   UpdateDocumentResponse,
 } from '../../../shared/api-contracts/document.js'
 import { getLogger } from '../../log.js'
-import { evictDoc, getDoc } from '../../store/doc-cache.js'
-import { documentExists, saveDocument } from '../../store/document-store.js'
+import { evictDoc } from '../../store/doc-cache.js'
+import { documentExists, getDoc, saveDocument } from '../../store/document-store.js'
 import type { VersionEntry } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { getBroadcastFn } from './_shared.js'

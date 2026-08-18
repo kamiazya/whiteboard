@@ -1669,7 +1669,8 @@ describe('renameDocumentPath', () => {
   })
 
   it('evicts every moved path from the cache, not only the two named ones', async () => {
-    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { getDoc } = await import('./document-store.js')
     clearCache()
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/child', new LoroDoc())
@@ -1684,7 +1685,8 @@ describe('renameDocumentPath', () => {
   })
 
   it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {
-    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { getDoc } = await import('./document-store.js')
     clearCache()
     try {
       await saveDocument('session1', 'a', new LoroDoc())
@@ -1699,7 +1701,8 @@ describe('renameDocumentPath', () => {
   })
 
   it('evicts a phantom doc-cache entry already sitting at the destination path, so the renamed content is not overwritten', async () => {
-    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { getDoc } = await import('./document-store.js')
     clearCache()
     try {
       // Write real content under 'a'.
@@ -1823,7 +1826,8 @@ describe('auto-compact', () => {
     // optimisation. Confirm the cache is dropped so getDoc reloads from
     // the compacted file.
     const { LoroMap } = await import('loro-crdt')
-    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { getDoc } = await import('./document-store.js')
 
     clearCache()
 
