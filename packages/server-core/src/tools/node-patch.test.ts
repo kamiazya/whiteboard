@@ -8,8 +8,8 @@ import {
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
-import { loadDocument } from './document-io.js'
-import { DocumentNotFoundError, NodeLockedError, NodeNotFoundError } from './errors.js'
+import { loadDocument, SnapshotNotFoundError } from './document-io.js'
+import { NodeLockedError, NodeNotFoundError } from './errors.js'
 import { createNodeLockTool } from './node-lock.js'
 import { createNodePatchTool, nodePatchInputSchema } from './node-patch.js'
 
@@ -120,7 +120,7 @@ describe('wb_node_patch tool', () => {
     ).rejects.toThrow(NodeNotFoundError)
   })
 
-  test('throws DocumentNotFoundError when no snapshot exists yet', async () => {
+  test('throws SnapshotNotFoundError when no snapshot exists yet', async () => {
     const documentStore = new FakeDocumentStore()
     await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
     const tool = createNodePatchTool(makeDeps(documentStore))
@@ -132,7 +132,7 @@ describe('wb_node_patch tool', () => {
         nodeId: 'n1',
         patch: { x: 1 },
       }),
-    ).rejects.toThrow(DocumentNotFoundError)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 
   test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {

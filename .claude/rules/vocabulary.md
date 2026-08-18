@@ -160,13 +160,3 @@ than by correcting a call site — keep them that way:
   on export and applied back on import.
 - `readCoreFacets` answers `undefined` for a `spatial` document, so core facets
   cannot be written to one.
-
-## Open
-
-One duplication, kept here because it has no other home: three "not found"
-errors exist and two mean the same thing — `SnapshotNotFoundError`
-(`render/load-spatial-canvas.ts`) and `DocumentNotFoundError`
-(`tools/errors.ts`, "no saved snapshot"), beside
-`WorkspaceDocumentNotFoundError` (`tools/document-crud.errors.ts`, the index
-has no such document). `create-server.ts` maps classes to status codes, so
-collapsing them changes behaviour and needs its own increment.
