@@ -67,7 +67,7 @@ export const exportRequestMessageSchema = z.object({
   scale: z.number().finite().optional(),
   minFontPx: z.number().finite().optional(),
   // When set, export only elements inside the frame plus the frame itself,
-  // so section-level PNG exports stay small on large canvases.
+  // so section-level PNG exports stay small on large documents.
   frameId: z.string().optional(),
   // Forces the exported scene into 'light' or 'dark' regardless of the
   // connected client's current theme. Must be carried through here too —

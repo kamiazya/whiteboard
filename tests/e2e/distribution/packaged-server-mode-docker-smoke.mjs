@@ -332,7 +332,7 @@ try {
 
   // Scenario 5: protected route, no auth → 401
   {
-    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/canvas/test-canvas/viewport`)
+    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/document/test-canvas/viewport`)
     if (resp.status !== 401) fail(`scenario 5: no-auth expected 401, got ${resp.status}`)
     assertNoLeak('scenario 5 body', await resp.text())
     console.log('[docker-smoke] scenario 5 PASS: no-auth → 401')
@@ -353,7 +353,7 @@ try {
         exp: now + 3600,
       },
     )
-    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/canvas/test-canvas/viewport`, {
+    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${jwt}` },
     })
     if (resp.status === 401 || resp.status === 403)
@@ -379,7 +379,7 @@ try {
         exp: now + 3600,
       },
     )
-    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/canvas/test-canvas/viewport`, {
+    const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${jwt}` },
     })
     if (resp.status !== 403) fail(`scenario 7: wrong scope expected 403, got ${resp.status}`)

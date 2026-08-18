@@ -13,7 +13,7 @@ export function NotFoundPage({ onBack }: { onBack: () => void }): JSX.Element {
       mark={<NotFoundMark className="text-muted-foreground" />}
       title="There's nothing here"
       description="The link may be wrong, or what it pointed at has moved."
-      actions={<StatusPageButton label="Back to canvases" onClick={onBack} primary />}
+      actions={<StatusPageButton label="Back to documents" onClick={onBack} primary />}
     />
   )
 }

@@ -4,12 +4,12 @@ import {
   type BranchStatsResponse,
   branchMetaSchema,
   branchStatsResponseSchema,
-  type CanvasBranchesState,
   type CreateBranchRequest,
-  canvasBranchesStateSchema,
   createBranchResponseSchema,
   type DeleteBranchResponse,
+  type DocumentBranchesState,
   deleteBranchResponseSchema,
+  documentBranchesStateSchema,
   type MergeResponse,
   mergeResponseSchema,
   type RenameBranchResponse,
@@ -23,11 +23,11 @@ import { ZodError } from 'zod'
 // Branch API helpers plus the React hook wrapper.
 // - branchesApi: pure request helpers that can be tested without React.
 // - useBranches: bundles list state and mutators. Callers notify the hook of
-//   an external HEAD change (e.g. useCanvasSync's onHeadChanged) by invoking
+//   an external HEAD change (e.g. useDocumentSync's onHeadChanged) by invoking
 //   the returned `refetch`; this hook does not subscribe to any event bus.
 
 export type { BranchMeta }
-export type BranchesState = CanvasBranchesState
+export type BranchesState = DocumentBranchesState
 export type MergeResult = MergeResponse
 
 // ── URL builder ──
@@ -43,7 +43,7 @@ export function buildBranchUrls(
   merge: (source: string) => string
 } {
   const safePath = encodeURIComponent(path)
-  const base = `/api/workspaces/${workspaceId}/canvases/${safePath}`
+  const base = `/api/workspaces/${workspaceId}/documents/${safePath}`
   return {
     list: `${base}/branches`,
     head: `${base}/head`,
@@ -53,14 +53,14 @@ export function buildBranchUrls(
   }
 }
 
-// canvasBranchesStateSchema is the single source of truth for the envelope
+// documentBranchesStateSchema is the single source of truth for the envelope
 // shape. Fall back to filtering the branches array per-item only when the
 // envelope itself fails validation (e.g. a single rogue row breaks the whole
 // array parse), so the BranchPicker keeps rendering the valid branches
 // instead of dropping the entire response.
 export function parseBranchesResponse(raw: unknown): BranchesState {
   if (!raw || typeof raw !== 'object') return { branches: [], head: 'main' }
-  const envelope = canvasBranchesStateSchema.safeParse(raw)
+  const envelope = documentBranchesStateSchema.safeParse(raw)
   if (envelope.success) {
     return {
       branches: envelope.data.branches,
@@ -187,7 +187,7 @@ export function branchesApi(workspaceId: string, path: string, fetchFn: typeof f
 
 // React hook.
 // Expose refetch so callers can refresh on an externally observed HEAD
-// change (e.g. useCanvasSync's onHeadChanged callback).
+// change (e.g. useDocumentSync's onHeadChanged callback).
 export interface UseBranchesResult {
   state: BranchesState
   loading: boolean
@@ -239,10 +239,10 @@ export function useBranches(
   // in the source makes every tool treat this file as binary — grep reports
   // "binary file matches" and prints nothing, which is how a stale name in
   // here survived a repo-wide sweep.
-  const canvasKey = `${workspaceId}\0${path}`
-  const [prevCanvasKey, setPrevCanvasKey] = useState(canvasKey)
-  if (prevCanvasKey !== canvasKey) {
-    setPrevCanvasKey(canvasKey)
+  const documentKey = `${workspaceId}\0${path}`
+  const [prevDocumentKey, setPrevDocumentKey] = useState(documentKey)
+  if (prevDocumentKey !== documentKey) {
+    setPrevDocumentKey(documentKey)
     setState({ branches: [], head: 'main' })
     setError(null)
     setLoading(true)
@@ -271,7 +271,7 @@ export function useBranches(
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after
   // the component is gone. There is no window-event subscription here: the
-  // caller (e.g. CanvasPage via useCanvasSync's onHeadChanged option) invokes
+  // caller (e.g. DocumentPage via useDocumentSync's onHeadChanged option) invokes
   // `refetch` directly when it observes an external HEAD change.
   useEffect(() => {
     return () => {

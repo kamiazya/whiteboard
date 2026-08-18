@@ -31,7 +31,7 @@ beforeEach(() => {
     makeFetchMock((url, init) => {
       // This card renders the multi-canvas selector, which also asks for the
       // version list; an empty list keeps the chrome free of version badges.
-      if (url.includes('/canvases/') && url.endsWith('/versions')) {
+      if (url.includes('/documents/') && url.endsWith('/versions')) {
         return jsonResponse({ versions: [] })
       }
       return topBar(url, init)
@@ -55,7 +55,7 @@ describe('docs snapshot — canvas browser UI hero', () => {
         testId="canvas-browser-ui-frame"
         width={1280}
         height={760}
-        canvases={[
+        documents={[
           { path: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' },
           { path: 'design/login-flow', updatedAt: '2026-04-30T12:00:00.000Z' },
           { path: 'sketches/inbox', updatedAt: '2026-04-29T12:00:00.000Z' },

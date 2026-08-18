@@ -4,8 +4,8 @@ import type { BrowserLocalStore } from '../../lib/browser-local-store.js'
 import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
-import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
-import { importOneCanvas } from './import-browser-local.js'
+import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
+import { importOneDocument } from './import-browser-local.js'
 
 const log = getAppLogger('import-browser-local-panel')
 
@@ -30,7 +30,7 @@ type RowResult =
   | { status: 'error'; reason: string }
 
 /**
- * Copy-first migration UI: lists browser-local canvases and imports selected
+ * Copy-first migration UI: lists browser-local documents and imports selected
  * ones onto a paired daemon workspace one at a time (sequential, not
  * Promise.all, to bound peak memory while merging large Loro histories).
  * Never writes to or deletes from browserLocalStore/loroStore.
@@ -43,22 +43,22 @@ export function ImportBrowserLocalPanel({
   loroStore,
   settingsStore,
 }: ImportBrowserLocalPanelProps) {
-  const [canvases, setCanvases] = useState<CanvasSnapshot[] | null>(null)
+  const [documents, setDocuments] = useState<DocumentSnapshot[] | null>(null)
   const [results, setResults] = useState<Record<string, RowResult>>({})
   const [isImporting, setIsImporting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     browserLocalStore
-      .listCanvases()
+      .listDocuments()
       .then((list) => {
-        if (!cancelled) setCanvases(list)
+        if (!cancelled) setDocuments(list)
       })
       .catch((err: unknown) => {
         // A blocked/corrupt IndexedDB must not leave the panel in the
         // loading state forever — degrade to the empty state.
-        log.error('listCanvases failed', err)
-        if (!cancelled) setCanvases([])
+        log.error('listDocuments failed', err)
+        if (!cancelled) setDocuments([])
       })
     return () => {
       cancelled = true
@@ -66,23 +66,23 @@ export function ImportBrowserLocalPanel({
   }, [browserLocalStore])
 
   async function handleImport() {
-    if (!canvases || canvases.length === 0) return
+    if (!documents || documents.length === 0) return
     setIsImporting(true)
     let anySuccess = false
     let lastSuccessCanvasId: string | undefined
 
     try {
       // Sequential on purpose: each iteration merges a full Loro history into
-      // a throwaway doc, which is memory-heavy for large canvases.
-      for (const canvas of canvases) {
+      // a throwaway doc, which is memory-heavy for large documents.
+      for (const canvas of documents) {
         setResults((prev) => ({ ...prev, [canvas.id]: { status: 'pending' } }))
         try {
           const loroLoad = await loroStore.load(canvas.id)
-          const result = await importOneCanvas({
+          const result = await importOneDocument({
             fetch: daemonFetch,
             daemonBaseUrl,
             workspaceId,
-            canvasName: canvas.name,
+            documentName: canvas.name,
             documentKind: canvas.kind,
             loroLoad,
           })
@@ -121,7 +121,7 @@ export function ImportBrowserLocalPanel({
             browserLocalToDaemon: {
               ...current.migration.browserLocalToDaemon,
               lastImportedAt: now,
-              lastImportedCanvasId: lastSuccessCanvasId,
+              lastImportedDocumentId: lastSuccessCanvasId,
             },
           },
         }))
@@ -132,14 +132,14 @@ export function ImportBrowserLocalPanel({
     }
   }
 
-  if (canvases === null) {
-    return <p className="text-sm text-muted-foreground">Loading browser-local canvases…</p>
+  if (documents === null) {
+    return <p className="text-sm text-muted-foreground">Loading browser-local documents…</p>
   }
 
-  if (canvases.length === 0) {
+  if (documents.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No browser-local canvases to import on this device.
+        No browser-local documents to import on this device.
       </p>
     )
   }
@@ -147,7 +147,7 @@ export function ImportBrowserLocalPanel({
   return (
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-1">
-        {canvases.map((canvas) => {
+        {documents.map((canvas) => {
           const result = results[canvas.id]
           return (
             <li key={canvas.id} className="flex items-center justify-between gap-2 text-sm">

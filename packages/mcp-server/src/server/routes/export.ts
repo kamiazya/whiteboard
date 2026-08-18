@@ -13,8 +13,8 @@ import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { documentExists } from '../store/document-store.js'
-import { onCanvasAction } from './canvas/path-route.js'
-import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
+import { onDocumentAction } from './document/path-route.js'
+import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
 
 // The body is a small JSON options object (padding/scale/frameId/theme/
 // outputPath), never canvas content — the PNG is always rendered headlessly
@@ -25,8 +25,8 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 export function createExportRouter() {
   const app = new Hono()
 
-  // POST /api/w/:workspaceId/canvas/<path>/export
-  onCanvasAction(
+  // POST /api/w/:workspaceId/document/<path>/export
+  onDocumentAction(
     app,
     'post',
     'export',
@@ -68,7 +68,7 @@ export function createExportRouter() {
           )
         } catch (err) {
           if (err instanceof OutputPathError) {
-            const { status, body: errBody } = toCanvasOutputPathErrorBody(err, workspaceId)
+            const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
             return c.json(errBody as ExportErrorBody, status)
           }
           throw err

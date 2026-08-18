@@ -105,7 +105,7 @@ describe('MergeToast', () => {
       expect(fetchMock).toHaveBeenCalled()
     })
     const calledUrl = fetchMock.mock.calls[0]?.[0] as string
-    expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v%2Fpre%3Fweird%23id/restore')
+    expect(calledUrl).toBe('/api/workspaces/s1/documents/c1/versions/v%2Fpre%3Fweird%23id/restore')
   })
 
   it('restores the canvas the merge happened on, not the currently selected one', async () => {
@@ -123,7 +123,7 @@ describe('MergeToast', () => {
       expect(fetchMock).toHaveBeenCalled()
     })
     const calledUrl = fetchMock.mock.calls[0]?.[0] as string
-    expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v-pre/restore')
+    expect(calledUrl).toBe('/api/workspaces/s1/documents/c1/versions/v-pre/restore')
   })
 
   it('closes immediately when the close button is clicked', () => {
@@ -199,7 +199,7 @@ describe('MergeToast', () => {
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => expect(onRestored).toHaveBeenCalled())
     expect(daemonFetch).toHaveBeenCalledWith(
-      '/api/workspaces/s1/canvases/c1/versions/v-pre/restore',
+      '/api/workspaces/s1/documents/c1/versions/v-pre/restore',
       { method: 'POST' },
     )
     expect(globalFetch).not.toHaveBeenCalled()

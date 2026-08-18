@@ -3,7 +3,7 @@
 // on overlapping nodes), and among equal-crossing configurations the one
 // with fewer REALIZED bends wins — the abstract pair ranking (L before Z)
 // can lie once obstacles force the L into a staircase. Crossing-free,
-// overlap-free canvases are still never reshuffled: the optimizer's
+// overlap-free documents are still never reshuffled: the optimizer's
 // short-circuit ignores the bend term on purpose.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
@@ -111,7 +111,7 @@ describe('realized-bend tie-break', () => {
   it('a crossing-free canvas is never reshuffled for bends alone', () => {
     // Same shape WITHOUT the crossing pair: the optimizer short-circuits
     // on the zero [overlap, illegible, crossings] prefix, so the staircase
-    // stays — churn on healthy canvases is worse than a extra bend.
+    // stays — churn on healthy documents is worse than a extra bend.
     const nodes = [
       box('src', 0, 400, 200, 100),
       box('dst', 700, 700, 200, 100),

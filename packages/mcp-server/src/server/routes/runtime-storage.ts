@@ -45,7 +45,7 @@ function emptyBucket(): Bucket {
 
 // Categorise a path under getDataDir(). Mirrors the layout the daemon actually
 // writes today:
-//   blobs/<workspaceId>/canvas/<id>.loro         — canvas Loro snapshots
+//   blobs/<workspaceId>/document/<id>.loro         — canvas Loro snapshots
 //   blobs/<workspaceId>/versions/<id>.png        — version thumbnails
 //   <workspaceId>/files/<id>.png                 — user-uploaded files
 //   <workspaceId>/exports/<file>.png             — export artifacts
@@ -57,7 +57,7 @@ function categorize(relPath: string): keyof StorageReport['byCategory'] {
   const head = segments[0] ?? ''
   if (head === 'blobs') {
     // Version thumbnails live at blobs/<ws>/versions/{id}.png; canvas
-    // snapshots at blobs/<ws>/canvas/{id}.loro. Anything else under blobs/
+    // snapshots at blobs/<ws>/document/{id}.loro. Anything else under blobs/
     // is treated as canvas storage.
     if (segments[2] === 'versions') return 'versions'
     return 'blobs'

@@ -1,4 +1,4 @@
-export interface CanvasInfo {
+export interface DocumentInfo {
   path: string
   updatedAt: string
   // Local-mode display name, supplied by the caller instead of the daemon's

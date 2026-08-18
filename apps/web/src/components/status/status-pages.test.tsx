@@ -23,7 +23,7 @@ describe('NotFoundPage', () => {
     render(<NotFoundPage onBack={onBack} />)
     const mark = document.querySelector('svg[data-mark="not-found"]')
     expect(mark).toBeTruthy()
-    screen.getByRole('button', { name: 'Back to canvases' }).click()
+    screen.getByRole('button', { name: 'Back to documents' }).click()
     expect(onBack).toHaveBeenCalled()
   })
 })

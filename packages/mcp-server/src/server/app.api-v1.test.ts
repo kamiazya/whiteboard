@@ -71,13 +71,13 @@ describe('createApp /api/v1 document mount', () => {
     const deps = resolveServerDeps(createContainer())
     const app = createApp({ ...createRuntimeOptions('secret'), serverDeps: deps })
 
-    const unauthed = await app.request('/api/v1/workspaces/default/canvases')
+    const unauthed = await app.request('/api/v1/workspaces/default/documents')
     expect(unauthed.status).toBe(401)
 
     // The daemon auth check runs ahead of the workspace-existence check, so
     // an authed request against a never-created workspace 404s rather than
     // 200-empty — list and create agree about workspace existence.
-    const res = await app.request('/api/v1/workspaces/default/canvases', {
+    const res = await app.request('/api/v1/workspaces/default/documents', {
       headers: { Authorization: 'Bearer secret' },
     })
     expect(res.status).toBe(404)
@@ -87,23 +87,23 @@ describe('createApp /api/v1 document mount', () => {
     const deps = resolveServerDeps(createContainer())
     const app = createApp({ ...createRuntimeOptions('secret'), serverDeps: deps })
 
-    const createRes = await app.request('/api/v1/workspaces/default/canvases', {
+    const createRes = await app.request('/api/v1/workspaces/default/documents', {
       method: 'POST',
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'notes', kind: 'spatial', createWorkspace: true }),
     })
     expect(createRes.status).toBe(201)
 
-    const listRes = await app.request('/api/v1/workspaces/default/canvases', {
+    const listRes = await app.request('/api/v1/workspaces/default/documents', {
       headers: { Authorization: 'Bearer secret' },
     })
-    const body = (await listRes.json()) as { canvases: { path: string }[] }
-    expect(body.canvases.map((c) => c.path)).toEqual(['notes'])
+    const body = (await listRes.json()) as { documents: { path: string }[] }
+    expect(body.documents.map((c) => c.path)).toEqual(['notes'])
   })
 
   it('leaves /api/v1 unmounted (404) when no serverDeps are supplied', async () => {
     const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('/api/v1/workspaces/default/canvases', {
+    const res = await app.request('/api/v1/workspaces/default/documents', {
       headers: { Authorization: 'Bearer secret' },
     })
     expect(res.status).toBe(404)

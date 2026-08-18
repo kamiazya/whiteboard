@@ -430,17 +430,17 @@ describe('app — server-mode composition', () => {
       expect(res.status).not.toBe(403)
     })
 
-    it('GET /api/w/:wid/canvas/:path/snapshot → 403 with canvas:write only (requires canvas:read)', async () => {
+    it('GET /api/w/:wid/document/:path/snapshot → 403 with canvas:write only (requires canvas:read)', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/snapshot', {
+      const res = await app.request('/api/w/w1/document/canvas-a/snapshot', {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/w/:wid/canvas/:path/update → 403 with canvas:read only (requires canvas:write)', async () => {
+    it('POST /api/w/:wid/document/:path/update → 403 with canvas:read only (requires canvas:write)', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/update', {
+      const res = await app.request('/api/w/w1/document/canvas-a/update', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
@@ -470,23 +470,23 @@ describe('app — server-mode composition', () => {
 
   // Req 6: files scope through composed app
   describe('server-mode files scope via composed app', () => {
-    it('GET /api/w/:wid/canvas/:path/file/:fileId → 401 without auth', async () => {
+    it('GET /api/w/:wid/document/:path/file/:fileId → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['files:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/file/file-001')
+      const res = await app.request('/api/w/w1/document/canvas-a/file/file-001')
       expect(res.status).toBe(401)
     })
 
-    it('GET /api/w/:wid/canvas/:path/file/:fileId → 403 with files:write only', async () => {
+    it('GET /api/w/:wid/document/:path/file/:fileId → 403 with files:write only', async () => {
       const app = createApp(makeServerModeOptions(['files:write']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/file/file-001', {
+      const res = await app.request('/api/w/w1/document/canvas-a/file/file-001', {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('PUT /api/w/:wid/canvas/:path/file/:fileId → 403 with files:read only', async () => {
+    it('PUT /api/w/:wid/document/:path/file/:fileId → 403 with files:read only', async () => {
       const app = createApp(makeServerModeOptions(['files:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/file/file-001', {
+      const res = await app.request('/api/w/w1/document/canvas-a/file/file-001', {
         method: 'PUT',
         headers: { authorization: BEARER, 'Content-Type': 'image/png' },
         body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -506,7 +506,7 @@ describe('app — server-mode composition', () => {
   // Req 8: insufficient scope → 403 + no WWW-Authenticate
   it('insufficient scope → 403 + no WWW-Authenticate through composed app', async () => {
     const app = createApp(makeServerModeOptions(['workspace:read']))
-    const res = await app.request('/api/w/w1/canvas/c1/snapshot', {
+    const res = await app.request('/api/w/w1/document/c1/snapshot', {
       headers: { authorization: BEARER },
     })
     expect(res.status).toBe(403)
@@ -515,9 +515,9 @@ describe('app — server-mode composition', () => {
 
   // Previously-unguarded routes: export, viewport, status
   describe('server-mode: previously-unguarded routes are auth-gated', () => {
-    it('POST /api/w/:wid/canvas/:path/export → 401 without auth', async () => {
+    it('POST /api/w/:wid/document/:path/export → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/export', {
+      const res = await app.request('/api/w/w1/document/canvas-a/export', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
@@ -525,9 +525,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(401)
     })
 
-    it('POST /api/w/:wid/canvas/:path/export → 403 with canvas:read only (requires canvas:write)', async () => {
+    it('POST /api/w/:wid/document/:path/export → 403 with canvas:read only (requires canvas:write)', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/export', {
+      const res = await app.request('/api/w/w1/document/canvas-a/export', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({}),
@@ -535,9 +535,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/w/:wid/canvas/:path/viewport → 401 without auth', async () => {
+    it('POST /api/w/:wid/document/:path/viewport → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/viewport', {
+      const res = await app.request('/api/w/w1/document/canvas-a/viewport', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
@@ -545,11 +545,11 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(401)
     })
 
-    it('POST /api/w/:wid/canvas/:path/viewport → 403 with canvas:read only (requires canvas:write)', async () => {
+    it('POST /api/w/:wid/document/:path/viewport → 403 with canvas:read only (requires canvas:write)', async () => {
       // Regression (security MEDIUM-1): viewport is a mutating POST that fell through the
-      // /api/w/*/canvas/ catch-all and was authorized with canvas:read. It must require canvas:write.
+      // /api/w/*/document/ catch-all and was authorized with canvas:read. It must require canvas:write.
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/viewport', {
+      const res = await app.request('/api/w/w1/document/canvas-a/viewport', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({}),
@@ -557,9 +557,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/w/:wid/canvas/:path/viewport passes auth layer with canvas:write', async () => {
+    it('POST /api/w/:wid/document/:path/viewport passes auth layer with canvas:write', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/viewport', {
+      const res = await app.request('/api/w/w1/document/canvas-a/viewport', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({}),
@@ -568,16 +568,16 @@ describe('app — server-mode composition', () => {
       expect(res.status).not.toBe(403)
     })
 
-    it('GET /api/w/:wid/canvas/:path/client-count → 401 without auth', async () => {
+    it('GET /api/w/:wid/document/:path/client-count → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/canvas/canvas-a/client-count')
+      const res = await app.request('/api/w/w1/document/canvas-a/client-count')
       expect(res.status).toBe(401)
     })
 
     // Workspace write operations
-    it('POST /api/workspaces/:wid/canvases → 403 with workspace:read only (requires workspace:write)', async () => {
+    it('POST /api/workspaces/:wid/documents → 403 with workspace:read only (requires workspace:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases', {
+      const res = await app.request('/api/workspaces/w1/documents', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ path: 'new-canvas', name: 'New Canvas' }),
@@ -595,9 +595,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('PUT /api/workspaces/:wid/canvases/:path/name → 403 with workspace:read only (requires workspace:write)', async () => {
+    it('PUT /api/workspaces/:wid/documents/:path/name → 403 with workspace:read only (requires workspace:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/name', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/name', {
         method: 'PUT',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'New Canvas Name' }),
@@ -606,44 +606,47 @@ describe('app — server-mode composition', () => {
     })
 
     // Version history routes require versions:read/write
-    it('GET /api/workspaces/:wid/canvases/:path/versions → 403 with workspace:read only (requires versions:read)', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/versions → 403 with workspace:read only (requires versions:read)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/versions', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/versions', {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/canvases/:path/versions → auth passes with versions:read', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/versions → auth passes with versions:read', async () => {
       const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/versions', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/versions', {
         headers: { authorization: BEARER },
       })
       expect(res.status).not.toBe(401)
       expect(res.status).not.toBe(403)
     })
 
-    it('POST /api/workspaces/:wid/canvases/:path/versions/:id/restore → 403 with versions:read only (requires versions:write)', async () => {
+    it('POST /api/workspaces/:wid/documents/:path/versions/:id/restore → 403 with versions:read only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/versions/v-001/restore', {
-        method: 'POST',
-        headers: { authorization: BEARER },
-      })
+      const res = await app.request(
+        '/api/workspaces/w1/documents/canvas-a/versions/v-001/restore',
+        {
+          method: 'POST',
+          headers: { authorization: BEARER },
+        },
+      )
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/canvases/:path/latest-thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/latest-thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/latest-thumbnail', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/latest-thumbnail', {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/canvases/:path/versions/:id/thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/versions/:id/thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
       const res = await app.request(
-        '/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail',
+        '/api/workspaces/w1/documents/canvas-a/versions/v-001/thumbnail',
         {
           headers: { authorization: BEARER },
         },
@@ -651,10 +654,10 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('PUT /api/workspaces/:wid/canvases/:path/versions/:id/thumbnail → 403 with versions:read only (requires versions:write)', async () => {
+    it('PUT /api/workspaces/:wid/documents/:path/versions/:id/thumbnail → 403 with versions:read only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['versions:read']))
       const res = await app.request(
-        '/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail',
+        '/api/workspaces/w1/documents/canvas-a/versions/v-001/thumbnail',
         {
           method: 'PUT',
           headers: { authorization: BEARER, 'content-type': 'image/png' },
@@ -664,9 +667,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/workspaces/:wid/canvases/:path/compact → 403 with workspace:write only (requires versions:write)', async () => {
+    it('POST /api/workspaces/:wid/documents/:path/compact → 403 with workspace:write only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:write']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/compact', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/compact', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
@@ -674,9 +677,9 @@ describe('app — server-mode composition', () => {
     })
 
     // Branch write operations require versions:write
-    it('POST /api/workspaces/:wid/canvases/:path/branches → 403 with workspace:write only (requires versions:write)', async () => {
+    it('POST /api/workspaces/:wid/documents/:path/branches → 403 with workspace:write only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:write']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/branches', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
@@ -684,17 +687,17 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/canvases/:path/branches → 403 with workspace:read only (requires versions:read)', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/branches → 403 with workspace:read only (requires versions:read)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/branches', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/canvases/:path/branches → auth passes with versions:read', async () => {
+    it('GET /api/workspaces/:wid/documents/:path/branches → auth passes with versions:read', async () => {
       const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/branches', {
+      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
         headers: { authorization: BEARER },
       })
       expect(res.status).not.toBe(401)

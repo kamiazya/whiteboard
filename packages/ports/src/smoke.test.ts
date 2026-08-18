@@ -34,10 +34,10 @@ describe('ports package smoke', () => {
     }
 
     const docRef = pkg.docRefSchema.parse({
-      kind: 'canvas',
+      kind: 'document',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
-    expect(docRef.kind).toBe('canvas')
+    expect(docRef.kind).toBe('document')
 
     expect(pkg.TOKENS.DocumentStore).toBe(Symbol.for('whiteboard.ports.DocumentStore'))
     expect(pkg.negotiateProtocolVersion([1, 2], [2, 3])).toBe(2)

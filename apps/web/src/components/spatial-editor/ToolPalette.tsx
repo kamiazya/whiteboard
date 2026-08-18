@@ -74,7 +74,7 @@ interface ToolPaletteProps {
   readonly onCreateLink: () => void
   readonly onCreateGroup: () => void
   /** Absent when the host supplies no canvas listing — the entry hides. */
-  readonly onCreateCanvasRef?: () => void
+  readonly onCreateDocumentRef?: () => void
   /** Absent when the host supplies no image storage — the entry hides. */
   readonly onCreateImage?: () => void
   readonly tool: EditorTool
@@ -112,7 +112,7 @@ export function ToolPalette({
   onCreateNode,
   onCreateLink,
   onCreateGroup,
-  onCreateCanvasRef,
+  onCreateDocumentRef,
   onCreateImage,
   tool,
   onToolChange,
@@ -161,12 +161,12 @@ export function ToolPalette({
       onSelect: onCreateGroup,
       drag: 'group',
     },
-    ...(onCreateCanvasRef !== undefined
+    ...(onCreateDocumentRef !== undefined
       ? [
           {
             label: CREATION_LABELS.document,
             icon: <FileBox aria-hidden="true" className="size-4" />,
-            onSelect: onCreateCanvasRef,
+            onSelect: onCreateDocumentRef,
           },
         ]
       : []),

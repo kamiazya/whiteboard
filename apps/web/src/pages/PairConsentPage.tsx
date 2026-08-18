@@ -129,7 +129,7 @@ export function PairConsentPage({
         {request.origin}
       </p>
       <p className="mb-4 text-sm text-muted-foreground">
-        is asking to read and edit the canvases stored by this daemon. Only approve origins you
+        is asking to read and edit the documents stored by this daemon. Only approve origins you
         recognize.
       </p>
       {identity !== null && (

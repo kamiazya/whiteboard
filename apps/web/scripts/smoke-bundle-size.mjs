@@ -2,8 +2,8 @@
 // Bundle-size gate for the built dist/. Run after `pnpm build`.
 //
 // Budgets (gzip): the entry chunk dominates first paint, so it gets a hard
-// ceiling; CSS has its own. The daemon-only feature chunk (DaemonCanvasPage,
-// loaded via React.lazy) is named `daemon-canvas-*.js` by vite.config.ts's
+// ceiling; CSS has its own. The daemon-only feature chunk (DaemonDocumentPage,
+// loaded via React.lazy) is named `daemon-document-*.js` by vite.config.ts's
 // chunkFileNames so it can never leak into first paint unnoticed — this
 // budget is `required: true` because the chunk exists as of this gate.
 //
@@ -35,8 +35,8 @@ const BUDGETS = [
   { label: 'entry JS (index-*.js)', pattern: /^index-.*\.js$/, limit: 30 * KB, required: true },
   { label: 'CSS (index-*.css)', pattern: /^index-.*\.css$/, limit: 30 * KB, required: true },
   {
-    label: 'daemon lazy chunk (daemon-canvas-*.js)',
-    pattern: /^daemon-canvas-.*\.js$/,
+    label: 'daemon lazy chunk (daemon-document-*.js)',
+    pattern: /^daemon-document-.*\.js$/,
     limit: 40 * KB,
     required: true,
   },

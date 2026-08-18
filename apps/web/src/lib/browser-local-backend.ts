@@ -1,20 +1,20 @@
 import type {
   BinaryFileDataLike,
-  CanvasBackend,
-  CanvasBackendHandlers,
+  DocumentBackend,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
-import { CanvasFileStore, dataUrlToBlob } from './canvas-file-store.js'
+import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 /**
- * BrowserLocalBackend: CanvasBackend implementation for fully offline,
+ * BrowserLocalBackend: DocumentBackend implementation for fully offline,
  * browser-local use. Persists Loro CRDT snapshots and incremental deltas
- * in IndexedDB via LoroStore (DB v2 'loroCanvases' store), and uploaded
- * image files via CanvasFileStore (DB v4 'canvasFiles' store).
+ * in IndexedDB via LoroStore (DB v2 'loroDocuments' store), and uploaded
+ * image files via DocumentFileStore (DB v4 'documentFiles' store).
  *
  * getFile/putFile: images are persisted to IndexedDB (not OPFS — see the
- * class-level design note in canvas-file-store.ts for the rationale).
+ * class-level design note in document-file-store.ts for the rationale).
  * putFile stores each entry keyed by its tuple fileId (never
  * BinaryFileDataLike.id, which callers must not rely on for keying) and
  * calls onFileSuccess once per successfully stored entry; it rejects on a
@@ -35,22 +35,22 @@ import { LoroStore } from './loro-store.js'
  * further serializes the read-modify-write inside a single IDB readwrite
  * transaction for appendDelta.
  */
-export class BrowserLocalBackend implements CanvasBackend {
+export class BrowserLocalBackend implements DocumentBackend {
   private readonly documentId: string
   private readonly store: LoroStore
-  private readonly fileStore: CanvasFileStore
-  private handlers: CanvasBackendHandlers | null = null
+  private readonly fileStore: DocumentFileStore
+  private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(documentId: string, store?: LoroStore, fileStore?: CanvasFileStore) {
+  constructor(documentId: string, store?: LoroStore, fileStore?: DocumentFileStore) {
     this.documentId = documentId
     this.store = store ?? new LoroStore()
-    this.fileStore = fileStore ?? new CanvasFileStore()
+    this.fileStore = fileStore ?? new DocumentFileStore()
   }
 
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.disconnected = false
     this.handlers = handlers
     // Fire synchronously so the caller can observe onConnected immediately.
@@ -102,7 +102,7 @@ export class BrowserLocalBackend implements CanvasBackend {
   /**
    * Returns the persisted Blob for fileId, or null for an unknown id and for
    * a corrupt/unknown-version record — never calls onError, since a read-path
-   * miss is not a storage failure (see CanvasFileStore.get).
+   * miss is not a storage failure (see DocumentFileStore.get).
    */
   async getFile(fileId: string): Promise<Blob | null> {
     return this.fileStore.get(fileId)
@@ -110,7 +110,7 @@ export class BrowserLocalBackend implements CanvasBackend {
 
   /**
    * Persists each entry keyed by its tuple fileId (the dedupe key
-   * useCanvasSync already uses — never `data.id`, which a caller's
+   * useDocumentSync already uses — never `data.id`, which a caller's
    * BinaryFileDataLike is not guaranteed to agree with). Calls
    * onFileSuccess once per successfully stored entry. Rejects and routes
    * handlers.onError?.('storage-failure') on any store failure so a failed
@@ -151,7 +151,7 @@ export class BrowserLocalBackend implements CanvasBackend {
   // ── Private ──────────────────────────────────────────────────────────────────
 
   /** True once the original connect() handlers are no longer the live ones. */
-  private isStale(handlers: CanvasBackendHandlers): boolean {
+  private isStale(handlers: DocumentBackendHandlers): boolean {
     return this.disconnected || this.handlers !== handlers
   }
 

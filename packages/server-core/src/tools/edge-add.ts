@@ -7,8 +7,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const edgeAddInputSchema = z
@@ -56,7 +56,7 @@ export function createEdgeAddTool(deps: ServerDeps) {
     inputSchema: edgeAddInputSchema,
     outputSchema: edgeAddOutputSchema,
     execute: async (input: EdgeAddInput): Promise<EdgeAddOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const kind = readDocumentKind(doc)
@@ -84,7 +84,7 @@ export function createEdgeAddTool(deps: ServerDeps) {
       })
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, edge: input.edge }
     },

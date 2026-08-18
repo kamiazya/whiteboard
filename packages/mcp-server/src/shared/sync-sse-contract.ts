@@ -30,7 +30,7 @@ export const syncUpdateEventSchema = z.object({
   doc: z.string().min(1),
   // SSE frames are text, so Loro update bytes travel base64-encoded. Only
   // incremental updates go through here — the initial snapshot is served as
-  // binary by GET /api/w/:workspaceId/canvas/<path>/snapshot, so the largest
+  // binary by GET /api/w/:workspaceId/document/<path>/snapshot, so the largest
   // payload never pays the base64 inflation.
   update: z.string(),
 })
@@ -40,7 +40,7 @@ export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 /**
  * A server text message (version_created, head_changed, …) wrapped with the
  * document it belongs to. A WebSocket is per-canvas so its text frames need no
- * addressing; one SSE stream serves many canvases, so an unaddressed frame
+ * addressing; one SSE stream serves many documents, so an unaddressed frame
  * would be applied to whichever canvas happened to be listening.
  *
  * `raw` stays a string: it is the WebSocket text payload verbatim, validated

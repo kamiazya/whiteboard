@@ -39,7 +39,7 @@ import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 // gate that produced this notice in the first place. The "Open the local
 // app" link below is the escape hatch.
 export const UNSUPPORTED_BROWSER_NOTICE =
-  'This browser blocks the hosted app from reaching a local daemon over the network, so canvases stay saved in this browser only. Use a Chromium-based browser to connect a local daemon.'
+  'This browser blocks the hosted app from reaching a local daemon over the network, so documents stay saved in this browser only. Use a Chromium-based browser to connect a local daemon.'
 
 // Docs are not served from apps/web (no /docs route), so the banner links to
 // the source-of-truth GitHub blob rather than fabricating a local route.
@@ -152,7 +152,7 @@ export function DaemonDetectedBanner({
     return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath }
   })
 
-  // Trailing slashes would otherwise produce `http://host:3099//canvas/...`.
+  // Trailing slashes would otherwise produce `http://host:3099//document/...`.
   const baseUrl = (storedTarget.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL).replace(/\/+$/, '')
 
   // Whether a reconnect target was ever actually persisted (as opposed to

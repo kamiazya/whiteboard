@@ -18,7 +18,7 @@
  * `(workspaceId, path)`. The names match because the concept does; the two
  * stores are what do not see each other. Both now write the same
  * `LibsqlDocumentStore` rows, which is why `saveDocument`/`compactDocument`
- * additionally take `withCanvasDocWriteLock` — see their comments.
+ * additionally take `withDocumentWriteLock` — see their comments.
  */
 import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -27,10 +27,10 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
-import type { CanvasSummary } from '../../shared/api-contracts/canvas.js'
+import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import { validateCanvasId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
+import { validateDocumentId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
   isCorruptStoredDataError,
@@ -42,7 +42,7 @@ import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.j
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
-import { withCanvasDocWriteLock, withWorkspaceWriteLock } from './workspace-lock.js'
+import { withDocumentWriteLock, withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Chunk size shared with the MCP tool write path (server-core's
 // document-io.ts) and migration 0011's FS-blob importer: an arbitrary
@@ -59,20 +59,25 @@ export class ConflictError extends Error {
 }
 
 // ── blob path helpers ──
-// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
+// Legacy snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
 // The documentId is the stable row PK from the `documents` table, so renaming
 // a document's path does not move blobs around.
 //
-// The `canvas/` segment is a stored layout, not a name this module is free to
-// correct: moving it means walking every workspace's blob tree at boot, so it
-// is its own migration-bearing increment rather than part of a rename.
+// The `canvas/` segment names the CONTAINER, which ADR-0009 calls a Document,
+// and it deliberately stays: this tree is being RETIRED, not corrected.
+// `0011-import-fs-blobs` reads it as a frozen literal and
+// `sweep-imported-fs-blobs.ts` deletes each file — then the directory — once
+// its bytes are proven to live in Libsql. A migration that renamed the
+// segment would move every legacy blob out from under that sweep, leaving it
+// neither verified nor cleaned up. There is nothing here to rename once the
+// last file is gone.
 function blobsRoot(): string {
   return join(getDataDir(), 'blobs')
 }
 
 function documentBlobPath(workspaceId: string, documentId: string): string {
   validateWorkspaceId(workspaceId)
-  validateCanvasId(documentId)
+  validateDocumentId(documentId)
   return join(blobsRoot(), workspaceId, 'canvas', `${documentId}.loro`)
 }
 
@@ -100,7 +105,7 @@ async function documentStoreReady(): Promise<LibsqlDocumentStore> {
 
 // Chunk + replace a document's snapshot rows under the canvas-doc write
 // lock. Every mutating MCP tool serializes its load-modify-save against
-// this same key (workspace-lock.ts's withCanvasDocWriteLock) — since both
+// this same key (workspace-lock.ts's withDocumentWriteLock) — since both
 // paths write the same Libsql rows, taking it here closes the lost-update
 // window between the HTTP/WS save path and an agent's tool call racing on
 // the SAME document. Callers hold the workspace lock first; that nesting
@@ -113,10 +118,10 @@ async function saveSnapshotLocked(
   snapshot: Uint8Array,
   frontier: Uint8Array<ArrayBuffer>,
 ): Promise<void> {
-  await withCanvasDocWriteLock(documentId, async () => {
+  await withDocumentWriteLock(documentId, async () => {
     const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
     await documentStore.saveSnapshot({
-      docRef: { kind: 'canvas', documentId },
+      docRef: { kind: 'document', documentId },
       manifest,
       chunks,
       frontier,
@@ -143,8 +148,8 @@ async function mergeAndSaveSnapshotLocked(
   documentId: string,
   doc: LoroDoc,
 ): Promise<number> {
-  const docRef = { kind: 'canvas' as const, documentId }
-  return withCanvasDocWriteLock(documentId, async () => {
+  const docRef = { kind: 'document' as const, documentId }
+  return withDocumentWriteLock(documentId, async () => {
     const stored = await documentStore.readFrontier({ docRef })
     if (stored !== null) {
       const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
@@ -155,7 +160,7 @@ async function mergeAndSaveSnapshotLocked(
             doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
           }
         } catch (err) {
-          getLogger('canvas').warning(
+          getLogger('document').warning(
             { workspaceId, documentId, err: err as Error },
             'stored snapshot failed to merge before save; overwriting',
           )
@@ -196,13 +201,13 @@ export async function saveDocument(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const overwrite = options.overwrite ?? false
     const db = await dbReady()
-    const existingCanvasId = await getDocumentIdByPath(db, workspaceId, path)
-    if (existingCanvasId && !overwrite) {
+    const existingDocumentId = await getDocumentIdByPath(db, workspaceId, path)
+    if (existingDocumentId && !overwrite) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-    // Pre-allocate the documentId for new canvases so the snapshot can be
+    // Pre-allocate the documentId for new documents so the snapshot can be
     // written before any metadata row commits. If the snapshot write fails
     // (driver error, transient corruption) we leave no DB row behind, so a
     // retry can succeed instead of hitting a phantom ConflictError on the
@@ -211,11 +216,11 @@ export async function saveDocument(
     // table and the port's DocumentEntry accepts only a canonical ULID, so a
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
-    const documentId = existingCanvasId ?? generateDocumentId()
+    const documentId = existingDocumentId ?? generateDocumentId()
     const documentStore = await documentStoreReady()
     const savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
     await upsertWorkspaceRow(db, workspaceId)
-    if (existingCanvasId) {
+    if (existingDocumentId) {
       // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
       // `kind` and must never touch the stored value. An explicit `kind` is
       // an intentional sync request (e.g. restore reconciling a different-
@@ -296,7 +301,7 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
   let originalBytes: Uint8Array
   try {
     const snapshot = await documentStore.loadSnapshot({
-      docRef: { kind: 'canvas', documentId },
+      docRef: { kind: 'document', documentId },
     })
     if (snapshot === null) return new LoroDoc()
     try {
@@ -437,12 +442,12 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     // connection in db/index.ts).
     await db.deleteFrom('documents').where('id', '=', documentId).execute()
 
-    // Mirrors wb_document_delete (canvas-crud.ts): the identity row goes
+    // Mirrors wb_document_delete (document-crud.ts): the identity row goes
     // first, then the Libsql snapshot/delta/frontier rows, so a crash
     // between the two leaves an orphaned-but-unreachable snapshot rather
     // than a listed canvas with no content.
     const documentStore = await documentStoreReady()
-    await documentStore.deleteDoc({ docRef: { kind: 'canvas', documentId } })
+    await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
 
     const blobPath = documentBlobPath(workspaceId, documentId)
     await unlinkIfExists(blobPath)
@@ -507,7 +512,7 @@ export async function compactDocument(
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
   const documentStore = await documentStoreReady()
-  const docRef = { kind: 'canvas' as const, documentId }
+  const docRef = { kind: 'document' as const, documentId }
 
   // Hold the canvas-doc write lock across the read that decides the shallow
   // snapshot AND the write that persists it. Previously only the final
@@ -518,7 +523,7 @@ export async function compactDocument(
   // saveDocument's own write already guards against, now reachable here too
   // because compaction's target and the tool surface's target are the same
   // Libsql rows.
-  return withCanvasDocWriteLock(documentId, async () => {
+  return withDocumentWriteLock(documentId, async () => {
     const existing = await documentStore.loadSnapshot({ docRef })
     if (existing === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
@@ -567,7 +572,7 @@ export async function compactDocument(
       shallow,
       doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
     )
-    // Stamp the canvas row so the auto-Optimize loop can skip canvases that
+    // Stamp the canvas row so the auto-Optimize loop can skip documents that
     // have not changed since the last successful compaction, and so the UI
     // can surface "Auto-optimised Ns ago" without reading file mtimes.
     await db
@@ -587,7 +592,7 @@ export async function compactDocument(
   })
 }
 
-// ── most-recent auto-compact timestamp across all canvases ───────────
+// ── most-recent auto-compact timestamp across all documents ───────────
 // Used by the storage report to show "Auto-optimised Ns ago" without
 // client-side aggregation. Returns null when no canvas has been compacted yet.
 export async function readLatestCompactedAt(): Promise<number | null> {
@@ -753,7 +758,7 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 }
 
 // ── rename a canvas's path ──
-// Updates only canvases.path. branches/versions FK on documentId and the blob
+// Updates only documents.path. branches/versions FK on documentId and the blob
 // path also uses documentId, so none of that moves. Returns null (never
 // throws) for a missing source canvas, matching deleteDocument's boolean-
 // shaped "already gone" handling; a rename onto an already-taken path
@@ -795,10 +800,10 @@ export async function renameDocumentPath(
   })
 }
 
-// ── list canvases from the canvases table ──
+// ── list documents from the documents table ──
 export async function listDocuments(
   workspaceId: string,
-): Promise<Pick<CanvasSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
+): Promise<Pick<DocumentSummary, 'path' | 'id' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db

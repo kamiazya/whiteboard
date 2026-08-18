@@ -4,7 +4,7 @@ import type { BoundingBox, Scene } from './scene-graph.js'
 /**
  * `sceneDigest`'s output is the ONLY Zod-schematized surface in this
  * package: it is the AI-facing spatial digest that crosses a process
- * boundary (the `/canvas/{id}/layout` route payload and the `canvas_layout`
+ * boundary (the `/document/{id}/layout` route payload and the `canvas_layout`
  * MCP tool output), per this repo's zod-schema-discipline. Every array
  * below uses an explicit total sort with a documented tie-breaker — no
  * Set/Map iteration order is allowed to leak into the output, or the

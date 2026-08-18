@@ -10,7 +10,7 @@
  * into `createSpatialTheme`. Export (mcp-server) and the read-only viewer
  * (canvas-viewer) both call `createSpatialTheme({ mode: 'light' })`
  * directly for the same reason this file is pinned to light on export (see
- * `useCanvasSync.ts`'s `exportScene`) — a user's UI theme must never change
+ * `useDocumentSync.ts`'s `exportScene`) — a user's UI theme must never change
  * exported SVG/PNG bytes.
  */
 import {

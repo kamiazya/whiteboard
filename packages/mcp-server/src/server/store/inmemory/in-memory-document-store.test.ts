@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { InMemoryDocumentStore } from './in-memory-document-store.js'
 
 function canvasRef(documentId: string): DocRef {
-  return { kind: 'canvas', documentId }
+  return { kind: 'document', documentId }
 }
 
 describe('InMemoryDocumentStore', () => {
@@ -97,7 +97,7 @@ describe('InMemoryDocumentStore', () => {
 
   it('isolates docRef kind (canvas vs workspace-tree with the same id shape)', async () => {
     const store = new InMemoryDocumentStore()
-    const canvasDocRef: DocRef = { kind: 'canvas', documentId: 'shared-id' }
+    const canvasDocRef: DocRef = { kind: 'document', documentId: 'shared-id' }
     const workspaceDocRef: DocRef = { kind: 'workspace-tree', workspaceId: 'shared-id' }
 
     await store.appendDeltas({

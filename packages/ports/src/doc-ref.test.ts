@@ -4,7 +4,7 @@ import { docRefSchema } from './doc-ref.js'
 describe('docRefSchema', () => {
   it('accepts a canvas doc ref', () => {
     const result = docRefSchema.safeParse({
-      kind: 'canvas',
+      kind: 'document',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
     expect(result.success).toBe(true)
@@ -20,11 +20,11 @@ describe('docRefSchema', () => {
   })
 
   it('rejects a canvas ref missing documentId', () => {
-    expect(docRefSchema.safeParse({ kind: 'canvas' }).success).toBe(false)
+    expect(docRefSchema.safeParse({ kind: 'document' }).success).toBe(false)
   })
 
   it('rejects a canvas ref whose documentId is not a ULID', () => {
-    expect(docRefSchema.safeParse({ kind: 'canvas', documentId: 'workspace-a' }).success).toBe(
+    expect(docRefSchema.safeParse({ kind: 'document', documentId: 'workspace-a' }).success).toBe(
       false,
     )
   })
@@ -37,8 +37,11 @@ describe('docRefSchema', () => {
 
   it('rejects an extra unknown key (strict)', () => {
     expect(
-      docRefSchema.safeParse({ kind: 'canvas', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', extra: 1 })
-        .success,
+      docRefSchema.safeParse({
+        kind: 'document',
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        extra: 1,
+      }).success,
     ).toBe(false)
   })
 })

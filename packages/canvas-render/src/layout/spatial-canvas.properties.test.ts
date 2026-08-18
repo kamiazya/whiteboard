@@ -143,7 +143,7 @@ describe('layoutSpatialCanvas properties (PBT)', () => {
  * A fixed (not fc-generated) resolver keyed off `spatialNodeArb`'s file
  * pool: deterministic per file, so the property below exercises every
  * `composeFileFacets` path (usable card, degrades-to-nothing, no match)
- * across generated canvases without needing its own arbitrary.
+ * across generated documents without needing its own arbitrary.
  */
 function fakeResolveFacets(ref: string): ResolvedReference | undefined {
   if (ref === 'a.md') {
@@ -200,7 +200,7 @@ describe('layoutSpatialCanvas facet-card properties (PBT)', () => {
 
 /**
  * Keyed off the same `spatialNodeArb` file pool as the facet resolver
- * above, so generated canvases exercise every `composeFileMarkdown` path:
+ * above, so generated documents exercise every `composeFileMarkdown` path:
  * a body that renders, an empty body that degrades, and a reference the
  * resolver does not know.
  */
@@ -313,6 +313,32 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     expect(text).not.toContain('Body')
   })
 
+  it('lets a small node degrade to the card while a bigger sibling renders the body', () => {
+    // Shrunk from seed=-466764184. Two `a.md` file nodes differing only in
+    // height: 17x44 fits the markdown body, 17x40 does not and falls through
+    // to the one-line card. Both outcomes are correct, and a canvas-wide
+    // "no Card anywhere" assertion called the pair a bug — this pins the
+    // mixed-size canvas the property below now judges node by node.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'small', type: 'file', x: 0, y: 0, width: 17, height: 40, file: 'a.md' },
+        { id: 'big', type: 'file', x: 0, y: 0, width: 17, height: 44, file: 'a.md' },
+      ],
+      edges: [],
+    }
+    const text = collectRunText(
+      layoutSpatialCanvas(canvas, {
+        ...bare,
+        resolveReference: (ref) => ({
+          ...fakeResolveMarkdown(ref),
+          ...fakeResolveFacets(ref),
+        }),
+      }).nodes,
+    )
+    expect(text).toContain('Body')
+    expect(text).toContain('Card')
+  })
+
   fcTest.prop([spatialCanvasArb], withDefaults())(
     'a resolved markdown body outranks a resolved facet card wherever the body can render',
     (canvas) => {
@@ -323,24 +349,44 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
       // the pinned 17x40 counterexample above), and asserting past either
       // guard would restate composeFileMarkdown's documented fall-through
       // as a failure.
-      const cardOnly = collectRunText(
-        layoutSpatialCanvas(canvas, { ...bare, resolveReference: fakeResolveFacets }).nodes,
-      )
-      if (!cardOnly.includes('Card')) return
-      const bodyOnly = collectRunText(layoutSpatialCanvas(canvas, withMarkdown).nodes)
-      if (!bodyOnly.includes('Body')) return
+      //
+      // PER NODE, not per canvas, and attributed by laying each node out
+      // ALONE. Degradation is a property of one box's size, so a canvas
+      // holding a box that fits the body beside one that does not renders
+      // Body for the first and Card for the second — legitimately.
+      // Canvas-wide guards let that pair through and then failed on the
+      // Card the small node was entitled to (seed -466764184: 17x40 beside
+      // 17x44, both `a.md`), asserting the documented fall-through was a
+      // bug.
+      //
+      // Indexing the three scenes positionally does NOT fix it: one canvas
+      // node expands into several scene shapes and the count differs
+      // between a card render and a body render, so the indices stop
+      // lining up, both guards stop holding together, and the property
+      // passes vacuously — swapping composeFileMarkdown and
+      // composeFileFacets in spatial-canvas.ts left it green. A one-node
+      // canvas per node is what makes the attribution exact.
+      for (const node of canvas.nodes) {
+        const solo: SpatialCanvas = { nodes: [node], edges: [] }
+        const cardOnly = collectRunText(
+          layoutSpatialCanvas(solo, { ...bare, resolveReference: fakeResolveFacets }).nodes,
+        )
+        if (!cardOnly.includes('Card')) continue
+        const bodyOnly = collectRunText(layoutSpatialCanvas(solo, withMarkdown).nodes)
+        if (!bodyOnly.includes('Body')) continue
 
-      const both = collectRunText(
-        layoutSpatialCanvas(canvas, {
-          ...bare,
-          resolveReference: (ref) => ({
-            ...fakeResolveMarkdown(ref),
-            ...fakeResolveFacets(ref),
-          }),
-        }).nodes,
-      )
-      expect(both).toContain('Body')
-      expect(both).not.toContain('Card')
+        const both = collectRunText(
+          layoutSpatialCanvas(solo, {
+            ...bare,
+            resolveReference: (ref) => ({
+              ...fakeResolveMarkdown(ref),
+              ...fakeResolveFacets(ref),
+            }),
+          }).nodes,
+        )
+        expect(both).toContain('Body')
+        expect(both).not.toContain('Card')
+      }
     },
   )
 })

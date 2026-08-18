@@ -30,19 +30,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 interface MockRoutes {
   workspaces: Array<{ workspaceId: string }>
-  canvasesByWorkspace: Record<string, Array<{ path: string; updatedAt: string; kind?: string }>>
+  documentsByWorkspace: Record<string, Array<{ path: string; updatedAt: string; kind?: string }>>
   namesByWorkspace?: Record<
     string,
-    { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
+    { workspace?: string; documents: Record<string, string>; pinned: string[] } | 'fail'
   >
-  onCreateCanvas?: (workspaceId: string, path: string, kind?: string) => void
+  onCreateDocument?: (workspaceId: string, path: string, kind?: string) => void
   // Return a Response (or a pending promise of one) to override the
   // default 200 {ok:true}.
   onDeleteCanvas?: (workspaceId: string, path: string) => Response | Promise<Response> | undefined
   snapshotByCanvas?: Record<string, Uint8Array>
   onUpdateCanvas?: (workspaceId: string, path: string, bytes: Uint8Array) => void
   onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
-  /** When set, the canvases fetch resolves only after this promise settles. */
+  /** When set, the documents fetch resolves only after this promise settles. */
   delayCanvases?: Promise<void>
 }
 
@@ -52,22 +52,22 @@ function installFetchMock(routes: MockRoutes) {
     if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
       return Promise.resolve(jsonResponse({ workspaces: routes.workspaces }))
     }
-    const canvasesMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases$/)
-    if (canvasesMatch && (!init || init.method === undefined)) {
-      const workspaceId = decodeURIComponent(canvasesMatch[1])
-      const canvases = routes.canvasesByWorkspace[workspaceId]
-      if (!canvases) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      const respond = () => jsonResponse({ canvases })
+    const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
+    if (documentsMatch && (!init || init.method === undefined)) {
+      const workspaceId = decodeURIComponent(documentsMatch[1])
+      const documents = routes.documentsByWorkspace[workspaceId]
+      if (!documents) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+      const respond = () => jsonResponse({ documents })
       if (routes.delayCanvases) return routes.delayCanvases.then(respond)
       return Promise.resolve(respond())
     }
-    if (canvasesMatch && init?.method === 'POST') {
-      const workspaceId = decodeURIComponent(canvasesMatch[1])
+    if (documentsMatch && init?.method === 'POST') {
+      const workspaceId = decodeURIComponent(documentsMatch[1])
       const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
-      routes.onCreateCanvas?.(workspaceId, body.path, body.kind)
+      routes.onCreateDocument?.(workspaceId, body.path, body.kind)
       return Promise.resolve(jsonResponse({ path: body.path }))
     }
-    const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)$/)
+    const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents\/([^/]+)$/)
     if (canvasDeleteMatch && init?.method === 'DELETE') {
       const workspaceId = decodeURIComponent(canvasDeleteMatch[1])
       const path = decodeURIComponent(canvasDeleteMatch[2])
@@ -83,7 +83,7 @@ function installFetchMock(routes: MockRoutes) {
       }
       return Promise.resolve(jsonResponse(names))
     }
-    const snapshotMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/snapshot$/)
+    const snapshotMatch = url.match(/\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/)
     if (snapshotMatch) {
       const path = decodeURIComponent(snapshotMatch[2])
       const bytes = routes.snapshotByCanvas?.[path]
@@ -95,23 +95,23 @@ function installFetchMock(routes: MockRoutes) {
         }),
       )
     }
-    const updateMatch = url.match(/\/api\/w\/([^/]+)\/canvas\/(.+)\/update$/)
+    const updateMatch = url.match(/\/api\/w\/([^/]+)\/document\/(.+)\/update$/)
     if (updateMatch && init?.method === 'POST') {
       const workspaceId = decodeURIComponent(updateMatch[1])
       const path = decodeURIComponent(updateMatch[2])
       routes.onUpdateCanvas?.(workspaceId, path, new Uint8Array(init.body as ArrayBuffer))
       return Promise.resolve(jsonResponse({ ok: true }))
     }
-    const canvasNameMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)\/name$/)
+    const canvasNameMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents\/([^/]+)\/name$/)
     if (canvasNameMatch && init?.method === 'PUT') {
       const workspaceId = decodeURIComponent(canvasNameMatch[1])
       const path = decodeURIComponent(canvasNameMatch[2])
       const body = JSON.parse(String(init.body)) as { name: string }
       routes.onSetCanvasName?.(workspaceId, path, body.name)
       const names = routes.namesByWorkspace?.[workspaceId]
-      const canvases = names && names !== 'fail' ? names.canvases : {}
+      const documents = names && names !== 'fail' ? names.documents : {}
       return Promise.resolve(
-        jsonResponse({ canvases: { ...canvases, [path]: body.name }, pinned: [] }),
+        jsonResponse({ documents: { ...documents, [path]: body.name }, pinned: [] }),
       )
     }
     return Promise.resolve(jsonResponse({}, 404))
@@ -139,29 +139,29 @@ describe('DaemonIndexPage', () => {
   it('renders one card per canvas of the selected workspace with display name and relative updatedAt', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: {
-        'ws-a': { canvases: { alpha: 'Alpha Board' }, pinned: [] },
+        'ws-a': { documents: { alpha: 'Alpha Board' }, pinned: [] },
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
     expect(await screen.findByText('Alpha Board')).toBeTruthy()
     expect(screen.queryByText('beta')).toBeNull()
   })
 
   it('marks a markdown row from the daemon list response as markdown on its card', async () => {
-    // The read direction of `kind`: the daemon's canvases-list response maps
-    // into CanvasRow and reaches the card's text marker. The create/POST
+    // The read direction of `kind`: the daemon's documents-list response maps
+    // into DocumentRow and reaches the card's text marker. The create/POST
     // direction is covered separately; without this test every page-level
     // mock defaults to spatial and the mapping could silently drop kind.
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [
           { path: 'note', updatedAt: new Date().toISOString(), kind: 'markdown' },
           { path: 'board', updatedAt: new Date().toISOString() },
@@ -169,10 +169,10 @@ describe('DaemonIndexPage', () => {
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('note')
 
-    const cards = screen.getAllByTestId('canvas-list-card')
+    const cards = screen.getAllByTestId('document-list-card')
     const noteCard = cards.find((c) => within(c).queryByText('note'))!
     const boardCard = cards.find((c) => within(c).queryByText('board'))!
     expect(within(noteCard).getByText(/markdown/i)).toBeTruthy()
@@ -180,37 +180,37 @@ describe('DaemonIndexPage', () => {
   })
 
   it('keeps a create entry point when the canvas list fails to load', async () => {
-    // A failed listCanvases must not dead-end the page: creating routes
+    // A failed listDocuments must not dead-end the page: creating routes
     // around the broken list (the POST needs no rows, and success navigates
     // away), so the error state keeps the same recovery path the toolbar
     // used to provide.
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {},
-      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      documentsByWorkspace: {},
+      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     expect(await screen.findByRole('alert')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
   it('fades the loaded grid in for skeleton-to-content continuity', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
-    const card = await screen.findByTestId('canvas-list-card')
+    const card = await screen.findByTestId('document-list-card')
     const wrapper = card.closest('.animate-in') as HTMLElement | null
     expect(wrapper).not.toBeNull()
     expect(wrapper?.className).toMatch(/\bfade-in-0\b/)
@@ -219,7 +219,7 @@ describe('DaemonIndexPage', () => {
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
@@ -229,7 +229,7 @@ describe('DaemonIndexPage', () => {
       <DaemonIndexPage
         daemonBaseUrl={DAEMON_BASE_URL}
         initialWorkspaceId="ws-b"
-        onOpenCanvas={vi.fn()}
+        onOpenDocument={vi.fn()}
       />,
     )
 
@@ -241,7 +241,7 @@ describe('DaemonIndexPage', () => {
   it('falls back to the first-listed workspace when initialWorkspaceId is not in the daemon list', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
@@ -251,7 +251,7 @@ describe('DaemonIndexPage', () => {
       <DaemonIndexPage
         daemonBaseUrl={DAEMON_BASE_URL}
         initialWorkspaceId="stale-deleted-workspace"
-        onOpenCanvas={vi.fn()}
+        onOpenDocument={vi.fn()}
       />,
     )
 
@@ -261,13 +261,13 @@ describe('DaemonIndexPage', () => {
   it('switching the workspace selector replaces the visible cards', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByText('alpha')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
@@ -292,16 +292,16 @@ describe('DaemonIndexPage', () => {
           jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
         )
       }
-      if (url.includes('/ws-a/canvases')) {
+      if (url.includes('/ws-a/documents')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
-      if (url.includes('/ws-b/canvases')) {
+      if (url.includes('/ws-b/documents')) {
         return new Promise<Response>((resolve) => {
           waiters.push(() =>
             resolve(
-              jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
+              jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
             ),
           )
         })
@@ -310,22 +310,22 @@ describe('DaemonIndexPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByText('alpha')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
 
-    // ws-b's canvases request is still pending — the old grid must be gone NOW.
+    // ws-b's documents request is still pending — the old grid must be gone NOW.
     expect(screen.queryByText('alpha')).toBeNull()
 
     releaseB()
     expect(await screen.findByText('beta')).toBeTruthy()
   })
 
-  it('sorts pinned canvases before unpinned, and unpinned by updatedAt desc', async () => {
+  it('sorts pinned documents before unpinned, and unpinned by updatedAt desc', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [
           { path: 'old', updatedAt: '2020-01-01T00:00:00Z' },
           { path: 'new', updatedAt: '2026-01-01T00:00:00Z' },
@@ -333,14 +333,14 @@ describe('DaemonIndexPage', () => {
         ],
       },
       namesByWorkspace: {
-        'ws-a': { canvases: {}, pinned: ['pinned-one'] },
+        'ws-a': { documents: {}, pinned: ['pinned-one'] },
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('pinned-one')
 
-    const cards = screen.getAllByTestId('canvas-list-card')
+    const cards = screen.getAllByTestId('document-list-card')
     expect(cards).toHaveLength(3)
     expect(within(cards[0]!).getByText('pinned-one')).toBeTruthy()
     expect(within(cards[1]!).getByText('new')).toBeTruthy()
@@ -350,7 +350,7 @@ describe('DaemonIndexPage', () => {
   it('filters cards by search input matching path or display name', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [
           { path: 'alpha', updatedAt: new Date().toISOString() },
           { path: 'beta', updatedAt: new Date().toISOString() },
@@ -358,10 +358,10 @@ describe('DaemonIndexPage', () => {
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
-    fireEvent.change(screen.getByLabelText('Search canvases'), { target: { value: 'bet' } })
+    fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'bet' } })
 
     expect(screen.queryByText('alpha')).toBeNull()
     expect(screen.getByText('beta')).toBeTruthy()
@@ -370,23 +370,23 @@ describe('DaemonIndexPage', () => {
   it('degrades gracefully to unpinned/path-only when the names fetch fails', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': 'fail' },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
-  it('shows an alert (not a blank page) when listCanvases fails for the selected workspace', async () => {
+  it('shows an alert (not a blank page) when listDocuments fails for the selected workspace', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {},
+      documentsByWorkspace: {},
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByRole('alert')).toBeTruthy()
   })
 
@@ -396,7 +396,7 @@ describe('DaemonIndexPage', () => {
       vi.fn(() => Promise.resolve(jsonResponse({ message: 'boom' }, 500))),
     )
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
     expect((await screen.findByRole('alert')).textContent).toBe('Failed to load workspaces.')
   })
@@ -410,47 +410,49 @@ describe('DaemonIndexPage', () => {
           jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return new Promise<Response>((resolve) => {
           resolveA = resolve
         })
       }
-      if (url.endsWith('/api/workspaces/ws-b/canvases')) {
+      if (url.endsWith('/api/workspaces/ws-b/documents')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
         )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByLabelText('Workspace')).toBeTruthy())
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
     expect(await screen.findByText('beta')).toBeTruthy()
 
-    resolveA?.(jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }))
+    resolveA?.(
+      jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+    )
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(screen.queryByText('alpha')).toBeNull()
     expect(screen.getByText('beta')).toBeTruthy()
   })
 
-  it('calls onOpenCanvas with the card identity on click', async () => {
+  it('calls onOpenDocument with the card identity on click', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
-    const card = await screen.findByTestId('canvas-list-card')
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+    const card = await screen.findByTestId('document-list-card')
     fireEvent.click(card)
 
-    expect(onOpenCanvas).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
   })
 
   it('duplicates a canvas via its card Duplicate action without opening it', async () => {
@@ -459,18 +461,18 @@ describe('DaemonIndexPage', () => {
     const names: Array<[string, string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
-      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       snapshotByCanvas: { alpha: new Uint8Array([1, 2, 3]) },
-      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
       onUpdateCanvas: (workspaceId, path, bytes) => updates.push([workspaceId, path, bytes]),
       onSetCanvasName: (workspaceId, path, name) => names.push([workspaceId, path, name]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
     fireEvent.click(duplicateBtn)
 
@@ -480,7 +482,7 @@ describe('DaemonIndexPage', () => {
     expect(updates).toEqual([['ws-a', 'alpha-copy', new Uint8Array([1, 2, 3])]])
     expect(names).toEqual([['ws-a', 'alpha-copy', 'Alpha (copy)']])
     // Clicking the Duplicate action must not also open the source canvas.
-    expect(onOpenCanvas).not.toHaveBeenCalled()
+    expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
   it('disables the card Duplicate button while in flight, and double-clicking produces exactly one copy', async () => {
@@ -492,36 +494,36 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { path: string }
         created.push(['ws-a', body.path])
         return Promise.resolve(jsonResponse({ path: body.path }))
       }
       if (url.endsWith('/api/workspaces/ws-a/names')) {
-        return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
+        return Promise.resolve(jsonResponse({ documents: { alpha: 'Alpha' }, pinned: [] }))
       }
-      if (url.endsWith('/api/w/ws-a/canvas/alpha/snapshot')) {
+      if (url.endsWith('/api/w/ws-a/document/alpha/snapshot')) {
         snapshotCalls++
         return new Promise<Response>((resolve) => {
           resolveSnapshot = resolve
         })
       }
-      if (/\/api\/canvas\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+      if (/\/api\/document\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ ok: true }))
       }
-      if (/\/api\/workspaces\/ws-a\/canvases\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
-        return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
+      if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse({ documents: { alpha: 'Alpha' }, pinned: [] }))
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     const duplicateBtn = (await screen.findByRole('button', {
       name: /duplicate/i,
     })) as HTMLButtonElement
@@ -546,13 +548,13 @@ describe('DaemonIndexPage', () => {
   it('shows an alert and re-enables the Duplicate button when duplicating fails', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
-      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       // No snapshotByCanvas entry for 'alpha' -> the mock 404s the snapshot read.
     })
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     const duplicateBtn = (await screen.findByRole('button', {
       name: /duplicate/i,
     })) as HTMLButtonElement
@@ -571,17 +573,17 @@ describe('DaemonIndexPage', () => {
           jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-b/canvases') && (!init || init.method === undefined)) {
+      if (url.endsWith('/api/workspaces/ws-b/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { path: string }
         return Promise.resolve(jsonResponse({ path: body.path }))
       }
@@ -589,24 +591,24 @@ describe('DaemonIndexPage', () => {
         url.endsWith('/api/workspaces/ws-a/names') ||
         url.endsWith('/api/workspaces/ws-b/names')
       ) {
-        return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
       }
-      if (url.endsWith('/api/w/ws-a/canvas/alpha/snapshot')) {
+      if (url.endsWith('/api/w/ws-a/document/alpha/snapshot')) {
         return new Promise<Response>((resolve) => {
           resolveSnapshot = resolve
         })
       }
-      if (/\/api\/canvas\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+      if (/\/api\/document\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ ok: true }))
       }
-      if (/\/api\/workspaces\/ws-a\/canvases\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
-        return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
     fireEvent.click(duplicateBtn)
 
@@ -635,19 +637,19 @@ describe('DaemonIndexPage', () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
     await createViaMenu()
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled']])
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -656,19 +658,19 @@ describe('DaemonIndexPage', () => {
     const created: Array<[string, string, string | undefined]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
+      onCreateDocument: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
     await createViaMenu('New markdown note')
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled', 'markdown']])
   })
 
@@ -676,19 +678,19 @@ describe('DaemonIndexPage', () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'untitled', updatedAt: new Date().toISOString() }],
       },
-      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('untitled')
 
     await createViaMenu()
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2'))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled-2'))
     expect(created).toEqual([['ws-a', 'untitled-2']])
   })
 
@@ -698,24 +700,24 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
-        return Promise.resolve(jsonResponse({ canvases: [] }))
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(jsonResponse({ documents: [] }))
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     // Empty workspace: the empty state's create action is the entry point.
     fireEvent.click(await screen.findByRole('button', { name: 'Create a canvas' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('Request failed (500).')
     expect(screen.queryByText(/boom/)).toBeNull()
-    expect(onOpenCanvas).not.toHaveBeenCalled()
+    expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
   // The `disabled` attribute only protects AFTER React re-renders. Two presses inside one tick
@@ -729,19 +731,19 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         created.push(JSON.parse(String(init.body)).path as string)
         return Promise.resolve(jsonResponse({ path: 'untitled' }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
-        return Promise.resolve(jsonResponse({ canvases: [] }))
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(jsonResponse({ documents: [] }))
       }
-      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     // Empty workspace: the empty state's create action is the direct-click
     // entry point (the toolbar + goes through a menu, which cannot fire
     // twice in one tick — its item unmounts on the first select).
@@ -751,7 +753,7 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(button)
     fireEvent.click(button)
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalled())
     expect(created).toEqual(['untitled'])
   })
 
@@ -767,23 +769,23 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         created.push(JSON.parse(String(init.body)).path as string)
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
         })
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(
-          jsonResponse({ canvases: [{ path: 'existing', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({ documents: [{ path: 'existing', updatedAt: new Date().toISOString() }] }),
         )
       }
-      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
     await createViaMenu()
@@ -798,7 +800,7 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual(['untitled'])
 
     resolveCreate?.(jsonResponse({ path: 'untitled' }))
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
 
@@ -810,21 +812,21 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         created.push(JSON.parse(String(init.body)).path as string)
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
         })
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
-        return Promise.resolve(jsonResponse({ canvases: [] }))
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(jsonResponse({ documents: [] }))
       }
-      return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     const button = await screen.findByRole('button', { name: 'Create a canvas' })
 
     fireEvent.click(button)
@@ -835,7 +837,7 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual(['untitled'])
 
     resolveCreate?.(jsonResponse({ path: 'untitled' }))
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
 
@@ -850,7 +852,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
         const path = JSON.parse(String(init?.body ?? '{}')).path as string
         created.push(path)
         if (serverPaths.includes(path)) {
@@ -859,11 +861,11 @@ describe('DaemonIndexPage', () => {
         serverPaths = [...serverPaths, path]
         return Promise.resolve(jsonResponse({ path }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
         // The list starts EMPTY (a second tab created "untitled"), so the first derive collides.
         return Promise.resolve(
           jsonResponse({
-            canvases:
+            documents:
               created.length === 0
                 ? []
                 : serverPaths.map((path) => ({ path, updatedAt: new Date().toISOString() })),
@@ -873,9 +875,9 @@ describe('DaemonIndexPage', () => {
       return Promise.resolve(jsonResponse({ names: {} }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     // The list starts empty, so the first create goes through the empty state.
     fireEvent.click(await screen.findByRole('button', { name: 'Create a canvas' }))
     expect((await screen.findByRole('alert')).textContent).toContain('already exists')
@@ -890,28 +892,28 @@ describe('DaemonIndexPage', () => {
       ),
     )
     await createViaMenu()
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalled())
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalled())
 
     expect(created).toEqual(['untitled', 'untitled-2'])
-    expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled-2')
+    expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled-2')
   })
 
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
     const deleted: string[] = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
-      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha Board' }, pinned: [] } },
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha Board' }, pinned: [] } },
       onDeleteCanvas: (_ws, path) => {
         deleted.push(path)
         return undefined
       },
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />, {
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />, {
       container: document.body,
     })
     await screen.findByText('Alpha Board')
@@ -924,7 +926,7 @@ describe('DaemonIndexPage', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(deleted).toEqual([])
     expect(screen.getByText('Alpha Board')).toBeTruthy()
-    expect(onOpenCanvas).not.toHaveBeenCalled()
+    expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
   it('confirming Delete sends DELETE and the card disappears from the refreshed list', async () => {
@@ -935,7 +937,7 @@ describe('DaemonIndexPage', () => {
     ]
     const routes: Parameters<typeof installFetchMock>[0] = {
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
@@ -948,7 +950,7 @@ describe('DaemonIndexPage', () => {
     }
     installFetchMock(routes)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
     await screen.findByText('alpha')
@@ -971,7 +973,7 @@ describe('DaemonIndexPage', () => {
     const deleted: string[] = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
       onDeleteCanvas: (_ws, path) => {
@@ -982,7 +984,7 @@ describe('DaemonIndexPage', () => {
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
     await screen.findByText('alpha')
@@ -1006,7 +1008,7 @@ describe('DaemonIndexPage', () => {
     let rows = [{ path: 'alpha', updatedAt: new Date().toISOString() }]
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         get 'ws-a'() {
           listFetches += 1
           return rows
@@ -1015,7 +1017,7 @@ describe('DaemonIndexPage', () => {
       onDeleteCanvas: () => jsonResponse({ title: 'Canvas not found' }, 404),
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />, {
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
     await screen.findByText('alpha')
@@ -1039,14 +1041,14 @@ describe('DaemonIndexPage', () => {
   it('has no Storage tab — storage and pairing live on the routed Settings page (design refactor D2)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
     const router = createMemoryRouter(
       [
         {
           path: '*',
-          element: <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />,
+          element: <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />,
         },
       ],
       { initialEntries: ['/'] },
@@ -1067,12 +1069,12 @@ describe('DaemonIndexPage', () => {
   it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'dTMMrBP3c5ah8_SXTRVvC' }],
-      canvasesByWorkspace: {
+      documentsByWorkspace: {
         dTMMrBP3c5ah8_SXTRVvC: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
     // One workspace = nothing to choose; the raw id has no reason to be
@@ -1083,10 +1085,10 @@ describe('DaemonIndexPage', () => {
   it('exposes the New canvas control as an icon-only button whose glyph is aria-hidden', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
     const button = screen.getByRole('button', { name: 'New canvas' })
@@ -1099,10 +1101,10 @@ describe('DaemonIndexPage', () => {
   it('mounts no permanent creation form in the toolbar (ADR-0006)', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
     expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
@@ -1120,49 +1122,49 @@ describe('DaemonIndexPage', () => {
     })
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
       delayCanvases: gate,
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
-    // While the canvases fetch is in flight: structural skeleton, and no
-    // premature "No canvases" copy.
-    expect(await screen.findByRole('status', { name: /loading canvases/i })).toBeTruthy()
-    expect(screen.queryByText(/no canvases/i)).toBeNull()
+    // While the documents fetch is in flight: structural skeleton, and no
+    // premature "No documents" copy.
+    expect(await screen.findByRole('status', { name: /loading documents/i })).toBeTruthy()
+    expect(screen.queryByText(/no documents/i)).toBeNull()
 
     release()
     await screen.findByText('alpha')
-    expect(screen.queryByRole('status', { name: /loading canvases/i })).toBeNull()
+    expect(screen.queryByRole('status', { name: /loading documents/i })).toBeNull()
   })
 
   it('empty workspace shows one clear next action that creates and opens a canvas', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [] },
-      onCreateCanvas: (workspaceId, path) => created.push([workspaceId, path]),
+      documentsByWorkspace: { 'ws-a': [] },
+      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
     })
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
 
-    expect(await screen.findByText('No canvases yet')).toBeTruthy()
+    expect(await screen.findByText('No documents yet')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
 
     // The action creates immediately — no naming step gates it — and opens
     // the result, same as the toolbar's "New canvas" control.
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'untitled'))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
   it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
-      canvasesByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
     const grid = screen.getByRole('button', { name: 'Grid view' })

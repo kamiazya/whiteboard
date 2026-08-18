@@ -9,14 +9,14 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
-  registerCanvasInWorkspace,
+  registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { loadDocument } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { createTidyCanvasTool } from './tidy-canvas.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(
@@ -24,13 +24,13 @@ async function seedCanvas(
   canvas: SpatialCanvas,
   lockedIds: readonly string[] = [],
 ): Promise<void> {
-  await registerCanvasInWorkspace(documentStore, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   for (const id of lockedIds) setNodeLock(seedDoc, id, true)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'canvas', documentId: CANVAS_ID },
+    docRef: { kind: 'document', documentId: DOCUMENT_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -63,16 +63,16 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
-    expect(result.documentId).toBe(CANVAS_ID)
+    expect(result.documentId).toBe(DOCUMENT_ID)
     expect([...result.moved].sort((a, b) => a.id.localeCompare(b.id))).toEqual([
       { id: 'a', x: 0, y: 96 },
       { id: 'b', x: 200, y: 96 },
       { id: 'c', x: 400, y: 96 },
     ])
 
-    const { canvas } = await loadDocument(deps, CANVAS_ID)
+    const { canvas } = await loadDocument(deps, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.y)).toEqual([96, 96, 96])
   })
 
@@ -84,12 +84,12 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     // b joins a's band (118 - 101 < 24) and lands on round8(101) = 104;
     // locked a stays exactly where it was.
     expect(result.moved).toEqual([{ id: 'b', x: 200, y: 104 }])
-    const { canvas } = await loadDocument(deps, CANVAS_ID)
+    const { canvas } = await loadDocument(deps, DOCUMENT_ID)
     expect(canvas.nodes.find((n) => n.id === 'a')?.y).toBe(101)
     expect(canvas.nodes.find((n) => n.id === 'b')?.y).toBe(104)
   })
@@ -104,7 +104,7 @@ describe('wb_canvas_tidy tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: CANVAS_ID,
+      documentId: DOCUMENT_ID,
       scope: ['a'],
     })
 
@@ -120,7 +120,7 @@ describe('wb_canvas_tidy tool', () => {
     const deps = makeDeps(documentStore)
     const tool = createTidyCanvasTool(deps)
 
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.moved).toEqual([])
   })
@@ -133,8 +133,8 @@ describe('wb_canvas_tidy tool', () => {
     })
     const tool = createTidyCanvasTool(makeDeps(documentStore))
 
-    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
-    const second = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    const second = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(second.moved).toEqual([])
   })
@@ -144,7 +144,7 @@ describe('wb_canvas_tidy tool', () => {
     const tool = createTidyCanvasTool(makeDeps(documentStore))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
     ).rejects.toThrow()
   })
 })
@@ -162,8 +162,8 @@ describe('wb_canvas_tidy on a markdown document', () => {
     // document predating the format guards, or one the web editor gave a
     // second node, is the one that got repositioned.
     const store = new FakeDocumentStore()
-    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
-    await seedDoc(store, CANVAS_ID, (doc) => {
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
       writeSpatialCanvas(doc, {
         nodes: [
@@ -176,10 +176,10 @@ describe('wb_canvas_tidy on a markdown document', () => {
     const deps = makeDeps(store)
 
     await expect(
-      createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID }),
+      createTidyCanvasTool(deps).execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
-    const { canvas } = await loadDocument(deps, CANVAS_ID)
+    const { canvas } = await loadDocument(deps, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }))).toEqual([
       { id: 'okf-body', x: 3, y: 7 },
       { id: 'stray', x: 211, y: 9 },

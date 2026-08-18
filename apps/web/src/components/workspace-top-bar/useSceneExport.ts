@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { SceneExportFormat } from '@/hooks/useCanvasSync'
+import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 import type { AppLogger } from '@/lib/app-logger'
 
 // Keyed by SceneExportFormat so a new format must add its own entry rather

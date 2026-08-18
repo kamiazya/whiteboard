@@ -145,7 +145,7 @@ export function sseStreamSourceContract(
   })
 
   it('does not deliver an update addressed to another document', async () => {
-    // One stream serves many canvases, so every frame carries its doc key.
+    // One stream serves many documents, so every frame carries its doc key.
     // Without this an edit to one canvas would be applied to another.
     const h = await create()
     const doc = nextDoc()

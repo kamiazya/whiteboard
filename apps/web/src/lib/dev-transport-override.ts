@@ -3,7 +3,7 @@
  *
  * It exists because the SSE path — and therefore the SharedWorker, and
  * therefore the whole authority replica behind it — is UNREACHABLE in local
- * development. `selectCanvasTransport` chooses SSE only for a secure page
+ * development. `selectDocumentTransport` chooses SSE only for a secure page
  * talking to an insecure daemon, and "secure" there means the literal `https:`
  * scheme; `pnpm dev` serves `http://localhost`, so every local session picks
  * WebSocket. That is the correct choice (an http page has no mixed-content
@@ -23,11 +23,11 @@
  * navigation: a canvas is usually reached by clicking through the index, and
  * a parameter would be gone by the time it mattered.
  */
-import type { CanvasTransport } from '@kamiazya/whiteboard-mcp/select-canvas-transport'
+import type { DocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 
 export const DEV_TRANSPORT_OVERRIDE_KEY = 'whiteboard:dev-transport'
 
-export function devTransportOverride(): CanvasTransport | undefined {
+export function devTransportOverride(): DocumentTransport | undefined {
   // Not a runtime feature check — a build-time constant. Vite substitutes
   // `false` here for a production build, so everything below folds away and
   // the key never reaches the shipped bundle. `scripts/smoke-artifact.mjs`

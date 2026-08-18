@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  browserLocalCanvasPath,
+  browserLocalDocumentPath,
   browserLocalIndexPath,
   canvasPath,
   daemonRoutePath,
@@ -23,17 +23,17 @@ describe('app-routes', () => {
   })
 
   it('builds a canvas path under the workspace it belongs to', () => {
-    expect(canvasPath('w1', 'main')).toBe('/w/w1/canvas/main')
+    expect(canvasPath('w1', 'main')).toBe('/w/w1/document/main')
   })
 
   it('percent-encodes the workspace, and the path per segment', () => {
-    expect(canvasPath('w 1', 'my/path')).toBe('/w/w%201/canvas/my/path')
+    expect(canvasPath('w 1', 'my/path')).toBe('/w/w%201/document/my/path')
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
   it('builds browser-local paths', () => {
     expect(browserLocalIndexPath()).toBe('/local')
-    expect(browserLocalCanvasPath('abc-123')).toBe('/local/abc-123')
+    expect(browserLocalDocumentPath('abc-123')).toBe('/local/abc-123')
   })
 })
 
@@ -47,8 +47,8 @@ describe('parseDaemonRoute', () => {
   })
 
   it('parses a canvas route', () => {
-    expect(parseDaemonRoute('/w/w1/canvas/main')).toEqual({
-      kind: 'canvas',
+    expect(parseDaemonRoute('/w/w1/document/main')).toEqual({
+      kind: 'document',
       workspaceId: 'w1',
       path: 'main',
     })
@@ -58,35 +58,35 @@ describe('parseDaemonRoute', () => {
     // The whole point of the shape: a document's path IS the URL's tail, one
     // URL segment per path segment, so the hierarchy the workspace shows is
     // the hierarchy the address bar shows. The data path below has been able
-    // to load these since the canvases family took paths.
-    expect(parseDaemonRoute('/w/w1/canvas/notes/2026/plan')).toEqual({
-      kind: 'canvas',
+    // to load these since the documents family took paths.
+    expect(parseDaemonRoute('/w/w1/document/notes/2026/plan')).toEqual({
+      kind: 'document',
       workspaceId: 'w1',
       path: 'notes/2026/plan',
     })
   })
 
   it('round-trips a nested path through daemonRoutePath', () => {
-    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', path: 'notes/2026/plan' })).toEqual(
-      '/w/w1/canvas/notes/2026/plan',
-    )
+    expect(
+      daemonRoutePath({ kind: 'document', workspaceId: 'w1', path: 'notes/2026/plan' }),
+    ).toEqual('/w/w1/document/notes/2026/plan')
   })
 
   it('decodes each tail segment separately, keeping the separators', () => {
-    expect(parseDaemonRoute('/w/w1/canvas/a%20b/c%20d')).toEqual({
-      kind: 'canvas',
+    expect(parseDaemonRoute('/w/w1/document/a%20b/c%20d')).toEqual({
+      kind: 'document',
       workspaceId: 'w1',
       path: 'a b/c d',
     })
-    expect(canvasPath('w1', 'a b/c d')).toBe('/w/w1/canvas/a%20b/c%20d')
+    expect(canvasPath('w1', 'a b/c d')).toBe('/w/w1/document/a%20b/c%20d')
   })
 
   it('treats a malformed segment anywhere in the tail as not-a-route', () => {
-    expect(parseDaemonRoute('/w/w1/canvas/ok/ma%in')).toBeNull()
+    expect(parseDaemonRoute('/w/w1/document/ok/ma%in')).toBeNull()
   })
 
   it('is not confused by the workspace-index route it now nests under', () => {
-    // `/w/w1` and `/w/w1/canvas/...` share a prefix; the canvas branch must
+    // `/w/w1` and `/w/w1/document/...` share a prefix; the canvas branch must
     // not swallow the bare workspace route, nor the reverse.
     expect(parseDaemonRoute('/w/w1')).toEqual({ kind: 'index', workspaceId: 'w1' })
     expect(parseDaemonRoute('/w/w1/canvas')).toBeNull()
@@ -96,13 +96,13 @@ describe('parseDaemonRoute', () => {
     expect(parseDaemonRoute('/local/abc')).toBeNull()
     expect(parseDaemonRoute('/something/else')).toBeNull()
     // The retired shape is not a route any more.
-    expect(parseDaemonRoute('/canvas/w1/main')).toBeNull()
+    expect(parseDaemonRoute('/document/w1/main')).toBeNull()
   })
 
   it('round-trips through daemonRoutePath', () => {
-    const route = parseDaemonRoute('/w/w1/canvas/main')
+    const route = parseDaemonRoute('/w/w1/document/main')
     expect(route).not.toBeNull()
-    expect(daemonRoutePath(route!)).toBe('/w/w1/canvas/main')
+    expect(daemonRoutePath(route!)).toBe('/w/w1/document/main')
   })
 })
 
@@ -116,8 +116,8 @@ describe('daemonRoutePath', () => {
   })
 
   it('builds a canvas path', () => {
-    expect(daemonRoutePath({ kind: 'canvas', workspaceId: 'w1', path: 'main' })).toBe(
-      '/w/w1/canvas/main',
+    expect(daemonRoutePath({ kind: 'document', workspaceId: 'w1', path: 'main' })).toBe(
+      '/w/w1/document/main',
     )
   })
 })
@@ -129,7 +129,7 @@ describe('parseBrowserLocalRoute', () => {
 
   it('returns null for the bare /local index and unrelated paths', () => {
     expect(parseBrowserLocalRoute('/local')).toBeNull()
-    expect(parseBrowserLocalRoute('/w/w1/canvas/main')).toBeNull()
+    expect(parseBrowserLocalRoute('/w/w1/document/main')).toBeNull()
   })
 })
 
@@ -138,8 +138,8 @@ describe('parseBrowserLocalRoute', () => {
 // index.
 describe('malformed percent-encoding', () => {
   it('treats an undecodable segment as not-a-route instead of throwing', () => {
-    expect(parseDaemonRoute('/w/w%1/canvas/main')).toBeNull()
-    expect(parseDaemonRoute('/w/w1/canvas/ma%in')).toBeNull()
+    expect(parseDaemonRoute('/w/w%1/document/main')).toBeNull()
+    expect(parseDaemonRoute('/w/w1/document/ma%in')).toBeNull()
     expect(parseDaemonRoute('/w/%E0%A4%A')).toBeNull()
     expect(parseBrowserLocalRoute('/local/%zz')).toBeNull()
   })
@@ -150,7 +150,7 @@ describe('isKnownAppPath', () => {
     for (const p of [
       '/',
       '/w/ws1',
-      '/w/ws1/canvas/main',
+      '/w/ws1/document/main',
       '/local',
       '/local/c1',
       '/pair',
@@ -166,7 +166,7 @@ describe('isKnownAppPath', () => {
   it('rejects unknown paths so App can show not-found instead of silently falling through', () => {
     for (const p of [
       '/nope',
-      '/canvas/ws1/main',
+      '/document/ws1/main',
       '/w/ws1/canvas',
       '/local/a/b',
       '/w/',

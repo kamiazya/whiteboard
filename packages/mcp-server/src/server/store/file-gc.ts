@@ -4,11 +4,11 @@ import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
-import type { purgeResultSchema } from '../../shared/api-contracts/canvas.js'
+import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
-import { loadCanvasBranches } from './branches-store.js'
+import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
@@ -30,7 +30,7 @@ const log = getLogger('file-gc')
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 
 // Single source of truth for the wire shape is purgeResultSchema
-// (shared/api-contracts/canvas.ts) — both routes/files.ts's response and
+// (shared/api-contracts/document.ts) — both routes/files.ts's response and
 // this internal return type derive from it so they cannot drift apart.
 export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 
@@ -130,12 +130,12 @@ async function collectReferencedFileIds(
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
-  const canvases = await listDocuments(workspaceId)
-  for (const { path } of canvases) {
+  const documents = await listDocuments(workspaceId)
+  for (const { path } of documents) {
     const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
 
-    const { branches } = await loadCanvasBranches(workspaceId, path)
+    const { branches } = await loadDocumentBranches(workspaceId, path)
     for (const branch of branches) {
       // Every branch tip (including HEAD's, which is redundant with the
       // live scan above but harmless) is a live reference set — a file

@@ -85,7 +85,7 @@ const server = setupServer(
   // Addressed by workspace and path rather than by the document key the rest
   // of the worker routes on — the key IS `${workspaceId}/${path}`, which is
   // what lets the worker reconstruct this URL at all.
-  http.post(`${BASE}/api/w/:workspaceId/canvas/:path/update`, async ({ request, params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
     updateWrites.push({
       workspaceId: String(params.workspaceId),
       path: String(params.path),
@@ -97,7 +97,7 @@ const server = setupServer(
   // The worker seeds every subscribed document's replica from this route.
   // Answered (with "unknown") rather than left unhandled: `bypass` would let
   // the request escape to whatever real daemon is listening on this port.
-  http.get(`${BASE}/api/w/:workspaceId/canvas/:path/snapshot`, () =>
+  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, () =>
     HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
   ),
 )

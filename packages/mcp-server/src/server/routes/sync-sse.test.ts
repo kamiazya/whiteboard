@@ -4,7 +4,7 @@
 // Plain http fetch to loopback IS allowed from a secure page, so the same
 // sync protocol rides SSE downstream and POST upstream.
 //
-// The initial snapshot is NOT carried here: GET /api/w/:ws/canvas/:path/snapshot
+// The initial snapshot is NOT carried here: GET /api/w/:ws/document/:path/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
 import { afterEach, describe, expect, it } from 'vitest'
@@ -256,7 +256,7 @@ describe('SSE sync transport', () => {
   })
 
   // A WebSocket is per-canvas so its text frames need no addressing. One SSE
-  // stream serves many canvases, so an unaddressed frame would be applied to
+  // stream serves many documents, so an unaddressed frame would be applied to
   // whichever canvas happened to be listening.
   it('addresses a text message to the document it belongs to', async () => {
     const app = createApp(createRuntimeOptions())

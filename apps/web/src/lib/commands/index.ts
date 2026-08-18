@@ -21,8 +21,8 @@ export {
   type GetAppContextResult,
   getAppContextInputSchema,
   getAppContextResultSchema,
-  type WhiteboardCommandCanvasIdentity,
   type WhiteboardCommandDeps,
+  type WhiteboardCommandDocumentIdentity,
   type WhiteboardCommands,
 } from './types.js'
 export { useWhiteboardCommands } from './use-whiteboard-commands.js'

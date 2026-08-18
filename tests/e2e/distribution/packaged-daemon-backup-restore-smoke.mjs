@@ -224,7 +224,7 @@ try {
   // through the real DB + filesystem stores, NOT via fixture writes.
   const createRes = await authedFetch(
     daemonA,
-    `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+    `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,9 +248,9 @@ try {
   }
 
   const seededList = await (
-    await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
+    await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`)
   ).json()
-  const seededPaths = (seededList?.canvases ?? []).map((c) => c.path)
+  const seededPaths = (seededList?.documents ?? []).map((c) => c.path)
   if (!seededPaths.includes(SEED_CANVAS_PATH)) {
     throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededPaths)}`)
   }
@@ -258,7 +258,7 @@ try {
 
   // Capture the canvas Loro snapshot through daemon A's HTTP route
   // BEFORE stopping it. The route reads from
-  // `blobs/<wsId>/canvas/<documentId>.loro` via the document-store —
+  // `blobs/<wsId>/document/<documentId>.loro` via the document-store —
   // that's exactly the file path the backup helper has to round-trip
   // through restore. Comparing daemon B's snapshot bytes to this
   // baseline catches a regression that drops `blobs/` from the
@@ -267,7 +267,7 @@ try {
   // would no longer match.
   const snapshotARes = await authedFetch(
     daemonA,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )
   if (!snapshotARes.ok) {
     throw new Error(`daemon A snapshot fetch failed: ${snapshotARes.status}`)
@@ -381,9 +381,9 @@ try {
     )
   }
   const restoredCanvases = await (
-    await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
+    await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`)
   ).json()
-  const restoredPaths = (restoredCanvases?.canvases ?? []).map((c) => c.path)
+  const restoredPaths = (restoredCanvases?.documents ?? []).map((c) => c.path)
   if (!restoredPaths.includes(SEED_CANVAS_PATH)) {
     throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredPaths)}`)
   }
@@ -399,7 +399,7 @@ try {
   // daemon B to actually `loadCanvas` the restored file.
   const snapshotBRes = await authedFetch(
     daemonB,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/canvas/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
+    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )
   if (!snapshotBRes.ok) {
     throw new Error(`daemon B snapshot fetch failed: ${snapshotBRes.status}`)
@@ -420,7 +420,7 @@ try {
   }
   // Byte equality through `loadCanvas → doc.export({ mode: 'snapshot' })`
   // means daemon B successfully read the restored
-  // `blobs/<wsId>/canvas/<documentId>.loro` file. The Loro runtime
+  // `blobs/<wsId>/document/<documentId>.loro` file. The Loro runtime
   // itself is exercised by the existing document-store integration
   // tests; here byte equality is sufficient to catch a regression
   // that drops `blobs/` from the backup or restore copy or that

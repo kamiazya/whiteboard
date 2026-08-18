@@ -22,7 +22,7 @@ export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { fitMinimap, projectBox } from '../components/spatial-editor/minimap.js'
-import type { SyncStatus } from './canvas-sync-types.js'
+import type { SyncStatus } from './document-sync-types.js'
 
 export interface FaviconRect {
   x: number

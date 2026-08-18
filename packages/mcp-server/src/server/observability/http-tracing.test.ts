@@ -36,7 +36,7 @@ function buildApp() {
   const app = new Hono()
   app.use('*', tracingMiddleware())
   app.get('/api/runtime/storage', (c) => c.json({ ok: true }))
-  app.post('/api/workspaces/:wid/canvases/:path/compact', (c) =>
+  app.post('/api/workspaces/:wid/documents/:path/compact', (c) =>
     c.json({ path: c.req.param('path') }),
   )
   app.get('/health', (c) => c.text('ok'))
@@ -60,16 +60,18 @@ describe('tracingMiddleware http.route attribute', () => {
 
   it('captures parameterised routes verbatim (preserves :wid / :path)', async () => {
     const app = buildApp()
-    const res = await app.request('/api/workspaces/ws_a/canvases/design%2Flogin/compact', {
+    const res = await app.request('/api/workspaces/ws_a/documents/design%2Flogin/compact', {
       method: 'POST',
     })
     expect(res.status).toBe(200)
     const span = exporter.getFinishedSpans()[0]
     // The whole point of low-cardinality http.route is that all
     // ws_a, ws_b, … collapse onto the same template.
-    expect(span.attributes['http.route']).toBe('/api/workspaces/:wid/canvases/:path/compact')
+    expect(span.attributes['http.route']).toBe('/api/workspaces/:wid/documents/:path/compact')
     // url.path stays high-cardinality so debugging single requests still works.
-    expect(span.attributes['url.path']).toBe('/api/workspaces/ws_a/canvases/design%2Flogin/compact')
+    expect(span.attributes['url.path']).toBe(
+      '/api/workspaces/ws_a/documents/design%2Flogin/compact',
+    )
   })
 
   it('records the http method + status code in semconv attributes', async () => {

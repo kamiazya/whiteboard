@@ -32,32 +32,32 @@ import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.
 
 afterEach(cleanup)
 
-// Records the props BrowserLocalCanvasPage receives so tests can assert
+// Records the props BrowserLocalDocumentPage receives so tests can assert
 // capabilities actually flow from App down to the page, not just that the
-// page mounts. BrowserLocalCanvasPage pulls in loro-crdt, which needs a
+// page mounts. BrowserLocalDocumentPage pulls in loro-crdt, which needs a
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
-// Captures the initialCanvasId prop so a test can assert App derives it from
+// Captures the initialDocumentId prop so a test can assert App derives it from
 // the /local/:documentId URL (parseBrowserLocalRoute) rather than merely
 // mounting the page.
 let receivedInitialCanvasId: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
 // during render, so App's ErrorBoundary wiring has something real to catch.
-let throwInBrowserLocalCanvasPage = false
-vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
-  BrowserLocalCanvasPage: ({
+let throwInBrowserLocalDocumentPage = false
+vi.mock('./pages/BrowserLocalDocumentPage.js', () => ({
+  BrowserLocalDocumentPage: ({
     capabilities,
-    initialCanvasId,
+    initialDocumentId,
   }: {
     capabilities?: WhiteboardCapabilities
-    initialCanvasId?: string
+    initialDocumentId?: string
   }) => {
     receivedCapabilities = capabilities
-    receivedInitialCanvasId = initialCanvasId
-    if (throwInBrowserLocalCanvasPage) {
+    receivedInitialCanvasId = initialDocumentId
+    if (throwInBrowserLocalDocumentPage) {
       throw new Error('boom')
     }
-    return <div data-testid="browser-local-canvas-page" />
+    return <div data-testid="browser-local-document-page" />
   },
 }))
 
@@ -65,8 +65,8 @@ vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
 // without rendering the real list (which would pull in the store's IDB path).
 let receivedIndexPageOnOpenCanvas: ((id: string) => void) | undefined
 vi.mock('./pages/BrowserLocalIndexPage.js', () => ({
-  BrowserLocalIndexPage: ({ onOpenCanvas }: { onOpenCanvas: (id: string) => void }) => {
-    receivedIndexPageOnOpenCanvas = onOpenCanvas
+  BrowserLocalIndexPage: ({ onOpenDocument }: { onOpenDocument: (id: string) => void }) => {
+    receivedIndexPageOnOpenCanvas = onOpenDocument
     return <div data-testid="browser-local-index-page" />
   },
 }))
@@ -92,14 +92,14 @@ let receivedDaemonPageProps: Record<string, unknown> | undefined
 // Toggled by the error-boundary test: throwing from the lazily-resolved page
 // exercises the paired branch's boundary, which must sit OUTSIDE Suspense to
 // catch errors surfacing through the lazy path.
-let throwInDaemonCanvasPage = false
-vi.mock('./pages/DaemonCanvasPage.js', () => ({
-  DaemonCanvasPage: (props: Record<string, unknown>) => {
+let throwInDaemonDocumentPage = false
+vi.mock('./pages/DaemonDocumentPage.js', () => ({
+  DaemonDocumentPage: (props: Record<string, unknown>) => {
     receivedDaemonPageProps = props
-    if (throwInDaemonCanvasPage) {
+    if (throwInDaemonDocumentPage) {
       throw new Error('boom-daemon')
     }
-    return <div data-testid="daemon-canvas-page" />
+    return <div data-testid="daemon-document-page" />
   },
 }))
 
@@ -386,24 +386,24 @@ describe('App capability wiring', () => {
     receivedCapabilities = undefined
   })
 
-  it('passes the browser-local capabilities down to BrowserLocalCanvasPage', async () => {
+  it('passes the browser-local capabilities down to BrowserLocalDocumentPage', async () => {
     render(
       <MemoryRouter initialEntries={['/local/c1']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-document-page')
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialCanvasId from a /local/:documentId cold-load URL', async () => {
+  it('derives initialDocumentId from a /local/:documentId cold-load URL', async () => {
     receivedInitialCanvasId = undefined
     render(
       <MemoryRouter initialEntries={['/local/c2']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-document-page')
     expect(receivedInitialCanvasId).toBe('c2')
   })
 
@@ -414,7 +414,7 @@ describe('App capability wiring', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('browser-local-document-page')).toBeNull()
   })
 
   it('opening a canvas from the list mounts the editor on that canvas', async () => {
@@ -427,7 +427,7 @@ describe('App capability wiring', () => {
     await screen.findByTestId('browser-local-index-page')
     expect(receivedIndexPageOnOpenCanvas).toBeDefined()
     act(() => receivedIndexPageOnOpenCanvas?.('c9'))
-    expect(await screen.findByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('browser-local-document-page')).toBeTruthy()
     expect(receivedInitialCanvasId).toBe('c9')
   })
 })
@@ -438,7 +438,7 @@ describe('App daemon-pairing routing', () => {
     receivedDaemonPageProps = undefined
   })
 
-  it('renders DaemonCanvasPage from the payload when paired', async () => {
+  it('renders DaemonDocumentPage from the payload when paired', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
@@ -454,10 +454,10 @@ describe('App daemon-pairing routing', () => {
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    // DaemonCanvasPage is React.lazy — resolves after a microtask even with
+    // DaemonDocumentPage is React.lazy — resolves after a microtask even with
     // a mocked module, so the assertion must await past the Suspense fallback.
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
-    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-local-document-page')).toBeNull()
     expect(receivedDaemonPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
@@ -486,7 +486,7 @@ describe('App daemon-pairing routing', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 })
 
@@ -515,7 +515,7 @@ describe('App reconnect-target persistence', () => {
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
 
     const saved = createUserSettingsStore().load()
     expect(saved.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
@@ -539,7 +539,7 @@ describe('App reconnect-target persistence', () => {
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
 
     expect(localStorage.getItem(STORAGE_KEY) ?? '').not.toContain('super-secret-token')
   })
@@ -574,28 +574,28 @@ describe('App local-daemon provider state', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
-    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
+    expect(screen.queryByTestId('browser-local-document-page')).toBeNull()
     expect(screen.queryByText('Whiteboard')).toBeNull()
     expect(receivedDaemonIndexPageProps?.daemonBaseUrl).toBe(LOCAL_DAEMON_STATE.daemonBaseUrl)
-    expect(receivedDaemonIndexPageProps?.onOpenCanvas).toBeInstanceOf(Function)
+    expect(receivedDaemonIndexPageProps?.onOpenDocument).toBeInstanceOf(Function)
   })
 
-  it('mounts DaemonCanvasPage with the opened canvas identity after a gallery selection', async () => {
+  it('mounts DaemonDocumentPage with the opened canvas identity after a gallery selection', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
       </MemoryRouter>,
     )
     await screen.findByTestId('daemon-index-page')
-    const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+    const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
       workspaceId: string,
       path: string,
     ) => void
     act(() => {
-      onOpenCanvas('w1', 'main')
+      onOpenDocument('w1', 'main')
     })
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
@@ -626,7 +626,7 @@ describe('App local-daemon provider state', () => {
     expect(receivedDaemonIndexPageProps?.token).toBeUndefined()
   })
 
-  it('returns to the index when DaemonCanvasPage invokes onNavigateBack', async () => {
+  it('returns to the index when DaemonDocumentPage invokes onNavigateBack', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
@@ -634,19 +634,19 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'main')
+      onOpenDocument('w1', 'main')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
       onNavigateBack()
     })
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
   it('preserves the opened canvas workspaceId as initialWorkspaceId when navigating back to the index', async () => {
@@ -657,13 +657,13 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('workspace-b', 'main')
+      onOpenDocument('workspace-b', 'main')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
       onNavigateBack()
@@ -672,7 +672,7 @@ describe('App local-daemon provider state', () => {
     expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
   })
 
-  it('remounts DaemonCanvasPage cleanly when opening a different canvas after returning to the index', async () => {
+  it('remounts DaemonDocumentPage cleanly when opening a different canvas after returning to the index', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
@@ -680,13 +680,13 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'canvas-a')
+      onOpenDocument('w1', 'canvas-a')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     expect(receivedDaemonPageProps?.path).toBe('canvas-a')
 
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
@@ -696,13 +696,13 @@ describe('App local-daemon provider state', () => {
     await screen.findByTestId('daemon-index-page')
 
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'canvas-b')
+      onOpenDocument('w1', 'canvas-b')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     expect(receivedDaemonPageProps?.path).toBe('canvas-b')
   })
 
@@ -714,28 +714,28 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'main')
+      onOpenDocument('w1', 'main')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     const onContinueBrowserLocal = receivedDaemonPageProps?.onContinueBrowserLocal as () => void
     act(() => {
       onContinueBrowserLocal()
     })
     expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
     // Capabilities flow to the editor: open a canvas from the escaped list.
     act(() => receivedIndexPageOnOpenCanvas?.('c1'))
-    await screen.findByTestId('browser-local-canvas-page')
+    await screen.findByTestId('browser-local-document-page')
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_CAPABILITIES)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
 
   it('catches an error surfacing through the local-daemon lazy path (boundary outside Suspense)', async () => {
-    throwInDaemonCanvasPage = true
+    throwInDaemonDocumentPage = true
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={LOCAL_DAEMON_STATE} />
@@ -745,16 +745,16 @@ describe('App local-daemon provider state', () => {
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     try {
       act(() => {
-        const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
           workspaceId: string,
           path: string,
         ) => void
-        onOpenCanvas('w1', 'main')
+        onOpenDocument('w1', 'main')
       })
       expect(await screen.findByText('Something went wrong')).toBeTruthy()
       expect(reportSpy).toHaveBeenCalled()
     } finally {
-      throwInDaemonCanvasPage = false
+      throwInDaemonDocumentPage = false
       reportSpy.mockRestore()
     }
   })
@@ -787,7 +787,7 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
   it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no path', async () => {
@@ -851,9 +851,9 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /w/:workspaceId/canvas/:path deep link straight into DaemonCanvasPage', async () => {
-    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+  it('cold-loads a /w/:workspaceId/document/:path deep link straight into DaemonDocumentPage', async () => {
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/main')
+    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
   })
@@ -861,8 +861,8 @@ describe('App URL routing', () => {
   it('cold-loads a NESTED document path deep link, path intact', async () => {
     // The tail is the document's path since the data layer converged on
     // paths; the page must receive it verbatim, separators and all.
-    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/notes/2026/plan')
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/notes/2026/plan')
+    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('notes/2026/plan')
   })
@@ -877,19 +877,19 @@ describe('App URL routing', () => {
     const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/')
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'main')
+      onOpenDocument('w1', 'main')
     })
-    await screen.findByTestId('daemon-canvas-page')
-    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
+    await screen.findByTestId('daemon-document-page')
+    expect(router.state.location.pathname).toBe('/w/w1/document/main')
   })
 
   it('updates the URL back to the gallery when onNavigateBack fires', async () => {
-    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/canvas/main')
-    await screen.findByTestId('daemon-canvas-page')
+    const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/w/w1/document/main')
+    await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
       onNavigateBack()
@@ -902,24 +902,24 @@ describe('App URL routing', () => {
     const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/')
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      const onOpenDocument = receivedDaemonIndexPageProps?.onOpenDocument as (
         workspaceId: string,
         path: string,
       ) => void
-      onOpenCanvas('w1', 'main')
+      onOpenDocument('w1', 'main')
     })
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
 
     act(() => {
       router.navigate(-1)
     })
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
 
     act(() => {
       router.navigate(1)
     })
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
   })
 
   it('replaces a consumed #wb= pairing with the canonical URL instead of leaving the raw fragment behind', async () => {
@@ -934,8 +934,8 @@ describe('App URL routing', () => {
       },
     }
     const router = renderAppWithRouter(BROWSER_LOCAL_STATE, '/')
-    await screen.findByTestId('daemon-canvas-page')
-    expect(router.state.location.pathname).toBe('/w/w1/canvas/main')
+    await screen.findByTestId('daemon-document-page')
+    expect(router.state.location.pathname).toBe('/w/w1/document/main')
     // The replace must not have added a new history entry: going back from
     // here should leave the SPA (nothing left to land on inside this test's
     // single-entry history), not bounce to a stale pre-pairing '/' entry.
@@ -944,7 +944,7 @@ describe('App URL routing', () => {
 
   it('shows the not-found page for an unrecognized path (no blank page, no silent redirect)', async () => {
     renderAppWithRouter(LOCAL_DAEMON_STATE, '/something/unrelated/entirely')
-    expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
   })
 })
@@ -986,7 +986,7 @@ describe('App shell (single instance above the routed pages)', () => {
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
-    await screen.findByTestId('daemon-canvas-page')
+    await screen.findByTestId('daemon-document-page')
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
   })
@@ -1133,14 +1133,14 @@ describe('App /settings routing', () => {
 
 describe('App error boundary', () => {
   beforeEach(() => {
-    throwInBrowserLocalCanvasPage = false
+    throwInBrowserLocalDocumentPage = false
   })
   afterEach(() => {
-    throwInBrowserLocalCanvasPage = false
+    throwInBrowserLocalDocumentPage = false
   })
 
   it('catches a render error from the active page and shows the fallback instead of crashing the app', async () => {
-    throwInBrowserLocalCanvasPage = true
+    throwInBrowserLocalDocumentPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
       <MemoryRouter initialEntries={['/local/c1']}>
@@ -1154,7 +1154,7 @@ describe('App error boundary', () => {
   })
 
   it('catches an error surfacing through the paired branch lazy path (boundary sits outside Suspense)', async () => {
-    throwInDaemonCanvasPage = true
+    throwInDaemonDocumentPage = true
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
@@ -1177,7 +1177,7 @@ describe('App error boundary', () => {
       expect(await screen.findByText('Something went wrong')).toBeTruthy()
       expect(reportSpy).toHaveBeenCalled()
     } finally {
-      throwInDaemonCanvasPage = false
+      throwInDaemonDocumentPage = false
       mockDaemonConnectionResult = { status: 'none' }
       reportSpy.mockRestore()
     }
@@ -1205,7 +1205,7 @@ describe('App not-found route', () => {
       </MemoryRouter>,
     )
     // The page chunk is lazy — wait for it to resolve.
-    expect(await screen.findByRole('button', { name: /back to canvases/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
     expect(document.querySelector('[data-mark="not-found"]')).toBeTruthy()
   })
 

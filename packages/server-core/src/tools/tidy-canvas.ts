@@ -8,8 +8,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PatchValidationError } from './errors.js'
 
 export const tidyCanvasInputSchema = z
@@ -41,7 +41,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
     inputSchema: tidyCanvasInputSchema,
     outputSchema: tidyCanvasOutputSchema,
     execute: async (input: TidyCanvasInput): Promise<TidyCanvasOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       // A markdown document stores its OKF body in a text node, so its
@@ -77,7 +77,7 @@ export function createTidyCanvasTool(deps: ServerDeps) {
       const parsed = spatialCanvasSchema.safeParse(candidateCanvas)
       if (!parsed.success) throw new PatchValidationError(parsed.error.issues)
 
-      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, moved: [...moved] }
     },

@@ -44,7 +44,7 @@ const { createFilesRouter } = await import('./files.js')
 const { IncompleteFileGcScanError } = await import('../store/file-gc.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
-describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
+describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -58,7 +58,7 @@ describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG magic bytes
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001', {
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -76,7 +76,7 @@ describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001', {
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -106,7 +106,7 @@ describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
 
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
     const app = createFilesRouter()
-    const responsePromise = app.request('/api/w/session1/canvas/canvas-a/file/file-001', {
+    const responsePromise = app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -130,7 +130,7 @@ describe('PUT /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
   })
 })
 
-describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
+describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1', 'files'), { recursive: true })
@@ -146,7 +146,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     await writeFile(join(tempDir, 'session1', 'files', 'file-001.png'), imageData)
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('image/png')
 
@@ -156,7 +156,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
 
   it('returns 404 for a missing fileId', async () => {
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/nonexistent')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/nonexistent')
     expect(res.status).toBe(404)
   })
 
@@ -164,7 +164,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     await rm(join(tempDir, 'session1', 'files'), { recursive: true, force: true })
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(404)
   })
@@ -175,7 +175,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     await writeFile(join(tempDir, 'session1', 'files'), 'not-a-directory')
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -188,7 +188,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     await mkdir(join(tempDir, 'session1', 'files', 'file-001.png'), { recursive: true })
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -208,7 +208,7 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
     )
 
     const app = createFilesRouter()
-    const res = await app.request('/api/w/session1/canvas/canvas-a/file/file-001')
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
 
     const buf = await res.arrayBuffer()
@@ -219,10 +219,10 @@ describe('GET /api/w/:workspaceId/canvas/:path/file/:fileId', () => {
   it('returns 400 for invalid workspaceId / fileId', async () => {
     const app = createFilesRouter()
 
-    const badSession = await app.request('/api/w/bad.sid/canvas/canvas-a/file/file-001')
+    const badSession = await app.request('/api/w/bad.sid/document/canvas-a/file/file-001')
     expect(badSession.status).toBe(400)
 
-    const badFileId = await app.request('/api/w/session1/canvas/canvas-a/file/bad.id')
+    const badFileId = await app.request('/api/w/session1/document/canvas-a/file/bad.id')
     expect(badFileId.status).toBe(400)
   })
 })

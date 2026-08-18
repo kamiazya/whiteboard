@@ -305,7 +305,7 @@ try {
 
     // Seed workspace + canvas.
     const createRes = await fetch(
-      `http://127.0.0.1:${DAEMON_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
+      `http://127.0.0.1:${DAEMON_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
@@ -420,20 +420,20 @@ try {
     // Verify the seeded canvas is accessible via the protected API.
     const jwt = makeJwt(privateKey, 'workspace:read canvas:read')
     const listRes = await fetch(
-      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
+      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
       { headers: { Authorization: `Bearer ${jwt}` } },
     )
     if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
-    if (!(list?.canvases ?? []).some((c) => c.path === CANVAS_PATH)) {
+    if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {
       fail('scenario 5: seeded canvas not found on restored server', {
-        canvasCount: (list?.canvases ?? []).length,
+        documentCount: (list?.documents ?? []).length,
       })
     }
 
     // Auth contract: unauthenticated → 401, wrong scope → 403.
     const noAuthRes = await fetch(
-      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
+      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
     )
     if (noAuthRes.status !== 401)
       fail(`scenario 5: expected 401 for no-auth, got ${noAuthRes.status}`)

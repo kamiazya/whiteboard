@@ -269,7 +269,7 @@ export interface SpatialBatchWriter {
  * throws, NOTHING is committed — the error is rethrown and the partial
  * uncommitted ops stay pending on the doc (visible to readers; commit is
  * an undo/sync boundary, not a visibility boundary). The caller must then
- * converge with a committing write — canvas-sync-session's documented
+ * converge with a committing write — document-sync-session's documented
  * fallback (`writeSpatialCanvas(doc, next)`) does exactly this, absorbing
  * the pending ops into one converged commit. Never follow a thrown batch
  * with an UNRELATED commit on the same doc: the pending ops would be

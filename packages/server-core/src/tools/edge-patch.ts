@@ -9,8 +9,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { assertCanvasInWorkspace } from './assert-canvas-in-workspace.js'
-import { loadDocument, saveCanvasDoc } from './document-io.js'
+import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { EdgeLockedError, EdgeNotFoundError, PatchValidationError } from './errors.js'
 
 export const edgePatchFieldsSchema = z
@@ -57,7 +57,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
     execute: async (input: EdgePatchInput): Promise<EdgePatchOutput> => {
-      await assertCanvasInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.documentId)
 
       const edge = canvas.edges.find((candidate) => candidate.id === input.edgeId)
@@ -90,7 +90,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
         throw new EdgeNotFoundError(input.documentId, input.edgeId)
       }
 
-      await saveCanvasDoc(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, edge: updatedEdge }
     },

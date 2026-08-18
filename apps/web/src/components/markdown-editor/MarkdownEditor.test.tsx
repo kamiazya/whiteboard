@@ -155,15 +155,15 @@ describe('MarkdownEditor', () => {
     }
   })
 
-  it('opens a wikiLink target through onOpenCanvas instead of navigating the window', async () => {
+  it('opens a wikiLink target through onOpenDocument instead of navigating the window', async () => {
     vi.useFakeTimers()
     const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
         value={`See [[canvas:${NOTE_ID}|the plan]] and [external](https://example.com).`}
         onChange={() => {}}
-        onOpenCanvas={onOpenCanvas}
+        onOpenDocument={onOpenDocument}
         previewDebounceMs={150}
       />,
     )
@@ -175,7 +175,7 @@ describe('MarkdownEditor', () => {
     expect(wikiAnchor).not.toBeNull()
     if (!wikiAnchor) throw new Error('unreachable')
     const intercepted = !fireEvent.click(wikiAnchor)
-    expect(onOpenCanvas).toHaveBeenCalledWith(NOTE_ID)
+    expect(onOpenDocument).toHaveBeenCalledWith(NOTE_ID)
     // preventDefault fired — the SPA never navigates to a bare-ULID URL.
     expect(intercepted).toBe(true)
 
@@ -184,21 +184,21 @@ describe('MarkdownEditor', () => {
     expect(external).not.toBeNull()
     if (!external) throw new Error('unreachable')
     fireEvent.click(external)
-    expect(onOpenCanvas).toHaveBeenCalledTimes(1)
+    expect(onOpenDocument).toHaveBeenCalledTimes(1)
   })
 
   it('intercepts browser-local UUID canvas ids too, not only daemon ULIDs', async () => {
     vi.useFakeTimers()
-    // Browser-local canvases mint crypto.randomUUID() ids; the daemon mints
+    // Browser-local documents mint crypto.randomUUID() ids; the daemon mints
     // ULIDs. Both travel through the alias resolver into anchor hrefs.
     const UUID = '68f94ee9-80fe-4e7e-b1fc-dcf853e26da3'
-    const onOpenCanvas = vi.fn()
+    const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
         value="See [[Snippet]]."
         onChange={() => {}}
         resolveAlias={(alias) => (alias === 'Snippet' ? UUID : null)}
-        onOpenCanvas={onOpenCanvas}
+        onOpenDocument={onOpenDocument}
         previewDebounceMs={150}
       />,
     )
@@ -209,7 +209,7 @@ describe('MarkdownEditor', () => {
     expect(anchor).not.toBeNull()
     if (!anchor) throw new Error('unreachable')
     const intercepted = !fireEvent.click(anchor)
-    expect(onOpenCanvas).toHaveBeenCalledWith(UUID)
+    expect(onOpenDocument).toHaveBeenCalledWith(UUID)
     expect(intercepted).toBe(true)
   })
 

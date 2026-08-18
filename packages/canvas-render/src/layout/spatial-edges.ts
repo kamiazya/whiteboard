@@ -245,7 +245,7 @@ function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
  * routes leave in the order of their destinations and never cross right at
  * the node; ties (same far node, e.g. a bidirectional pair) fall back to
  * edge document order, then from-before-to. A side with a single end keeps
- * its midpoint, so canvases without shared sides render exactly as before.
+ * its midpoint, so documents without shared sides render exactly as before.
  *
  * Edges with a missing endpoint get no entry — `routeEdge` already
  * degrades those to a zero-length path on its own.
@@ -344,7 +344,7 @@ function computeAnchorsFor(
   sides: ReadonlyMap<string, SidePair>,
   // Alignment never varies WITHIN one optimizer run: sliding anchors
   // mid-optimization changes trial costs, which shifts side-choice
-  // equilibria on multi-edge canvases in ways the ranking never anticipated
+  // equilibria on multi-edge documents in ways the ranking never anticipated
   // (observed: a bystander edge re-siding onto a worse face). The search
   // proper therefore runs entirely unaligned, and `assignEdgeAnchors` hands
   // its settled configuration back through a SECOND, entirely aligned run —
@@ -558,7 +558,7 @@ function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
  * is a sweep-and-prune (edge-crossing-sweep.ts, ~3ms at 200 edges); the
  * remaining cost is the TRIAL loop, bounded above FULL_OPT_MAX_EDGES by
  * trying candidates only for the worst-offending edges (pathological
- * 200-edge canvases: ~150-200ms per committed layout on a dev machine —
+ * 200-edge documents: ~150-200ms per committed layout on a dev machine —
  * paid only while the canvas actually has crossings/overlap, and never on
  * live-drag cached frames via the editor's carried-side cache). ponytail:
  * trial-loop incrementalization (persist the matrix across edits instead
@@ -1422,7 +1422,7 @@ const ORTHOGONAL_STUB_PX = 20
 /** Extra stub depth per additional member of a shared (node, side) group,
  * so ends sharing a side leave through parallel DISTINCT corridors instead
  * of one collinear overlap that a line jump cannot express. One-sided and
- * strictly additive: lane 0 keeps the exact base depth (unshared canvases
+ * strictly additive: lane 0 keeps the exact base depth (unshared documents
  * are byte-identical), deeper lanes only ever move AWAY from their node.
  * ponytail: depth grows unbounded with group size — a ~15-edge side pushes
  * the deepest stub ~200px out; cap distinct lanes and share the outermost

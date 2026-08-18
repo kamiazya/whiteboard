@@ -1,21 +1,21 @@
 import {
   apiErrorReason,
-  type CanvasOkfV1Response,
-  type CreateCanvasResponse,
-  canvasApiUrl,
-  canvasesApiUrl,
-  canvasOkfV1ResponseSchema,
-  createCanvasResponseSchema,
-  type DeleteCanvasResponse,
-  deleteCanvasResponseSchema,
-  type ListCanvasesResponse,
-  type ListCanvasesV1Response,
+  type CreateDocumentResponse,
+  createDocumentResponseSchema,
+  type DeleteDocumentResponse,
+  type DocumentOkfV1Response,
+  deleteDocumentResponseSchema,
+  documentApiUrl,
+  documentOkfV1ResponseSchema,
+  documentsApiUrl,
+  type ListDocumentsResponse,
+  type ListDocumentsV1Response,
   type ListWorkspacesResponse,
-  listCanvasesResponseSchema,
-  listCanvasesV1ResponseSchema,
+  listDocumentsResponseSchema,
+  listDocumentsV1ResponseSchema,
   listWorkspacesResponseSchema,
-  type UpdateCanvasResponse,
-  updateCanvasResponseSchema,
+  type UpdateDocumentResponse,
+  updateDocumentResponseSchema,
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
@@ -75,29 +75,29 @@ export function listWorkspaces(
   return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/workspaces`, listWorkspacesResponseSchema)
 }
 
-export function listCanvases(
+export function listDocuments(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-): Promise<ListCanvasesResponse> {
+): Promise<ListDocumentsResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
-    listCanvasesResponseSchema,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    listDocumentsResponseSchema,
   )
 }
 
-export function createCanvas(
+export function createDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
   kind?: DocumentKind,
-): Promise<CreateCanvasResponse> {
+): Promise<CreateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
-    createCanvasResponseSchema,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    createDocumentResponseSchema,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -108,21 +108,21 @@ export function createCanvas(
   )
 }
 
-export function deleteCanvas(
+export function deleteDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
-): Promise<DeleteCanvasResponse> {
+): Promise<DeleteDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, path)}`,
-    deleteCanvasResponseSchema,
+    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path)}`,
+    deleteDocumentResponseSchema,
     { method: 'DELETE' },
   )
 }
 
-// GET /api/w/:workspaceId/canvas/:path/snapshot returns raw Loro bytes
+// GET /api/w/:workspaceId/document/:path/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
 // which always calls res.json().
 export async function getCanvasSnapshot(
@@ -131,7 +131,7 @@ export async function getCanvasSnapshot(
   workspaceId: string,
   path: string,
 ): Promise<Uint8Array> {
-  const url = `${daemonBaseUrl}${canvasApiUrl(workspaceId, path, 'snapshot')}`
+  const url = `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'snapshot')}`
   const res = await fetchFn(url)
   if (!res.ok) {
     throw new Error(await parseProblemDetails(res))
@@ -139,22 +139,22 @@ export async function getCanvasSnapshot(
   return new Uint8Array(await res.arrayBuffer())
 }
 
-export function updateCanvas(
+export function updateDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
   snapshot: Uint8Array,
-): Promise<UpdateCanvasResponse> {
+): Promise<UpdateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasApiUrl(workspaceId, path, 'update')}`,
-    updateCanvasResponseSchema,
+    `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'update')}`,
+    updateDocumentResponseSchema,
     { method: 'POST', body: snapshot as BodyInit },
   )
 }
 
-export function setCanvasName(
+export function setDocumentDisplayName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
@@ -163,7 +163,7 @@ export function setCanvasName(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${canvasesApiUrl(workspaceId, path, 'name')}`,
+    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'name')}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
@@ -179,11 +179,11 @@ export function listCanvasesV1(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-): Promise<ListCanvasesV1Response> {
+): Promise<ListDocumentsV1Response> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
-    listCanvasesV1ResponseSchema,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    listDocumentsV1ResponseSchema,
   )
 }
 
@@ -192,11 +192,11 @@ export function getCanvasOkfV1(
   daemonBaseUrl: string,
   workspaceId: string,
   documentId: string,
-): Promise<CanvasOkfV1Response> {
+): Promise<DocumentOkfV1Response> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(documentId)}/okf`,
-    canvasOkfV1ResponseSchema,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/okf`,
+    documentOkfV1ResponseSchema,
   )
 }
 

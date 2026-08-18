@@ -54,7 +54,7 @@ function isSelfOrDescendant(path: string, ancestor: string): boolean {
 }
 
 /**
- * `DocumentIndex` over the daemon's `canvases` table — the store the user's
+ * `DocumentIndex` over the daemon's `documents` table — the store the user's
  * canvas list, versions, branches and file GC already hang off, which is what
  * makes an agent-created document one a user can see.
  *

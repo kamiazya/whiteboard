@@ -55,7 +55,7 @@ export function buildCheckpointChildEnv(
  * so the retry wiring is unit-testable against a fake callTool without spawning
  * a real MCP child process.
  */
-export function triggerDaemonCanvasCreate(
+export function triggerDaemonDocumentCreate(
   callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
   options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
@@ -248,7 +248,7 @@ export async function runE2eCheckpointSmoke({
     // wb_document_create is the first daemon-dependent RPC, so its failure mode is
     // the daemon cold-starting under contention. Retrying is opt-in: only the
     // tarball smoke (no fixed vitest testTimeout) enables it.
-    const created = await triggerDaemonCanvasCreate(callTool, {
+    const created = await triggerDaemonDocumentCreate(callTool, {
       retryDaemonStartup: shouldRetryDaemonStartup,
       maxDaemonStartupRetries,
     })

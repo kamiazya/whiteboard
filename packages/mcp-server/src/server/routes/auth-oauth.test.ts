@@ -12,8 +12,8 @@ function createApp(grantStore?: ReturnType<typeof createOAuthTransactionStore>) 
   return app
 }
 
-const READ_PATH = '/api/w/session-1/canvas/demo/snapshot'
-const WRITE_PATH = '/api/w/session-1/canvas/demo/update'
+const READ_PATH = '/api/w/session-1/document/demo/snapshot'
+const WRITE_PATH = '/api/w/session-1/document/demo/update'
 const UNDECLARED_PATH = '/api/not-in-the-registry'
 
 async function request(

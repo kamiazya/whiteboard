@@ -1,16 +1,16 @@
-import type { WorkspaceNames } from '../../shared/api-contracts/canvas.js'
+import type { WorkspaceNames } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { upsertDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 
 export type { WorkspaceNames }
 
 // Workspace + canvas display names and pin order. Backed by:
 //   workspaces.displayName       -> WorkspaceNames.workspace
-//   canvases.displayName         -> WorkspaceNames.canvases[path]
-//   canvases.isPinned + pinOrder -> WorkspaceNames.pinned (sorted by pinOrder)
+//   documents.displayName         -> WorkspaceNames.documents[path]
+//   documents.isPinned + pinOrder -> WorkspaceNames.pinned (sorted by pinOrder)
 //
 // loadWorkspaceNames returns an empty state for workspaces with no rows. The
 // previous filesystem implementation also returned an empty state when
@@ -29,16 +29,16 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
     .select(['displayName'])
     .where('id', '=', workspaceId)
     .executeTakeFirst()
-  const canvasRows = await db
+  const documentRows = await db
     .selectFrom('documents')
     .select(['path', 'displayName', 'isPinned', 'pinOrder'])
     .where('workspaceId', '=', workspaceId)
     .execute()
-  const canvases: Record<string, string> = {}
+  const documents: Record<string, string> = {}
   const pinned: Array<{ path: string; order: number }> = []
-  for (const row of canvasRows) {
+  for (const row of documentRows) {
     if (row.displayName !== null) {
-      canvases[row.path] = row.displayName
+      documents[row.path] = row.displayName
     }
     if (row.isPinned === 1) {
       pinned.push({ path: row.path, order: row.pinOrder ?? Number.MAX_SAFE_INTEGER })
@@ -46,7 +46,7 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
   }
   pinned.sort((a, b) => a.order - b.order)
   const out: WorkspaceNames = {
-    canvases,
+    documents,
     pinned: pinned.map((p) => p.path),
   }
   if (wsRow?.displayName) {
@@ -72,7 +72,7 @@ export async function setWorkspaceName(workspaceId: string, name: string): Promi
   return loadWorkspaceNames(workspaceId)
 }
 
-export async function setCanvasName(
+export async function setDocumentDisplayName(
   workspaceId: string,
   path: string,
   name: string,
@@ -81,7 +81,7 @@ export async function setCanvasName(
   validateDocumentPath(path)
   const trimmed = name.trim()
   const db = await dbReady()
-  await upsertCanvasRow(db, workspaceId, path)
+  await upsertDocumentRow(db, workspaceId, path)
   const now = Date.now()
   await db
     .updateTable('documents')
@@ -99,7 +99,7 @@ export async function setCanvasName(
 //   - pinned=true on a not-yet-pinned canvas: append at the end (max pinOrder+1)
 //   - pinned=true on an already-pinned canvas: no-op, order preserved
 //   - pinned=false: clear isPinned + pinOrder
-export async function setCanvasPinned(
+export async function setDocumentPinned(
   workspaceId: string,
   path: string,
   pinned: boolean,
@@ -107,7 +107,7 @@ export async function setCanvasPinned(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
-  await upsertCanvasRow(db, workspaceId, path)
+  await upsertDocumentRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
     const row = await trx
       .selectFrom('documents')

@@ -2,14 +2,14 @@ import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
-export interface WorkspaceFileTreeCanvas {
+export interface WorkspaceFileTreeDocument {
   readonly documentId: string
   readonly path: string
 }
 
 export interface WorkspaceFileTreeProps {
-  canvases: readonly WorkspaceFileTreeCanvas[]
-  onOpen: (canvas: WorkspaceFileTreeCanvas) => void
+  documents: readonly WorkspaceFileTreeDocument[]
+  onOpen: (canvas: WorkspaceFileTreeDocument) => void
   className?: string
 }
 
@@ -18,22 +18,22 @@ interface TreeNode {
   readonly path: string
   /** Set when this exact path is a canvas; an intermediate segment that no
    *  canvas claims renders as a plain directory. */
-  readonly canvas: WorkspaceFileTreeCanvas | null
+  readonly canvas: WorkspaceFileTreeDocument | null
   readonly children: TreeNode[]
 }
 
 // A document path is its full slash-joined placement: splitting on '/'
 // reconstructs the tree without a second source of truth.
-function buildTree(canvases: readonly WorkspaceFileTreeCanvas[]): TreeNode[] {
+function buildTree(documents: readonly WorkspaceFileTreeDocument[]): TreeNode[] {
   interface MutableNode {
     name: string
     path: string
-    canvas: WorkspaceFileTreeCanvas | null
+    canvas: WorkspaceFileTreeDocument | null
     children: Map<string, MutableNode>
   }
   const root = new Map<string, MutableNode>()
 
-  for (const canvas of canvases) {
+  for (const canvas of documents) {
     const segments = canvas.path.split('/')
     let level = root
     let path = ''
@@ -61,7 +61,7 @@ function TreeItem({
   onOpen,
 }: {
   node: TreeNode
-  onOpen: (canvas: WorkspaceFileTreeCanvas) => void
+  onOpen: (canvas: WorkspaceFileTreeDocument) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0
@@ -128,19 +128,19 @@ function TreeItem({
  * from the paths the /api/v1 canvas list already carries — this component
  * never re-derives or stores tree structure of its own.
  */
-export function WorkspaceFileTree({ canvases, onOpen, className }: WorkspaceFileTreeProps) {
-  const tree = useMemo(() => buildTree(canvases), [canvases])
+export function WorkspaceFileTree({ documents, onOpen, className }: WorkspaceFileTreeProps) {
+  const tree = useMemo(() => buildTree(documents), [documents])
 
   if (tree.length === 0) {
     return (
       <p className={cn('text-muted-foreground text-sm', className)}>
-        No canvases in this workspace yet.
+        No documents in this workspace yet.
       </p>
     )
   }
 
   return (
-    <div role="tree" aria-label="Workspace canvases" className={cn('space-y-0.5', className)}>
+    <div role="tree" aria-label="Workspace documents" className={cn('space-y-0.5', className)}>
       {tree.map((node) => (
         <TreeItem key={node.path} node={node} onOpen={onOpen} />
       ))}

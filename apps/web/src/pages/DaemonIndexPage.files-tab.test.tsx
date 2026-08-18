@@ -30,7 +30,7 @@ function installFetchMock(
   v1ListResponse: { status: number; body: unknown } = {
     status: 200,
     body: {
-      canvases: [
+      documents: [
         { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
         {
           documentId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
@@ -45,16 +45,16 @@ function installFetchMock(
     if (url.endsWith('/api/workspaces')) {
       return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
     }
-    if (url.endsWith('/api/v1/workspaces/default/canvases')) {
+    if (url.endsWith('/api/v1/workspaces/default/documents')) {
       return Promise.resolve(jsonResponse(v1ListResponse.body, v1ListResponse.status))
     }
-    if (url.endsWith('/api/v1/workspaces/default/canvases/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
+    if (url.endsWith('/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
       return Promise.resolve(
         jsonResponse({ markdown: OKF_DOC, frontmatter: { type: 'note', title: 'Design' } }),
       )
     }
-    if (url.match(/\/api\/workspaces\/[^/]+\/canvases$/)) {
-      return Promise.resolve(jsonResponse({ canvases: [] }))
+    if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+      return Promise.resolve(jsonResponse({ documents: [] }))
     }
     return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
   })
@@ -71,7 +71,7 @@ describe('DaemonIndexPage tree view', () => {
   it('shows the path tree and previews a canvas OKF on click', async () => {
     installFetchMock()
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
@@ -92,7 +92,7 @@ describe('DaemonIndexPage tree view', () => {
   it('shows a calm no-tree message (not an alert) when the v1 list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
@@ -104,7 +104,7 @@ describe('DaemonIndexPage tree view', () => {
   it('still shows the failure alert when the v1 list fails for a non-404 reason', async () => {
     installFetchMock({ status: 500, body: { error: 'boom' } })
     render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenCanvas={() => {}} />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))

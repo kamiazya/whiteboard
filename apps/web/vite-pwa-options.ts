@@ -33,7 +33,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     display: 'standalone',
     start_url: '/',
     // Launching from the OS focuses the already-open app instead of piling
-    // up windows; canvases are live documents, not one-shot pages.
+    // up windows; documents are live documents, not one-shot pages.
     launch_handler: { client_mode: 'focus-existing' },
     // Richer install dialog on Chromium. The image is the docs gallery
     // screenshot; pwa-icons.test.ts pins the declared size to the file.
@@ -46,7 +46,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
       },
     ],
     // Long-press / right-click the installed icon. `?new=canvas` is handled
-    // by the browser-local page (BrowserLocalCanvasPage); in daemon mode it
+    // by the browser-local page (BrowserLocalDocumentPage); in daemon mode it
     // degrades to the gallery, one click from the same action.
     shortcuts: [
       {

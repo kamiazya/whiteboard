@@ -4,12 +4,15 @@ import {
   extensionFacetsArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
-import { FakeDocumentStore, registerCanvasInWorkspace } from '../test-utils/fake-document-store.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+} from '../test-utils/fake-document-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createDocumentSetTool } from './document-set.js'
 import { exportOkf } from './export-okf.js'
 
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 /**
@@ -72,7 +75,7 @@ const okfDocumentArbitrary = fc
 
 async function setupTools() {
   const store = new FakeDocumentStore()
-  await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
   const deps = {
     documentStore: store,
     blobStore: {} as never,
@@ -91,8 +94,8 @@ describe('wb_document_set -> the OKF exporter round-trip property', () => {
       const { documentSet, deps } = await setupTools()
       const markdown = serializeOkf(doc)
 
-      await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: CANVAS_ID, markdown })
-      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: CANVAS_ID })
+      await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
+      const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
       expect(result.frontmatter.type).toBe(doc.frontmatter.type)
       // Not verbatim: the name lives on the workspace now, and a blank name

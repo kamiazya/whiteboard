@@ -1,9 +1,9 @@
 import {
   apiErrorReason,
-  canvasApiUrl,
-  createCanvasRequestSchema,
-  createCanvasResponseSchema,
-  updateCanvasResponseSchema,
+  createDocumentRequestSchema,
+  createDocumentResponseSchema,
+  documentApiUrl,
+  updateDocumentResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
@@ -36,15 +36,15 @@ export function mergeToSnapshot(snapshot: Uint8Array, deltas: Uint8Array[]): Uin
   return doc.export({ mode: 'snapshot' })
 }
 
-export type ImportOneCanvasResult =
+export type ImportOneDocumentResult =
   | { kind: 'ok'; path: string }
   | { kind: 'failed'; reason: string }
 
-interface ImportOneCanvasOptions {
+interface ImportOneDocumentOptions {
   fetch: typeof globalThis.fetch
   daemonBaseUrl: string
   workspaceId: string
-  canvasName: string
+  documentName: string
   documentKind: DocumentKind
   loroLoad: LoroLoadResult
 }
@@ -78,11 +78,11 @@ async function parseErrorTitle(res: Response): Promise<string> {
  * to MAX_CREATE_ATTEMPTS), then push the merged snapshot. Never mutates or
  * deletes the source browser-local data — the caller owns that lifecycle.
  */
-export async function importOneCanvas(
-  options: ImportOneCanvasOptions,
-): Promise<ImportOneCanvasResult> {
+export async function importOneDocument(
+  options: ImportOneDocumentOptions,
+): Promise<ImportOneDocumentResult> {
   try {
-    return await importOneCanvasUnsafe(options)
+    return await importOneDocumentUnsafe(options)
   } catch {
     // A thrown fetch (daemon offline, connection dropped mid-import) must
     // surface as a structured per-canvas failure, never a rejected promise
@@ -91,23 +91,23 @@ export async function importOneCanvas(
   }
 }
 
-async function importOneCanvasUnsafe(
-  options: ImportOneCanvasOptions,
-): Promise<ImportOneCanvasResult> {
-  const { fetch, daemonBaseUrl, workspaceId, canvasName, documentKind, loroLoad } = options
+async function importOneDocumentUnsafe(
+  options: ImportOneDocumentOptions,
+): Promise<ImportOneDocumentResult> {
+  const { fetch, daemonBaseUrl, workspaceId, documentName, documentKind, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {
     return { kind: 'failed', reason: loroLoadFailureReason(loroLoad.kind) }
   }
 
-  const baseSegment = toPathSegment(canvasName)
+  const baseSegment = toPathSegment(documentName)
   let createdPath: string | null = null
 
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
     const candidatePath = attempt === 0 ? baseSegment : `${baseSegment}-${attempt + 1}`
-    const body = createCanvasRequestSchema.parse({ path: candidatePath, kind: documentKind })
+    const body = createDocumentRequestSchema.parse({ path: candidatePath, kind: documentKind })
     const res = await fetch(
-      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
+      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,7 +122,7 @@ async function importOneCanvasUnsafe(
     }
 
     const json: unknown = await res.json()
-    const parsed = createCanvasResponseSchema.safeParse(json)
+    const parsed = createDocumentResponseSchema.safeParse(json)
     if (!parsed.success) {
       return { kind: 'failed', reason: 'Create response failed schema validation.' }
     }
@@ -140,7 +140,7 @@ async function importOneCanvasUnsafe(
   const mergedSnapshot = mergeToSnapshot(loroLoad.snapshot, loroLoad.deltas ?? [])
 
   const updateRes = await fetch(
-    `${daemonBaseUrl}${canvasApiUrl(workspaceId, createdPath, 'update')}`,
+    `${daemonBaseUrl}${documentApiUrl(workspaceId, createdPath, 'update')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -153,7 +153,7 @@ async function importOneCanvasUnsafe(
   }
 
   const updateJson: unknown = await updateRes.json()
-  const updateParsed = updateCanvasResponseSchema.safeParse(updateJson)
+  const updateParsed = updateDocumentResponseSchema.safeParse(updateJson)
   if (!updateParsed.success) {
     return { kind: 'failed', reason: 'Update response failed schema validation.' }
   }

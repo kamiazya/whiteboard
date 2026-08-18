@@ -9,7 +9,7 @@ import { findPackageRoot } from './package-root.js'
 export const WHITEBOARD_ROOT = findPackageRoot(import.meta.url)
 
 // Force owner-only permissions for the data dir, tokens, and stored
-// canvases. On shared VMs or dev containers, a default umask like 0755 can
+// documents. On shared VMs or dev containers, a default umask like 0755 can
 // leave daemon tokens readable by other users. Windows ignores POSIX modes
 // here.
 const POSIX_DATA_DIR_MODE = 0o700
