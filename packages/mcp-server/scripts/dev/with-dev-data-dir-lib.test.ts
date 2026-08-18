@@ -19,7 +19,6 @@ import {
   resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
   resolveEffectivePort,
-  resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
   writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
@@ -99,16 +98,6 @@ describe('ensureDevDataDirSecured', () => {
     if (process.platform !== 'win32') {
       expect(statSync(target).mode & 0o777).toBe(0o700)
     }
-  })
-})
-
-describe('resolveRepoRootFromScriptDir', () => {
-  it('resolves the repo root two levels above packages/mcp-server from the dev scripts dir', () => {
-    // This file lives at packages/mcp-server/scripts/dev — repo root is
-    // four levels up (dev -> scripts -> mcp-server -> packages -> repoRoot).
-    const scriptDir = '/repo/packages/mcp-server/scripts/dev'
-
-    expect(resolveRepoRootFromScriptDir(scriptDir)).toBe(resolve('/repo'))
   })
 })
 
