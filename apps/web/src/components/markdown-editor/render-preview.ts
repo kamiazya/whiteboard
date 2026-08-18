@@ -11,6 +11,8 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
+import { outlineFromScene } from '../../lib/document-outline.js'
+import type { RailBlock } from './rail-geometry.js'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
@@ -18,7 +20,7 @@ export interface RenderMarkdownPreviewOptions {
   readonly background?: string
   /**
    * Maps `[[Name]]` aliases to canvas ids (codec's separate
-   * resolution pass over the parsed tree). Absent, only `[[canvas:ULID]]`
+   * resolution pass over the parsed tree). Absent, only a bare `[[ULID]]`
    * references resolve; unresolved aliases stay literal bracket text.
    */
   readonly resolveAlias?: AliasResolver
@@ -73,6 +75,12 @@ export interface PreviewBlockAnchor {
 export interface RenderedMarkdownPreview {
   readonly svg: string
   readonly anchors: readonly PreviewBlockAnchor[]
+  /**
+   * Each top-level block's box, in the SVG's own pixel space — the same
+   * origin the anchors use, and from the SAME layout pass, so the rail that
+   * draws them can never disagree with what is painted beside it.
+   */
+  readonly blocks: readonly RailBlock[]
 }
 
 const PREVIEW_PADDING_PX = 8
@@ -107,7 +115,38 @@ export function renderMarkdownPreview(
     renderDiagram,
   })
   const svg = renderSceneToSvg(scene, { padding: PREVIEW_PADDING_PX, background })
-  return { svg, anchors: blockAnchors(value, scene) }
+  return { svg, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+}
+
+/**
+ * The rail's half of the render: block boxes and anchors, WITHOUT serializing
+ * an SVG nobody reads.
+ *
+ * The rail draws rectangles, so the SVG string is pure waste on that path —
+ * and it is paid per keystroke, in a worker, for a document that may be long.
+ * Sharing `layoutScene` keeps the shape identical to what the preview would
+ * paint; only the serialization is skipped.
+ */
+export function layoutMarkdownOutline(
+  value: string,
+  options: Omit<RenderMarkdownPreviewOptions, 'background'>,
+): Pick<RenderedMarkdownPreview, 'anchors' | 'blocks'> {
+  const scene = layoutScene(value, options)
+  return { anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+}
+
+/** Top-level block boxes, shifted onto the SVG's pixel origin like anchors. */
+function blockBoxes(scene: Scene): readonly RailBlock[] {
+  if (scene.nodes.length === 0) return []
+  const bounds = sceneBounds(scene)
+  const originY = bounds.y - PREVIEW_PADDING_PX
+  const originX = bounds.x - PREVIEW_PADDING_PX
+  return outlineFromScene(scene).map((rect) => ({
+    x: rect.x - originX,
+    y: rect.y - originY,
+    w: rect.w,
+    h: rect.h,
+  }))
 }
 
 function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[] {

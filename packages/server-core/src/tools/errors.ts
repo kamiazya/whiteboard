@@ -38,14 +38,6 @@ export class DocumentContentLossError extends Error {
   }
 }
 
-/** Thrown when a patch tool targets a canvas that has no saved snapshot yet. */
-export class DocumentNotFoundError extends Error {
-  constructor(public readonly documentId: string) {
-    super(`canvas doc not found: ${documentId}`)
-    this.name = 'DocumentNotFoundError'
-  }
-}
-
 /** Thrown when a patch tool targets a nodeId absent from the canvas. */
 export class NodeNotFoundError extends Error {
   constructor(

@@ -91,6 +91,14 @@ export interface TextRunNode {
 export interface ShapeSceneNode {
   readonly kind: 'shape'
   /**
+   * The node's content had to be cut to fit this box, so a reader is seeing
+   * less than the document holds. Semantic provenance like `id`: the SVG
+   * backend never emits it — the FADE on the last surviving run is the
+   * painted half of the same fact — and `sceneDigest` reports it, which is
+   * the only way a reader that is not looking at pixels can learn it.
+   */
+  readonly truncated?: true
+  /**
    * The DOCUMENT node this chrome belongs to, when the scene was built from
    * one. Semantic provenance in the same sense as a heading's `level` — the
    * SVG backend never emits it, but `sceneDigest` needs it to name what it

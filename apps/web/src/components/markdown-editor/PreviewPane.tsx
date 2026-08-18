@@ -3,6 +3,7 @@ import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
+import type { RailBlock } from './rail-geometry.js'
 import { type PreviewBlockAnchor, renderMarkdownPreview } from './render-preview.js'
 
 export interface PreviewPaneProps {
@@ -27,6 +28,12 @@ export interface PreviewPaneProps {
    * only that handler looks at.
    */
   anchorsRef?: MutableRefObject<readonly PreviewBlockAnchor[]>
+  /**
+   * Each top-level block's box, for the rail beside this pane. Surfaced the
+   * same way as anchors — through a ref rather than a callback — so a
+   * re-render of the pane does not re-render whatever holds the rail.
+   */
+  blocksRef?: MutableRefObject<readonly RailBlock[]>
 }
 
 /**
@@ -56,8 +63,9 @@ export function PreviewPane({
   renderMath,
   renderDiagram,
   anchorsRef,
+  blocksRef,
 }: PreviewPaneProps) {
-  const { svg, anchors } = useMemo(
+  const { svg, anchors, blocks } = useMemo(
     () =>
       renderMarkdownPreview(value, {
         measure,
@@ -72,7 +80,8 @@ export function PreviewPane({
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors
-  }, [anchors, anchorsRef])
+    if (blocksRef) blocksRef.current = blocks
+  }, [anchors, anchorsRef, blocks, blocksRef])
 
   const fill = editorTextFill(theme)
   return (

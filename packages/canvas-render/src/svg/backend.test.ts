@@ -200,6 +200,59 @@ describe('renderSceneToSvg', () => {
     }
   })
 
+  it('underlines every link run, so a link reads as one without depending on color', () => {
+    for (const link of [
+      { kind: 'link', href: 'https://example.com' },
+      { kind: 'wikiLink', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+      { kind: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+    ] as const) {
+      const scene: Scene = {
+        nodes: [
+          {
+            kind: 'paragraph',
+            bbox: { x: 0, y: 0, w: 100, h: 16 },
+            runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 10, h: 16 }, text: 'link', link }],
+          },
+        ],
+      }
+      expect(renderSceneToSvg(scene)).toContain('text-decoration="underline"')
+    }
+  })
+
+  it('keeps both decorations on a struck-through link rather than dropping one', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'paragraph',
+          bbox: { x: 0, y: 0, w: 100, h: 16 },
+          runs: [
+            {
+              kind: 'textRun',
+              bbox: { x: 0, y: 0, w: 10, h: 16 },
+              text: 'link',
+              deleted: true,
+              link: { kind: 'link', href: 'https://example.com' },
+            },
+          ],
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toContain('text-decoration="line-through underline"')
+  })
+
+  it('leaves a non-link run undecorated', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'paragraph',
+          bbox: { x: 0, y: 0, w: 100, h: 16 },
+          runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 10, h: 16 }, text: 'plain' }],
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).not.toContain('text-decoration=')
+  })
+
   it('rejects unsafe URL schemes (javascript:, data:, vbscript:) on link hrefs', () => {
     for (const href of ['javascript:alert(1)', 'data:text/html,<script>1</script>', 'vbscript:x']) {
       const scene: Scene = {
@@ -442,7 +495,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
     }
     const svg = renderSceneToSvg(scene)
     expect(svg).toContain(
-      '<a href="https://example.com"><text x="0" y="0" fill="#111" font-family="Inter" font-size="14">styled link</text></a>',
+      '<a href="https://example.com"><text x="0" y="0" fill="#111" font-family="Inter" font-size="14" text-decoration="underline">styled link</text></a>',
     )
   })
 

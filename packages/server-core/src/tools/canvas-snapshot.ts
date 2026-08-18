@@ -9,8 +9,9 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * Per-node text budget, in characters. A text node can hold a whole markdown
@@ -194,7 +195,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
-      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
       await assertSpatialDocument(
         deps,
         input.workspaceId,

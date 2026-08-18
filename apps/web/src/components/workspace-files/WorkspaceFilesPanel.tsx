@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
-import { DaemonApiError, getDocumentOkfV1, listDocumentsV1 } from '../../lib/daemon-api-client.js'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DaemonApiError,
+  getDocumentOkfV1,
+  getDocumentSnapshot,
+  listDocuments,
+} from '../../lib/daemon-api-client.js'
+import { DocumentMinimap } from './DocumentMinimap.js'
+import { createRowOutlineLoader } from './load-row-outline.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -32,14 +39,41 @@ export function WorkspaceFilesPanel({
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [preview, setPreview] = useState<OkfPreview>({ kind: 'idle' })
 
+  // One loader for the whole tree, so a re-render does not hand every row a
+  // new function and re-trigger its read.
+  const loadRowOutline = useMemo(
+    () =>
+      createRowOutlineLoader({
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        getSnapshot: getDocumentSnapshot,
+        getOkf: getDocumentOkfV1,
+      }),
+    [daemonFetch, daemonBaseUrl, workspaceId],
+  )
+
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
-    listDocumentsV1(daemonFetch, daemonBaseUrl, workspaceId)
+    // The RICH list, not /api/v1's: that one carries only {documentId, path},
+    // so the tree could label a row by nothing but its path segment and had
+    // no way to know a document's kind. Both are things the tree has to show.
+    listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
-        if (!cancelled) setDocuments(res.documents)
+        if (cancelled) return
+        setDocuments(
+          res.documents.map((entry) => ({
+            // An older daemon omits the id; the path stands in, as it does
+            // everywhere else that reads this list.
+            documentId: entry.id ?? entry.path,
+            path: entry.path,
+            ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          })),
+        )
       })
       .catch((err) => {
         if (cancelled) return
@@ -88,7 +122,13 @@ export function WorkspaceFilesPanel({
   return (
     <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
       <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
-        <WorkspaceFileTree documents={documents} onOpen={openDocument} />
+        <WorkspaceFileTree
+          documents={documents}
+          onOpen={openDocument}
+          renderIcon={(entry) => (
+            <DocumentMinimap key={entry.documentId} document={entry} loadOutline={loadRowOutline} />
+          )}
+        />
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (
