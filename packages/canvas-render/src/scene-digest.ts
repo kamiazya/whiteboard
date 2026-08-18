@@ -14,7 +14,20 @@ import type { BoundingBox, Scene } from './scene-graph.js'
 const bboxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
 
 export const sceneDigestSchema = z.object({
-  nodes: z.array(z.object({ id: z.string(), bbox: bboxSchema, z: z.number().int() })),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      bbox: bboxSchema,
+      z: z.number().int(),
+      /**
+       * Present only when this node's content was cut to fit its box, so a
+       * reader knows the document holds more than the canvas shows. The
+       * painted half of the same fact is a fade on the last surviving line,
+       * which a reader of this JSON never sees.
+       */
+      truncated: z.literal(true).optional(),
+    }),
+  ),
   overlaps: z.array(z.tuple([z.string(), z.string()])),
   containment: z.array(z.object({ parent: z.string(), child: z.string() })),
   clusters: z.array(z.array(z.string())),
@@ -47,6 +60,7 @@ interface DigestEntry {
   readonly id: string
   readonly bbox: BoundingBox
   readonly z: number
+  readonly truncated?: true
 }
 
 function overlapArea(a: BoundingBox, b: BoundingBox): number {
@@ -224,9 +238,13 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
  * every bbox-carrying node, named by position. There is nothing better to
  * name them by, and the alternative is answering with nothing.
  */
-function collectEntries(scene: Scene): { readonly id?: string; readonly bbox: BoundingBox }[] {
+function collectEntries(
+  scene: Scene,
+): { readonly id?: string; readonly bbox: BoundingBox; readonly truncated?: true }[] {
   const identified = scene.nodes.flatMap((node) =>
-    node.kind === 'shape' && node.id !== undefined ? [{ id: node.id, bbox: node.bbox }] : [],
+    node.kind === 'shape' && node.id !== undefined
+      ? [{ id: node.id, bbox: node.bbox, ...(node.truncated ? { truncated: true as const } : {}) }]
+      : [],
   )
   if (identified.length > 0) return identified
   return scene.nodes.flatMap((node) => (node.kind === 'edge' ? [] : [{ bbox: node.bbox }]))
@@ -243,10 +261,16 @@ export function sceneDigest(scene: Scene): SceneDigest {
     id: entry.id ?? `n${index}`,
     bbox: entry.bbox,
     z: index,
+    ...(entry.truncated ? { truncated: true as const } : {}),
   }))
 
   return {
-    nodes: entries.map((e) => ({ id: e.id, bbox: e.bbox, z: e.z })),
+    nodes: entries.map((e) => ({
+      id: e.id,
+      bbox: e.bbox,
+      z: e.z,
+      ...(e.truncated ? { truncated: true as const } : {}),
+    })),
     overlaps: computeOverlaps(entries),
     containment: computeContainment(entries),
     clusters: computeClusters(entries),
