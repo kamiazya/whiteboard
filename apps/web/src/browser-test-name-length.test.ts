@@ -27,8 +27,21 @@ const sources = import.meta.glob('./**/*.browser.test.tsx', {
   eager: true,
 }) as Record<string, string>
 
-/** ext4/APFS both stop at 255 bytes for a single path component. */
+/** ext4/APFS both stop at 255 BYTES for a single path component. */
 const NAME_LIMIT = 255
+
+/**
+ * The name as it reaches the filesystem. vitest replaces every non-alphanumeric
+ * CHARACTER with one ASCII `-`, including multi-byte ones, so the sanitized
+ * form is pure ASCII and its length in characters IS its length in bytes.
+ *
+ * Measured against a real attachment name: the title path
+ * `…markdown 導線 (browser — real IndexedDB)-…-is editable…` is 207 characters
+ * and 213 UTF-8 bytes raw, and landed on disk as 207 characters — `導`, `線`
+ * and `—` each cost one dash, not three. Counting the raw title's bytes would
+ * therefore reject titles that fit.
+ */
+const sanitize = (title: string): string => title.replace(/[^a-zA-Z0-9]/g, '-')
 
 /**
  * What the attachment name costs before the test's own title:
@@ -79,7 +92,11 @@ describe('browser test names fit the trace attachment filename', () => {
 
     const overBudget = files
       .flatMap((file) =>
-        titlePaths(sources[file] ?? '').map((title) => ({ file, title, length: title.length })),
+        titlePaths(sources[file] ?? '').map((title) => ({
+          file,
+          title,
+          length: sanitize(title).length,
+        })),
       )
       .filter((entry) => entry.length > TITLE_BUDGET)
       .sort((a, b) => b.length - a.length)
