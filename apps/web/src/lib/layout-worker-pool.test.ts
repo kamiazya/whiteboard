@@ -158,6 +158,71 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  // Every other path that frees a slot pumps the queue. Cancelling an
+  // in-flight request frees one too — and the tests above only passed
+  // because each follows its cancel with a run(), whose own pump does the
+  // dispatch. Nothing in production guarantees that next call.
+  it('hands the freed slot to queued work when an in-flight request is cancelled', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    const running = pool.run({ id: 1 })
+    const queued = pool.run({ id: 2 })
+    pool.cancel(1)
+    await expect(running).rejects.toThrow(/cancelled/i)
+
+    expect(factory.live[0].sent).toEqual([1, 2])
+    factory.live[0].reply(2, { ok: 'wanted' })
+    await expect(queued).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
+  // The total stall: with every slot cancelled and no further run(), the
+  // stale replies cannot restart it either — settle() takes its
+  // already-freed early return, which does not pump.
+  it('does not stall forever when every busy slot is cancelled at once', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 2, createWorker: factory.create })
+
+    const a = pool.run({ id: 1 })
+    const b = pool.run({ id: 2 })
+    const queued = pool.run({ id: 3 })
+    pool.cancel(1)
+    pool.cancel(2)
+    await expect(a).rejects.toThrow(/cancelled/i)
+    await expect(b).rejects.toThrow(/cancelled/i)
+
+    factory.live[0].reply(1, {})
+    factory.live[1].reply(2, {})
+
+    const holder = factory.live.find((w) => w.sent.includes(3))
+    expect(holder).toBeDefined()
+    holder?.reply(3, { ok: 'wanted' })
+    await expect(queued).resolves.toEqual({ id: 3, ok: 'wanted' })
+    pool.dispose()
+  })
+
+  // Cancelling background work lowers backgroundInFlight below the cap, so a
+  // request the cap was holding back becomes runnable — which only the pump
+  // can notice.
+  it('releases background work the cap was holding back', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 2, createWorker: factory.create })
+
+    const running = pool.run({ id: 1 }, 'background')
+    const capped = pool.run({ id: 2 }, 'background')
+    expect(factory.live[0].sent).toEqual([1])
+
+    pool.cancel(1)
+    await expect(running).rejects.toThrow(/cancelled/i)
+
+    const holder = factory.live.find((w) => w.sent.includes(2))
+    expect(holder).toBeDefined()
+    holder?.reply(2, { ok: 'wanted' })
+    await expect(capped).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
   it('creates workers lazily, so an unused pool costs nothing', () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 4, createWorker: factory.create })

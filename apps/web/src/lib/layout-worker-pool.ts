@@ -220,6 +220,12 @@ export function createLayoutWorkerPool(options: {
         abandoned.add(id)
         pending.reject(new Error(`layout request ${id} cancelled`))
         slot.busyWith = null
+        // Freeing a slot means the queue may have work for it — and every
+        // other path that frees one pumps. The stale reply cannot do it
+        // later either: settle() takes its already-freed early return, which
+        // deliberately does nothing. Without this, queued work waits for an
+        // unrelated caller to happen along.
+        pump()
       }
     },
 

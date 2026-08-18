@@ -27,6 +27,25 @@ describe('WorkspaceFileTree', () => {
     expect(screen.queryByText('login-flow')).toBeNull()
   })
 
+  // The list carries the kind, so the row shows it. Not the minimap that
+  // will replace this icon — just the difference between the two things a
+  // document can be, which the tree already knows and was throwing away.
+  it('distinguishes a spatial document from a markdown one', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[
+          { documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' },
+          { documentId: 'c2', path: 'b', name: 'Diagram', kind: 'spatial' },
+        ]}
+        onOpen={() => {}}
+      />,
+    )
+    const prose = screen.getByRole('treeitem', { name: 'Prose' })
+    const diagram = screen.getByRole('treeitem', { name: 'Diagram' })
+    expect(prose.querySelector('[data-kind]')?.getAttribute('data-kind')).toBe('markdown')
+    expect(diagram.querySelector('[data-kind]')?.getAttribute('data-kind')).toBe('spatial')
+  })
+
   it('falls back to the segment for a document nobody named', () => {
     render(
       <WorkspaceFileTree

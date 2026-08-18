@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useDocumentOutline } from '../../hooks/useDocumentOutline.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -37,6 +37,36 @@ describe('the rail in write mode', () => {
     )
 
     await waitFor(() => expect(bars()).toBeGreaterThan(short), { timeout: 15_000 })
+  })
+
+  // The rail replaces the scrollbar, so pressing it has to MOVE something.
+  // Every test until now checked the bars it draws and none checked the one
+  // thing it is for.
+  it('scrolls the source to the position pressed', async () => {
+    const { container } = render(
+      <div style={{ width: '900px', height: '300px' }}>
+        <MarkdownEditor value={LONG} onChange={() => undefined} className="h-full" />
+      </div>,
+    )
+    const rail = await waitFor(
+      () => {
+        const el = container.querySelector('[data-testid="markdown-minimap-rail"]')
+        if (el === null) throw new Error('no rail yet')
+        if (el.querySelectorAll(':scope > div').length < 5) throw new Error('no bars yet')
+        return el as HTMLElement
+      },
+      { timeout: 15_000 },
+    )
+    const scroller = container.querySelector('.cm-scroller') as HTMLElement
+    expect(scroller.scrollTop).toBe(0)
+
+    const box = rail.getBoundingClientRect()
+    rail.setPointerCapture = () => undefined
+    rail.hasPointerCapture = () => true
+    fireEvent.pointerDown(rail, { clientY: box.top + box.height * 0.85, pointerId: 1 })
+
+    // Pressing near the bottom of the map lands near the end of the document.
+    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0), { timeout: 5_000 })
   })
 })
 
