@@ -511,8 +511,11 @@ describe('layoutMdastBlocks — word wrap', () => {
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    // One run: an interior space in a code span is not a word boundary, so it
+    // is never SPLIT there. It is CUT to fit instead, and says so.
     expect(paragraph.runs).toHaveLength(1)
-    expect(paragraph.runs[0].text).toBe('function call with spaces()')
+    expect(paragraph.runs[0].truncated).toBe(true)
+    expect('function call with spaces()'.startsWith(paragraph.runs[0].text)).toBe(true)
   })
 
   it('keeps an overflowing raw html run whole instead of splitting it at whitespace', () => {
@@ -530,8 +533,11 @@ describe('layoutMdastBlocks — word wrap', () => {
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    // One run — an attribute value's spaces are not word boundaries — cut to
+    // fit rather than split.
     expect(paragraph.runs).toHaveLength(1)
-    expect(paragraph.runs[0].text).toBe('<span class="a b c" data-x="y">')
+    expect(paragraph.runs[0].truncated).toBe(true)
+    expect('<span class="a b c" data-x="y">'.startsWith(paragraph.runs[0].text)).toBe(true)
   })
 
   it('preserves a space between a wrapped chunk and the next inline sibling', () => {
@@ -632,8 +638,12 @@ describe('layoutMdastBlocks — word wrap', () => {
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    // Math is the one atomic run that is not CUT either: `a + b + c` cut to
+    // `a + b` reads as a complete formula that is simply wrong, where cut code
+    // reads as cut. Overflowing is the lesser harm, so it keeps every term.
     expect(paragraph.runs).toHaveLength(1)
     expect(paragraph.runs[0].text).toBe('a + b + c + d + e')
+    expect(paragraph.runs[0].truncated).toBeUndefined()
   })
 })
 

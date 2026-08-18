@@ -511,6 +511,32 @@ paths:
     constructor turns a ~24KB model into a Map, and charging that to whichever
     lazily-imported chunk pulls this module in turned two apps/web browser
     tests red before it was made lazy.
+    **What cannot wrap is CUT, not left to overflow** (`layout/truncate.ts`,
+    `fitToWidth`): a node label (one line is what makes it a label) and an
+    atomic run. The run keeps the longest prefix that fits and is marked
+    `truncated`, which the SVG backend paints as a fade — never an ellipsis,
+    because a label is cut precisely where width is scarce and three dots
+    spend the width they save. `fitToWidth` never returns the empty string for
+    non-empty input: one glyph over the edge still says a label is there.
+    Two carve-outs:
+    - **Inline MATH is neither split nor cut.** `a + b + c` cut to `a + b`
+      reads as a complete formula that is simply wrong, where cut code or cut
+      markup reads as cut. It is the one thing still allowed to overflow, and
+      the scoreboard's zeroes are pinned knowing it.
+    - **An EDGE label is not cut**, because it floats on the edge rather than
+      inside a box, so there is no width to fit it to.
+    The fade itself is ONE `<mask>` in `<defs>` with
+    `maskContentUnits="objectBoundingBox"`, so it scales to every referencing
+    element instead of needing a definition per run, and it is emitted only
+    when something is truncated — presence-only, exactly like an absent
+    appearance attribute, which is what keeps every existing golden
+    byte-identical. Verified honoured by resvg (the PNG export path) as well
+    as browsers. A page embedding several of these SVGs repeats the mask id,
+    which is harmless precisely because every copy is byte-identical.
+    NOT done, and deliberately: `sceneDigest` does not report truncation. A
+    fade says "there is more" without saying how much, and the digest carries
+    no text content to be inconsistent with — add it when a reader has a
+    reason to act on it.
     `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
     see the Tests section.
 

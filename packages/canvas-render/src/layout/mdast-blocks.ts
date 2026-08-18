@@ -31,6 +31,7 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
+import { fitToWidth } from './truncate.js'
 
 /**
  * Minimal layout constants. Deliberately NOT a theme/design-token system
@@ -405,9 +406,25 @@ function layoutPhrasing(
     // mid-token at a whitespace boundary — unlike prose, an internal space
     // in their source text is not a word boundary.
     wrappable = true,
+    // Inline MATH is atomic AND uncuttable: `a + b + c` cut to `a + b`
+    // reads as a complete formula that is simply wrong, where cut code or
+    // cut markup reads as cut. Overflowing is the lesser harm.
+    truncatable = true,
   ) => {
     if (!wrappable) {
-      pushRun(text, extra, runStyle)
+      // Atomic: never SPLIT, because an interior space in a code span or an
+      // HTML tag is not a word boundary. Cutting it is the only way left to
+      // keep it inside the box, and the run says so.
+      const fitted =
+        canWrap && truncatable
+          ? fitToWidth(
+              text,
+              bodyFont(options.fontFamily, fontSizePx, runStyle),
+              options.measure,
+              options.maxWidth - line.x,
+            )
+          : { text }
+      pushRun(fitted.text, { ...extra, ...(fitted.truncated ? { truncated: true } : {}) }, runStyle)
       return
     }
     // XML — and therefore an SVG <text> element — strips leading/trailing
@@ -515,7 +532,7 @@ function layoutPhrasing(
           emit(child.alt ?? child.identifier, {}, currentStyle)
           break
         case 'inlineMath':
-          emit(child.value, {}, currentStyle, false)
+          emit(child.value, {}, currentStyle, false, false)
           break
         case 'wikiLink':
           emit(

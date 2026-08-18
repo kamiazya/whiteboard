@@ -2040,7 +2040,11 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
     )
 
     const chrome = await vi.waitFor(() => {
-      const rect = container.querySelector('svg rect')
+      // Not the first `svg rect`: the truncation fade's <mask> owns a 1x1
+      // rect in <defs>, which comes first in document order.
+      const rect = [...container.querySelectorAll('svg rect')].find(
+        (candidate) => candidate.closest('defs') === null,
+      )
       if (!rect) throw new Error('no node chrome yet')
       return rect
     })
@@ -2060,5 +2064,52 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
     for (const run of runs) {
       expect(run.textContent ?? '').not.toMatch(/^[。、）」』，]/)
     }
+  })
+
+  it('cuts a long file label to fit its node and fades the cut edge', async () => {
+    // A label never wraps — one line is what makes it a label — so this is
+    // the other half of "content stays inside the box". The fade is a single
+    // shared <mask>, so its presence is checked by the reference, not by
+    // counting definitions.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'file-node',
+          type: 'file',
+          x: 20,
+          y: 20,
+          width: 160,
+          height: 60,
+          file: 'とても長い日本語のファイル名です.md',
+        },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <div style={{ width: 900, height: 600 }}>
+        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+      </div>,
+    )
+
+    const chrome = await vi.waitFor(() => {
+      // Not the first `svg rect`: the truncation fade's <mask> owns a 1x1
+      // rect in <defs>, which comes first in document order.
+      const rect = [...container.querySelectorAll('svg rect')].find(
+        (candidate) => candidate.closest('defs') === null,
+      )
+      if (!rect) throw new Error('no node chrome yet')
+      return rect
+    })
+    const label = [...container.querySelectorAll('svg text')].find(
+      (node) => (node.textContent ?? '').trim() !== '',
+    )
+    expect(label).toBeTruthy()
+    if (!label) return
+    expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
+      chrome.getBoundingClientRect().right + 1,
+    )
+    expect(label.getAttribute('mask')).toMatch(/^url\(#/)
+    // Cut, not rewritten: what is painted is a prefix of the real name.
+    expect('とても長い日本語のファイル名です.md'.startsWith(label.textContent ?? '')).toBe(true)
   })
 })

@@ -235,9 +235,31 @@ describe('layoutMdastBlocks properties', () => {
 
   // Wrapping decides where spaces go, so this compares TOKEN SEQUENCES
   // rather than raw strings: a line break legitimately replaces a space.
+  //
+  // A TRUNCATED run is the one place text is deliberately dropped, so a
+  // document containing one is held to the weaker statement its contract
+  // actually makes: what survives is a PREFIX. Stated as two properties
+  // rather than one weakened property, so the un-truncated case — every
+  // document with no atomic overflow in it, which is nearly all of them —
+  // keeps the full strength it had.
   fcTest.prop([proseRootArb], withDefaults())('preserves every source word, in order', (root) => {
-    const rendered = textRuns(layout(root)).flatMap(({ run }) => tokens(run.text))
+    const runs = textRuns(layout(root))
+    if (runs.some(({ run }) => run.truncated === true)) return
+    const rendered = runs.flatMap(({ run }) => tokens(run.text))
     expect(rejoinSplitTokens(rendered, sourceTokens(root))).toStrictEqual(sourceTokens(root))
+  })
+
+  fcTest.prop([proseRootArb], withDefaults())('only ever cuts a run to a prefix', (root) => {
+    const source = sourceTokens(root).join(' ')
+    for (const { run } of textRuns(layout(root))) {
+      if (run.truncated !== true) continue
+      // The cut text is a prefix of SOME source token: an atomic run's own
+      // text, which the token stream carries verbatim.
+      expect(sourceTokens(root).some((token) => token.startsWith(tokens(run.text)[0] ?? ''))).toBe(
+        true,
+      )
+      expect(source.includes(tokens(run.text)[0] ?? '')).toBe(true)
+    }
   })
 
   // XML — and therefore an SVG <text> element — strips leading/trailing

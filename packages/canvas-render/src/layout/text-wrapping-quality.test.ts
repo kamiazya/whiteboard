@@ -17,11 +17,11 @@ import { layoutMdastBlocks } from './mdast-blocks.js'
  * improvement has to be as loud as a regression, and someone has to say why
  * the number moved.
  *
- * The DEBT metrics (`overflow`, `max`, `bboxLies`) target zero. The three
- * overflows left are all `inline-code`: an atomic run is never split, because
- * an interior space in a code span is not a word boundary. Truncating it is
- * the ellipsis/fade slice's job, not the line breaker's — until then the
- * block bbox at least covers the ink, which is why `bboxLies` is 0.
+ * The DEBT metrics (`overflow`, `max`, `bboxLies`) are all ZERO, and are
+ * pinned at zero so the next regression is loud. The one thing still allowed
+ * to overflow by contract is inline MATH, which is neither split nor cut:
+ * `a + b + c` cut to `a + b` reads as a complete formula that is simply
+ * wrong, where cut code reads as cut. No corpus case exercises it.
  *
  * The PRICE metrics (`runs`, `lines`, `measure`) have no target — they exist
  * so a wrapping strategy that buys its quality with a per-character measure
@@ -104,9 +104,9 @@ const PINNED_SCORES: readonly string[] = [
   'long-token@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=71',
   'long-token@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=67',
   'long-token@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=65',
-  'inline-code@120: overflow=1 max=+277px bboxLies=0 runs=3 lines=2 measure=9',
-  'inline-code@200: overflow=1 max=+197px bboxLies=0 runs=3 lines=2 measure=9',
-  'inline-code@320: overflow=1 max=+77px bboxLies=0 runs=3 lines=2 measure=9',
+  'inline-code@120: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=14',
+  'inline-code@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=22',
+  'inline-code@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=35',
   'ja-heading@120: overflow=0 max=+0px bboxLies=0 runs=12 lines=12 measure=51',
   'ja-heading@200: overflow=0 max=+0px bboxLies=0 runs=8 lines=8 measure=32',
   'ja-heading@320: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=21',
@@ -118,5 +118,5 @@ const PINNED_SCORES: readonly string[] = [
   'emoji@320: overflow=0 max=+0px bboxLies=0 runs=1 lines=1 measure=3',
 ]
 
-const PINNED_DEBT = { overflowingRuns: 3, maxOverflowPx: 277, bboxUnderreports: 0 }
-const PINNED_PRICE = { runs: 155, lines: 146, measureCalls: 873 }
+const PINNED_DEBT = { overflowingRuns: 0, maxOverflowPx: 0, bboxUnderreports: 0 }
+const PINNED_PRICE = { runs: 155, lines: 146, measureCalls: 917 }
