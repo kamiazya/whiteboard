@@ -37,7 +37,6 @@
 export const ALL_REGISTERED_TOOLS = [
   'wb_viewport_set',
   'wb_body_patch',
-  'wb_scene_digest',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_document_set',
@@ -85,7 +84,6 @@ export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
 export const UNIT_ONLY_TOOLS = [
   'wb_body_patch',
-  'wb_scene_digest',
   'wb_scene_render',
   'wb_document_get',
   'wb_document_delete',

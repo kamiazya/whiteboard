@@ -100,6 +100,11 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
     pattern: /\bwb_canvas_tidy\b/,
     reason: 'retired into wb_canvas_edit — use an ops entry { op: "tidy" }',
   },
+  {
+    pattern: /\bwb_scene_digest\b/,
+    reason:
+      'merged into wb_canvas_snapshot (ADR-0010) — pass layout:true for the overlap/containment/cluster/free-region analysis',
+  },
 ]
 
 describe('skills tool-surface guard', () => {

@@ -162,8 +162,8 @@ Stage 2 rules:
 
 Once a draft exists, break it as if you know nothing about the prior chat.
 Review either the whole document or one section at a time, but do it **while looking at the SVG
-`wb_scene_render` returns** (or, when you cannot view an image, the summary `wb_scene_digest`
-returns).
+`wb_scene_render` returns** (or, when you cannot view an image, what
+`wb_canvas_snapshot({ layout: true })` returns).
 
 Check:
 

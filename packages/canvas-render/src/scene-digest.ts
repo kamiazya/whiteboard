@@ -19,6 +19,17 @@ export const sceneDigestSchema = z.object({
   containment: z.array(z.object({ parent: z.string(), child: z.string() })),
   clusters: z.array(z.array(z.string())),
   freeRegions: z.array(bboxSchema),
+  /**
+   * Whether a guard below dropped a derivation rather than computing it.
+   *
+   * Without this the guards are indistinguishable from a genuine answer: a
+   * board too large for the pairwise scan reports `overlaps: []`, which
+   * reads as "nothing overlaps" — the most misleading possible reply to
+   * "is this board tidy". Only this function knows both conditions (one is
+   * a node count, the other a derived grid size), so it is the only place
+   * that can say so.
+   */
+  truncated: z.boolean(),
 })
 
 export type SceneDigest = z.infer<typeof sceneDigestSchema>
@@ -33,7 +44,7 @@ const FREE_REGION_GRID_PX = 20
  * an arbitrarily large `rows x cols` boolean matrix; past this bound free
  * regions are dropped rather than risking unbounded allocation.
  */
-const FREE_REGION_MAX_CELLS = 250_000
+export const FREE_REGION_MAX_CELLS = 250_000
 /**
  * Upper bound on the entry count fed into the pairwise O(n^2)
  * overlap/containment/cluster derivation below. Scene node counts are
@@ -41,7 +52,7 @@ const FREE_REGION_MAX_CELLS = 250_000
  * fields degrades to empty rather than risking a runaway pairwise scan —
  * mirroring FREE_REGION_MAX_CELLS's guard for the grid allocation above.
  */
-const PAIRWISE_MAX_ENTRIES = 2_000
+export const PAIRWISE_MAX_ENTRIES = 2_000
 
 interface DigestEntry {
   readonly id: string
@@ -245,11 +256,18 @@ export function sceneDigest(scene: Scene): SceneDigest {
     z: index,
   }))
 
+  const freeRegions = computeFreeRegions(entries)
   return {
     nodes: entries.map((e) => ({ id: e.id, bbox: e.bbox, z: e.z })),
     overlaps: computeOverlaps(entries),
     containment: computeContainment(entries),
     clusters: computeClusters(entries),
-    freeRegions: computeFreeRegions(entries),
+    freeRegions,
+    // The pairwise guard is a node count and can be re-tested directly. The
+    // grid guard depends on the scene's extent, so it is inferred from its
+    // one observable effect: no free regions on a scene that HAS nodes, which
+    // a real layout never produces (a board of boxes always leaves gaps).
+    truncated:
+      entries.length > PAIRWISE_MAX_ENTRIES || (entries.length > 0 && freeRegions.length === 0),
   }
 }

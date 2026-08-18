@@ -279,9 +279,8 @@ coordinates — nothing here assumes a feature the tool surface does not have.
 ## After Drawing
 
 1. call `wb_scene_render({ workspaceId, documentId })` and inspect the SVG for overflow / overlap / directionality
-2. if you cannot see the image, read the board with `wb_canvas_snapshot` (what is on it) or
-   `wb_scene_digest` (whether it is tidy) — though `wb_canvas_edit` already returned the board under
-   `snapshot`
+2. if you cannot see the image, read the board with `wb_canvas_snapshot` (add `layout: true` to
+   judge whether it is tidy) — though `wb_canvas_edit` already returned the board under `snapshot`
 3. if refinement is needed, send `node.patch` / `edge.patch` / `node.remove` ops before considering a
    full redraw on a new document
 

@@ -58,7 +58,8 @@ export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
  *
  * References are resolved UNCONDITIONALLY here, unlike `wb_scene_render`'s
  * opt-in `embedReferences`. That flag exists because the render tool shares
- * its scene builder with `wb_scene_digest`, whose usefulness depends on a
+ * its scene builder with `wb_canvas_snapshot`'s layout analysis, whose
+ * usefulness depends on a
  * canvas's digest not moving when a different document is edited. This tool
  * has no such sibling: its one consumer is a viewer for a human, which
  * always wants the reference resolved, and it has no store of its own to

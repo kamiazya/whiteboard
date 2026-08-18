@@ -45,17 +45,18 @@ wb_document_get({ workspaceId, documentId })
 // no recorded kind -> throws a "no recorded kind" error — itself a signal worth reporting
 ```
 
-**Do not probe with `wb_scene_digest` first.** The digest reads the spatial containers without
-checking the document's kind, so a markdown document — whose body lives elsewhere — digests as
-`{ nodes: [], edges: [] }` with no error. Digest-first therefore cannot distinguish "empty spatial
-document" from "markdown document full of prose."
+**Read the kind before reading the content.** A spatial read refuses a document it knows to be
+markdown rather than reporting its containers as empty, so it cannot silently answer "nothing
+here" about a document full of prose — but it also cannot tell you the kind of a document you have
+not identified yet. `wb_document_get` is what establishes that.
 
 Once a document is KNOWN spatial (from `wb_document_get`'s `kind`, or because this session created
-it), `wb_scene_digest` is the cheap re-probe for later passes — counts and bounding boxes without
-re-pulling the payload:
+it), `wb_canvas_snapshot` is the cheap re-probe for later passes — node text, geometry and lock
+state without the untruncated JSON Canvas payload:
 
 ```js
-wb_scene_digest({ workspaceId, documentId })  // only meaningful for a known-spatial document
+wb_canvas_snapshot({ workspaceId, documentId })               // what is on it
+wb_canvas_snapshot({ workspaceId, documentId, layout: true })  // ...and whether it is tidy
 ```
 
 A document with no recorded kind predates format tracking (`wb_document_get` refuses; the digest
@@ -104,5 +105,5 @@ Do **not** delete anything automatically. Always confirm with the user before ca
   (`wb_version_list` / `wb_version_restore`), and those do not survive the document itself being
   deleted.
 - This skill has no bulk operation: auditing N documents means N `wb_document_get` /
-  `wb_scene_digest` calls. For a very large workspace, sample rather than exhaustively walking
+  `wb_canvas_snapshot` calls. For a very large workspace, sample rather than exhaustively walking
   every document.

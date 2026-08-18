@@ -31,7 +31,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
-  wb_scene_digest: { profile: READ_ONLY, title: 'Summarise the laid-out scene' },
   wb_viewport_set: {
     // Mutating rather than read-only: it changes what a human is looking at.
     // Idempotent — sending the same viewport twice lands in the same place.
