@@ -845,6 +845,7 @@ export function DaemonDocumentPage({
                     linkTargets={linkTargets}
                     onCommit={nodeInEditor.commit}
                     onClose={nodeInEditor.close}
+                    onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
                   />
                 )}
               </div>
