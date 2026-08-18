@@ -285,6 +285,27 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
+    tools.canvasEdit.name,
+    {
+      description: tools.canvasEdit.description,
+      inputSchema: tools.canvasEdit.inputSchema.shape,
+      outputSchema: tools.canvasEdit.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasEdit.inputSchema.parse(args)
+      // Under the per-document write lock: this is the one tool that reads
+      // the whole canvas, decides ids and placements against what it read,
+      // and writes it back. Two concurrent batches without the lock can
+      // mint the same id and the later save wins silently.
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
+        tools.canvasEdit.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.versionSave.name,
     {
       description: tools.versionSave.description,

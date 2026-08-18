@@ -11,6 +11,7 @@ const DESTRUCTIVE_IDEMPOTENT = {
   openWorldHint: false,
 } as const
 const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
+const DESTRUCTIVE = { destructiveHint: true, openWorldHint: false } as const
 export const MUTATING = { openWorldHint: false } as const
 
 // Map from tool name to annotation profile and human-friendly title. Used by
@@ -35,6 +36,12 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Lock or unlock an edge on the spatial canvas',
   },
   wb_canvas_tidy: { profile: MUTATING_IDEMPOTENT, title: 'Tidy the spatial canvas layout' },
+  wb_canvas_edit: {
+    // Destructive because a batch may carry node.remove / edge.remove, and
+    // NOT idempotent because an add refuses an id already on the canvas.
+    profile: DESTRUCTIVE,
+    title: 'Apply a batch of edits to the spatial canvas',
+  },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_scene_digest: { profile: READ_ONLY, title: 'Summarise the laid-out scene' },

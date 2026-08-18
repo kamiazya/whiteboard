@@ -4,6 +4,7 @@ import {
   canvasColorSchema,
   documentIdSchema,
   nodeIdSchema,
+  type SpatialCanvas,
   type SpatialNode,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -27,7 +28,7 @@ export const SNAPSHOT_MAX_EDGES = 600
  * emitting `false` on every node of a 300-node board costs more than the
  * information is worth. Absent means "no".
  */
-export const canvasSnapshotNodeSchema = z
+const canvasSnapshotNodeSchema = z
   .object({
     id: nodeIdSchema,
     type: z.enum(['text', 'file', 'link', 'group']),
@@ -49,7 +50,7 @@ export const canvasSnapshotNodeSchema = z
   })
   .strict()
 
-export const canvasSnapshotEdgeSchema = z
+const canvasSnapshotEdgeSchema = z
   .object({
     id: nodeIdSchema,
     fromNode: nodeIdSchema,
@@ -135,6 +136,39 @@ function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSn
 }
 
 /**
+ * Projects a canvas value plus its lock sets into the snapshot payload.
+ *
+ * Split out from the tool so `wb_canvas_edit` can answer with the board it
+ * just produced without a second load — the two must agree field for field,
+ * and the only way to guarantee that is one projection.
+ */
+export function projectCanvasSnapshot(
+  documentId: string,
+  canvas: SpatialCanvas,
+  nodeLocks: ReadonlySet<string>,
+  edgeLocks: ReadonlySet<string>,
+): CanvasSnapshot {
+  const projected = canvas.nodes
+    .slice(0, SNAPSHOT_MAX_NODES)
+    .map((node) => projectNode(node, nodeLocks.has(node.id)))
+  const edges = canvas.edges
+    .slice(0, SNAPSHOT_MAX_EDGES)
+    .map((edge) => projectEdge(edge, edgeLocks.has(edge.id)))
+
+  return {
+    documentId,
+    nodes: projected.map((entry) => entry.node),
+    edges,
+    nodeCount: canvas.nodes.length,
+    edgeCount: canvas.edges.length,
+    truncated:
+      canvas.nodes.length > SNAPSHOT_MAX_NODES ||
+      canvas.edges.length > SNAPSHOT_MAX_EDGES ||
+      projected.some((entry) => entry.truncated),
+  }
+}
+
+/**
  * The compact, semantic read of a spatial canvas — what an agent should
  * reach for before editing one.
  *
@@ -169,27 +203,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
         'wb_canvas_snapshot',
       )
 
-      const nodeLocks = readNodeLocks(doc)
-      const edgeLocks = readEdgeLocks(doc)
-
-      const projected = canvas.nodes
-        .slice(0, SNAPSHOT_MAX_NODES)
-        .map((node) => projectNode(node, nodeLocks.has(node.id)))
-      const edges = canvas.edges
-        .slice(0, SNAPSHOT_MAX_EDGES)
-        .map((edge) => projectEdge(edge, edgeLocks.has(edge.id)))
-
-      return {
-        documentId: input.documentId,
-        nodes: projected.map((entry) => entry.node),
-        edges,
-        nodeCount: canvas.nodes.length,
-        edgeCount: canvas.edges.length,
-        truncated:
-          canvas.nodes.length > SNAPSHOT_MAX_NODES ||
-          canvas.edges.length > SNAPSHOT_MAX_EDGES ||
-          projected.some((entry) => entry.truncated),
-      }
+      return projectCanvasSnapshot(input.documentId, canvas, readNodeLocks(doc), readEdgeLocks(doc))
     },
   }
 }
