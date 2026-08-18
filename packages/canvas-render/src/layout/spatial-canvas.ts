@@ -541,6 +541,51 @@ function contentBox(
  * passing through here paints outside the frame, which is a rendering
  * defect this package's "what cannot fit is cut" contract forbids.
  */
+/**
+ * Trims a block to the LINES of it that fit, for the two block kinds whose
+ * runs are lines (`layoutMdastBlocks` emits one run per wrapped line).
+ *
+ * Whole-block granularity alone leaves the commonest shape unbounded: a
+ * single long paragraph is ONE block, so a body that is one paragraph either
+ * fits or is kept whole and painted outside the frame. Measured before this
+ * existed — a paragraph laid out at 112px in a 60px node reached y=120,
+ * twice the height of the box it lives in.
+ *
+ * `undefined` when not even the first line fits, leaving the keep-first
+ * decision to the caller. `list`/`table`/`blockquote` stay whole-block: their
+ * children are not lines, and two of them are the `subtreeOffsetX`
+ * transform-boundary class this package keeps at arm's length.
+ */
+function fitBlockLines(
+  block: Exclude<SceneNode, { kind: 'edge' }>,
+  maxBottom: number,
+): SceneNode | undefined {
+  // A list's ITEMS are its lines-equivalent: one row each, laid out with
+  // increasing bottoms, so the same prefix trim applies. Measured as the
+  // worst offender before this — a list escaped its frame even at a box only
+  // 20% too small, where every prose case survived. Only the items are
+  // filtered; their descendants are never read, so the `subtreeOffsetX`
+  // transform-boundary rule is untouched.
+  if (block.kind === 'list') {
+    const items = block.items.filter((item) => item.bbox.y + item.bbox.h <= maxBottom)
+    if (items.length === 0 || items.length === block.items.length) return undefined
+    const bottom = Math.max(...items.map((item) => item.bbox.y + item.bbox.h))
+    return { ...block, items, bbox: { ...block.bbox, h: bottom - block.bbox.y } }
+  }
+  if (block.kind !== 'paragraph' && block.kind !== 'heading') return undefined
+  const kept = block.runs.filter((run) => run.bbox.y + run.bbox.h <= maxBottom)
+  if (kept.length === 0 || kept.length === block.runs.length) return undefined
+
+  // The last surviving line carries the fade the SVG backend already paints
+  // for a horizontally cut run, so a vertical cut says "there is more" in
+  // the same visual language rather than ending silently.
+  const runs = kept.map((run, index) =>
+    index === kept.length - 1 ? { ...run, truncated: true as const } : run,
+  )
+  const bottom = Math.max(...runs.map((run) => run.bbox.y + run.bbox.h))
+  return { ...block, runs, bbox: { ...block.bbox, h: bottom - block.bbox.y } }
+}
+
 function fitSceneInNode(
   scene: Scene,
   node: SpatialNode,
@@ -552,9 +597,20 @@ function fitSceneInNode(
 
   // Neither producer emits an edge (the one SceneNode variant with no
   // `bbox`); that guard is for the type checker, not runtime.
-  const fitted = scene.nodes.filter(
-    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= box.h,
-  )
+  const fitted: SceneNode[] = []
+  for (const entry of scene.nodes) {
+    if (entry.kind === 'edge') continue
+    if (entry.bbox.y + entry.bbox.h <= box.h) {
+      fitted.push(entry)
+      continue
+    }
+    // The first block that does not fit is the last one considered: every
+    // block after it starts lower still, and `layoutMdastBlocks` lays them
+    // out with strictly increasing bottoms.
+    const trimmed = fitBlockLines(entry, box.h)
+    if (trimmed !== undefined) fitted.push(trimmed)
+    break
+  }
   return fitted.length === 0 ? undefined : { nodes: fitted }
 }
 
