@@ -125,9 +125,6 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
 const BROWSER_LOCAL_STATE: ProviderState = {
   kind: 'browser-local',
   capabilities: {
-    canvasReadWrite: true,
-    migrationExport: true,
-    migrationImport: false,
     workspaces: false,
     versions: false,
     branches: false,
@@ -139,9 +136,6 @@ const LOCAL_DAEMON_STATE: ProviderState = {
   kind: 'local-daemon',
   daemonBaseUrl: 'http://127.0.0.1:3000',
   capabilities: {
-    canvasReadWrite: true,
-    migrationExport: false,
-    migrationImport: true,
     workspaces: true,
     versions: true,
     branches: true,
