@@ -1,4 +1,5 @@
 import {
+  readDocumentKind,
   readEdgeLocks,
   readNodeLocks,
   writeDocumentKind,
@@ -13,7 +14,12 @@ import {
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
-import { createCanvasEditTool, PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit.js'
+import {
+  canvasEditInputSchema,
+  createCanvasEditTool,
+  PLACEMENT_COLUMNS,
+  PLACEMENT_GUTTER_PX,
+} from './canvas-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -431,5 +437,254 @@ describe('wb_canvas_edit tool', () => {
 
     expect(result.applied).toBe(3)
     expect(result.snapshot.edges).toHaveLength(1)
+  })
+})
+
+/**
+ * Behaviour inherited from the seven single-purpose tools this batch tool
+ * replaced (`wb_node_add` / `wb_node_patch` / `wb_edge_add` /
+ * `wb_edge_patch` / `wb_node_lock` / `wb_edge_lock` / `wb_canvas_tidy`).
+ *
+ * Ported BEFORE those tools were deleted, so the retirement is backed by
+ * green tests rather than by an argument. The precedent this guards against
+ * is the `annotate` tool, removed with nothing replacing it — every caller
+ * kept looking live and failed at the host with an unknown-tool error.
+ */
+describe('wb_canvas_edit — behaviour inherited from the retired tools', () => {
+  test('records a document that predates kinds as spatial (from wb_node_add)', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, EMPTY)
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
+    })
+
+    const { doc } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(readDocumentKind(doc)).toBe('spatial')
+  })
+
+  test('rejects a canvas the workspace does not own (from every mutation tool)', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, EMPTY)
+    })
+    // Deliberately NOT registered under WORKSPACE_ID.
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
+      }),
+    ).rejects.toMatchObject({ name: 'WorkspaceDocumentNotFoundError' })
+  })
+
+  test('rejects a canvas with no saved snapshot (from wb_node_patch)', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'node.patch', id: 'a', patch: { x: 1 } }],
+      }),
+    ).rejects.toMatchObject({ name: 'DocumentNotFoundError' })
+  })
+
+  test('rejects a negative width at the schema level (from wb_node_patch)', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      edges: [],
+    })
+
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.patch', id: 'a', patch: { width: -1 } }],
+    })
+    expect(parsed.success).toBe(false)
+
+    // A non-negative width still parses, so the rejection above is the
+    // sign constraint and not the op shape.
+    expect(
+      canvasEditInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'node.patch', id: 'a', patch: { width: 1 } }],
+      }).success,
+    ).toBe(true)
+  })
+
+  test('drops a label patched onto a text node instead of storing it (from wb_node_patch)', async () => {
+    // `label` is a group-only field and the per-type node schemas are not
+    // strict, so an unrecognized key is stripped on re-parse rather than
+    // rejected. Existing schema behaviour, pinned here because it is
+    // surprising enough that a reader would otherwise call it a bug.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.patch', id: 'a', patch: { label: 'not for a text node' } }],
+    })
+
+    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes[0]).not.toHaveProperty('label')
+  })
+
+  test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'triangle' } }],
+    })
+    expect(parsed.success).toBe(false)
+
+    const valid = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'arrow', fromEnd: 'none' } }],
+    })
+    expect(valid.success).toBe(true)
+  })
+
+  test('a locked NODE does not freeze the edges touching it (from wb_edge_patch)', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
+        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+      ],
+      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'node.lock', id: 'a', locked: true },
+        // Only an edge's OWN lock stops it being patched.
+        { op: 'edge.patch', id: 'e', patch: { label: 'still editable' } },
+      ],
+    })
+
+    expect(result.applied).toBe(2)
+    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges[0]).toMatchObject({ label: 'still editable' })
+  })
+
+  test('an edge lock does not lock a node sharing the same id (from wb_edge_lock)', async () => {
+    // Nodes and edges have separate lock sets, and model has no distinct
+    // edge-id shape — so a same-spelled id must not leak across them.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'node x' },
+        { id: 'y', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'node y' },
+      ],
+      edges: [{ id: 'x', fromNode: 'x', toNode: 'y' }],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'edge.lock', id: 'x', locked: true },
+        { op: 'node.patch', id: 'x', patch: { x: 5 } },
+      ],
+    })
+
+    expect(result.applied).toBe(2)
+    const { doc, canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(readEdgeLocks(doc).has('x')).toBe(true)
+    expect(readNodeLocks(doc).has('x')).toBe(false)
+    expect(canvas.nodes.find((n) => n.id === 'x')).toMatchObject({ x: 5 })
+  })
+
+  test('tidy never moves a locked node (from wb_canvas_tidy)', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'pinned', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'pinned' },
+        { id: 'loose', type: 'text', x: 10, y: 10, width: 100, height: 100, text: 'loose' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.lock', id: 'pinned', locked: true }, { op: 'tidy' }],
+    })
+
+    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.find((n) => n.id === 'pinned')).toMatchObject({ x: 0, y: 0 })
+  })
+
+  test('tidy scope restricts moves to the listed nodes (from wb_canvas_tidy)', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'A' },
+        { id: 'b', type: 'text', x: 10, y: 10, width: 100, height: 100, text: 'B' },
+        { id: 'c', type: 'text', x: 900, y: 900, width: 100, height: 100, text: 'C' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'tidy', scope: ['b'] }],
+    })
+
+    expect(result.geometry.every((entry) => entry.id === 'b')).toBe(true)
+    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.find((n) => n.id === 'c')).toMatchObject({ x: 900, y: 900 })
+  })
+
+  test('tidy is a fixpoint: a second run moves nothing (from wb_canvas_tidy)', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 3, y: 7, width: 100, height: 100, text: 'A' },
+        { id: 'b', type: 'text', x: 11, y: 13, width: 100, height: 100, text: 'B' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'tidy' }],
+    })
+    const second = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'tidy' }],
+    })
+
+    expect(second.geometry).toEqual([])
+    expect(second.touched).toEqual({ nodes: [], edges: [] })
   })
 })
