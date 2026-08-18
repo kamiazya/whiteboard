@@ -115,8 +115,12 @@ it('only the four corner markers are painted — mid-edge chrome is gone', () =>
   selectNode(container)
 
   const overlay = container.querySelector('[data-testid="selection-overlay"]') as Element
+  // Scoped to the selection chrome: the node-tools pill beside the box is a
+  // separate control that also paints on the canvas surface.
   const painted = [...overlay.querySelectorAll('rect')].filter(
-    (el) => el.getAttribute('fill') === 'var(--background)',
+    (el) =>
+      el.getAttribute('fill') === 'var(--background)' &&
+      el.closest('[data-testid="node-tools"]') === null,
   )
   expect(painted).toHaveLength(4)
 })

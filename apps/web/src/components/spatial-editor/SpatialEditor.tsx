@@ -322,6 +322,14 @@ export interface SpatialEditorProps {
   /** Follows a file node's reference (navigation). Absent → follow hides. */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   /**
+   * Opens a text node's body on a surface the HOST owns — the composition
+   * root already holds the seams a full markdown editor needs (alias
+   * resolution, link targets, embeds), so the canvas hands over the node and
+   * its text and stays out of it. Absent means no such surface exists, and
+   * the catalog does not offer the verb.
+   */
+  readonly onOpenInEditor?: (nodeId: string, text: string) => void
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -462,6 +470,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedEdgeIds,
       onToggleEdgeLock,
       onToggleNodeLock,
+      onOpenInEditor,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -3547,6 +3556,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // target — one catalog, now with a visible doorway. Offered
               // for every selection (multi included: align/distribute were
               // the least discoverable actions of all).
+              // Only a single text node has a body to open, and only when the
+              // host has a surface to open it on.
+              onOpenInEditor={
+                onOpenInEditor !== undefined && !isMultiSelection && selectedNode?.type === 'text'
+                  ? () => onOpenInEditor(selectedNode.id, selectedNode.text)
+                  : undefined
+              }
               onMoreActions={(anchor) => {
                 const screen = canvasToScreen(anchor, viewport)
                 setContextMenu({

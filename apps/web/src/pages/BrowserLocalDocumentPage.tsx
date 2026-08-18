@@ -8,6 +8,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
+import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
@@ -383,6 +385,8 @@ export function BrowserLocalDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
   } = useDocumentSync(backend)
+
+  const nodeInEditor = useNodeInEditor(canvas, onChange)
 
   // Export rides the canvas row's operations kebab on this page (the top
   // bar keeps its export only in daemon mode, which has no canvas row).
@@ -833,6 +837,7 @@ export function BrowserLocalDocumentPage({
                   lockedNodeIds={lockedNodeIds}
                   lockedEdgeIds={lockedEdgeIds}
                   onToggleNodeLock={setNodeLock}
+                  onOpenInEditor={nodeInEditor.open}
                   onToggleEdgeLock={setEdgeLock}
                   paletteLeading={
                     <HistoryCluster
@@ -843,6 +848,18 @@ export function BrowserLocalDocumentPage({
                     />
                   }
                 />
+                {nodeInEditor.editing !== null && (
+                  <NodeTextEditorOverlay
+                    title={documentName ?? 'Untitled'}
+                    initialText={nodeInEditor.editing.text}
+                    theme={resolvedTheme}
+                    resolveAlias={resolveAlias}
+                    resolveEmbed={resolveEmbed}
+                    linkTargets={linkTargets}
+                    onCommit={nodeInEditor.commit}
+                    onClose={nodeInEditor.close}
+                  />
+                )}
               </div>
             </div>
           )}

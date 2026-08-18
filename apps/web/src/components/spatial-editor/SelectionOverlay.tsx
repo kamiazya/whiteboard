@@ -31,9 +31,29 @@ export interface SelectionOverlayProps {
    * an editor has no focus fight to lose.
    */
   readonly onMoreActions?: (anchor: Point) => void
+  /**
+   * Opens this node's body on a fuller editing surface.
+   *
+   * A DOORWAY, not a verb: every entry in the ⋯ catalog changes the node and
+   * leaves you on the canvas, and this one changes nothing and moves you
+   * somewhere else. Putting a navigation among object verbs is what left two
+   * near-identical pencil icons side by side with no way to tell them apart.
+   */
+  readonly onOpenInEditor?: () => void
 }
 
 const SELECTION_STROKE = 'var(--manipulation)'
+
+/**
+ * The node-tools pill is drawn in the app's neutral ink, not the manipulation
+ * accent. The accent is what says "this is selected", and it is already spent
+ * on the outline and the handles — repeating it on a control that sits beside
+ * the node makes the loudest thing on the canvas a piece of chrome. Both
+ * carry a literal fallback because this overlay must render the same where
+ * the app stylesheet is absent (browser-mode component tests).
+ */
+const TOOL_INK = 'var(--muted-foreground, oklch(0.556 0 0))'
+const TOOL_EDGE = 'var(--border, oklch(0.922 0 0))'
 const HANDLE_LABEL: Record<ResizeHandleKind, string> = {
   nw: 'Resize north-west',
   n: 'Resize north',
@@ -73,6 +93,7 @@ export function SelectionOverlay({
   onHandleKeyDown,
   onConnectKeyDown,
   onMoreActions,
+  onOpenInEditor,
 }: SelectionOverlayProps) {
   const handles = resizeHandleBoxes(box, zoom)
   // Hitting and drawing are separate questions: the markers stay 8px so
@@ -234,57 +255,153 @@ export function SelectionOverlay({
             />
           </g>
         ))}
-      {onMoreActions !== undefined && (
-        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
-        <g
-          data-testid="more-actions-handle"
-          role="button"
-          tabIndex={0}
-          aria-label="More actions"
-          aria-haspopup="menu"
-          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-          onPointerDown={(e) => {
-            // Keep the press away from the root's node/empty hit-test; the
-            // action itself fires on pointerup.
-            e.stopPropagation()
-          }}
-          onPointerUp={(e) => {
-            // pointerup, not click: the editor root preventDefaults native
-            // touchstart (its iOS long-press suppression), which cancels the
-            // synthetic mouse-compatibility events — a touch tap never
-            // produces a click here. After pointerdown, so no focus fight
-            // with mousedown's default action either.
-            e.stopPropagation()
-            onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return
-            e.preventDefault()
-            onMoreActions({ x: box.x + box.width - 12 / zoom, y: box.y - 18 / zoom })
-          }}
-        >
-          <rect
-            x={box.x + box.width - 24 / zoom}
-            y={box.y - 30 / zoom}
-            width={24 / zoom}
-            height={24 / zoom}
-            rx={6 / zoom}
-            fill={SELECTION_STROKE}
-          />
-          {/* Three dots as real circles, not a "⋯" glyph — a text character
-              rides the platform font and renders as emoji or tofu on some
-              systems, which is no way to draw a control. */}
-          {[-5, 0, 5].map((dx) => (
-            <circle
-              key={dx}
-              cx={box.x + box.width - 12 / zoom + dx / zoom}
-              cy={box.y - 18 / zoom}
-              r={1.6 / zoom}
-              fill="var(--background)"
-            />
-          ))}
-        </g>
-      )}
+      {(onOpenInEditor !== undefined || onMoreActions !== undefined) &&
+        (() => {
+          // ONE group, not one chip per verb. The two doorways stay separate
+          // controls — they lead to different kinds of place — but they read
+          // as a single tool cluster attached to this node, and they are
+          // drawn quietly: the selection outline already says "this is
+          // selected", so a solid accent fill here would be the loudest thing
+          // on a canvas whose job is to recede behind its content.
+          const slots = [
+            ...(onOpenInEditor === undefined
+              ? []
+              : [{ kind: 'open' as const, label: 'Open in editor', run: onOpenInEditor }]),
+            ...(onMoreActions === undefined
+              ? []
+              : [
+                  {
+                    kind: 'more' as const,
+                    label: 'More actions',
+                    run: () =>
+                      onMoreActions({
+                        x: box.x + box.width - 12 / zoom,
+                        y: box.y - 18 / zoom,
+                      }),
+                  },
+                ]),
+          ]
+          const slotSize = 24 / zoom
+          const groupWidth = slotSize * slots.length
+          const left = box.x + box.width - groupWidth
+          const top = box.y - 30 / zoom
+          return (
+            <g data-testid="node-tools">
+              <rect
+                x={left}
+                y={top}
+                width={groupWidth}
+                height={slotSize}
+                rx={6 / zoom}
+                fill="var(--background)"
+                stroke={TOOL_EDGE}
+                strokeWidth={1 / zoom}
+              />
+              {slots.map((slot, index) => {
+                const cx = left + slotSize * index + slotSize / 2
+                const cy = top + slotSize / 2
+                return (
+                  // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+                  <g
+                    key={slot.kind}
+                    data-testid={
+                      slot.kind === 'open' ? 'open-in-editor-handle' : 'more-actions-handle'
+                    }
+                    role="button"
+                    tabIndex={0}
+                    aria-label={slot.label}
+                    {...(slot.kind === 'more' ? { 'aria-haspopup': 'menu' as const } : {})}
+                    style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                    onPointerDown={(e) => {
+                      // Keep the press away from the root's node/empty
+                      // hit-test; the action itself fires on pointerup.
+                      e.stopPropagation()
+                    }}
+                    onPointerUp={(e) => {
+                      // pointerup, not click: the editor root preventDefaults
+                      // native touchstart (its iOS long-press suppression),
+                      // which cancels the synthetic mouse-compatibility
+                      // events — a touch tap never produces a click here.
+                      e.stopPropagation()
+                      slot.run()
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return
+                      e.preventDefault()
+                      slot.run()
+                    }}
+                  >
+                    {/* The hit area: transparent, so the quiet pill stays the
+                        only thing drawn until a pointer asks for more. */}
+                    <rect
+                      x={left + slotSize * index}
+                      y={top}
+                      width={slotSize}
+                      height={slotSize}
+                      rx={6 / zoom}
+                      fill="transparent"
+                    />
+                    {index > 0 && (
+                      <line
+                        x1={left + slotSize * index}
+                        y1={top + 5 / zoom}
+                        x2={left + slotSize * index}
+                        y2={top + slotSize - 5 / zoom}
+                        stroke={TOOL_EDGE}
+                        strokeWidth={1 / zoom}
+                      />
+                    )}
+                    {slot.kind === 'open' ? (
+                      /* An arrow leaving a frame: the same "this takes you
+                         elsewhere" glyph a link out of the page carries,
+                         drawn rather than typed so no platform font can turn
+                         it into tofu. */
+                      <g
+                        fill="none"
+                        stroke={TOOL_INK}
+                        strokeWidth={1.5 / zoom}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path
+                          d={[
+                            `M ${cx + 1 / zoom} ${cy - 5 / zoom}`,
+                            `l ${-5 / zoom} 0`,
+                            `l 0 ${10 / zoom}`,
+                            `l ${10 / zoom} 0`,
+                            `l 0 ${-5 / zoom}`,
+                          ].join(' ')}
+                        />
+                        <path
+                          d={[
+                            `M ${cx} ${cy - 1 / zoom}`,
+                            `l ${5 / zoom} ${-5 / zoom}`,
+                            `M ${cx + 1 / zoom} ${cy - 6 / zoom}`,
+                            `l ${4 / zoom} 0 l 0 ${4 / zoom}`,
+                          ].join(' ')}
+                        />
+                      </g>
+                    ) : (
+                      /* Three dots as real circles, not a "⋯" glyph — a text
+                         character rides the platform font and renders as
+                         emoji or tofu on some systems, which is no way to
+                         draw a control. */
+                      [-5, 0, 5].map((dx) => (
+                        <circle
+                          key={dx}
+                          cx={cx + dx / zoom}
+                          cy={cy}
+                          r={1.6 / zoom}
+                          fill={TOOL_INK}
+                        />
+                      ))
+                    )}
+                  </g>
+                )
+              })}
+            </g>
+          )
+        })()}
     </svg>
   )
 }

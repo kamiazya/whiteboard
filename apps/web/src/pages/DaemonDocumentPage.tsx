@@ -9,6 +9,8 @@ import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeas
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
+import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
@@ -323,6 +325,7 @@ export function DaemonDocumentPage({
   // and local-update forwarding as every other change, with no second write
   // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
   // value passed alongside is the unchanged one this command does not touch.
+  const nodeInEditor = useNodeInEditor(canvasValue, onChange)
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
@@ -810,6 +813,7 @@ export function DaemonDocumentPage({
                   lockedNodeIds={lockedNodeIds}
                   lockedEdgeIds={lockedEdgeIds}
                   onToggleNodeLock={setNodeLock}
+                  onOpenInEditor={nodeInEditor.open}
                   onToggleEdgeLock={setEdgeLock}
                   paletteLeading={
                     <HistoryCluster
@@ -831,6 +835,18 @@ export function DaemonDocumentPage({
                     />
                   }
                 />
+                {nodeInEditor.editing !== null && (
+                  <NodeTextEditorOverlay
+                    title={canvas?.path ?? 'Untitled'}
+                    initialText={nodeInEditor.editing.text}
+                    theme={resolvedTheme}
+                    resolveAlias={resolveAlias}
+                    resolveEmbed={resolveEmbed}
+                    linkTargets={linkTargets}
+                    onCommit={nodeInEditor.commit}
+                    onClose={nodeInEditor.close}
+                  />
+                )}
               </div>
             )}
           />
