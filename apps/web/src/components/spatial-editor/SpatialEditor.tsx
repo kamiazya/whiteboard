@@ -78,7 +78,6 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   forwardRef,
@@ -1129,7 +1128,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         { ...canvas, nodes: liveNodes },
         {
           measure: dragStatic.measure,
-          parseBody: parseMarkdownBody,
           appearance: createEditorAppearance(theme),
           edgeSideOverrides: overrides,
         },

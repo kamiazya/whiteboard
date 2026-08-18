@@ -29,7 +29,6 @@
 
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import {
   composeReferenceSeam,
@@ -67,7 +66,6 @@ self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
       measure,
       theme: request.theme,
       resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),
-      parseBody: parseMarkdownBody,
     })
     const response: LayoutResponse = {
       type: 'laid-out',

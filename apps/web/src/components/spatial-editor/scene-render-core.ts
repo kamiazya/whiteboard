@@ -1,14 +1,16 @@
 /**
- * The `SpatialCanvas` -> `Scene` -> SVG composition, with NO markdown parser
- * of its own.
+ * The `SpatialCanvas` -> `Scene` -> SVG composition.
  *
- * Split out of scene-render.ts so the layout worker can import it: that module
- * supplies codec's `parseMarkdownBody` as the default, and a static
- * import of the codec drags remark and unified into whatever imports it —
- * a worker chunk that has no use for them, and (under the dev server) cannot
- * even evaluate them. This is NOT a second scene builder: scene-render.ts
- * calls straight through to here, so there is still exactly one composition
- * of `layoutSpatialCanvas` + `sceneBounds` + `renderSceneToSvg`.
+ * Split out of scene-render.ts so the layout worker can import this without
+ * the editor-side module graph hanging off scene-render.ts. This is NOT a
+ * second scene builder: scene-render.ts calls straight through to here, so
+ * there is still exactly one composition of `layoutSpatialCanvas` +
+ * `sceneBounds` + `renderSceneToSvg`.
+ *
+ * It used to take a `parseBody` too, so that a static codec import stayed out
+ * of the worker chunk. canvas-render now DEFAULTS to codec's parser, and the
+ * worker imported codec directly anyway, so the option was one more copy of
+ * the same line rather than a boundary.
  */
 
 import type {
@@ -24,14 +26,11 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
-  /** Required here; scene-render.ts is where the codec default is applied. */
-  readonly parseBody: (text: string) => MdastRoot
   readonly theme?: ResolvedTheme
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
@@ -56,7 +55,6 @@ export function renderCanvasToSvgWith(
 ): RenderedCanvas {
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
     measure: options.measure,
-    parseBody: options.parseBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,

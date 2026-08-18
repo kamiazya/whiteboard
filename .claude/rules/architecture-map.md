@@ -6,7 +6,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, zod |
+| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, zod |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/loro-adapter` | LoroDoc<->model bridge | model, ports, loro-crdt |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, hono, zod, loro-crdt |

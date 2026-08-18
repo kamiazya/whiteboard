@@ -11,7 +11,6 @@ import {
   SPATIAL_THEME_GEOMETRY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
@@ -43,7 +42,6 @@ export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasO
   const probe: SpatialCanvas = { nodes: [{ ...node, height: 1 }], edges: [] }
   const scene = layoutSpatialCanvas(probe, {
     measure: options.measure,
-    parseBody: parseMarkdownBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
   })
   const bounds = sceneBounds(scene)
@@ -54,5 +52,5 @@ export function renderCanvasToSvg(
   canvas: SpatialCanvas,
   options: RenderCanvasOptions,
 ): RenderedCanvas {
-  return renderCanvasToSvgWith(canvas, { ...options, parseBody: parseMarkdownBody })
+  return renderCanvasToSvgWith(canvas, options)
 }
