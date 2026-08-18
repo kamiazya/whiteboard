@@ -1,5 +1,10 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { FontDescriptor, MeasureText, TextMetrics } from '../measure.js'
+import {
+  type FontDescriptor,
+  isFullWidthCodePoint,
+  type MeasureText,
+  type TextMetrics,
+} from '../measure.js'
 
 /**
  * The text-wrapping scoreboard's corpus and its measurer.
@@ -19,24 +24,12 @@ import type { FontDescriptor, MeasureText, TextMetrics } from '../measure.js'
  * arithmetic — no font, no platform text API — so results are identical on
  * every machine.
  *
- * Ranges are the fullwidth/CJK blocks of Unicode: CJK ideographs and their
- * extension A, hiragana, katakana, Hangul syllables, CJK symbols and
- * punctuation, and the fullwidth forms.
+ * Which code points are wide is `measure.ts`'s `isFullWidthCodePoint`, shared
+ * with server-core's agent-facing estimator: two estimators disagreeing about
+ * that would lay the same canvas out differently depending on which one ran.
+ * The Latin ratio is each estimator's own — this one reports a scoreboard,
+ * that one drives a `truncated` verdict.
  */
-function isFullWidth(codePoint: number): boolean {
-  return (
-    (codePoint >= 0x1100 && codePoint <= 0x115f) || // Hangul Jamo
-    (codePoint >= 0x3000 && codePoint <= 0x303f) || // CJK symbols and punctuation
-    (codePoint >= 0x3040 && codePoint <= 0x30ff) || // hiragana + katakana
-    (codePoint >= 0x3400 && codePoint <= 0x4dbf) || // CJK extension A
-    (codePoint >= 0x4e00 && codePoint <= 0x9fff) || // CJK unified ideographs
-    (codePoint >= 0xac00 && codePoint <= 0xd7a3) || // Hangul syllables
-    (codePoint >= 0xf900 && codePoint <= 0xfaff) || // CJK compatibility ideographs
-    (codePoint >= 0xff00 && codePoint <= 0xff60) || // fullwidth forms
-    (codePoint >= 0x1f300 && codePoint <= 0x1faff) // emoji
-  )
-}
-
 const LATIN_RATIO = 0.6
 
 /** Advance width in em units — the width-model half of the measurer. */
@@ -44,7 +37,7 @@ function advanceEm(text: string): number {
   let em = 0
   for (const char of text) {
     const codePoint = char.codePointAt(0)
-    em += codePoint !== undefined && isFullWidth(codePoint) ? 1 : LATIN_RATIO
+    em += codePoint !== undefined && isFullWidthCodePoint(codePoint) ? 1 : LATIN_RATIO
   }
   return em
 }

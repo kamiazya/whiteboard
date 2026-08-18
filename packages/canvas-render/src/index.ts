@@ -32,7 +32,7 @@ export {
 } from './layout/spatial-edges.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
-export { clampAdvance, constantRatioMeasureText } from './measure.js'
+export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'

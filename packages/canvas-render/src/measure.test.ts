@@ -54,4 +54,28 @@ describe('constantRatioMeasureText', () => {
       expect(metrics).toEqual({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
     }
   })
+
+  // A ratio is a model, not a calibration. Charging a kana the same fraction
+  // as an 'i' is not an approximation of Japanese, it is the wrong model,
+  // and it is what made `wb_scene_digest` report nothing hidden for a node
+  // the editor was painting a fade on.
+  it('charges a fullwidth character a full em, not the Latin ratio', () => {
+    expect(constantRatioMeasureText('あ', font).advanceWidth).toBeCloseTo(16)
+    expect(constantRatioMeasureText('漢', font).advanceWidth).toBeCloseTo(16)
+    expect(constantRatioMeasureText('한', font).advanceWidth).toBeCloseTo(16)
+  })
+
+  it('adds the two up for mixed text', () => {
+    // 'API' + 'を' + 'call' -> 7 Latin at 0.55 em, 1 fullwidth at 1 em.
+    expect(constantRatioMeasureText('APIをcall', font).advanceWidth).toBeCloseTo(
+      (7 * 0.55 + 1) * 16,
+    )
+  })
+
+  // `text.length` counts UTF-16 units, so an astral code point was charged
+  // twice over. Iterating code points is what the fullwidth test above needs
+  // anyway, and it fixes this at the same time.
+  it('charges an astral code point once, not once per surrogate', () => {
+    expect(constantRatioMeasureText('🚀', font).advanceWidth).toBeCloseTo(16)
+  })
 })

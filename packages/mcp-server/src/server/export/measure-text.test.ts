@@ -194,3 +194,38 @@ describe('createOpentypeMeasureText', () => {
     }
   })
 })
+
+// The vendored face is Latin-only. `opentype.js` answers a code point it does
+// not carry with the `.notdef` advance — a flat ~0.44 em — which is not a
+// measurement of anything, and understates Japanese by more than the estimator
+// it replaced. Falling back per code point is what stops "measure with the
+// real font" being a regression for every non-Latin canvas.
+describe('a code point the vendored face does not carry', () => {
+  const font = {
+    family: 'Roboto',
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal' as const,
+    sizePx: 16,
+  }
+
+  it('is estimated at a full em rather than measured as .notdef', async () => {
+    const measure = await createOpentypeMeasureText()
+    for (const char of ['あ', '漢', '한']) {
+      expect(measure(char, font).advanceWidth).toBeCloseTo(16)
+    }
+  })
+
+  it('still measures the Latin it does carry from the font, not the estimate', async () => {
+    const measure = await createOpentypeMeasureText()
+    // 'MMMM' vs 'iiii' is the discriminator: the estimator cannot tell them
+    // apart, so equal advances here would mean the fallback swallowed everything.
+    expect(measure('MMMM', font).advanceWidth).not.toBeCloseTo(measure('iiii', font).advanceWidth)
+  })
+
+  it('adds a carried and an uncarried run to the sum of their parts', async () => {
+    const measure = await createOpentypeMeasureText()
+    const whole = measure('API漢字', font).advanceWidth
+    expect(whole).toBeCloseTo(measure('API', font).advanceWidth + 32)
+  })
+})

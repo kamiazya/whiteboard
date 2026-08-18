@@ -99,12 +99,28 @@ paths:
    their own copy (server-core cannot load a font itself and gets one
    injected via `ServerDeps.measure`, mcp-server needs one when the
    vendored asset is missing, canvas-viewer when the realm has no Canvas 2D
-   context) with three DIFFERENT constant
-   sets, so the same canvas measured differently depending on which
-   degraded path produced it. The ratios are arbitrary; the point is that
-   they are arbitrary in one place. It matches no real font by
-   construction — a scene laid out with it is degraded, never
-   byte-reproducible against a measured one.
+   context) with three DIFFERENT constant sets, so the same canvas measured
+   differently depending on which degraded path produced it. The ratios are
+   arbitrary; the point is that they are arbitrary in one place. It matches
+   no real font by construction — a scene laid out with it is degraded,
+   never byte-reproducible against a measured one.
+   It is nonetheless SCRIPT-AWARE, via `isFullWidthCodePoint`, and that is
+   not a refinement of the estimate but a correction of the model: charging
+   every character one ratio is not an approximation of Japanese, it is
+   wrong. Measured, a uniform ratio put `これは日本語です` at 56.8px against
+   a true 128px, and `wb_scene_digest` answered `truncated` absent for a node
+   the editor was painting a fade on. The predicate is exported because a
+   second estimator exists — the text-wrapping scoreboard's corpus measurer,
+   which keeps its own Latin ratio but must agree about which code points are
+   wide, or the same canvas breaks its lines differently depending on which
+   one laid it out.
+   A real measurer reads the advance from the font and has no use for the
+   predicate — with ONE exception it must handle: a font that lacks the
+   glyph. `opentype.js` answers a missing glyph with the `.notdef` advance
+   (a flat ~0.44 em in the vendored Roboto), which is not a measurement and
+   is worse than the estimate. A real measurer therefore falls back to the
+   estimator PER CODE POINT for anything the face does not carry, detected
+   by glyph index rather than by comparing advances.
 4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
    internal/versioned shape consumed later by loro-adapter's View-
    resolution layer. Root depth is `0`; a 4th nesting level is the cap

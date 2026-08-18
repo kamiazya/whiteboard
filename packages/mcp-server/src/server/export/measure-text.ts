@@ -36,6 +36,60 @@ export function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
   return 'regular'
 }
 
+/**
+ * The vendored face is Latin-only, and `opentype.js` does not report that: a
+ * code point it has no glyph for is measured as `.notdef`, a flat ~0.44 em
+ * that is not a measurement of anything. Left alone it understates Japanese
+ * by more than the constant-ratio estimator it is supposed to improve on —
+ * measured, `あ` at 7.1px against a true 16px — so "lay out with the real
+ * font" would be a regression for every non-Latin canvas.
+ *
+ * The face is asked by GLYPH INDEX rather than by comparing advances: a
+ * legitimately narrow glyph can share `.notdef`'s width, and comparing would
+ * throw it away.
+ *
+ * Fixing it properly means shipping a CJK face, which is a font-distribution
+ * decision rather than a layout one.
+ * ponytail: estimate the glyphs the face lacks; ship a CJK face when export
+ * fidelity for those scripts is worth the package size.
+ */
+function measureAdvance(
+  font: opentype.Font,
+  text: string,
+  descriptor: FontDescriptor,
+  sizePx: number,
+): number {
+  const carried = (char: string): boolean => font.charToGlyphIndex(char) !== 0
+  // Nothing missing is the common case and stays exactly one call into the
+  // font, so a Latin canvas measures no differently than before.
+  let allCarried = true
+  for (const char of text) {
+    if (!carried(char)) {
+      allCarried = false
+      break
+    }
+  }
+  if (allCarried) return font.getAdvanceWidth(text, sizePx, { kerning: false })
+
+  let advance = 0
+  let run = ''
+  const flush = (): void => {
+    if (run === '') return
+    advance += font.getAdvanceWidth(run, sizePx, { kerning: false })
+    run = ''
+  }
+  for (const char of text) {
+    if (carried(char)) {
+      run += char
+      continue
+    }
+    flush()
+    advance += constantRatioMeasureText(char, descriptor).advanceWidth
+  }
+  flush()
+  return advance
+}
+
 function measureWithFont(
   font: opentype.Font,
   text: string,
@@ -50,10 +104,12 @@ function measureWithFont(
   // Kerning is disabled deliberately: it would make advanceWidth(a + b)
   // only approximately equal to advanceWidth(a) + advanceWidth(b) at the
   // kerning-pair seam, which this measurer's callers rely on being exact.
+  // That additivity is also what lets the mixed-script path below measure
+  // run by run and sum the pieces.
   const advanceWidth =
     sizePx === 0 || text.length === 0
       ? 0
-      : clampNonNegative(font.getAdvanceWidth(text, sizePx, { kerning: false }))
+      : clampNonNegative(measureAdvance(font, text, descriptor, sizePx))
   return {
     advanceWidth,
     ascent: clampNonNegative(font.ascender * scale),

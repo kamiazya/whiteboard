@@ -28,6 +28,19 @@ const canvas = {
       height: 200,
       text: 'Wide MMMM MMMM MMMM versus narrow iiii iiii iiii - where does this wrap?',
     },
+    // A Latin-only fixture cannot see the failure that matters most here: the
+    // estimator and a `.notdef`-returning font AGREE with each other on CJK,
+    // both at a fraction of the true width, so parity holds while the picture
+    // is wrong. This node wraps only if the kana are measured at a full em.
+    {
+      id: 'n2',
+      type: 'text' as const,
+      x: 0,
+      y: 240,
+      width: 200,
+      height: 200,
+      text: 'これは日本語のテキストです。ノードの幅を超えたときにどこで折り返すのか、全角を全角として測っているかどうかで答えが変わります。',
+    },
   ],
   edges: [],
 }
@@ -63,5 +76,14 @@ describe('wb_scene_render / export parity', () => {
     // background); the drawing inside them must not.
     expect(textRuns(viaTool.svg)).toEqual(textRuns(viaExport.svg))
     expect(textRuns(viaTool.svg).length).toBeGreaterThan(1)
+
+    // Parity alone would be satisfied by both sides measuring kana as
+    // `.notdef` (~0.44 em) and agreeing on a picture that is wrong. The
+    // threshold is what separates the two models rather than a pinned count:
+    // 60 fullwidth characters in a ~184px content box need 6 lines at a full
+    // em and fit in 3 at `.notdef`, so anything at or above 4 can only come
+    // from measuring them at their real width.
+    const japanese = textRuns(viaTool.svg).filter((run) => /[\u3040-\u30ff]/.test(run))
+    expect(japanese.length).toBeGreaterThanOrEqual(4)
   })
 })

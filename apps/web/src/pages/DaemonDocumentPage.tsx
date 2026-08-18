@@ -28,6 +28,7 @@ import {
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
+import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -39,7 +40,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -390,20 +391,18 @@ export function DaemonDocumentPage({
   // re-reads reasoning as webMcpEnabled above).
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
+  // One shape for whichever kind this document is — the favicon draws
+  // it today, and a tree row's icon draws the same one.
+  const documentOutline = useDocumentOutline({
+    kind: documentKind,
+    canvas: canvasValue,
+    markdownBody,
+  })
+
   useFavicon({
     style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
-    rects: useMemo(
-      () =>
-        canvasValue.nodes.map((n) => ({
-          x: n.x,
-          y: n.y,
-          w: n.width,
-          h: n.height,
-          color: resolveRectColor(n.color),
-        })),
-      [canvasValue.nodes],
-    ),
+    rects: documentOutline,
   })
 
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
