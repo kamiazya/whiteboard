@@ -12,6 +12,43 @@ const documents = [
 ]
 
 describe('WorkspaceFileTree', () => {
+  // The name is what every other surface shows and what a reference resolves
+  // by; the path is an auto-generated address nothing invites you to type.
+  // Showing the segment made the tree the one place a document went by a
+  // different name than the rest of the app calls it.
+  it('labels a document by its display name, not its path segment', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'design/login-flow', name: 'Auth signup flow' }]}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByText('Auth signup flow')).not.toBeNull()
+    expect(screen.queryByText('login-flow')).toBeNull()
+  })
+
+  it('falls back to the segment for a document nobody named', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'design/untitled-2' }]}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByText('untitled-2')).not.toBeNull()
+  })
+
+  // A folder has no document and therefore no name of its own — only the
+  // segment, which is the honest label for it.
+  it('still labels a folder by its segment', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'design/login', name: 'Auth signup flow' }]}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByText('design')).not.toBeNull()
+  })
+
   it('renders nested paths as an ARIA tree, not a flat list', () => {
     render(<WorkspaceFileTree documents={documents} onOpen={() => {}} />)
 
