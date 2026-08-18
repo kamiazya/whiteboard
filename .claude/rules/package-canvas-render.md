@@ -501,7 +501,7 @@ paths:
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
-    On top of UAX #14, **`budoux` narrows the candidates to phrase (文節)
+    On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
     boundaries for Japanese**, a strict subset of the UAX opportunities, so
     preferring them costs nothing in fit and buys a line that breaks where a
     reader would pause rather than mid-word. Applied only to text containing
@@ -510,7 +510,14 @@ paths:
     The parser is built on first Japanese text, NOT at module load: its
     constructor turns a ~24KB model into a Map, and charging that to whichever
     lazily-imported chunk pulls this module in turned two apps/web browser
-    tests red before it was made lazy.
+    tests red before it was made lazy. BudouX is VENDORED
+    (`src/vendor/budoux/`, Apache-2.0, with the equivalence check that was run
+    before the dependency was dropped recorded in its README) and NOT a
+    dependency: its only entry point re-exports the HTML processor, which
+    imports `linkedom` and from there the native `canvas` package, and the
+    published mcp-server bundle then fails to build at all. Tree-shaking
+    cannot help — esbuild resolves the whole graph before eliminating
+    anything — and the deep import is blocked by budoux's `exports` map.
     **What cannot wrap is CUT, not left to overflow** (`layout/truncate.ts`,
     `fitToWidth`): a node label (one line is what makes it a label) and an
     atomic run. The run keeps the longest prefix that fits and is marked

@@ -5,7 +5,6 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
-import { loadDefaultJapaneseParser } from 'budoux'
 import { LineBreaker } from 'css-line-break'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
@@ -31,6 +30,8 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
+import { jaModel } from '../vendor/budoux/ja-model.js'
+import { Parser } from '../vendor/budoux/parser.js'
 import { fitToWidth } from './truncate.js'
 
 /**
@@ -231,11 +232,16 @@ function uaxSegments(text: string): readonly string[] {
  * imported chunk happens to pull this module in makes every consumer pay for
  * a script it may never lay out. Two apps/web browser tests went red on
  * exactly that before this was made lazy.
+ *
+ * The parser and its model are VENDORED rather than depended on: budoux's
+ * only entry point drags in `linkedom` and from there the native `canvas`
+ * package, which breaks the published mcp-server build outright. See
+ * `../vendor/budoux/README.md`.
  */
-let japaneseParser: ReturnType<typeof loadDefaultJapaneseParser> | undefined
+let japaneseParser: Parser | undefined
 
 function parseJapanesePhrases(text: string): readonly string[] {
-  japaneseParser ??= loadDefaultJapaneseParser()
+  japaneseParser ??= new Parser(jaModel)
   return japaneseParser.parse(text)
 }
 

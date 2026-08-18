@@ -48,10 +48,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // which is where Japanese kinsoku lives), not something to hand-roll from
     // a character table. Pure and DOM-free, so it holds in Node, the browser
     // and a worker alike — verified before adopting.
-    // budoux: phrase (文節) boundaries for Japanese, a strict subset of the
-    // UAX #14 opportunities above — same argument, one level finer, and the
-    // difference between a line that fits and a line that reads.
-    allowedThirdParty: ['zod', 'css-line-break', 'budoux'],
+    // BudouX (phrase boundaries for Japanese) is deliberately NOT here: it is
+    // vendored under src/vendor/budoux, because depending on it drags in
+    // linkedom and the native canvas package and breaks the published build.
+    allowedThirdParty: ['zod', 'css-line-break'],
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],

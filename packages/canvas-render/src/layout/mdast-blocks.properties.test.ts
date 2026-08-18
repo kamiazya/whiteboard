@@ -177,6 +177,24 @@ function sourceTokens(node: MdastRoot | MdastFlowContent | MdastPhrasingContent)
   return children.flatMap((child) => sourceTokens(child))
 }
 
+/**
+ * The verbatim source text of every ATOMIC run — inline code, raw HTML,
+ * inline math. Only these are ever truncated (prose wraps instead), so this
+ * is the exact set a cut run's text must be a prefix of.
+ */
+function atomicValues(node: MdastRoot | MdastFlowContent | MdastPhrasingContent): string[] {
+  const type = (node as { type?: string }).type
+  const value = (node as { value?: unknown }).value
+  if (
+    typeof value === 'string' &&
+    (type === 'inlineCode' || type === 'html' || type === 'inlineMath')
+  ) {
+    return [value]
+  }
+  const children = (node as { children?: readonly MdastPhrasingContent[] }).children
+  return children ? children.flatMap((child) => atomicValues(child)) : []
+}
+
 describe('layoutMdastBlocks properties', () => {
   fcTest.prop([anyRootArb], withDefaults())('never throws, whatever the document', (root) => {
     expect(() => layout(root)).not.toThrow()
@@ -250,15 +268,12 @@ describe('layoutMdastBlocks properties', () => {
   })
 
   fcTest.prop([proseRootArb], withDefaults())('only ever cuts a run to a prefix', (root) => {
-    const source = sourceTokens(root).join(' ')
     for (const { run } of textRuns(layout(root))) {
       if (run.truncated !== true) continue
-      // The cut text is a prefix of SOME source token: an atomic run's own
-      // text, which the token stream carries verbatim.
-      expect(sourceTokens(root).some((token) => token.startsWith(tokens(run.text)[0] ?? ''))).toBe(
-        true,
-      )
-      expect(source.includes(tokens(run.text)[0] ?? '')).toBe(true)
+      // The WHOLE retained text, not just its first token: a truncator that
+      // corrupts anything after the first word would satisfy a per-token
+      // check while painting text that was never in the document.
+      expect(atomicValues(root).some((value) => value.startsWith(run.text))).toBe(true)
     }
   })
 
