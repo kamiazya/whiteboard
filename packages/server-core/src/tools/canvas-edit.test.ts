@@ -8,8 +8,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from './document-io.js'
-
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -21,6 +19,7 @@ import {
   PLACEMENT_COLUMNS,
   PLACEMENT_GUTTER_PX,
 } from './canvas-edit.js'
+import { loadDocument } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -498,7 +497,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         documentId: DOCUMENT_ID,
         ops: [{ op: 'node.patch', id: 'a', patch: { x: 1 } }],
       }),
-    ).rejects.toMatchObject({ name: 'DocumentNotFoundError' })
+    ).rejects.toMatchObject({ name: 'SnapshotNotFoundError' })
   })
 
   test('rejects a negative width at the schema level (from wb_node_patch)', async () => {

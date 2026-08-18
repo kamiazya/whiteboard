@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from './document-io.js'
-import {
-  NodeNotFoundError,
-  NotATextNodeError,
-  PatchValidationError,
-} from './errors.js'
+import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
 
 describe('server-core tool errors', () => {
   test('SnapshotNotFoundError carries the documentId and a descriptive message', () => {
