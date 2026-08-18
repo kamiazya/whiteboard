@@ -1,8 +1,14 @@
 /**
- * v2 -> v3 upgrade migration (real IndexedDB): the persisted JSON 'canvases'
- * row is demoted to metadata-only. Elements are canonical in the Loro doc
- * ('loroCanvases'), so a legacy 'scene' field on a v2 'canvases' row must be
- * stripped on upgrade without ever touching 'loroCanvases'.
+ * Upgrade migrations against a real IndexedDB, each seeding the store layout
+ * as it stood at that version. The store names change at v7 ('canvases' ->
+ * 'documents' and friends), so a fixture below spells whichever name its OWN
+ * version used — that is the whole point of a migration test, and rewriting a
+ * fixture to the current vocabulary would leave the migration untested while
+ * still passing.
+ *
+ * v2 -> v3: the persisted JSON metadata row is demoted to metadata-only.
+ * Elements are canonical in the Loro doc, so a legacy 'scene' field on a v2
+ * row must be stripped on upgrade without ever touching the Loro store.
  */
 
 import { Loro } from 'loro-crdt'
@@ -63,14 +69,14 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
   })
 }
 
-/** Reads a 'canvases' row directly via raw IDB, bypassing canvasSnapshotSchema. */
-async function readRawCanvasesRow(documentId: string): Promise<unknown> {
+/** Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema. */
+async function readRawDocumentsRow(documentId: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard')
     req.onsuccess = () => {
       const db = req.result
-      const tx = db.transaction('canvases', 'readonly')
-      const getReq = tx.objectStore('canvases').get(documentId)
+      const tx = db.transaction('documents', 'readonly')
+      const getReq = tx.objectStore('documents').get(documentId)
       getReq.onsuccess = () => resolve(getReq.result)
       getReq.onerror = () => reject(getReq.error)
       tx.oncomplete = () => db.close()
@@ -199,6 +205,129 @@ async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
   })
 }
 
+/** Seed a pre-v7 ("v6 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
+async function seedV6Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 6)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
+      tx.objectStore('meta').put(documentId, 'defaultCanvasId')
+      tx.objectStore('canvases').put(
+        { id: documentId, name: 'Pre-v7 document', updatedAt: '2026-01-01T00:00:00.000Z' },
+        documentId,
+      )
+      tx.objectStore('loroCanvases').put(
+        { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
+        documentId,
+      )
+      tx.objectStore('canvasFiles').put(new Blob(['file-bytes']), 'file-1')
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function metaKeys(): Promise<string[]> {
+  const db = await openWhiteboardDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readonly')
+    const req = tx.objectStore('meta').getAllKeys()
+    req.onsuccess = () => resolve(req.result.map(String).sort())
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 7 or higher (guards against reverting the bump alone)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(7)
+  })
+
+  it('moves every record to the renamed store and leaves no old store behind', async () => {
+    const documentId = 'document-migrate-v7'
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'canonical-el' })
+    await seedV6Fixture(documentId, doc.export({ mode: 'snapshot' }))
+
+    const db = await openWhiteboardDb()
+    // The old names are DELETED, not merely abandoned. A store left in place
+    // would keep a second copy of every document readable by anything that
+    // still remembers the old name.
+    expect([...db.objectStoreNames].sort()).toEqual([
+      'documentFiles',
+      'documents',
+      'loroDocuments',
+      'meta',
+    ])
+
+    const fileCount = await new Promise<number>((resolve, reject) => {
+      const tx = db.transaction('documentFiles', 'readonly')
+      const req = tx.objectStore('documentFiles').count()
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
+    })
+    expect(fileCount).toBe(1)
+
+    // Read back through the PRODUCTION stores, which only know the new names:
+    // a copy that lost its key or its value would fail here even though the
+    // store-name assertion above passed.
+    const loroResult = await new LoroStore().load(documentId)
+    expect(loroResult.kind).toBe('ok')
+    if (loroResult.kind === 'ok') {
+      const restored = new Loro()
+      restored.import(loroResult.snapshot)
+      expect(restored.getList('elements').toArray()).toEqual([{ id: 'canonical-el' }])
+    }
+
+    const metaStore = new IndexedDBStore()
+    const loadResult = await metaStore.load(documentId)
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot.name).toBe('Pre-v7 document')
+    }
+  })
+
+  it('carries the default pointer across the meta key rename', async () => {
+    const documentId = 'document-migrate-v7-pointer'
+    await seedV6Fixture(documentId, new Loro().export({ mode: 'snapshot' }))
+
+    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(documentId)
+    // The old key is removed rather than duplicated — two pointers could
+    // disagree, and nothing would say which one won.
+    expect(await metaKeys()).toEqual(['defaultDocumentId'])
+  })
+
+  it('is a no-op for a fresh install, which never had the old stores', async () => {
+    const db = await openWhiteboardDb()
+    expect([...db.objectStoreNames].sort()).toEqual([
+      'documentFiles',
+      'documents',
+      'loroDocuments',
+      'meta',
+    ])
+    db.close()
+  })
+})
+
 describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', () => {
   const LEGACY_RECONNECT_SECRET_KEY = 'whiteboard.reconnect-secret.v1'
 
@@ -230,8 +359,8 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
 
     const fileCount = await new Promise<number>((resolve, reject) => {
-      const tx = db.transaction('canvasFiles', 'readonly')
-      const req = tx.objectStore('canvasFiles').count()
+      const tx = db.transaction('documentFiles', 'readonly')
+      const req = tx.objectStore('documentFiles').count()
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
       tx.oncomplete = () => db.close()
@@ -243,7 +372,7 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
     const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
@@ -266,9 +395,9 @@ describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', ()
     const db = await openWhiteboardDb()
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
     expect([...db.objectStoreNames].sort()).toEqual([
-      'canvasFiles',
-      'canvases',
-      'loroCanvases',
+      'documentFiles',
+      'documents',
+      'loroDocuments',
       'meta',
     ])
     db.close()
@@ -283,7 +412,7 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(5)
   })
 
-  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/canvases/meta contents', async () => {
+  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/documents/meta contents', async () => {
     const documentId = 'canvas-migrate-v5'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
@@ -298,8 +427,8 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
 
     const fileCount = await new Promise<number>((resolve, reject) => {
-      const tx = db.transaction('canvasFiles', 'readonly')
-      const req = tx.objectStore('canvasFiles').count()
+      const tx = db.transaction('documentFiles', 'readonly')
+      const req = tx.objectStore('documentFiles').count()
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
       tx.oncomplete = () => db.close()
@@ -311,7 +440,7 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
     const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
@@ -328,7 +457,7 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(4)
   })
 
-  it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/canvases/meta contents', async () => {
+  it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/documents/meta contents', async () => {
     const documentId = 'canvas-migrate-v4'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
@@ -336,7 +465,7 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     await seedV3Fixture(documentId, loroSnapshot)
 
     const db = await openWhiteboardDb()
-    expect(db.objectStoreNames.contains('canvasFiles')).toBe(true)
+    expect(db.objectStoreNames.contains('documentFiles')).toBe(true)
     db.close()
 
     const loroStore = new LoroStore()
@@ -344,7 +473,7 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     expect(loroResult.kind).toBe('ok')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
     const loadResult = await metaStore.load(documentId)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
@@ -382,12 +511,12 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
       expect(restored.getList('elements').toArray()).toEqual([{ id: 'canonical-el' }])
     }
 
-    // (c) The 'canvases' row has no scene / no old-schema orphan remains.
+    // (c) The 'documents' row has no scene / no old-schema orphan remains.
     // Checked against the RAW stored row (not the parsed load() result): Zod's
     // z.object() silently strips unrecognized keys from its parsed OUTPUT even
     // when the underlying row still carries them, so asserting only against
     // loadResult.snapshot would pass even if the upgrade never ran.
-    const rawRow = await readRawCanvasesRow(documentId)
+    const rawRow = await readRawDocumentsRow(documentId)
     expect(rawRow).not.toHaveProperty('scene')
     expect(rawRow).toEqual({
       id: documentId,
@@ -410,7 +539,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     }
 
     // (d) The default pointer/id is intact.
-    expect(await metaStore.getDefaultCanvasId()).toBe(documentId)
+    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
   })
 
   it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {

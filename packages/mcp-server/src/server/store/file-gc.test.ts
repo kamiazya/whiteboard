@@ -20,7 +20,7 @@ const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-g
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
-const { createBranch, loadCanvasBranches, saveCanvasBranches, updateBranchTip } = await import(
+const { createBranch, loadDocumentBranches, saveDocumentBranches, updateBranchTip } = await import(
   './branches-store.js'
 )
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -102,7 +102,7 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('keeps files referenced by nodes-model file nodes and deletes the rest', async () => {
-    // Two canvases reference distinct fileIds; an additional dangling file
+    // Two documents reference distinct fileIds; an additional dangling file
     // qualifies for deletion.
     await saveDocument('ws_a', 'used-a', makeSpatialDocWithImage('used-a'))
     await saveDocument('ws_a', 'used-b', makeSpatialDocWithImage('used-b'))
@@ -164,7 +164,7 @@ describe('purgeDanglingFiles', () => {
 
   it('mixed workspace: a legacy-elements doc and a nodes-model doc each protect their own file, an aged orphan is still purged', async () => {
     // Pins the two-pass walker running in ONE scan: a workspace mid-
-    // migration has some canvases still in the legacy shape and some
+    // migration has some documents still in the legacy shape and some
     // already resaved through the current model.
     await saveDocument('ws_mixed', 'legacy-page', makeDocWithImage('legacy-ref'))
     await saveDocument('ws_mixed', 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
@@ -497,14 +497,14 @@ describe('purgeDanglingFiles', () => {
 
     await seedFile('ws_branch_race', 'about-to-be-tip-referenced', '.png', 77)
 
-    // updateBranchTip's own async read (loadCanvasBranches) happens before
+    // updateBranchTip's own async read (loadDocumentBranches) happens before
     // it reaches the lock, which would make lock-acquisition order
     // non-deterministic under Promise.all. Pre-compute the next branches
     // state here (mirroring exactly what updateBranchTip does internally)
     // so the race below starts both sides at the same synchronous point —
-    // saveCanvasBranches is the single write path updateBranchTip funnels
+    // saveDocumentBranches is the single write path updateBranchTip funnels
     // through, so this exercises the identical lock.
-    const preRaceState = await loadCanvasBranches('ws_branch_race', 'page')
+    const preRaceState = await loadDocumentBranches('ws_branch_race', 'page')
     const idx = preRaceState.branches.findIndex((b) => b.name === 'feature')
     const nextState = {
       ...preRaceState,
@@ -515,7 +515,7 @@ describe('purgeDanglingFiles', () => {
       ],
     }
 
-    const updatePromise = saveCanvasBranches('ws_branch_race', 'page', nextState)
+    const updatePromise = saveDocumentBranches('ws_branch_race', 'page', nextState)
     const purgePromise = purgeDanglingFiles('ws_branch_race', { graceMs: 0 })
     const [, purgeResult] = await Promise.all([updatePromise, purgePromise])
 
@@ -598,7 +598,7 @@ describe('purgeDanglingFiles', () => {
       },
     })
 
-    const putHeadPromise = app.request('/api/workspaces/ws_head_race/canvases/page/head', {
+    const putHeadPromise = app.request('/api/workspaces/ws_head_race/documents/page/head', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),

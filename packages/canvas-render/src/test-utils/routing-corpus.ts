@@ -1,7 +1,7 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 
 /**
- * The canvases that reached a human before they reached the suite. Each one
+ * The documents that reached a human before they reached the suite. Each one
  * is a routing defect someone had to notice and report; keeping them together
  * makes "did this change help overall" a question with an answer, instead of
  * one pin per fix judged on its own.

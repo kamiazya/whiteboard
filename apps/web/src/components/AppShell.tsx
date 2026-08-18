@@ -18,7 +18,7 @@ import HomeMark from '../brand/home-mark.svg?react'
 export function AppShell({ daemon }: { daemon: boolean }) {
   const navigate = useNavigate()
   const location = useLocation()
-  // A live auth error (reported by DaemonCanvasPage through the shell-status
+  // A live auth error (reported by DaemonDocumentPage through the shell-status
   // store) means the daemon needs the user's action, so it counts as
   // disconnected for the attention dot.
   const authError = useSyncExternalStore(subscribeShellStatus, getShellDaemonAuthError)

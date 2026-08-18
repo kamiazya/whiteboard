@@ -1,28 +1,28 @@
 import {
-  createCanvasInputSchema,
-  createCanvasOutputSchema,
   createServer,
-  deleteCanvasInputSchema,
-  deleteCanvasOutputSchema,
-  getCanvasInputSchema,
-  getCanvasOutputSchema,
-  listCanvasesInputSchema,
-  listCanvasesOutputSchema,
   type ServerDeps,
   setLogSink as setServerCoreLogSink,
   WB_DOCUMENT_CREATE_DESCRIPTION,
   WB_DOCUMENT_DELETE_DESCRIPTION,
   WB_DOCUMENT_LIST_DESCRIPTION,
   WB_DOCUMENT_RESOLVE_DESCRIPTION,
-  wbCanvasCreate,
-  wbCanvasDelete,
-  wbCanvasGet,
-  wbCanvasList,
+  wbDocumentCreate,
+  wbDocumentCreateInputSchema,
+  wbDocumentCreateOutputSchema,
+  wbDocumentDelete,
+  wbDocumentDeleteInputSchema,
+  wbDocumentDeleteOutputSchema,
+  wbDocumentList,
+  wbDocumentListInputSchema,
+  wbDocumentListOutputSchema,
+  wbDocumentResolve,
+  wbDocumentResolveInputSchema,
+  wbDocumentResolveOutputSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
-import { withCanvasDocWriteLock } from '../store/workspace-lock.js'
+import { withDocumentWriteLock } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
@@ -47,7 +47,7 @@ setServerCoreLogSink((record) => {
 export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
   const { tools } = createServer(deps)
 
-  // Every MUTATING tool below runs inside withCanvasDocWriteLock, keyed on
+  // Every MUTATING tool below runs inside withDocumentWriteLock, keyed on
   // the canvas it targets. Each is a load-modify-save against
   // documentStore, whose saveSnapshot writes unconditionally, so two calls
   // that load the same base before either saves silently drop one of the
@@ -77,7 +77,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.facetSet.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -94,7 +94,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.nodeAdd.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.nodeAdd.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -111,7 +111,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.nodePatch.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.nodePatch.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -128,7 +128,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.nodeLock.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.nodeLock.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -145,7 +145,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.edgeLock.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.edgeLock.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -162,7 +162,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.edgeAdd.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.edgeAdd.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -179,7 +179,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.edgePatch.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.edgePatch.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -196,7 +196,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.tidyCanvas.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.tidyCanvas.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -278,7 +278,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.versionSave.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -310,7 +310,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.versionRestore.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.versionRestore.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -343,7 +343,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.documentSet.inputSchema.parse(args)
-      const result = await withCanvasDocWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.documentSet.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -356,12 +356,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     'wb_document_create',
     {
       description: WB_DOCUMENT_CREATE_DESCRIPTION,
-      inputSchema: createCanvasInputSchema.shape,
-      outputSchema: createCanvasOutputSchema,
+      inputSchema: wbDocumentCreateInputSchema.shape,
+      outputSchema: wbDocumentCreateOutputSchema,
     },
     async (args) => {
-      const parsed = createCanvasInputSchema.parse(args)
-      const result = await wbCanvasCreate(deps, parsed)
+      const parsed = wbDocumentCreateInputSchema.parse(args)
+      const result = await wbDocumentCreate(deps, parsed)
       return structuredJsonResult(result)
     },
   )
@@ -371,12 +371,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     'wb_document_list',
     {
       description: WB_DOCUMENT_LIST_DESCRIPTION,
-      inputSchema: listCanvasesInputSchema.shape,
-      outputSchema: listCanvasesOutputSchema,
+      inputSchema: wbDocumentListInputSchema.shape,
+      outputSchema: wbDocumentListOutputSchema,
     },
     async (args) => {
-      const parsed = listCanvasesInputSchema.parse(args)
-      const result = await wbCanvasList(deps, parsed)
+      const parsed = wbDocumentListInputSchema.parse(args)
+      const result = await wbDocumentList(deps, parsed)
       return structuredJsonResult(result)
     },
   )
@@ -386,12 +386,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     'wb_document_resolve',
     {
       description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
-      inputSchema: getCanvasInputSchema.shape,
-      outputSchema: getCanvasOutputSchema,
+      inputSchema: wbDocumentResolveInputSchema.shape,
+      outputSchema: wbDocumentResolveOutputSchema,
     },
     async (args) => {
-      const parsed = getCanvasInputSchema.parse(args)
-      const result = await wbCanvasGet(deps, parsed)
+      const parsed = wbDocumentResolveInputSchema.parse(args)
+      const result = await wbDocumentResolve(deps, parsed)
       return structuredJsonResult(result)
     },
   )
@@ -401,12 +401,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     'wb_document_delete',
     {
       description: WB_DOCUMENT_DELETE_DESCRIPTION,
-      inputSchema: deleteCanvasInputSchema.shape,
-      outputSchema: deleteCanvasOutputSchema,
+      inputSchema: wbDocumentDeleteInputSchema.shape,
+      outputSchema: wbDocumentDeleteOutputSchema,
     },
     async (args) => {
-      const parsed = deleteCanvasInputSchema.parse(args)
-      const result = await wbCanvasDelete(deps, parsed)
+      const parsed = wbDocumentDeleteInputSchema.parse(args)
+      const result = await wbDocumentDelete(deps, parsed)
       return structuredJsonResult(result)
     },
   )

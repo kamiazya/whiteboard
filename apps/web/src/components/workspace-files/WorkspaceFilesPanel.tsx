@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { DaemonApiError, getCanvasOkfV1, listCanvasesV1 } from '../../lib/daemon-api-client.js'
-import { WorkspaceFileTree, type WorkspaceFileTreeCanvas } from './WorkspaceFileTree.js'
+import { DaemonApiError, getDocumentOkfV1, listDocumentsV1 } from '../../lib/daemon-api-client.js'
+import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
   daemonFetch: typeof globalThis.fetch
@@ -26,7 +26,7 @@ export function WorkspaceFilesPanel({
   daemonBaseUrl,
   workspaceId,
 }: WorkspaceFilesPanelProps) {
-  const [canvases, setCanvases] = useState<WorkspaceFileTreeCanvas[] | null>(null)
+  const [documents, setDocuments] = useState<WorkspaceFileTreeDocument[] | null>(null)
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
@@ -34,12 +34,12 @@ export function WorkspaceFilesPanel({
 
   useEffect(() => {
     let cancelled = false
-    setCanvases(null)
+    setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
-    listCanvasesV1(daemonFetch, daemonBaseUrl, workspaceId)
+    listDocumentsV1(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
-        if (!cancelled) setCanvases(res.canvases)
+        if (!cancelled) setDocuments(res.documents)
       })
       .catch((err) => {
         if (cancelled) return
@@ -50,22 +50,22 @@ export function WorkspaceFilesPanel({
     }
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
-  const openCanvas = (canvas: WorkspaceFileTreeCanvas) => {
-    setPreview({ kind: 'loading', path: canvas.path })
-    getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.documentId)
+  const openDocument = (entry: WorkspaceFileTreeDocument) => {
+    setPreview({ kind: 'loading', path: entry.path })
+    getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
       .then((res) => {
         setPreview((current) =>
-          current.kind === 'loading' && current.path === canvas.path
-            ? { kind: 'loaded', path: canvas.path, markdown: res.markdown }
+          current.kind === 'loading' && current.path === entry.path
+            ? { kind: 'loaded', path: entry.path, markdown: res.markdown }
             : current,
         )
       })
       .catch(() => {
         setPreview((current) =>
-          current.kind === 'loading' && current.path === canvas.path
-            ? // A created-but-never-written canvas 404s; show it as empty
+          current.kind === 'loading' && current.path === entry.path
+            ? // A created-but-never-written document 404s; show it as empty
               // rather than as a failure (see the /okf route's contract).
-              { kind: 'empty', path: canvas.path }
+              { kind: 'empty', path: entry.path }
             : current,
         )
       })
@@ -81,14 +81,14 @@ export function WorkspaceFilesPanel({
   if (listStatus === 'not-found') {
     return <p className="text-muted-foreground text-sm">This workspace has no document tree yet.</p>
   }
-  if (canvases === null) {
+  if (documents === null) {
     return <p className="text-muted-foreground text-sm">Loading files…</p>
   }
 
   return (
     <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
       <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
-        <WorkspaceFileTree canvases={canvases} onOpen={openCanvas} />
+        <WorkspaceFileTree documents={documents} onOpen={openDocument} />
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (

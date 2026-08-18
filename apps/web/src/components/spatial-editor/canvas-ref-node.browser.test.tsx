@@ -72,17 +72,17 @@ it('Add canvas opens the picker and picking creates a file node with that refere
       (b) => b.getAttribute('aria-label') === 'Document',
     ) as HTMLElement,
   )
-  await expect.element(page.getByTestId('canvas-picker-dialog')).toBeInTheDocument()
+  await expect.element(page.getByTestId('document-picker-dialog')).toBeInTheDocument()
 
   const option = [
-    ...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button'),
+    ...container.querySelectorAll('[data-testid="document-picker-dialog"] button'),
   ].find((b) => b.textContent === 'Meeting notes') as HTMLButtonElement
   fireEvent.click(option)
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(latest.canvas.nodes[0]).toMatchObject({ type: 'file', file: 'canvas-b' })
   expect(latest.commands).toContain('create-node')
-  expect(container.querySelector('[data-testid="canvas-picker-dialog"]')).toBeNull()
+  expect(container.querySelector('[data-testid="document-picker-dialog"]')).toBeNull()
   // The card shows the RESOLVED label, not the opaque reference — the
   // stored value stays the reference, display goes through the resolver.
   await vi.waitFor(() => expect(container.textContent).toContain('Meeting notes'))
@@ -108,16 +108,16 @@ it('the file context menu offers Open canvas and Change target retargets via the
   expect(container.textContent).toContain('Open canvas')
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Change target' }))
-  await expect.element(page.getByTestId('canvas-picker-dialog')).toBeInTheDocument()
+  await expect.element(page.getByTestId('document-picker-dialog')).toBeInTheDocument()
 
   // The current reference is marked in the list.
   const current = [
-    ...container.querySelectorAll('[data-testid="canvas-picker-dialog"] [aria-current="true"]'),
+    ...container.querySelectorAll('[data-testid="document-picker-dialog"] [aria-current="true"]'),
   ]
   expect(current.map((b) => b.textContent)).toEqual(['Release plan'])
 
   const target = [
-    ...container.querySelectorAll('[data-testid="canvas-picker-dialog"] button'),
+    ...container.querySelectorAll('[data-testid="document-picker-dialog"] button'),
   ].find((b) => b.textContent === 'Meeting notes') as HTMLButtonElement
   fireEvent.click(target)
 

@@ -215,11 +215,11 @@ async function main() {
     name: 'リリース計画 2026 / v2',
   })
   const namedList = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
-  const namedRow = namedList.canvases.find((c) => c.documentId === named.documentId)
+  const namedRow = namedList.documents.find((c) => c.documentId === named.documentId)
   if (namedRow?.name !== 'リリース計画 2026 / v2') {
     throw new Error(`wb_document_list lost the document name: ${JSON.stringify(namedRow)}`)
   }
-  const unnamedRow = namedList.canvases.find((c) => c.documentId === documentId)
+  const unnamedRow = namedList.documents.find((c) => c.documentId === documentId)
   if (unnamedRow === undefined || 'name' in unnamedRow) {
     throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
   }

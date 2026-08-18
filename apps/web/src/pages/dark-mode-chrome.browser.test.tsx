@@ -42,7 +42,7 @@ beforeEach(() => {
       return Promise.resolve(
         jsonResponse({
           workspace: 'Design review',
-          canvases: { 'design/login-flow': 'Login flow' },
+          documents: { 'design/login-flow': 'Login flow' },
           pinned: [],
         }),
       )
@@ -100,10 +100,10 @@ describe('dark-mode chrome (root token application)', () => {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        canvases={[{ path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' }]}
+        documents={[{ path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToCanvas={() => {}}
+        onNavigateToDocument={() => {}}
       />,
     )
 

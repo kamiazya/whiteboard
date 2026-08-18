@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  createCanvas,
   createDaemonFetch,
-  deleteCanvas,
-  getCanvasSnapshot,
-  listCanvases,
+  createDocument,
+  deleteDocument,
+  getDocumentSnapshot,
+  listDocuments,
   listWorkspaces,
-  setCanvasName,
-  updateCanvas,
+  setDocumentDisplayName,
+  updateDocument,
 } from './daemon-api-client.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -56,7 +56,7 @@ describe('createDaemonFetch', () => {
 
   it('preserves method/headers/body for a Request-object input, same-origin', async () => {
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
-    const req = new Request(`${DAEMON_BASE_URL}/api/canvases`, {
+    const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'POST',
       headers: { 'X-Custom': 'yes' },
       body: JSON.stringify({ a: 1 }),
@@ -72,7 +72,7 @@ describe('createDaemonFetch', () => {
   it('preserves the abort signal (and request semantics) from a Request-object input', async () => {
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
     const controller = new AbortController()
-    const req = new Request(`${DAEMON_BASE_URL}/api/canvases`, {
+    const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'GET',
       signal: controller.signal,
       keepalive: true,
@@ -90,7 +90,7 @@ describe('createDaemonFetch', () => {
     // Fetch spec: passing a ReadableStream as `body` requires `duplex: 'half'`
     // in RequestInit, or the call throws in browsers/undici that enforce it.
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
-    const req = new Request(`${DAEMON_BASE_URL}/api/canvases`, {
+    const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'POST',
       body: JSON.stringify({ a: 1 }),
     })
@@ -137,19 +137,19 @@ describe('listWorkspaces', () => {
   })
 })
 
-describe('listCanvases', () => {
+describe('listDocuments', () => {
   it('parses a valid response body', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ canvases: [{ path: 'main', updatedAt: '2026-01-01' }] }))
-    const result = await listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')
+      .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
+    const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
     // A kind-less entry stays kind-less: the client no longer invents
     // 'spatial' for a daemon that recorded no kind, so "stored as spatial"
     // and "never recorded" stay distinguishable. Consumers that must render
     // something (the gallery badge, the daemon page's editor choice) default
     // locally and visibly.
     expect(result).toEqual({
-      canvases: [{ path: 'main', updatedAt: '2026-01-01' }],
+      documents: [{ path: 'main', updatedAt: '2026-01-01' }],
     })
   })
 
@@ -157,38 +157,38 @@ describe('listCanvases', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse({ canvases: [{ path: 'note', updatedAt: '2026-01-01', kind: 'markdown' }] }),
+        jsonResponse({ documents: [{ path: 'note', updatedAt: '2026-01-01', kind: 'markdown' }] }),
       )
-    const result = await listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')
-    expect(result.canvases[0]?.kind).toBe('markdown')
+    const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
+    expect(result.documents[0]?.kind).toBe('markdown')
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ canvases: [{ path: 1 }] }))
-    await expect(listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ documents: [{ path: 1 }] }))
+    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Server error' }, 500))
-    await expect(listCanvases(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/server error/i)
+    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/server error/i)
   })
 })
 
-describe('createCanvas', () => {
+describe('createDocument', () => {
   it('parses a valid response body', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'new-canvas' }))
-    const result = await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas')
+    const result = await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas')
     expect(result).toEqual({ path: 'new-canvas' })
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ nope: true }))
-    await expect(createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/validation/i)
+    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/validation/i)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
-    await expect(createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
+    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
   })
 
   it('sends kind in the POST body when given, omits it otherwise', async () => {
@@ -197,34 +197,34 @@ describe('createCanvas', () => {
       return JSON.parse(init.body as string)
     }
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'x' }))
-    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
+    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
     expect(sentBody(fetchFn)).toEqual({ path: 'x', kind: 'markdown' })
     fetchFn.mockClear()
     fetchFn.mockResolvedValue(jsonResponse({ path: 'y' }))
-    await createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
+    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
     expect(sentBody(fetchFn)).toEqual({ path: 'y' })
   })
 })
 
-describe('deleteCanvas', () => {
+describe('deleteDocument', () => {
   it('sends DELETE to the canvas URL and parses the ok body', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
-    const result = await deleteCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'old-canvas')
+    const result = await deleteDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'old-canvas')
     expect(result).toEqual({ ok: true })
     const [url, init] = fetchFn.mock.calls[0]!
-    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/canvases/old-canvas`)
+    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/old-canvas`)
     expect((init as RequestInit).method).toBe('DELETE')
   })
 
   it('rejects on a 404, surfacing the problem-details title', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Canvas not found' }, 404))
-    await expect(deleteCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
+    await expect(deleteDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
       /canvas not found/i,
     )
   })
 })
 
-describe('getCanvasSnapshot', () => {
+describe('getDocumentSnapshot', () => {
   it('returns the raw octet-stream body as a Uint8Array', async () => {
     const bytes = new Uint8Array([1, 2, 3, 4])
     const fetchFn = vi.fn().mockResolvedValue(
@@ -233,27 +233,27 @@ describe('getCanvasSnapshot', () => {
         headers: { 'Content-Type': 'application/octet-stream' },
       }),
     )
-    const result = await getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
+    const result = await getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
     expect(new Uint8Array(result)).toEqual(bytes)
-    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/canvas/main/snapshot`)
+    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/document/main/snapshot`)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
-    await expect(getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
+    await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
       /not found/i,
     )
   })
 })
 
-describe('updateCanvas', () => {
+describe('updateDocument', () => {
   it('POSTs the snapshot bytes as the request body', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
     const bytes = new Uint8Array([9, 9, 9])
-    const result = await updateCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'main', bytes)
+    const result = await updateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'main', bytes)
     expect(result).toEqual({ ok: true })
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/w/w1/canvas/main/update`)
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/w/w1/document/main/update`)
     expect(initArg?.method).toBe('POST')
     expect(initArg?.body).toBe(bytes)
   })
@@ -261,28 +261,28 @@ describe('updateCanvas', () => {
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Server error' }, 500))
     await expect(
-      updateCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'main', new Uint8Array()),
+      updateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'main', new Uint8Array()),
     ).rejects.toThrow(/server error/i)
   })
 })
 
-describe('setCanvasName', () => {
+describe('setDocumentDisplayName', () => {
   it('PUTs the name and parses the returned WorkspaceNames payload', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ canvases: { main: 'My canvas' }, pinned: [] }))
-    const result = await setCanvasName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'My canvas')
-    expect(result).toEqual({ canvases: { main: 'My canvas' }, pinned: [] })
+      .mockResolvedValue(jsonResponse({ documents: { main: 'My canvas' }, pinned: [] }))
+    const result = await setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'My canvas')
+    expect(result).toEqual({ documents: { main: 'My canvas' }, pinned: [] })
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/canvases/main/name`)
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/main/name`)
     expect(initArg?.method).toBe('PUT')
     expect(JSON.parse(String(initArg?.body))).toEqual({ name: 'My canvas' })
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Bad request' }, 400))
-    await expect(setCanvasName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x')).rejects.toThrow(
-      /bad request/i,
-    )
+    await expect(
+      setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x'),
+    ).rejects.toThrow(/bad request/i)
   })
 })

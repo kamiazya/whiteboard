@@ -1,5 +1,5 @@
 /**
- * Persistent-storage guard for browser-local canvases. Without an explicit
+ * Persistent-storage guard for browser-local documents. Without an explicit
  * StorageManager.persist() grant, the IndexedDB holding every browser-local
  * canvas is best-effort — the browser may evict it under storage pressure,
  * which would silently delete user data the product promises stays on their

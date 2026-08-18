@@ -108,8 +108,8 @@ describe('backup-restore drill', () => {
 
       // Re-point DATA_DIR at the restored copy and verify.
       dataDir = roots.target
-      const canvases = await listDocuments('session1')
-      expect(canvases.map((c) => c.path)).toContain('canvas-a')
+      const documents = await listDocuments('session1')
+      expect(documents.map((c) => c.path)).toContain('canvas-a')
 
       const restoredDoc = await loadDocument('session1', 'canvas-a')
       const restoredElements = restoredDoc.getMovableList('elements').toJSON() as {

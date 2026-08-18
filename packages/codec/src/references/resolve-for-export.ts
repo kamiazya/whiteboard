@@ -8,7 +8,7 @@ import type {
   MdastTableRow,
 } from '@kamiazya/whiteboard-model/mdast'
 
-export type CanvasPathResolver = (documentId: string) => string | null
+export type DocumentPathResolver = (documentId: string) => string | null
 
 function wikiLinkExportText(alias: string | undefined, path: string): string {
   const label = alias ?? path
@@ -17,7 +17,7 @@ function wikiLinkExportText(alias: string | undefined, path: string): string {
 
 function exportPhrasing(
   node: MdastPhrasingContent,
-  resolver: CanvasPathResolver,
+  resolver: DocumentPathResolver,
 ): MdastPhrasingContent {
   if (node.type === 'wikiLink' || node.type === 'embed') {
     const path = resolver(node.documentId)
@@ -38,12 +38,12 @@ function exportPhrasing(
 
 function exportCellPhrasing(
   node: MdastCellPhrasingContent,
-  resolver: CanvasPathResolver,
+  resolver: DocumentPathResolver,
 ): MdastCellPhrasingContent {
   return exportPhrasing(node as MdastPhrasingContent, resolver) as MdastCellPhrasingContent
 }
 
-function exportFlow(node: MdastFlowContent, resolver: CanvasPathResolver): MdastFlowContent {
+function exportFlow(node: MdastFlowContent, resolver: DocumentPathResolver): MdastFlowContent {
   switch (node.type) {
     case 'paragraph':
     case 'heading':
@@ -59,15 +59,15 @@ function exportFlow(node: MdastFlowContent, resolver: CanvasPathResolver): Mdast
   }
 }
 
-function exportListItem(node: MdastListItem, resolver: CanvasPathResolver): MdastListItem {
+function exportListItem(node: MdastListItem, resolver: DocumentPathResolver): MdastListItem {
   return { ...node, children: node.children.map((child) => exportFlow(child, resolver)) }
 }
 
-function exportTableRow(node: MdastTableRow, resolver: CanvasPathResolver): MdastTableRow {
+function exportTableRow(node: MdastTableRow, resolver: DocumentPathResolver): MdastTableRow {
   return { ...node, children: node.children.map((child) => exportTableCell(child, resolver)) }
 }
 
-function exportTableCell(node: MdastTableCell, resolver: CanvasPathResolver): MdastTableCell {
+function exportTableCell(node: MdastTableCell, resolver: DocumentPathResolver): MdastTableCell {
   return { ...node, children: node.children.map((child) => exportCellPhrasing(child, resolver)) }
 }
 
@@ -81,7 +81,7 @@ function exportTableCell(node: MdastTableCell, resolver: CanvasPathResolver): Md
  */
 export function resolveReferencesForExport(
   root: MdastRoot,
-  resolver: CanvasPathResolver,
+  resolver: DocumentPathResolver,
 ): MdastRoot {
   return { ...root, children: root.children.map((child) => exportFlow(child, resolver)) }
 }

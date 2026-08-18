@@ -3,7 +3,7 @@
 // "the drawing does not travel". The content is rendered once at drag
 // start (single-node render, ~0.4ms) and travels via a per-frame CSS
 // transform; the committed full-canvas render stays untouched during the
-// drag, which is the property that keeps this smooth on large canvases.
+// drag, which is the property that keeps this smooth on large documents.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'

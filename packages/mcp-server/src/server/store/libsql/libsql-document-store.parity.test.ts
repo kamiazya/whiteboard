@@ -21,8 +21,8 @@ import { LibsqlDocumentStore } from './libsql-document-store.js'
 // id string, so the model exercises the isolation boundary in addition to
 // plain multi-doc isolation.
 const DOC_REFS: readonly DocRef[] = [
-  { kind: 'canvas', documentId: 'shared-id' },
-  { kind: 'canvas', documentId: 'other-canvas' },
+  { kind: 'document', documentId: 'shared-id' },
+  { kind: 'document', documentId: 'other-canvas' },
   { kind: 'workspace-tree', workspaceId: 'shared-id' },
 ]
 

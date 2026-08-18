@@ -1,5 +1,5 @@
 /**
- * SseBackend: the CanvasBackend for a page that has no WebSocket path to the
+ * SseBackend: the DocumentBackend for a page that has no WebSocket path to the
  * daemon.
  *
  * A page served over https cannot open a `ws://` socket to loopback — mixed
@@ -15,12 +15,12 @@
  */
 
 import { apiFetch } from './api-client.js'
-import { canvasFileApiUrl } from './api-contracts/canvas-url.js'
+import { documentFileApiUrl } from './api-contracts/document-url.js'
 import type {
   BinaryFileDataLike,
-  CanvasBackend,
-  CanvasBackendHandlers,
-} from './canvas-backend-contract.js'
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from './document-backend-contract.js'
 import type { SseStreamSource } from './sse-stream-hub.js'
 import { SseStreamHub } from './sse-stream-hub.js'
 import { uploadFiles } from './upload-files.js'
@@ -30,7 +30,7 @@ export interface SseTransport {
   fetch: typeof globalThis.fetch
 }
 
-export class SseBackend implements CanvasBackend {
+export class SseBackend implements DocumentBackend {
   private readonly workspaceId: string
   private readonly path: string
   private readonly baseUrl: string
@@ -65,12 +65,12 @@ export class SseBackend implements CanvasBackend {
     return `${this.baseUrl}${path}`
   }
 
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.cancelled = false
     void this.run(handlers)
   }
 
-  private async run(handlers: CanvasBackendHandlers): Promise<void> {
+  private async run(handlers: DocumentBackendHandlers): Promise<void> {
     // Snapshot first: the stream carries only incremental updates, so a client
     // that started reading before seeding would apply deltas to an empty doc.
     // Through the source, not a direct fetch, for the same reason push is:
@@ -122,7 +122,7 @@ export class SseBackend implements CanvasBackend {
     return this.ownedHub
   }
 
-  private dispatchText(raw: string, handlers: CanvasBackendHandlers): void {
+  private dispatchText(raw: string, handlers: DocumentBackendHandlers): void {
     // The payload reuses the WebSocket parser so both transports agree on the
     // shape and on what an unknown message does.
     const message = parseServerTextMessage(raw)
@@ -152,14 +152,16 @@ export class SseBackend implements CanvasBackend {
     // worker's replica merges the bytes against everything else it has seen
     // and writes onward itself. Posting here regardless would write around
     // that replica and re-send state the daemon had just delivered.
-    // Returned, not swallowed: `CanvasBackendHandlers` already treats a
+    // Returned, not swallowed: `DocumentBackendHandlers` already treats a
     // rejected push as the session's `error` status, and with no worker in
     // front there is nothing else that will ever retry this write.
     return this.resolveSource().push(this.docKey, bytes)
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
-    const res = await this.fetchFn(this.url(canvasFileApiUrl(this.workspaceId, this.path, fileId)))
+    const res = await this.fetchFn(
+      this.url(documentFileApiUrl(this.workspaceId, this.path, fileId)),
+    )
     if (!res.ok) return null
     return res.blob()
   }

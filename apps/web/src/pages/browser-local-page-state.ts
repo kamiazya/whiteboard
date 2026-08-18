@@ -1,6 +1,6 @@
-// Page-state derivation for `BrowserLocalCanvasPage`.
+// Page-state derivation for `BrowserLocalDocumentPage`.
 //
-// `useBrowserLocalCanvasController` carries several flat fields that
+// `useBrowserLocalDocumentController` carries several flat fields that
 // the page used to chain into a 3-way `if` cascade (degraded-load /
 // cleanup-completed / loading / editing). The cascade order matters
 // — completion view must beat the load-time placeholder — and the
@@ -21,11 +21,11 @@
 // invariants grep-friendly and lets the helper be tested in isolation
 // (no React renderer required).
 
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
-import type { BrowserLocalPersistenceState } from './use-browser-local-canvas-controller.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import type { BrowserLocalPersistenceState } from './use-browser-local-document-controller.js'
 
 export interface BrowserLocalPageStateInput {
-  snapshot: CanvasSnapshot | null
+  snapshot: DocumentSnapshot | null
   persistence: BrowserLocalPersistenceState
   cleanupCompleted: boolean
 }
@@ -50,7 +50,7 @@ export type BrowserLocalPageState =
   // Steady state. The editor renders. `persistence` may be `saved`,
   // `pending`, `saving`, or `degraded` — that distinction is the
   // header save-status surface, not a page-level branch.
-  | { kind: 'editing'; snapshot: CanvasSnapshot; persistence: BrowserLocalPersistenceState }
+  | { kind: 'editing'; snapshot: DocumentSnapshot; persistence: BrowserLocalPersistenceState }
 
 export function derivePageState(input: BrowserLocalPageStateInput): BrowserLocalPageState {
   // Cascade order encodes the invariants documented at the top of

@@ -36,8 +36,8 @@ describe('computeStorageReport', () => {
     // under <DATA_DIR>/<workspaceId>/files/ (document-store.ts), so the
     // categorizer has to recognise the real per-workspace paths, not the
     // top-level shorthand.
-    await seed('blobs/ws_1/canvas/abc.loro', 1000)
-    await seed('blobs/ws_1/canvas/def.loro', 2000)
+    await seed('blobs/ws_1/document/abc.loro', 1000)
+    await seed('blobs/ws_1/document/def.loro', 2000)
     await seed('blobs/ws_1/versions/v1.png', 500) // version thumbnail
     await seed('ws_1/files/image-1.png', 4000) // user-uploaded image (real layout)
     await seed('whiteboard.db', 8000)
@@ -61,8 +61,8 @@ describe('computeStorageReport', () => {
   })
 
   it('walks recursively through deeply nested workspaces', async () => {
-    await seed('blobs/ws_1/canvas/sub/dir/foo.loro', 100)
-    await seed('blobs/ws_2/canvas/bar.loro', 200)
+    await seed('blobs/ws_1/document/sub/dir/foo.loro', 100)
+    await seed('blobs/ws_2/document/bar.loro', 200)
     const report = await computeStorageReport(tempDir)
     expect(report.fileCount).toBe(2)
     expect(report.byCategory.blobs.bytes).toBe(300)

@@ -15,7 +15,7 @@ describe('sync SSE frame contract', () => {
 
   it('rejects a frame missing its addressing', () => {
     // An unaddressed frame is the misrouting hazard the doc key exists to
-    // prevent: one stream serves many canvases.
+    // prevent: one stream serves many documents.
     expect(syncUpdateEventSchema.safeParse({ update: 'AQID' }).success).toBe(false)
     expect(syncMessageEventSchema.safeParse({ raw: '{}' }).success).toBe(false)
     expect(syncReadyEventSchema.safeParse({ streamId: '' }).success).toBe(false)

@@ -43,7 +43,7 @@ describe('createLocalTokenAuthStrategy', () => {
     const strategy = createLocalTokenAuthStrategy({ token: 'secret' })
     const decision = strategy.authorize({
       method: 'POST',
-      path: '/api/workspaces/x/canvases',
+      path: '/api/workspaces/x/documents',
       authorizationHeader: 'Bearer secret',
       requiredScopes: ['canvas:write'],
     })
@@ -57,7 +57,7 @@ describe('createLocalTokenAuthStrategy', () => {
     const strategy = createLocalTokenAuthStrategy({ token: 'secret' })
     const decision = strategy.authorize({
       method: 'POST',
-      path: '/api/workspaces/x/canvases',
+      path: '/api/workspaces/x/documents',
       requiredScopes: ['canvas:write'],
     })
     expect(decision.ok).toBe(false)
@@ -71,7 +71,7 @@ describe('createLocalTokenAuthStrategy', () => {
     const strategy = createLocalTokenAuthStrategy({ token: 'secret' })
     const decision = strategy.authorize({
       method: 'POST',
-      path: '/api/workspaces/x/canvases',
+      path: '/api/workspaces/x/documents',
       authorizationHeader: 'Bearer not-the-token',
       requiredScopes: ['canvas:write'],
     })
@@ -150,7 +150,7 @@ describe('createLocalTokenAuthStrategy non-leak guard', () => {
     const strategy = createLocalTokenAuthStrategy({ token: 'secret' })
     const decision = strategy.authorize({
       method: 'POST',
-      path: '/api/workspaces/secret-workspace-id/canvases',
+      path: '/api/workspaces/secret-workspace-id/documents',
       requiredScopes: ['canvas:write'],
     })
     expect(decision.ok).toBe(false)

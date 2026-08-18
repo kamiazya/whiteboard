@@ -4,7 +4,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
-import { wbCanvasCreate } from './canvas-crud.js'
+import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
 import { saveDocumentSnapshot } from './document-io.js'
 
@@ -39,7 +39,7 @@ function makeDeps(): ServerDeps {
 }
 
 async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {
-  const { documentId } = await wbCanvasCreate(deps, {
+  const { documentId } = await wbDocumentCreate(deps, {
     workspaceId: 'ws',
     path: `doc-${kind}`,
     kind,

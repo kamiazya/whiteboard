@@ -3,30 +3,30 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
-import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
 
 afterEach(cleanup)
 
-async function seededStore(snapshots: CanvasSnapshot[]) {
+async function seededStore(snapshots: DocumentSnapshot[]) {
   const store = new MemoryStore()
   for (const s of snapshots) await store.save(s)
   return store
 }
 
 function renderPage(store: MemoryStore) {
-  const onOpenCanvas = vi.fn()
+  const onOpenDocument = vi.fn()
   // React delegates events to the root; Radix portals render into
   // document.body, so the body must be the React root for portal events.
   const utils = render(
     <MemoryRouter initialEntries={['/']}>
-      <BrowserLocalIndexPage store={store} onOpenCanvas={onOpenCanvas} />
+      <BrowserLocalIndexPage store={store} onOpenDocument={onOpenDocument} />
     </MemoryRouter>,
     {
       container: document.body,
     },
   )
-  return { onOpenCanvas, ...utils }
+  return { onOpenDocument, ...utils }
 }
 
 describe('BrowserLocalIndexPage', () => {
@@ -37,7 +37,7 @@ describe('BrowserLocalIndexPage', () => {
     ])
     renderPage(store)
 
-    const cards = await screen.findAllByTestId('canvas-list-card')
+    const cards = await screen.findAllByTestId('document-list-card')
     expect(cards).toHaveLength(2)
     expect(within(cards[0]!).getByText('Meeting Notes')).toBeTruthy()
     expect(within(cards[0]!).getByText(/markdown/i)).toBeTruthy()
@@ -49,18 +49,18 @@ describe('BrowserLocalIndexPage', () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Solo', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
-    const { onOpenCanvas } = renderPage(store)
+    const { onOpenDocument } = renderPage(store)
 
-    fireEvent.click((await screen.findAllByTestId('canvas-list-card'))[0]!)
-    expect(onOpenCanvas).toHaveBeenCalledWith('id-a')
+    fireEvent.click((await screen.findAllByTestId('document-list-card'))[0]!)
+    expect(onOpenDocument).toHaveBeenCalledWith('id-a')
   })
 
   it('creates a markdown canvas from the + menu, repoints the default, and opens it', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Existing', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
-    const { onOpenCanvas } = renderPage(store)
-    await screen.findAllByTestId('canvas-list-card')
+    const { onOpenDocument } = renderPage(store)
+    await screen.findAllByTestId('document-list-card')
 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'New canvas' }), {
       button: 0,
@@ -68,24 +68,24 @@ describe('BrowserLocalIndexPage', () => {
     })
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: 'New markdown note' }))
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
-    const newId = onOpenCanvas.mock.calls[0]![0] as string
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
+    const newId = onOpenDocument.mock.calls[0]![0] as string
     expect(newId).not.toBe('id-a')
-    const all = await store.listCanvases()
+    const all = await store.listDocuments()
     const created = all.find((s) => s.id === newId)
     expect(created?.kind).toBe('markdown')
-    expect(await store.getDefaultCanvasId()).toBe(newId)
+    expect(await store.getDefaultDocumentId()).toBe(newId)
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {
     const store = new MemoryStore()
-    const { onOpenCanvas } = renderPage(store)
+    const { onOpenDocument } = renderPage(store)
 
     fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
-    const newId = onOpenCanvas.mock.calls[0]![0] as string
-    const created = (await store.listCanvases()).find((s) => s.id === newId)
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
+    const newId = onOpenDocument.mock.calls[0]![0] as string
+    const created = (await store.listDocuments()).find((s) => s.id === newId)
     expect(created?.kind).toBe('spatial')
   })
 
@@ -93,33 +93,33 @@ describe('BrowserLocalIndexPage', () => {
     // Pins the createDisabled wiring: React flushes `creating` before a
     // second click can dispatch on the now-disabled button.
     const store = new MemoryStore()
-    const { onOpenCanvas } = renderPage(store)
+    const { onOpenDocument } = renderPage(store)
     const button = await screen.findByRole('button', { name: /create a canvas/i })
 
     fireEvent.click(button)
     fireEvent.click(button)
 
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
-    expect(await store.listCanvases()).toHaveLength(1)
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
+    expect(await store.listDocuments()).toHaveLength(1)
   })
 
   it('keeps a create entry point when the list fails to load', async () => {
-    // A failed listCanvases must not dead-end the page: the create path
+    // A failed listDocuments must not dead-end the page: the create path
     // does not need the list (fresh id + save), and success navigates away.
     const store = new MemoryStore()
-    store.listCanvases = () => Promise.reject(new Error('idb blocked'))
-    const { onOpenCanvas } = renderPage(store)
+    store.listDocuments = () => Promise.reject(new Error('idb blocked'))
+    const { onOpenDocument } = renderPage(store)
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('Failed to load canvases from this browser.')
+    expect(alert.textContent).toBe('Failed to load documents from this browser.')
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
-    await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
   })
 
   it('surfaces a create failure and re-enables the create action', async () => {
     const store = new MemoryStore()
     store.save = () => Promise.reject(new Error('quota exceeded'))
-    const { onOpenCanvas } = renderPage(store)
+    const { onOpenDocument } = renderPage(store)
 
     const button = await screen.findByRole('button', { name: /create a canvas/i })
     fireEvent.click(button)
@@ -127,7 +127,7 @@ describe('BrowserLocalIndexPage', () => {
     const alert = await screen.findByRole('alert')
     // Fixed copy — never the raw error text.
     expect(alert.textContent).toBe('Failed to create a canvas in this browser.')
-    expect(onOpenCanvas).not.toHaveBeenCalled()
+    expect(onOpenDocument).not.toHaveBeenCalled()
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
   })
 
@@ -136,7 +136,7 @@ describe('BrowserLocalIndexPage', () => {
       { id: 'id-a', name: 'Keep Me', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
     renderPage(store)
-    await screen.findAllByTestId('canvas-list-card')
+    await screen.findAllByTestId('document-list-card')
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Keep Me' }))
     const dialog = await screen.findByRole('alertdialog')
@@ -144,35 +144,35 @@ describe('BrowserLocalIndexPage', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(await store.listCanvases()).toHaveLength(1)
-    expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
+    expect(await store.listDocuments()).toHaveLength(1)
+    expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
   })
 
   it('confirming Delete removes the canvas; deleting the last one returns the empty state', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Doomed', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
-    const { onOpenCanvas } = renderPage(store)
-    await screen.findAllByTestId('canvas-list-card')
+    const { onOpenDocument } = renderPage(store)
+    await screen.findAllByTestId('document-list-card')
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Doomed' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(await store.listCanvases()).toHaveLength(0)
-    expect(await screen.findByText('No canvases yet')).toBeTruthy()
+    expect(await store.listDocuments()).toHaveLength(0)
+    expect(await screen.findByText('No documents yet')).toBeTruthy()
     // The delete flow must never open the canvas.
-    expect(onOpenCanvas).not.toHaveBeenCalled()
+    expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
   it('a failed delete shows the fixed error in the dialog, which stays open, and Cancel clears it', async () => {
     const store = await seededStore([
       { id: 'id-a', name: 'Sticky', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
     ])
-    store.removeCanvas = () => Promise.reject(new Error('quota exceeded'))
+    store.removeDocument = () => Promise.reject(new Error('quota exceeded'))
     renderPage(store)
-    await screen.findAllByTestId('canvas-list-card')
+    await screen.findAllByTestId('document-list-card')
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Sticky' }))
     const dialog = await screen.findByRole('alertdialog')
@@ -186,7 +186,7 @@ describe('BrowserLocalIndexPage', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(screen.getAllByTestId('canvas-list-card')).toHaveLength(1)
+    expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
   })
 
   it('shows the name alone — a browser-local canvas has no path to put under it', async () => {
@@ -199,7 +199,7 @@ describe('BrowserLocalIndexPage', () => {
     ])
     renderPage(store)
 
-    const cards = await screen.findAllByTestId('canvas-list-card')
+    const cards = await screen.findAllByTestId('document-list-card')
     expect(within(cards[0]!).getByText('構成図')).toBeTruthy()
     expect(within(cards[1]!).getByText('設計メモ')).toBeTruthy()
     expect(screen.queryAllByTestId('canvas-secondary')).toHaveLength(0)

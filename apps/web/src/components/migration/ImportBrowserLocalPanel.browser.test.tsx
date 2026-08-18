@@ -1,6 +1,6 @@
 /**
  * Real-IndexedDB browser test: seeds the actual IndexedDBStore + LoroStore
- * with two canvases (one with deltas), imports both, and asserts copy-first
+ * with two documents (one with deltas), imports both, and asserts copy-first
  * — after import the source store's contents are byte-identical.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -33,7 +33,7 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
   })
   afterEach(cleanup)
 
-  it('imports two seeded canvases via daemonFetch without mutating the source IndexedDB store', async () => {
+  it('imports two seeded documents via daemonFetch without mutating the source IndexedDB store', async () => {
     const browserLocalStore = new IndexedDBStore()
     const loroStore = new LoroStore()
 
@@ -64,13 +64,13 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     doc2.commit()
     await loroStore.appendDelta('c2', doc2.export({ mode: 'update', from: prevVV }))
 
-    const canvasesBefore = await browserLocalStore.listCanvases()
+    const documentsBefore = await browserLocalStore.listDocuments()
     const loro1Before = await loroStore.load('c1')
     const loro2Before = await loroStore.load('c2')
 
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/canvases')) {
+      if (url.endsWith('/documents')) {
         const { path } = JSON.parse(init?.body as string) as { path: string }
         return jsonResponse({ path })
       }
@@ -93,7 +93,7 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     await screen.findByText(/^imported as with-deltas$/i)
 
     const createCalls = daemonFetch.mock.calls.filter(([input]) =>
-      String(input).endsWith('/canvases'),
+      String(input).endsWith('/documents'),
     )
     const updateCalls = daemonFetch.mock.calls.filter(([input]) =>
       String(input).includes('/update'),
@@ -101,12 +101,12 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     expect(createCalls).toHaveLength(2)
     expect(updateCalls).toHaveLength(2)
 
-    const canvasesAfter = await browserLocalStore.listCanvases()
+    const documentsAfter = await browserLocalStore.listDocuments()
     const loro1After = await loroStore.load('c1')
     const loro2After = await loroStore.load('c2')
 
     await waitFor(() => {
-      expect(canvasesAfter).toEqual(canvasesBefore)
+      expect(documentsAfter).toEqual(documentsBefore)
     })
     expect(loro1After).toEqual(loro1Before)
     expect(loro2After).toEqual(loro2Before)

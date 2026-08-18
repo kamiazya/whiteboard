@@ -114,7 +114,7 @@ export function sseBroadcastUpdate(workspaceId: string, path: string, update: Ui
  * subscribers, wrapped with the document it belongs to.
  *
  * A WebSocket is per-canvas, so its text frames need no addressing. One SSE
- * stream serves many canvases, so an unaddressed frame would be applied to
+ * stream serves many documents, so an unaddressed frame would be applied to
  * whichever canvas happened to be listening — a head_changed for one canvas
  * landing on another.
  */

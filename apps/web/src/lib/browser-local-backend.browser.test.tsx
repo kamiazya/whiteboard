@@ -1,12 +1,12 @@
 /**
- * 3-C: BrowserLocalBackend — CanvasBackend contract tests.
+ * 3-C: BrowserLocalBackend — DocumentBackend contract tests.
  *
  * Real browser context required for IndexedDB + loro-crdt WASM.
  */
 
 import type {
   BinaryFileDataLike,
-  CanvasBackendHandlers,
+  DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,7 +27,7 @@ async function clearDb(): Promise<void> {
   })
 }
 
-function makeHandlers(overrides: Partial<CanvasBackendHandlers> = {}): CanvasBackendHandlers {
+function makeHandlers(overrides: Partial<DocumentBackendHandlers> = {}): DocumentBackendHandlers {
   return {
     onSnapshot: vi.fn(),
     onRemoteUpdate: vi.fn(),
@@ -277,7 +277,7 @@ describe('BrowserLocalBackend', () => {
     const backend = new BrowserLocalBackend(
       'canvas-1',
       undefined,
-      faultyStore as unknown as import('./canvas-file-store.js').CanvasFileStore,
+      faultyStore as unknown as import('./document-file-store.js').DocumentFileStore,
     )
     backend.connect(handlers)
     await vi.waitFor(
@@ -464,14 +464,14 @@ async function forceInvalidLoroRecord(documentId: string): Promise<void> {
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
+      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
     }
     req.onsuccess = () => {
       const db = req.result
-      const tx = db.transaction('loroCanvases', 'readwrite')
+      const tx = db.transaction('loroDocuments', 'readwrite')
       // v:1 envelope but snapshot bytes are not valid Loro data
-      tx.objectStore('loroCanvases').put(
+      tx.objectStore('loroDocuments').put(
         {
           v: 1,
           snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
@@ -498,14 +498,14 @@ async function forceRecordWithBadDelta(documentId: string, snapshot: Uint8Array)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
+      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
     }
     req.onsuccess = () => {
       const db = req.result
-      const tx = db.transaction('loroCanvases', 'readwrite')
+      const tx = db.transaction('loroDocuments', 'readwrite')
       // Valid snapshot but invalid delta bytes
-      tx.objectStore('loroCanvases').put(
+      tx.objectStore('loroDocuments').put(
         {
           v: 1,
           snapshot,
@@ -533,15 +533,15 @@ async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promis
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
-      if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
+      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
+      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
+      if (!db.objectStoreNames.contains('documentFiles')) db.createObjectStore('documentFiles')
     }
     req.onsuccess = () => {
       const db = req.result
-      const tx = db.transaction('canvasFiles', 'readwrite')
-      // Missing required fields — fails canvasFileRecordSchema.safeParse.
-      tx.objectStore('canvasFiles').put({ v: 1, garbage: true }, fileId)
+      const tx = db.transaction('documentFiles', 'readwrite')
+      // Missing required fields — fails documentFileRecordSchema.safeParse.
+      tx.objectStore('documentFiles').put({ v: 1, garbage: true }, fileId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -561,13 +561,13 @@ async function forceCorruptRecord(documentId: string): Promise<void> {
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
+      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
     }
     req.onsuccess = () => {
       const db = req.result
-      const tx = db.transaction('loroCanvases', 'readwrite')
-      tx.objectStore('loroCanvases').put({ v: 99, garbage: true }, documentId)
+      const tx = db.transaction('loroDocuments', 'readwrite')
+      tx.objectStore('loroDocuments').put({ v: 99, garbage: true }, documentId)
       tx.oncomplete = () => {
         db.close()
         resolve()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { syncFullscreenHash } from './canvas-fullscreen-hash.js'
 
-// The CanvasPage effect that mirrors `isFullscreen` into the URL hash used
+// The DocumentPage effect that mirrors `isFullscreen` into the URL hash used
 // to clobber any other hash on mount, breaking the add-library import
 // flow that opens the canvas with `#addLibrary=…`. The contract this
 // helper enforces:
@@ -51,7 +51,7 @@ describe('syncFullscreenHash', () => {
 
   it('preserves a non-fullscreen hash on initial mount in non-fullscreen mode', () => {
     const out = run(false, {
-      pathname: '/w/ws_a/canvas/design',
+      pathname: '/w/ws_a/document/design',
       search: '',
       hash: '#addLibrary=https%3A%2F%2Flibs.example%2Fpack',
     })
@@ -61,7 +61,7 @@ describe('syncFullscreenHash', () => {
 
   it('writes #fullscreen when toggled on, even if a different hash existed', () => {
     const out = run(true, {
-      pathname: '/w/ws_a/canvas/design',
+      pathname: '/w/ws_a/document/design',
       search: '?x=1',
       hash: '#addLibrary=foo',
     })
@@ -71,7 +71,7 @@ describe('syncFullscreenHash', () => {
 
   it('clears the hash only when leaving fullscreen mode', () => {
     const out = run(false, {
-      pathname: '/w/ws_a/canvas/design',
+      pathname: '/w/ws_a/document/design',
       search: '',
       hash: '#fullscreen',
     })
@@ -91,7 +91,7 @@ describe('syncFullscreenHash', () => {
     // that already updated the URL. The effect must not aggressively
     // re-write the hash to empty just because isFullscreen is false.
     const out = run(false, {
-      pathname: '/w/ws_a/canvas/design',
+      pathname: '/w/ws_a/document/design',
       search: '',
       hash: '#someOther=1',
     })

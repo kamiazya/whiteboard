@@ -58,7 +58,7 @@ describe('isReservedUiPath', () => {
     ['/wsx', false],
     ['/.well-known', false],
     ['/token/refresh', false],
-    ['/w/default/canvas/foo', false],
+    ['/w/default/document/foo', false],
     ['/tokens', false],
     ['/local/abc', false],
   ])('isReservedUiPath(%s) === %s', (path, expected) => {

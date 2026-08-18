@@ -69,7 +69,7 @@ describe('prepareDataDir', () => {
     await writeFile(join(blobDir, `${documentId}.loro`), doc.export({ mode: 'snapshot' }))
 
     const libsqlStore = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'canvas' as const, documentId }
+    const docRef = { kind: 'document' as const, documentId }
     // Nothing has imported the interim blob yet.
     await expect(libsqlStore.loadSnapshot({ docRef })).resolves.toBeNull()
 
@@ -107,7 +107,7 @@ describe('prepareDataDir', () => {
     // reading straight through LibsqlDocumentStore is enough to prove it.
     const db = await getDb(tempDir)
     const libsqlStore = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'canvas' as const, documentId }
+    const docRef = { kind: 'document' as const, documentId }
     const imported = await libsqlStore.loadSnapshot({ docRef })
     expect(imported).not.toBeNull()
     const reloaded = new LoroDoc()

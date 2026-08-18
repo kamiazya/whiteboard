@@ -185,7 +185,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   // (or POST) file route later silently authorizes a mutation with a
   // read-only credential.
   it('any write verb on a file route requires files:write, not just PUT', () => {
-    const filePath = '/api/w/ws1/canvas/main/file/abc'
+    const filePath = '/api/w/ws1/document/main/file/abc'
     expect(resolveApiRouteScope('GET', filePath)).toEqual({
       kind: 'scoped',
       scopes: ['files:read'],
@@ -208,8 +208,8 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
-  it('optimize-all canvases requires versions:write, not the workspace:write fallback', () => {
-    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/canvases/optimize-all')).toEqual({
+  it('optimize-all documents requires versions:write, not the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/documents/optimize-all')).toEqual({
       kind: 'scoped',
       scopes: ['versions:write'],
     })

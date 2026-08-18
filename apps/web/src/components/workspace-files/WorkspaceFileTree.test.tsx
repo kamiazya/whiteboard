@@ -4,7 +4,7 @@ import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 
 afterEach(cleanup)
 
-const canvases = [
+const documents = [
   { documentId: 'c-root', path: 'readme' },
   { documentId: 'c-notes', path: 'notes' },
   { documentId: 'c-child', path: 'notes/design' },
@@ -13,7 +13,7 @@ const canvases = [
 
 describe('WorkspaceFileTree', () => {
   it('renders nested paths as an ARIA tree, not a flat list', () => {
-    render(<WorkspaceFileTree canvases={canvases} onOpen={() => {}} />)
+    render(<WorkspaceFileTree documents={documents} onOpen={() => {}} />)
 
     expect(screen.getByRole('tree')).not.toBeNull()
     // notes is a branch: expandable, expanded by default.
@@ -26,7 +26,7 @@ describe('WorkspaceFileTree', () => {
 
   it('clicking a canvas row reports its documentId', () => {
     const onOpen = vi.fn()
-    render(<WorkspaceFileTree canvases={canvases} onOpen={onOpen} />)
+    render(<WorkspaceFileTree documents={documents} onOpen={onOpen} />)
 
     fireEvent.click(screen.getByText('readme'))
     expect(onOpen).toHaveBeenCalledWith(
@@ -35,7 +35,7 @@ describe('WorkspaceFileTree', () => {
   })
 
   it('collapsing a branch hides its descendants', () => {
-    render(<WorkspaceFileTree canvases={canvases} onOpen={() => {}} />)
+    render(<WorkspaceFileTree documents={documents} onOpen={() => {}} />)
 
     fireEvent.click(screen.getByTestId('tree-toggle-notes'))
     expect(screen.getByRole('treeitem', { name: /notes/ }).getAttribute('aria-expanded')).toBe(
@@ -47,7 +47,7 @@ describe('WorkspaceFileTree', () => {
 
   it('a branch that is itself a canvas is both expandable and openable', () => {
     const onOpen = vi.fn()
-    render(<WorkspaceFileTree canvases={canvases} onOpen={onOpen} />)
+    render(<WorkspaceFileTree documents={documents} onOpen={onOpen} />)
 
     // notes/design is a canvas AND has the child notes/design/palette.
     const design = screen.getByRole('treeitem', { name: /design/ })
@@ -59,8 +59,8 @@ describe('WorkspaceFileTree', () => {
   })
 
   it('shows an empty state instead of an empty tree', () => {
-    render(<WorkspaceFileTree canvases={[]} onOpen={() => {}} />)
+    render(<WorkspaceFileTree documents={[]} onOpen={() => {}} />)
     expect(screen.queryByRole('tree')).toBeNull()
-    expect(screen.getByText(/no canvases/i)).not.toBeNull()
+    expect(screen.getByText(/no documents/i)).not.toBeNull()
   })
 })

@@ -6,7 +6,7 @@ import { getLogger } from '../log.js'
 import {
   BranchNotFoundError,
   deleteBranch,
-  loadCanvasBranches,
+  loadDocumentBranches,
   setHead as setHeadPersist,
   updateBranchTip,
 } from './branches-store.js'
@@ -87,7 +87,7 @@ export function performBranchMerge(
 ): Promise<PerformBranchMergeResult> {
   const { versionStore, broadcastLoroUpdate, sendHeadChanged } = deps
   return withWorkspaceWriteLock(sid, async () => {
-    const state = await loadCanvasBranches(sid, path)
+    const state = await loadDocumentBranches(sid, path)
     const sourceBranch = state.branches.find((b) => b.name === source)
     const intoBranch = state.branches.find((b) => b.name === into)
     if (!sourceBranch) {
@@ -241,7 +241,7 @@ export function performBranchMerge(
 
     // If the target is HEAD, reconcile and broadcast the live doc. Otherwise only
     // rewrite the stored tip.
-    const latest = await loadCanvasBranches(sid, path)
+    const latest = await loadDocumentBranches(sid, path)
     if (latest.head === into && sourceTip && sourceTip.length > 0) {
       await reconcileLiveDocToPreview()
       sendHeadChanged(sid, path, into)
@@ -254,7 +254,7 @@ export function performBranchMerge(
     let switchedHead: { from: string; to: string } | undefined
     let deletedSource: string | undefined
     try {
-      const afterCommit = await loadCanvasBranches(sid, path)
+      const afterCommit = await loadDocumentBranches(sid, path)
       if (afterCommit.head === source && source !== into) {
         await setHeadPersist(sid, path, into)
         // switchedHead reports the PERSISTED head switch. It is deliberately

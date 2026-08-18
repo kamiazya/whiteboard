@@ -48,13 +48,13 @@ describe('docs snapshot: browser-local canvas list', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <div style={{ height: '100vh', background: 'white' }}>
-          <BrowserLocalIndexPage store={store} onOpenCanvas={() => {}} />
+          <BrowserLocalIndexPage store={store} onOpenDocument={() => {}} />
         </div>
       </MemoryRouter>,
     )
 
     await waitFor(() => {
-      if (document.querySelectorAll('[data-testid="canvas-list-card"]').length !== 3) {
+      if (document.querySelectorAll('[data-testid="document-list-card"]').length !== 3) {
         throw new Error('cards not settled')
       }
     })

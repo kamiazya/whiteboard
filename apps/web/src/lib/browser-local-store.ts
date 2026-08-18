@@ -1,9 +1,9 @@
 import { openWhiteboardDb } from './browser-idb.js'
-import type { CanvasSnapshot } from './whiteboard-client.js'
-import { canvasSnapshotSchema } from './whiteboard-client.js'
+import type { DocumentSnapshot } from './whiteboard-client.js'
+import { documentSnapshotSchema } from './whiteboard-client.js'
 
 export type LoadResult =
-  | { kind: 'ok'; snapshot: CanvasSnapshot }
+  | { kind: 'ok'; snapshot: DocumentSnapshot }
   | { kind: 'not-found' }
   | { kind: 'corrupted' }
 
@@ -12,79 +12,79 @@ export type DeleteResult =
   | { deleted: false; reason: 'pointer-mismatch' | 'not-found' }
 
 export interface BrowserLocalStore {
-  getDefaultCanvasId(): Promise<string | null>
-  setDefaultCanvasId(id: string): Promise<void>
+  getDefaultDocumentId(): Promise<string | null>
+  setDefaultDocumentId(id: string): Promise<void>
   load(id: string): Promise<LoadResult>
-  save(snapshot: CanvasSnapshot): Promise<void>
+  save(snapshot: DocumentSnapshot): Promise<void>
   del(expectedId: string): Promise<DeleteResult>
   // Unconditional delete of a canvas record by id, independent of the default pointer.
   // Optional capability used for best-effort cleanup of records del() cannot reach
   // (it only removes the canvas the default pointer currently aims at).
-  removeCanvas?(id: string): Promise<void>
+  removeDocument?(id: string): Promise<void>
   generateId(): string
-  listCanvases(): Promise<CanvasSnapshot[]>
+  listDocuments(): Promise<DocumentSnapshot[]>
 }
 
 export class MemoryStore implements BrowserLocalStore {
   private defaultId: string | null = null
-  private canvases = new Map<string, CanvasSnapshot>()
+  private documents = new Map<string, DocumentSnapshot>()
 
-  async getDefaultCanvasId(): Promise<string | null> {
+  async getDefaultDocumentId(): Promise<string | null> {
     return this.defaultId
   }
 
-  async setDefaultCanvasId(id: string): Promise<void> {
+  async setDefaultDocumentId(id: string): Promise<void> {
     this.defaultId = id
   }
 
   async load(id: string): Promise<LoadResult> {
-    const snapshot = this.canvases.get(id)
+    const snapshot = this.documents.get(id)
     if (!snapshot) return { kind: 'not-found' }
     return { kind: 'ok', snapshot }
   }
 
-  async save(snapshot: CanvasSnapshot): Promise<void> {
-    this.canvases.set(snapshot.id, snapshot)
+  async save(snapshot: DocumentSnapshot): Promise<void> {
+    this.documents.set(snapshot.id, snapshot)
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
     if (this.defaultId === null) return { deleted: false, reason: 'not-found' }
     if (this.defaultId !== expectedId) return { deleted: false, reason: 'pointer-mismatch' }
-    this.canvases.delete(expectedId)
+    this.documents.delete(expectedId)
     this.defaultId = null
     return { deleted: true }
   }
 
-  async removeCanvas(id: string): Promise<void> {
-    this.canvases.delete(id)
+  async removeDocument(id: string): Promise<void> {
+    this.documents.delete(id)
   }
 
   generateId(): string {
     return crypto.randomUUID()
   }
 
-  async listCanvases(): Promise<CanvasSnapshot[]> {
-    return [...this.canvases.values()]
+  async listDocuments(): Promise<DocumentSnapshot[]> {
+    return [...this.documents.values()]
   }
 }
 
 export class IndexedDBStore implements BrowserLocalStore {
-  async getDefaultCanvasId(): Promise<string | null> {
+  async getDefaultDocumentId(): Promise<string | null> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readonly')
-      const req = tx.objectStore('meta').get('defaultCanvasId')
+      const req = tx.objectStore('meta').get('defaultDocumentId')
       req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
       req.onerror = () => reject(req.error)
       tx.oncomplete = () => db.close()
     })
   }
 
-  async setDefaultCanvasId(id: string): Promise<void> {
+  async setDefaultDocumentId(id: string): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readwrite')
-      tx.objectStore('meta').put(id, 'defaultCanvasId')
+      tx.objectStore('meta').put(id, 'defaultDocumentId')
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -102,14 +102,14 @@ export class IndexedDBStore implements BrowserLocalStore {
   async load(id: string): Promise<LoadResult> {
     const db = await openWhiteboardDb()
     return new Promise((resolve) => {
-      const tx = db.transaction('canvases', 'readonly')
-      const req = tx.objectStore('canvases').get(id)
+      const tx = db.transaction('documents', 'readonly')
+      const req = tx.objectStore('documents').get(id)
       req.onsuccess = () => {
         if (req.result === undefined) {
           resolve({ kind: 'not-found' })
           return
         }
-        const parsed = canvasSnapshotSchema.safeParse(req.result)
+        const parsed = documentSnapshotSchema.safeParse(req.result)
         resolve(parsed.success ? { kind: 'ok', snapshot: parsed.data } : { kind: 'corrupted' })
       }
       req.onerror = () => resolve({ kind: 'corrupted' })
@@ -117,11 +117,11 @@ export class IndexedDBStore implements BrowserLocalStore {
     })
   }
 
-  async save(snapshot: CanvasSnapshot): Promise<void> {
+  async save(snapshot: DocumentSnapshot): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction('canvases', 'readwrite')
-      tx.objectStore('canvases').put(snapshot, snapshot.id)
+      const tx = db.transaction('documents', 'readwrite')
+      tx.objectStore('documents').put(snapshot, snapshot.id)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -137,12 +137,12 @@ export class IndexedDBStore implements BrowserLocalStore {
   async del(expectedId: string): Promise<DeleteResult> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(['meta', 'canvases'], 'readwrite')
+      const tx = db.transaction(['meta', 'documents'], 'readwrite')
       const metaStore = tx.objectStore('meta')
-      const canvasStore = tx.objectStore('canvases')
+      const documentStore = tx.objectStore('documents')
       let earlyResult: DeleteResult | null = null
 
-      const getReq = metaStore.get('defaultCanvasId')
+      const getReq = metaStore.get('defaultDocumentId')
       getReq.onsuccess = () => {
         const current = (getReq.result as string | undefined) ?? null
         if (current === null) {
@@ -155,8 +155,8 @@ export class IndexedDBStore implements BrowserLocalStore {
           tx.abort()
           return
         }
-        metaStore.delete('defaultCanvasId')
-        canvasStore.delete(expectedId)
+        metaStore.delete('defaultDocumentId')
+        documentStore.delete(expectedId)
       }
       tx.oncomplete = () => {
         db.close()
@@ -176,11 +176,11 @@ export class IndexedDBStore implements BrowserLocalStore {
     })
   }
 
-  async removeCanvas(id: string): Promise<void> {
+  async removeDocument(id: string): Promise<void> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction('canvases', 'readwrite')
-      tx.objectStore('canvases').delete(id)
+      const tx = db.transaction('documents', 'readwrite')
+      tx.objectStore('documents').delete(id)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -200,18 +200,18 @@ export class IndexedDBStore implements BrowserLocalStore {
     return crypto.randomUUID()
   }
 
-  async listCanvases(): Promise<CanvasSnapshot[]> {
+  async listDocuments(): Promise<DocumentSnapshot[]> {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
-      const tx = db.transaction('canvases', 'readonly')
-      const cursorReq = tx.objectStore('canvases').openCursor()
-      const results: CanvasSnapshot[] = []
+      const tx = db.transaction('documents', 'readonly')
+      const cursorReq = tx.objectStore('documents').openCursor()
+      const results: DocumentSnapshot[] = []
       cursorReq.onsuccess = () => {
         const cursor = cursorReq.result
         if (!cursor) return
         // Hydrate through the single parse boundary; skip a corrupt/legacy row
         // instead of throwing so it cannot blank the whole list.
-        const parsed = canvasSnapshotSchema.safeParse(cursor.value)
+        const parsed = documentSnapshotSchema.safeParse(cursor.value)
         if (parsed.success) results.push(parsed.data)
         cursor.continue()
       }

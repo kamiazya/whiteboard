@@ -31,8 +31,8 @@ function twoNodeCanvas(): SpatialCanvas {
 
 /**
  * SpatialEditor is CONTROLLED and owns no state of its own — a real host
- * (canvas-sync-session's synchronous `currentCanvas = next; notify(...)`,
- * see canvas-sync-session.ts) feeds the `onChange` result straight back as
+ * (document-sync-session's synchronous `currentCanvas = next; notify(...)`,
+ * see document-sync-session.ts) feeds the `onChange` result straight back as
  * the next `canvas` prop. Several create/delete scenarios below depend on
  * that feedback loop (e.g. a newly-created node's own TextNodeEditor only
  * renders once `canvas.nodes` actually contains it), so this thin wrapper

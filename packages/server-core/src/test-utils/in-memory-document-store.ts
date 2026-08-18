@@ -14,7 +14,7 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 
 function docRefKey(docRef: DocRef): string {
-  return docRef.kind === 'canvas'
+  return docRef.kind === 'document'
     ? `canvas:${docRef.documentId}`
     : `workspace-tree:${docRef.workspaceId}`
 }

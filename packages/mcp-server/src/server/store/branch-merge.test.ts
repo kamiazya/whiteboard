@@ -19,7 +19,9 @@ vi.mock('../config.js', () => ({
 }))
 
 const { performBranchMerge } = await import('./branch-merge.js')
-const { createBranch, loadCanvasBranches, saveCanvasBranches } = await import('./branches-store.js')
+const { createBranch, loadDocumentBranches, saveDocumentBranches } = await import(
+  './branches-store.js'
+)
 const branchesStore = await import('./branches-store.js')
 const { saveDocument, loadDocument } = await import('./document-store.js')
 const { clearCache } = await import('./doc-cache.js')
@@ -64,7 +66,7 @@ describe('performBranchMerge', () => {
     })
     await saveDocument(SID, PATH, doc, { overwrite: true })
     await createBranch(SID, PATH, { name: 'feature' })
-    const before = await loadCanvasBranches(SID, PATH)
+    const before = await loadDocumentBranches(SID, PATH)
     const saveSpy = vi.spyOn(deps.versionStore, 'save')
 
     const result = await performBranchMerge(deps, SID, PATH, {
@@ -81,7 +83,7 @@ describe('performBranchMerge', () => {
     expect(result.targetElementCount).toBe(1)
 
     // Nothing persisted.
-    await expect(loadCanvasBranches(SID, PATH)).resolves.toEqual(before)
+    await expect(loadDocumentBranches(SID, PATH)).resolves.toEqual(before)
     expect(saveSpy).not.toHaveBeenCalled()
     expect(deps.broadcastLoroUpdate).not.toHaveBeenCalled()
     expect(deps.sendHeadChanged).not.toHaveBeenCalled()
@@ -122,10 +124,10 @@ describe('performBranchMerge', () => {
 
     // Pin main to the A-only state so it stops tracking the live doc.
     const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
-    const state = await loadCanvasBranches(SID, PATH)
+    const state = await loadDocumentBranches(SID, PATH)
     const main = state.branches.find((b) => b.name === 'main')!
     main.tipFrontiers = mainOnlyTip
-    await saveCanvasBranches(SID, PATH, state)
+    await saveDocumentBranches(SID, PATH, state)
 
     // Add C on top and pin feature's tip to it, so feature diverges from
     // main's frozen A-only tip instead of tracking the live doc.
@@ -133,10 +135,10 @@ describe('performBranchMerge', () => {
     writeSpatialNode(withC, { id: 'C', type: 'text', text: 'c', x: 0, y: 0, width: 10, height: 10 })
     await saveDocument(SID, PATH, withC, { overwrite: true })
     const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
-    const afterAddC = await loadCanvasBranches(SID, PATH)
+    const afterAddC = await loadDocumentBranches(SID, PATH)
     const feature = afterAddC.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = featureTip
-    await saveCanvasBranches(SID, PATH, afterAddC)
+    await saveDocumentBranches(SID, PATH, afterAddC)
     clearCache()
 
     const result = await performBranchMerge(deps, SID, PATH, {
@@ -157,7 +159,7 @@ describe('performBranchMerge', () => {
     expect((update as Uint8Array).byteLength).toBeGreaterThan(0)
     expect(deps.sendHeadChanged).toHaveBeenCalledWith(SID, PATH, 'main')
 
-    const after = await loadCanvasBranches(SID, PATH)
+    const after = await loadDocumentBranches(SID, PATH)
     const afterMain = after.branches.find((b) => b.name === 'main')!
     // main's tip was moved onto feature's tip.
     expect(afterMain.tipFrontiers).toBe(featureTip)
@@ -186,7 +188,7 @@ describe('performBranchMerge', () => {
     expect(result.committed).toBe(true)
     expect(result.switchedHead).toEqual({ from: 'feature', to: 'main' })
     expect(deps.sendHeadChanged).toHaveBeenCalledWith(SID, PATH, 'main')
-    const after = await loadCanvasBranches(SID, PATH)
+    const after = await loadDocumentBranches(SID, PATH)
     expect(after.head).toBe('main')
     // source !== main and source !== into, so feature is deleted.
     expect(result.deletedSource).toBe('feature')
@@ -215,7 +217,7 @@ describe('performBranchMerge', () => {
     // sendHeadChanged is only fired by the HEAD===into reconcile branch or the
     // switchedHead cleanup branch, neither of which applies here.
     expect(deps.sendHeadChanged).not.toHaveBeenCalled()
-    const after = await loadCanvasBranches(SID, PATH)
+    const after = await loadDocumentBranches(SID, PATH)
     expect(after.head).toBe('third')
   })
 
@@ -255,7 +257,7 @@ describe('performBranchMerge', () => {
     })
 
     expect(result.deletedSource).toBe('feature')
-    const after = await loadCanvasBranches(SID, PATH)
+    const after = await loadDocumentBranches(SID, PATH)
     expect(after.branches.some((b) => b.name === 'feature')).toBe(false)
   })
 
@@ -274,7 +276,7 @@ describe('performBranchMerge', () => {
     })
 
     expect(result.deletedSource).toBeUndefined()
-    const after = await loadCanvasBranches(SID, PATH)
+    const after = await loadDocumentBranches(SID, PATH)
     expect(after.branches.some((b) => b.name === 'main')).toBe(true)
   })
 
@@ -437,16 +439,16 @@ describe('performBranchMerge', () => {
     const doc = makeSpatialDoc({ nodes: [], edges: [] })
     await saveDocument(SID, PATH, doc, { overwrite: true })
     await createBranch(SID, PATH, { name: 'feature' })
-    const state = await loadCanvasBranches(SID, PATH)
+    const state = await loadDocumentBranches(SID, PATH)
     const feature = state.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = 'not-a-valid-tip'
-    await saveCanvasBranches(SID, PATH, state)
-    const before = await loadCanvasBranches(SID, PATH)
+    await saveDocumentBranches(SID, PATH, state)
+    const before = await loadDocumentBranches(SID, PATH)
 
     await expect(
       performBranchMerge(deps, SID, PATH, { source: 'feature', into: 'main', dryRun: true }),
     ).rejects.toThrow(/feature/)
-    await expect(loadCanvasBranches(SID, PATH)).resolves.toEqual(before)
+    await expect(loadDocumentBranches(SID, PATH)).resolves.toEqual(before)
   })
 
   it('a no-op reconcile still broadcasts a header-only envelope (loro never exports zero bytes)', async () => {
@@ -464,10 +466,10 @@ describe('performBranchMerge', () => {
     })
     await saveDocument(SID, PATH, doc, { overwrite: true })
     await createBranch(SID, PATH, { name: 'feature' })
-    const state = await loadCanvasBranches(SID, PATH)
+    const state = await loadDocumentBranches(SID, PATH)
     const feature = state.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
-    await saveCanvasBranches(SID, PATH, state)
+    await saveDocumentBranches(SID, PATH, state)
 
     await performBranchMerge(deps, SID, PATH, {
       source: 'feature',
@@ -495,7 +497,7 @@ describe('performBranchMerge', () => {
     await createBranch(SID, PATH, { name: 'feature' })
     // Diverge feature from main so the cleanup-branch reconcile has real
     // bytes to broadcast — that broadcast is the injection point below.
-    const state = await loadCanvasBranches(SID, PATH)
+    const state = await loadDocumentBranches(SID, PATH)
     const feature = state.branches.find((b) => b.name === 'feature')!
     const diverged = makeSpatialDoc({
       nodes: [
@@ -505,7 +507,7 @@ describe('performBranchMerge', () => {
       edges: [],
     })
     feature.tipFrontiers = Buffer.from(encodeFrontiers(diverged.frontiers())).toString('base64')
-    await saveCanvasBranches(SID, PATH, state)
+    await saveDocumentBranches(SID, PATH, state)
     await saveDocument(SID, PATH, diverged, { overwrite: true })
     await branchesStore.setHead(SID, PATH, 'feature')
     deps.broadcastLoroUpdate.mockImplementationOnce(() => {
@@ -564,12 +566,12 @@ describe('performBranchMerge', () => {
     await saveDocument(SID, PATH, forkDoc, { overwrite: true })
     clearCache()
 
-    const state = await loadCanvasBranches(SID, PATH)
+    const state = await loadDocumentBranches(SID, PATH)
     const main = state.branches.find((b) => b.name === 'main')!
     main.tipFrontiers = mainTip
     const feature = state.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = sourceTip
-    await saveCanvasBranches(SID, PATH, state)
+    await saveDocumentBranches(SID, PATH, state)
 
     const result = await performBranchMerge(deps, SID, PATH, {
       source: 'feature',

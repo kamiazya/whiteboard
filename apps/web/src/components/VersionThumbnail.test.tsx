@@ -9,8 +9,8 @@ const WORKSPACE_ID = 'w 1#a'
 const path = 'main/x'
 const VERSION_ID = 'v?1'
 // The path is a document path: each segment is encoded, the separators are
-// structure (the canvasesApiUrl contract).
-const THUMBNAIL_PATH = `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${path.split('/').map(encodeURIComponent).join('/')}/versions/${encodeURIComponent(VERSION_ID)}/thumbnail`
+// structure (the documentsApiUrl contract).
+const THUMBNAIL_PATH = `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${path.split('/').map(encodeURIComponent).join('/')}/versions/${encodeURIComponent(VERSION_ID)}/thumbnail`
 
 function renderInDaemonMode(fetchFn: typeof fetch, props: Partial<{ versionId: string }> = {}) {
   return render(

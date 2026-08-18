@@ -14,9 +14,8 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { loadWorkspaceNames, setWorkspaceName, setCanvasName, setCanvasPinned } = await import(
-  './names-store.js'
-)
+const { loadWorkspaceNames, setWorkspaceName, setDocumentDisplayName, setDocumentPinned } =
+  await import('./names-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -34,22 +33,22 @@ describe('names-store', () => {
 
   it('returns empty WorkspaceNames for an uninitialized session', async () => {
     const names = await loadWorkspaceNames('sess-1')
-    expect(names).toEqual({ canvases: {}, pinned: [] })
+    expect(names).toEqual({ documents: {}, pinned: [] })
   })
 
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
     await setWorkspaceName('sess-1', 'My Workspace')
     const names = await loadWorkspaceNames('sess-1')
     expect(names.workspace).toBe('My Workspace')
-    expect(names.canvases).toEqual({})
+    expect(names.documents).toEqual({})
   })
 
-  it('setCanvasName stores names per path', async () => {
-    await setCanvasName('sess-1', 'arch/overview', 'Architecture Overview')
-    await setCanvasName('sess-1', 'notes/meeting', 'Team meeting notes')
+  it('setDocumentDisplayName stores names per path', async () => {
+    await setDocumentDisplayName('sess-1', 'arch/overview', 'Architecture Overview')
+    await setDocumentDisplayName('sess-1', 'notes/meeting', 'Team meeting notes')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases['arch/overview']).toBe('Architecture Overview')
-    expect(names.canvases['notes/meeting']).toBe('Team meeting notes')
+    expect(names.documents['arch/overview']).toBe('Architecture Overview')
+    expect(names.documents['notes/meeting']).toBe('Team meeting notes')
   })
 
   it('setWorkspaceName deletes workspace on empty string input', async () => {
@@ -59,64 +58,64 @@ describe('names-store', () => {
     expect(names.workspace).toBeUndefined()
   })
 
-  it('setCanvasName deletes the path entry on empty string input', async () => {
-    await setCanvasName('sess-1', 'a', 'Alpha')
-    await setCanvasName('sess-1', 'b', 'Beta')
-    await setCanvasName('sess-1', 'a', '')
+  it('setDocumentDisplayName deletes the path entry on empty string input', async () => {
+    await setDocumentDisplayName('sess-1', 'a', 'Alpha')
+    await setDocumentDisplayName('sess-1', 'b', 'Beta')
+    await setDocumentDisplayName('sess-1', 'a', '')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases).toEqual({ b: 'Beta' })
+    expect(names.documents).toEqual({ b: 'Beta' })
   })
 
   it('trims leading and trailing whitespace', async () => {
-    await setCanvasName('sess-1', 'path', '   spaced   ')
+    await setDocumentDisplayName('sess-1', 'path', '   spaced   ')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases.path).toBe('spaced')
+    expect(names.documents.path).toBe('spaced')
   })
 
   it('treats all-whitespace values as empty and deletes them', async () => {
-    await setCanvasName('sess-1', 'path', 'Initial')
-    await setCanvasName('sess-1', 'path', '   \t  \n ')
+    await setDocumentDisplayName('sess-1', 'path', 'Initial')
+    await setDocumentDisplayName('sess-1', 'path', '   \t  \n ')
     const names = await loadWorkspaceNames('sess-1')
-    expect(names.canvases.path).toBeUndefined()
+    expect(names.documents.path).toBeUndefined()
   })
 
-  it('updates workspace and canvases independently without overwriting each other', async () => {
-    await setCanvasName('sess-1', 'c1', 'Canvas 1')
+  it('updates workspace and documents independently without overwriting each other', async () => {
+    await setDocumentDisplayName('sess-1', 'c1', 'Canvas 1')
     await setWorkspaceName('sess-1', 'My WS')
-    await setCanvasName('sess-1', 'c2', 'Canvas 2')
+    await setDocumentDisplayName('sess-1', 'c2', 'Canvas 2')
 
     const names = await loadWorkspaceNames('sess-1')
     expect(names.workspace).toBe('My WS')
-    expect(names.canvases).toEqual({ c1: 'Canvas 1', c2: 'Canvas 2' })
+    expect(names.documents).toEqual({ c1: 'Canvas 1', c2: 'Canvas 2' })
   })
 
-  it('setCanvasPinned(true) appends to pinned and is idempotent', async () => {
-    let names = await setCanvasPinned('sess-1', 'c1', true)
+  it('setDocumentPinned(true) appends to pinned and is idempotent', async () => {
+    let names = await setDocumentPinned('sess-1', 'c1', true)
     expect(names.pinned).toEqual(['c1'])
-    names = await setCanvasPinned('sess-1', 'c2', true)
+    names = await setDocumentPinned('sess-1', 'c2', true)
     expect(names.pinned).toEqual(['c1', 'c2'])
     // Re-pinning is a no-op and preserves order.
-    names = await setCanvasPinned('sess-1', 'c1', true)
+    names = await setDocumentPinned('sess-1', 'c1', true)
     expect(names.pinned).toEqual(['c1', 'c2'])
   })
 
-  it('setCanvasPinned(false) removes from the array and is a no-op for missing paths', async () => {
-    await setCanvasPinned('sess-1', 'c1', true)
-    await setCanvasPinned('sess-1', 'c2', true)
-    let names = await setCanvasPinned('sess-1', 'c1', false)
+  it('setDocumentPinned(false) removes from the array and is a no-op for missing paths', async () => {
+    await setDocumentPinned('sess-1', 'c1', true)
+    await setDocumentPinned('sess-1', 'c2', true)
+    let names = await setDocumentPinned('sess-1', 'c1', false)
     expect(names.pinned).toEqual(['c2'])
     // Unpinning a missing path is a no-op.
-    names = await setCanvasPinned('sess-1', 'nope', false)
+    names = await setDocumentPinned('sess-1', 'nope', false)
     expect(names.pinned).toEqual(['c2'])
   })
 
   it('keeps pinned independent from name and workspace changes', async () => {
-    await setCanvasPinned('sess-1', 'c1', true)
+    await setDocumentPinned('sess-1', 'c1', true)
     await setWorkspaceName('sess-1', 'WS')
-    await setCanvasName('sess-1', 'c1', 'Canvas 1')
+    await setDocumentDisplayName('sess-1', 'c1', 'Canvas 1')
     const names = await loadWorkspaceNames('sess-1')
     expect(names.pinned).toEqual(['c1'])
     expect(names.workspace).toBe('WS')
-    expect(names.canvases).toEqual({ c1: 'Canvas 1' })
+    expect(names.documents).toEqual({ c1: 'Canvas 1' })
   })
 })

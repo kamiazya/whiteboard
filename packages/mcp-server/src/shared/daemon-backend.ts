@@ -22,12 +22,12 @@
  */
 
 import { apiFetch } from './api-client.js'
-import { canvasFileApiUrl } from './api-contracts/canvas-url.js'
+import { documentFileApiUrl } from './api-contracts/document-url.js'
 import type {
   BinaryFileDataLike,
-  CanvasBackend,
-  CanvasBackendHandlers,
-} from './canvas-backend-contract.js'
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from './document-backend-contract.js'
 import { readDaemonTokenOnce } from './token-store.js'
 import { uploadFiles } from './upload-files.js'
 import {
@@ -69,7 +69,7 @@ export interface DaemonApiTransport {
 // would silently spam reconnects with no way for the user to recover.
 const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
 
-export class DaemonBackend implements CanvasBackend {
+export class DaemonBackend implements DocumentBackend {
   private readonly workspaceId: string
   private readonly path: string
   private readonly locationHref: string
@@ -101,7 +101,7 @@ export class DaemonBackend implements CanvasBackend {
     this.apiTransport = apiTransport
   }
 
-  connect(handlers: CanvasBackendHandlers): void {
+  connect(handlers: DocumentBackendHandlers): void {
     this.cancelled = false
     this.attempt = 0
     this.consecutiveImmediateFailures = 0
@@ -130,7 +130,7 @@ export class DaemonBackend implements CanvasBackend {
 
   async getFile(fileId: string): Promise<Blob | null> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
-    const res = await fetchFn(canvasFileApiUrl(this.workspaceId, this.path, fileId))
+    const res = await fetchFn(documentFileApiUrl(this.workspaceId, this.path, fileId))
     if (!res.ok) return null
     return res.blob()
   }
@@ -165,7 +165,7 @@ export class DaemonBackend implements CanvasBackend {
     this.ws.send(JSON.stringify(msg))
   }
 
-  private openSocket(handlers: CanvasBackendHandlers): void {
+  private openSocket(handlers: DocumentBackendHandlers): void {
     if (this.cancelled) return
 
     const daemonToken = readDaemonTokenOnce() ?? this.apiTransport?.wsToken?.() ?? null

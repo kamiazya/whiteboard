@@ -47,13 +47,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // The bundle-size gate (scripts/smoke-bundle-size.mjs) matches this
-        // lazy chunk by a fixed `daemon-canvas-*.js` prefix. Without an
+        // lazy chunk by a fixed `daemon-document-*.js` prefix. Without an
         // explicit name here, Rollup names it after the source file
-        // (`DaemonCanvasPage-<hash>.js`), which the gate's pattern never
+        // (`DaemonDocumentPage-<hash>.js`), which the gate's pattern never
         // matches — silently skipping the budget instead of enforcing it.
         chunkFileNames: (chunkInfo) =>
-          chunkInfo.name === 'DaemonCanvasPage'
-            ? 'assets/daemon-canvas-[hash].js'
+          chunkInfo.name === 'DaemonDocumentPage'
+            ? 'assets/daemon-document-[hash].js'
             : 'assets/[name]-[hash].js',
         // Isolate React into its own named vendor chunk instead of letting
         // Rollup's automatic chunking scatter it across shared chunks. This
@@ -65,7 +65,7 @@ export default defineConfig({
         // Deliberately NOT doing the same for loro-crdt (dropped after
         // apps/web/scripts/smoke-bundle-size.mjs caught it regressing the
         // critical path back to ~120KB): loro-crdt is only ever imported from
-        // lazy-reachable modules (useCanvasSync, browser-local-backend, the
+        // lazy-reachable modules (useDocumentSync, browser-local-backend, the
         // migration import panel), so Rollup's automatic chunking already
         // isolates it into a chunk those lazy consumers share — no manual
         // rule needed. Forcing it into one named `vendor-loro-crdt` chunk

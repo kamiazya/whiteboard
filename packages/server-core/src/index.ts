@@ -9,25 +9,6 @@ export {
   bodyPatchRangeSchema,
   createBodyPatchTool,
 } from './tools/body-patch.js'
-export {
-  CanvasNotFoundError,
-  WorkspaceNotFoundError,
-} from './tools/canvas-crud.errors.js'
-export { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
-export {
-  createCanvasInputSchema,
-  createCanvasOutputSchema,
-  deleteCanvasInputSchema,
-  deleteCanvasOutputSchema,
-  getCanvasInputSchema,
-  getCanvasOutputSchema,
-  listCanvasesInputSchema,
-  listCanvasesOutputSchema,
-  WB_DOCUMENT_CREATE_DESCRIPTION,
-  WB_DOCUMENT_DELETE_DESCRIPTION,
-  WB_DOCUMENT_LIST_DESCRIPTION,
-  WB_DOCUMENT_RESOLVE_DESCRIPTION,
-} from './tools/canvas-crud.schemas.js'
 export type { CanvasDigestInput } from './tools/canvas-digest.js'
 export { canvasDigestInputSchema, createCanvasDigestTool } from './tools/canvas-digest.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
@@ -43,6 +24,30 @@ export {
   canvasViewReferenceSchema,
   createCanvasViewTool,
 } from './tools/canvas-view.js'
+export {
+  WorkspaceDocumentNotFoundError,
+  WorkspaceNotFoundError,
+} from './tools/document-crud.errors.js'
+export {
+  wbDocumentCreate,
+  wbDocumentDelete,
+  wbDocumentList,
+  wbDocumentResolve,
+} from './tools/document-crud.js'
+export {
+  WB_DOCUMENT_CREATE_DESCRIPTION,
+  WB_DOCUMENT_DELETE_DESCRIPTION,
+  WB_DOCUMENT_LIST_DESCRIPTION,
+  WB_DOCUMENT_RESOLVE_DESCRIPTION,
+  wbDocumentCreateInputSchema,
+  wbDocumentCreateOutputSchema,
+  wbDocumentDeleteInputSchema,
+  wbDocumentDeleteOutputSchema,
+  wbDocumentListInputSchema,
+  wbDocumentListOutputSchema,
+  wbDocumentResolveInputSchema,
+  wbDocumentResolveOutputSchema,
+} from './tools/document-crud.schemas.js'
 export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
 export {
   createDocumentSetTool,

@@ -22,7 +22,7 @@ import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 // run, so `connections` was still in its TDZ and the restore 500'd with a bare
 // ReferenceError. Taking the setter from the 42-line module that defines it
 // keeps the seam and drops the edge.
-import { setBroadcastFn } from './canvas/_shared.js'
+import { setBroadcastFn } from './document/_shared.js'
 import {
   setSyncSseHooks,
   sseBroadcastText,
@@ -41,7 +41,7 @@ const readyConnections = new Map<string, Set<WebSocket>>()
 // second later would land at default zoom/scroll and quietly mask that the
 // fit/move request worked at all on the daemon-Chromium tab. Replaying on
 // `client_ready` (not earlier) avoids racing the Excalidraw mount path.
-const lastViewportRequestByCanvas = new Map<string, string>()
+const lastViewportRequestByDocument = new Map<string, string>()
 let runtimeTouch: () => void = () => {}
 
 export function setRuntimeTouchFn(fn: () => void): void {
@@ -102,7 +102,7 @@ setBroadcastFn(broadcastLoroUpdate)
 // this module owns; injected rather than imported because ws.ts -> sync-sse.ts
 // is already a one-way dependency.
 setSyncSseHooks({
-  getCachedViewportRequest: (key) => lastViewportRequestByCanvas.get(key),
+  getCachedViewportRequest: (key) => lastViewportRequestByDocument.get(key),
   resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
 })
 
@@ -179,7 +179,7 @@ export function sendViewportRequest(
   // both ship the same bytes, and JSON.stringify is the only allocation that
   // needs to happen at viewport_set time.
   const raw = JSON.stringify(message)
-  lastViewportRequestByCanvas.set(`${workspaceId}/${path}`, raw)
+  lastViewportRequestByDocument.set(`${workspaceId}/${path}`, raw)
   // Send only to ready sockets. Pre-ready tabs cannot apply the viewport
   // yet AND will already get the cached request replayed when they
   // signal `client_ready`, so broadcasting to all sockets here would
@@ -321,7 +321,7 @@ export async function handleWsUpgrade(
         // late joiners (Playwright tab opening after viewport_set fired,
         // reload, reconnect after WS hiccup) inherit the same fit / scroll
         // / zoom intent the daemon-Chromium tab already received.
-        const cachedViewport = lastViewportRequestByCanvas.get(key)
+        const cachedViewport = lastViewportRequestByDocument.get(key)
         if (cachedViewport !== undefined) ws.send(cachedViewport)
         return
       }
@@ -472,7 +472,7 @@ export async function handleWsUpgrade(
       clients.delete(ws)
       if (clients.size === 0) {
         connections.delete(key)
-        // Intentionally keep `lastViewportRequestByCanvas[key]` even when
+        // Intentionally keep `lastViewportRequestByDocument[key]` even when
         // the connection count hits zero. A reload (Playwright or anyone)
         // closes the old WS before the new WS opens, so clearing here
         // would defeat the whole point of cache-and-replay. The cache
