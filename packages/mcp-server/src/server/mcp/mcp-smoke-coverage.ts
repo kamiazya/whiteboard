@@ -37,6 +37,7 @@
 export const ALL_REGISTERED_TOOLS = [
   'wb_body_patch',
   'wb_scene_digest',
+  'wb_canvas_snapshot',
   'wb_document_set',
   'wb_scene_render',
   'wb_edge_lock',
@@ -60,6 +61,7 @@ export const ALL_REGISTERED_TOOLS = [
 
 export const COVERED_TOOLS = [
   'wb_document_set',
+  'wb_canvas_snapshot',
   'wb_node_add',
   'wb_edge_add',
   'wb_edge_lock',

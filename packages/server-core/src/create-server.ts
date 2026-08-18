@@ -6,6 +6,7 @@ import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
 import { createCanvasViewTool } from './tools/canvas-view.js'
 import {
   WorkspaceDocumentNotFoundError,
@@ -144,6 +145,7 @@ export function createServer(deps: ServerDeps) {
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasView: createCanvasViewTool(deps),
     canvasDigest: createCanvasDigestTool(deps),
+    canvasSnapshot: createCanvasSnapshotTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
