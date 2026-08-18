@@ -451,7 +451,10 @@ describe('layoutMdastBlocks — word wrap', () => {
     expect(paragraph.bbox.h).toBe(lineCount * lineHeight)
   })
 
-  it('keeps a single unbreakable token wider than maxWidth as one overflowing run', () => {
+  it('breaks a token with no break opportunity in it by code point', () => {
+    // A token UAX #14 offers no break inside (one long identifier) used to be
+    // left whole and allowed to paint past the border. It is now split, and
+    // the only thing that may still overflow is a single glyph.
     const narrow = { measure, maxWidth: 10, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
@@ -461,8 +464,25 @@ describe('layoutMdastBlocks — word wrap', () => {
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
-    expect(paragraph.runs).toHaveLength(1)
-    expect(paragraph.runs[0].bbox.w).toBeGreaterThan(narrow.maxWidth)
+    expect(paragraph.runs).toHaveLength('unbreakabletoken'.length)
+    for (const run of paragraph.runs) {
+      expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(narrow.maxWidth)
+    }
+  })
+
+  it('leaves a single glyph wider than maxWidth overflowing rather than dropping it', () => {
+    // The documented irreducible exception: there is nothing below a code
+    // point to split, so the choice is overflow or loss, and loss is worse.
+    const tiny = { measure, maxWidth: 1, fontFamily: 'sans-serif' }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ab' }] }],
+    }
+    const scene = layoutMdastBlocks(root, tiny)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['a', 'b'])
+    expect(paragraph.runs[0].bbox.w).toBeGreaterThan(tiny.maxWidth)
   })
 
   it('does not throw and produces no wrap for a non-finite or non-positive maxWidth', () => {
@@ -519,14 +539,17 @@ describe('layoutMdastBlocks — word wrap', () => {
     // phrasing children: a text node ending in a space, then a styled run.
     // The trailing space belongs to the wrapped chunk, not the sibling, so
     // it must still separate them even when the chunk wraps mid-word.
-    const narrow = { measure, maxWidth: 50, fontFamily: 'sans-serif' }
+    // Width chosen so the chunk WRAPS ("longer line" does not fit) and the
+    // wrapped remainder plus the sibling still share the second line — the
+    // only arrangement in which "is the separator still there" is a question.
+    const narrow = { measure, maxWidth: 90, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
         {
           type: 'paragraph',
           children: [
-            { type: 'text', value: 'long line ' },
+            { type: 'text', value: 'longer line ' },
             { type: 'strong', children: [{ type: 'text', value: 'word' }] },
           ],
         },

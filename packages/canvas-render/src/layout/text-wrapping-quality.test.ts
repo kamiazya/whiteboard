@@ -17,11 +17,15 @@ import { layoutMdastBlocks } from './mdast-blocks.js'
  * improvement has to be as loud as a regression, and someone has to say why
  * the number moved.
  *
- * The DEBT metrics (`overflow`, `max`, `bboxLies`) target zero; they record
- * what today's greedy space-only wrapping actually does. The PRICE metrics
- * (`runs`, `lines`, `measure`) have no target — they exist so a wrapping
- * strategy that buys its quality with a per-character measure loop cannot do
- * it silently.
+ * The DEBT metrics (`overflow`, `max`, `bboxLies`) target zero. The three
+ * overflows left are all `inline-code`: an atomic run is never split, because
+ * an interior space in a code span is not a word boundary. Truncating it is
+ * the ellipsis/fade slice's job, not the line breaker's — until then the
+ * block bbox at least covers the ink, which is why `bboxLies` is 0.
+ *
+ * The PRICE metrics (`runs`, `lines`, `measure`) have no target — they exist
+ * so a wrapping strategy that buys its quality with a per-character measure
+ * loop cannot do it silently.
  */
 
 function scoreLine(name: string, maxWidth: number): string {
@@ -79,39 +83,40 @@ describe('text wrapping scoreboard', () => {
 })
 
 const PINNED_SCORES: readonly string[] = [
-  'en-prose@120: overflow=0 max=+0px bboxLies=0 runs=10 lines=6 measure=23',
-  'en-prose@200: overflow=0 max=+0px bboxLies=0 runs=10 lines=4 measure=23',
-  'en-prose@320: overflow=0 max=+0px bboxLies=0 runs=10 lines=2 measure=23',
-  'ja-prose@120: overflow=1 max=+680px bboxLies=1 runs=1 lines=1 measure=3',
-  'ja-prose@200: overflow=1 max=+600px bboxLies=1 runs=1 lines=1 measure=3',
-  'ja-prose@320: overflow=1 max=+480px bboxLies=1 runs=1 lines=1 measure=3',
-  'ja-en-mixed@120: overflow=3 max=+43px bboxLies=1 runs=7 lines=5 measure=17',
-  'ja-en-mixed@200: overflow=0 max=+0px bboxLies=0 runs=7 lines=4 measure=17',
-  'ja-en-mixed@320: overflow=0 max=+0px bboxLies=0 runs=7 lines=2 measure=17',
-  'ja-kinsoku@120: overflow=1 max=+392px bboxLies=1 runs=1 lines=1 measure=3',
-  'ja-kinsoku@200: overflow=1 max=+312px bboxLies=1 runs=1 lines=1 measure=3',
-  'ja-kinsoku@320: overflow=1 max=+192px bboxLies=1 runs=1 lines=1 measure=3',
-  'zh-prose@120: overflow=1 max=+264px bboxLies=1 runs=1 lines=1 measure=3',
-  'zh-prose@200: overflow=1 max=+184px bboxLies=1 runs=1 lines=1 measure=3',
-  'zh-prose@320: overflow=1 max=+64px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-url@120: overflow=1 max=+533px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-url@200: overflow=1 max=+453px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-url@320: overflow=1 max=+333px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-token@120: overflow=1 max=+446px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-token@200: overflow=1 max=+366px bboxLies=1 runs=1 lines=1 measure=3',
-  'long-token@320: overflow=1 max=+246px bboxLies=1 runs=1 lines=1 measure=3',
-  'inline-code@120: overflow=2 max=+334px bboxLies=1 runs=3 lines=1 measure=7',
-  'inline-code@200: overflow=2 max=+254px bboxLies=1 runs=3 lines=1 measure=7',
-  'inline-code@320: overflow=2 max=+134px bboxLies=1 runs=3 lines=1 measure=7',
-  'ja-heading@120: overflow=2 max=+680px bboxLies=2 runs=2 lines=2 measure=6',
-  'ja-heading@200: overflow=2 max=+600px bboxLies=2 runs=2 lines=2 measure=6',
-  'ja-heading@320: overflow=1 max=+480px bboxLies=1 runs=2 lines=2 measure=6',
-  'ja-list@120: overflow=2 max=+704px bboxLies=2 runs=4 lines=2 measure=8',
-  'ja-list@200: overflow=1 max=+624px bboxLies=1 runs=4 lines=2 measure=8',
-  'ja-list@320: overflow=1 max=+504px bboxLies=1 runs=4 lines=2 measure=8',
-  'emoji@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=3 measure=13',
-  'emoji@200: overflow=0 max=+0px bboxLies=0 runs=5 lines=2 measure=13',
+  'en-prose@120: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=23',
+  'en-prose@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=19',
+  'en-prose@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=15',
+  'ja-prose@120: overflow=0 max=+0px bboxLies=0 runs=8 lines=8 measure=63',
+  'ja-prose@200: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=57',
+  'ja-prose@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=53',
+  'ja-en-mixed@120: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=46',
+  'ja-en-mixed@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=24',
+  'ja-en-mixed@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=20',
+  'ja-kinsoku@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=35',
+  'ja-kinsoku@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=31',
+  'ja-kinsoku@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=29',
+  'zh-prose@120: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=31',
+  'zh-prose@200: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=27',
+  'zh-prose@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=27',
+  'long-url@120: overflow=0 max=+0px bboxLies=0 runs=8 lines=8 measure=28',
+  'long-url@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=20',
+  'long-url@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=18',
+  'long-token@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=71',
+  'long-token@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=67',
+  'long-token@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=65',
+  'inline-code@120: overflow=1 max=+277px bboxLies=0 runs=3 lines=2 measure=10',
+  'inline-code@200: overflow=1 max=+197px bboxLies=0 runs=3 lines=2 measure=10',
+  'inline-code@320: overflow=1 max=+77px bboxLies=0 runs=3 lines=2 measure=10',
+  'ja-heading@120: overflow=0 max=+0px bboxLies=0 runs=11 lines=11 measure=80',
+  'ja-heading@200: overflow=0 max=+0px bboxLies=0 runs=7 lines=7 measure=72',
+  'ja-heading@320: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=56',
+  'ja-list@120: overflow=0 max=+0px bboxLies=0 runs=13 lines=11 measure=80',
+  'ja-list@200: overflow=0 max=+0px bboxLies=0 runs=8 lines=6 measure=62',
+  'ja-list@320: overflow=0 max=+0px bboxLies=0 runs=6 lines=4 measure=58',
+  'emoji@120: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=22',
+  'emoji@200: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=20',
   'emoji@320: overflow=0 max=+0px bboxLies=0 runs=1 lines=1 measure=3',
 ]
-const PINNED_DEBT = { overflowingRuns: 33, maxOverflowPx: 704, bboxUnderreports: 28 }
-const PINNED_PRICE = { runs: 104, lines: 59, measureCalls: 257 }
+
+const PINNED_DEBT = { overflowingRuns: 3, maxOverflowPx: 277, bboxUnderreports: 0 }
+const PINNED_PRICE = { runs: 147, lines: 138, measureCalls: 1252 }

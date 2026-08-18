@@ -2005,3 +2005,60 @@ describe('node placement and affordances', () => {
     expect(document.activeElement).toBe(button)
   })
 })
+
+/**
+ * The Japanese sibling of the overflow defect above. The greedy space-only
+ * wrapper could not wrap a string with no spaces in it at all — it required a
+ * space to be present before it would even consider wrapping — so a Japanese
+ * note was emitted as one run and painted straight through its node's border
+ * and across whatever sat to the right of it.
+ *
+ * Deliberately a REAL browser test with the real Canvas 2D measurer: the whole
+ * defect is about advance widths, and a fixed-width fake measurer models CJK
+ * and Latin as the same width, which is the one assumption that hides it.
+ */
+describe('SpatialEditor (browser) — CJK text layout', () => {
+  it('wraps a Japanese note inside its node instead of painting past the border', async () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'ja-node',
+          type: 'text',
+          x: 20,
+          y: 20,
+          width: 200,
+          height: 160,
+          text: 'これは日本語の長い文章です。ノードの幅を超えても、枠の内側で折り返されなければなりません。',
+        },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <div style={{ width: 900, height: 600 }}>
+        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+      </div>,
+    )
+
+    const chrome = await vi.waitFor(() => {
+      const rect = container.querySelector('svg rect')
+      if (!rect) throw new Error('no node chrome yet')
+      return rect
+    })
+    const runs = [...container.querySelectorAll('svg text')].filter(
+      (node) => (node.textContent ?? '').trim() !== '',
+    )
+    const chromeBox = chrome.getBoundingClientRect()
+
+    // More than one line: a single run means nothing wrapped at all.
+    expect(
+      new Set(runs.map((run) => Math.round(run.getBoundingClientRect().top))).size,
+    ).toBeGreaterThan(1)
+    for (const run of runs) {
+      expect(run.getBoundingClientRect().right).toBeLessThanOrEqual(chromeBox.right + 1)
+    }
+    // Kinsoku: a closing character never opens a line.
+    for (const run of runs) {
+      expect(run.textContent ?? '').not.toMatch(/^[。、）」』，]/)
+    }
+  })
+})

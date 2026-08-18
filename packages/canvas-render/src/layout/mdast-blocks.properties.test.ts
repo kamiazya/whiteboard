@@ -196,29 +196,48 @@ describe('layoutMdastBlocks properties', () => {
   })
 
   // The defect this pins drew long lines straight past the node's right
-  // edge. The documented exception is deliberate: a single token wider than
-  // maxWidth is left overflowing rather than broken mid-word.
+  // edge. Only two documented exceptions remain, and both are irreducible:
+  // there is nothing below a single code point to split, and an ATOMIC run
+  // (inline code, raw HTML, inline math) is never split because an interior
+  // space in it is not a word boundary.
   fcTest.prop([anyRootArb], withDefaults())(
-    'wraps every run inside maxWidth unless the run is one unbreakable token',
+    'wraps every run inside maxWidth unless it is one code point or atomic',
     (root) => {
       for (const { run, offsetX } of textRuns(layout(root))) {
         const right = offsetX + run.bbox.x + run.bbox.w
         if (right <= MAX_WIDTH + 0.001) continue
-        // Two documented reasons a run may legitimately overrun: a single
-        // token is never broken mid-word, and an ATOMIC run (inline code,
-        // raw HTML, inline math) is never split even when it holds spaces.
-        expect(tokens(run.text).length <= 1 || run.code === true).toBe(true)
+        expect([...run.text].length <= 1 || run.code === true).toBe(true)
       }
     },
   )
 
+  /**
+   * The rendered tokens re-joined wherever wrapping split ONE source token
+   * across a break — legitimate since a token with no break opportunity in it
+   * is broken by code point rather than left to overflow. A dropped word
+   * still comes out short, and two words fused across a wrap point (the
+   * "separator space silently dropped" defect) still come out over-long.
+   */
+  function rejoinSplitTokens(rendered: readonly string[], source: readonly string[]): string[] {
+    const out: string[] = []
+    let index = 0
+    for (const want of source) {
+      let joined = ''
+      while (index < rendered.length && joined.length < want.length) {
+        joined += rendered[index]
+        index += 1
+      }
+      out.push(joined)
+    }
+    out.push(...rendered.slice(index))
+    return out
+  }
+
   // Wrapping decides where spaces go, so this compares TOKEN SEQUENCES
-  // rather than raw strings: a line break legitimately replaces a space,
-  // but neither dropping a word nor fusing two words across a wrap point
-  // (the "separator space silently dropped" defect) survives it.
+  // rather than raw strings: a line break legitimately replaces a space.
   fcTest.prop([proseRootArb], withDefaults())('preserves every source word, in order', (root) => {
     const rendered = textRuns(layout(root)).flatMap(({ run }) => tokens(run.text))
-    expect(rendered).toStrictEqual(sourceTokens(root))
+    expect(rejoinSplitTokens(rendered, sourceTokens(root))).toStrictEqual(sourceTokens(root))
   })
 
   // XML — and therefore an SVG <text> element — strips leading/trailing

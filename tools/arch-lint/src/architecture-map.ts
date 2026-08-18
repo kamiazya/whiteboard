@@ -43,7 +43,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   },
   '@kamiazya/whiteboard-canvas-render': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
-    allowedThirdParty: ['zod'],
+    // css-line-break: deciding WHERE a line may break is this package's own
+    // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
+    // which is where Japanese kinsoku lives), not something to hand-roll from
+    // a character table. Pure and DOM-free, so it holds in Node, the browser
+    // and a worker alike — verified before adopting.
+    allowedThirdParty: ['zod', 'css-line-break'],
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],

@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@kamiazya/whiteboard-model": "workspace:*",
+    "css-line-break": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

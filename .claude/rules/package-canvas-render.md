@@ -472,6 +472,38 @@ paths:
       so it stays a pure function of the canvas snapshot, exactly parallel
       to the style opt-in above.
 
+12. **Line breaking is UAX #14, not a hand-rolled character table**
+    (`layout/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
+    `lineBreak: 'strict'` supplies the break opportunities, which is what
+    makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
+    Japanese paragraph had no break opportunity anywhere and was emitted as
+    one run painting straight through the node border) and what supplies
+    Japanese kinsoku for free: a closing character never opens a line, an
+    opening character never ends one. This is the one third-party dependency
+    besides `zod`, registered in `tools/arch-lint`'s allowed list — deciding
+    WHERE a line may break is this package's own job and the answer is a
+    Unicode standard. It is pure and DOM-free, so Node, the browser and a
+    worker agree, which is what the byte-identical-SVG guarantee needs.
+    Four consequences worth knowing:
+    - **`wordBreak` stays `normal`.** `break-all` would also break English
+      mid-word. A segment that alone exceeds `maxWidth` is instead expanded to
+      CODE POINTS at the point it arises, so only the string that needs it
+      pays. A single code point wider than `maxWidth` is the one irreducible
+      overflow and is left to overflow rather than dropped.
+    - **A line is ONE run.** Emitting a run per break opportunity also fits,
+      and multiplies the SVG's `<text>` elements by the character count of
+      every CJK paragraph.
+    - **An ATOMIC run (inline code, raw HTML, inline math) is still never
+      split** — an interior space in a code span is not a word boundary — so
+      it can still overflow. Truncating it belongs to a later ellipsis/fade
+      slice, not to the line breaker.
+    - **A block's declared width covers its ink** (`blockWidth`). A block
+      claiming `maxWidth` while an atomic run paints past it is what let
+      `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
+      all agree on a size nothing actually fitted in.
+    `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
+    see the Tests section.
+
 11. **ONE reference seam, not one per content kind.** `SpatialLayoutOptions`
     carries a single `resolveReference?: (ref: string) => ResolvedReference
     | undefined`, where `ResolvedReference` is a record of independent
@@ -549,6 +581,17 @@ paths:
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+- `layout/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
+  same instrument-first shape as the routing one below: 11 corpus cases x 3
+  narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
+  overflow px, blocks whose bbox under-reports their ink) targets zero; price
+  (runs, lines, `measure` calls) has no target and exists so a breaking
+  strategy that buys quality with a per-character measure loop cannot do it
+  silently. Its measurer charges CJK a FULL em, unlike `fake-measure.ts`'s
+  uniform 0.6em/char, which understates Japanese by ~40% — the single number
+  the scoreboard exists to report. Metrics are an independent oracle
+  (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
+  and never calls the wrapping code.
 - `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

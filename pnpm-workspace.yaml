@@ -28,6 +28,10 @@ catalog:
   remark-gfm: "^4.0.1"
   remark-math: "^6.0.0"
   yaml: "^2.8.4"
+  # canvas-render: UAX #14 line breaking + CSS `line-break` (Japanese kinsoku).
+  # One version everywhere, because a break-opportunity difference between the
+  # browser and Node would desync the byte-identical-SVG guarantee.
+  css-line-break: "^2.1.0"
   "@vitest/coverage-v8": "^4.1.10"
   # mcp-server's first InversifyJS composition root (DI wiring only, no
   # decorators/reflect-metadata) — pinned old enough to clear minimumReleaseAge.

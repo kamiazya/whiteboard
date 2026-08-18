@@ -12,6 +12,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: ^4.1.10
       version: 4.1.10
+    css-line-break:
+      specifier: ^2.1.0
+      version: 2.1.0
     inversify:
       specifier: ^8.1.3
       version: 8.2.1
@@ -303,6 +306,9 @@ importers:
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
+      css-line-break:
+        specifier: 'catalog:'
+        version: 2.1.0
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -4467,6 +4473,10 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
+  base64-arraybuffer@1.0.2:
+    resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
+    engines: {node: '>= 0.6.0'}
+
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
@@ -4732,6 +4742,9 @@ packages:
   crypto-random-string@2.0.0:
     resolution: {integrity: sha512-v1plID3y9r/lPhviJ1wrXpLeyUIGAZ2SHNYTEapm7/8A9nLPoyvVp3RK/EPFqn5kEznyWgYZNsRtYYIWbuG8KA==}
     engines: {node: '>=8'}
+
+  css-line-break@2.1.0:
+    resolution: {integrity: sha512-FHcKFCZcAha3LwfVBhCQbW2nCNbkZXn7KVUJcsT5/P8YmfsVja0FMPJr0B903j/E69HUphKiV9iQArX8SDYA4w==}
 
   css-tree@3.2.1:
     resolution: {integrity: sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA==}
@@ -7623,6 +7636,9 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  utrie@1.0.2:
+    resolution: {integrity: sha512-1MLa5ouZiOmQzUbjbu9VmjLzn1QLXBhwpUa7kdLUQK+KQ5KA9I1vk5U4YHe/X2Ch7PYnJfWuWT+VbuxbGwljhw==}
 
   uuid@11.1.1:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
@@ -11712,6 +11728,8 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
+  base64-arraybuffer@1.0.2: {}
+
   base64-js@1.5.1:
     optional: true
 
@@ -11973,6 +11991,10 @@ snapshots:
       which: 2.0.2
 
   crypto-random-string@2.0.0: {}
+
+  css-line-break@2.1.0:
+    dependencies:
+      utrie: 1.0.2
 
   css-tree@3.2.1:
     dependencies:
@@ -15464,6 +15486,10 @@ snapshots:
 
   util-deprecate@1.0.2:
     optional: true
+
+  utrie@1.0.2:
+    dependencies:
+      base64-arraybuffer: 1.0.2
 
   uuid@11.1.1: {}
 
