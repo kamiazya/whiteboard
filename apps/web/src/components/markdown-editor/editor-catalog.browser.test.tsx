@@ -67,9 +67,9 @@ describe('the editor catalog (real browser)', () => {
     await caretInto(container, 6) // inside "weekly"
 
     await userEvent.click(getByRole('button', { name: 'More actions' }))
-    // The label says the destination, so an external-link verb can join the
-    // band later without either one becoming ambiguous.
-    await userEvent.click(getByRole('menuitem', { name: 'Link to document' }))
+    // With no targets supplied there is nothing to pick from, so the verb
+    // keeps the selection-free wrap (the picker's own file covers the rest).
+    await userEvent.click(getByRole('menuitem', { name: 'Link' }))
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[weekly]] review')
   })

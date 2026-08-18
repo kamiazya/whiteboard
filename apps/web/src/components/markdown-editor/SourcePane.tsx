@@ -106,6 +106,14 @@ export interface SourcePaneApi {
   run: (command: StateCommand) => void
   /** Heading level of the line the caret sits on; 0 for body text. */
   headingLevel: () => number
+  /**
+   * The text an inline verb would act on — the selection, else the caret's
+   * word. What the link picker seeds its search box with, so the gesture
+   * that used to wrap that word still ends in one keystroke.
+   */
+  scopeText: () => string
+  /** Replaces that same range with `markup`, leaving the caret after it. */
+  replaceScope: (markup: string) => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -248,6 +256,20 @@ export function SourcePane({
           view.focus()
         },
         headingLevel: () => headingLevelAt(view.state),
+        scopeText: () => {
+          const scope = rangeToActOn(view.state)
+          return view.state.doc.sliceString(scope.from, scope.to)
+        },
+        replaceScope: (markup) => {
+          const scope = rangeToActOn(view.state)
+          view.dispatch({
+            changes: { from: scope.from, to: scope.to, insert: markup },
+            selection: { anchor: scope.from + markup.length },
+            scrollIntoView: true,
+            userEvent: 'input',
+          })
+          view.focus()
+        },
         focus: () => view.focus(),
         topVisibleLine: () => {
           const scrollTop = view.scrollDOM.scrollTop

@@ -3,7 +3,7 @@ import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canva
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { Bold, Code, FileSymlink, Italic, SquareCheck } from 'lucide-react'
+import { Bold, Code, Italic, Link2, SquareCheck } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -20,6 +20,8 @@ import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
+import { LinkPickerDialog } from './LinkPickerDialog.js'
+import type { LinkTarget } from './link-target.js'
 import { PreviewPane } from './PreviewPane.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
@@ -56,6 +58,13 @@ export interface MarkdownEditorProps {
    * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
    */
   resolveAlias?: AliasResolver
+  /**
+   * Documents this editor may link to. Supplied by the composition root,
+   * which already holds the list its switcher shows. Absent (or empty) keeps
+   * the link verb's selection-free wrap: a picker onto an empty list would
+   * be a dead end.
+   */
+  linkTargets?: readonly LinkTarget[]
   /**
    * Called with the target canvas id when a resolved wikiLink is activated
    * in the preview. The host owns navigation; without it, wikiLink anchors
@@ -216,6 +225,7 @@ export function MarkdownEditor({
   meta,
   title,
   resolveAlias,
+  linkTargets,
   onOpenDocument,
   resolveEmbed,
   fragmentLoaders,
@@ -264,6 +274,7 @@ export function MarkdownEditor({
    * The open catalog and where it is anchored, in coordinates relative to
    * the editor root (ContextMenu positions against its offsetParent).
    */
+  const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
   const [catalog, setCatalog] = useState<{
     x: number
     y: number
@@ -436,14 +447,21 @@ export function MarkdownEditor({
       { label: 'Italic', icon: <Italic aria-hidden className="size-4" />, onSelect: wrap('*') },
       { label: 'Code', icon: <Code aria-hidden className="size-4" />, onSelect: wrap('`') },
       {
-        // Named for its destination, not its syntax: a chain icon and the
-        // word "link" would have to cover an external URL too, and this
-        // verb cannot — it wraps text in `[[ ]]`, which only ever resolves
-        // to a document in this workspace. The distinction has to survive
-        // an external-link verb arriving beside it.
-        label: 'Link to document',
-        icon: <FileSymlink aria-hidden className="size-4" />,
-        onSelect: wrap('[[', ']]'),
+        // One verb for both kinds of link: the picker's search box decides
+        // where it goes, so nothing asks the author to classify a
+        // destination before typing it. With no targets to pick from there
+        // is nothing to open, and the verb keeps its bracket wrap.
+        label: 'Link',
+        icon: <Link2 aria-hidden className="size-4" />,
+        onSelect:
+          linkTargets === undefined || linkTargets.length === 0
+            ? wrap('[[', ']]')
+            : () => {
+                const api = sourceApiRef.current
+                const text = api?.scopeText() ?? ''
+                setCatalog(null)
+                setLinkPicker({ query: text, text })
+              },
       },
       { kind: 'separator' },
       {
@@ -452,7 +470,7 @@ export function MarkdownEditor({
         onSelect: run(toggleTaskCheckbox),
       },
     ]
-  }, [catalog])
+  }, [catalog, linkTargets])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
@@ -543,6 +561,21 @@ export function MarkdownEditor({
           </div>
         )}
       </div>
+      {linkPicker !== null && linkTargets !== undefined && (
+        <LinkPickerDialog
+          targets={linkTargets}
+          initialQuery={linkPicker.query}
+          linkText={linkPicker.text}
+          onPick={(markup) => {
+            sourceApiRef.current?.replaceScope(markup)
+            setLinkPicker(null)
+          }}
+          onCancel={() => {
+            setLinkPicker(null)
+            sourceApiRef.current?.focus()
+          }}
+        />
+      )}
       {catalog !== null && (
         <ContextMenu
           x={catalog.x}

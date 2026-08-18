@@ -255,6 +255,12 @@ export function BrowserLocalDocumentPage({
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
   const resolveAlias = useMemo(() => createSnapshotAliasResolver(documents), [documents])
+  // The same list, for the link picker: it needs the id as well, so an
+  // ambiguous display name can still produce a link that resolves.
+  const linkTargets = useMemo(
+    () => documents.map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind })),
+    [documents],
+  )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
     body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
@@ -782,6 +788,7 @@ export function BrowserLocalDocumentPage({
                   meta: markdownDoc.coreFacets,
                   title: titleOf(documentName),
                   resolveAlias,
+                  linkTargets,
                   onOpenDocument: (id) => navigate(browserLocalDocumentPath(id)),
                   resolveEmbed,
                 }
