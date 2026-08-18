@@ -41,6 +41,7 @@ import { computeEdgeJumps } from './edge-jumps.js'
 import { edgeLabelAnchor } from './edge-label-anchor.js'
 import {
   type FittedBlocks,
+  firstLineOfBlocks,
   fitBlocksToHeight,
   layoutMdastBlocks,
   type MdastLayoutOptions,
@@ -407,12 +408,8 @@ function fitTextBody(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): FittedBlocks {
-  return (
-    fitSceneInNode(scene, node, options) ?? {
-      nodes: scene.nodes.slice(0, 1),
-      truncated: scene.nodes.length > 1,
-    }
-  )
+  // Keep-first's unit is a LINE, not a block: see `firstLineOfBlocks`.
+  return fitSceneInNode(scene, node, options) ?? firstLineOfBlocks(scene.nodes)
 }
 
 function composeTextNode(

@@ -144,3 +144,35 @@ describe('sceneDigest reports a node whose content did not fit', () => {
     expect(chrome(layout(400, THREE_PARAGRAPHS)).truncated).toBeUndefined()
   })
 })
+
+describe('a box too small for even ONE line', () => {
+  // Keep-first says a text node never renders empty. Its unit has to be a
+  // LINE: keeping the first BLOCK painted a two-line paragraph inside a
+  // one-line box and reported `truncated: false`, because it counted blocks
+  // and the paragraph was one. Unreachable while a line box equalled its
+  // font size — a 16px line always fit the smallest box in use — and reached
+  // the moment line height went to 1.5.
+  const ONE_LONG_PARAGRAPH: MdastRoot = {
+    type: 'root',
+    children: [paragraph('これは日本語のテキストで折り返します')],
+  }
+
+  it('keeps one LINE, not the whole first block', () => {
+    const painted = runs(layout(32, ONE_LONG_PARAGRAPH))
+
+    expect(painted.length).toBe(1)
+  })
+
+  it('says so, instead of reporting a box that overflows as complete', () => {
+    expect(chrome(layout(32, ONE_LONG_PARAGRAPH)).truncated).toBe(true)
+    expect(runs(layout(32, ONE_LONG_PARAGRAPH)).at(-1)?.truncated).toBe(true)
+  })
+
+  it('leaves the same paragraph alone in a box that holds both lines', () => {
+    const painted = runs(layout(64, ONE_LONG_PARAGRAPH))
+
+    expect(painted.length).toBe(2)
+    expect(painted.some((run) => run.truncated)).toBe(false)
+    expect(chrome(layout(64, ONE_LONG_PARAGRAPH)).truncated).toBeUndefined()
+  })
+})

@@ -1184,6 +1184,64 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
   return { nodes: truncated ? markLastRun(kept) : kept, truncated }
 }
 
+/**
+ * The smallest non-empty rendering of `nodes`: the first block cut to its
+ * FIRST LINE. This is keep-first's unit, and it has to be a line for the same
+ * reason `fitBlocksToHeight` steps down to lines — "a text node never renders
+ * empty" must not quietly mean "renders its whole first block, however tall".
+ *
+ * The hole this closes was only reachable once a line box grew past its font
+ * size: while one line always fit the smallest box anyone used, nothing ever
+ * asked for a fallback below block granularity. A caller keeping the first
+ * BLOCK painted a two-line paragraph inside a one-line box AND reported
+ * `truncated: false`, because it counted blocks and the paragraph was one —
+ * so an agent reading `wb_scene_digest` was told nothing was hidden while the
+ * frame was visibly overflowing.
+ *
+ * Blocks whose children are not lines (`blockquote`/`table`/`code`, the
+ * `subtreeOffsetX` transform-boundary class) are kept whole, exactly as
+ * `trimBlock` keeps them.
+ */
+export function firstLineOfBlocks(nodes: readonly SceneNode[]): FittedBlocks {
+  const first = nodes[0]
+  if (first === undefined || first.kind === 'edge') return { nodes: [], truncated: false }
+  const cut = firstLineOfBlock(first)
+  const truncated = nodes.length > 1 || cut.dropped
+  return { nodes: truncated ? markLastRun([cut.node]) : [cut.node], truncated }
+}
+
+function firstLineOfBlock(block: Exclude<SceneNode, { kind: 'edge' }>): {
+  node: SceneNode
+  dropped: boolean
+} {
+  if (block.kind === 'list') {
+    const first = block.items[0]
+    if (first === undefined) return { node: block, dropped: false }
+    return {
+      node: {
+        ...block,
+        items: [first],
+        bbox: { ...block.bbox, h: first.bbox.y + first.bbox.h - block.bbox.y },
+      },
+      dropped: block.items.length > 1,
+    }
+  }
+  if (block.kind !== 'paragraph' && block.kind !== 'heading') return { node: block, dropped: false }
+  const head = block.runs[0]
+  if (head === undefined) return { node: block, dropped: false }
+  // Runs sharing a `bbox.y` are one wrapped line — a line can be several runs
+  // when styling changes mid-line.
+  const runs = block.runs.filter((run) => run.bbox.y === head.bbox.y)
+  return {
+    node: {
+      ...block,
+      runs,
+      bbox: { ...block.bbox, h: head.bbox.y + head.bbox.h - block.bbox.y },
+    },
+    dropped: runs.length < block.runs.length,
+  }
+}
+
 function trimBlock(
   block: Exclude<SceneNode, { kind: 'edge' }>,
   maxBottom: number,

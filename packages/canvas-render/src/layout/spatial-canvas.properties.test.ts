@@ -303,14 +303,16 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     // width that narrow now says nothing about ranking — every body fails to
     // render there. Height is what this example is about.
     //
-    // The heights here track the markdown theme's line height and block
-    // gaps, so they move when it does. Measured against the current theme at
-    // 200px wide: under 42 neither fits and the node shows its label, 42-55
-    // is the card-only band, 56 and up renders the body. 48 sits mid-band on
-    // purpose — an example pinned to a boundary reports a rounding change as
-    // a ranking bug.
+    // The band moves with BOTH the markdown theme (line height, block gaps)
+    // and the cut granularity `fitBlocksToHeight` offers — the finer the cut,
+    // the less height the body needs and the narrower the card's window.
+    // Re-probe it after touching either; do not nudge the number until the
+    // test passes. Measured at 200px wide: <= 40 shows the label, 41-45 is
+    // card-only, >= 46 renders the body. 43 sits mid-band on purpose, because
+    // an example pinned to a boundary reports a rounding change as a ranking
+    // bug.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 48, file: 'a.md' }],
+      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 43, file: 'a.md' }],
       edges: [],
     }
     const text = collectRunText(
@@ -327,16 +329,17 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
   })
 
   it('lets a small node degrade to the card while a bigger sibling renders the body', () => {
-    // Two `a.md` file nodes differing only in height: 200x64 fits the
-    // markdown body, 200x48 does not and falls through to the card.
+    // Two `a.md` file nodes differing only in height: 200x56 fits the
+    // markdown body, 200x43 does not and falls through to the card.
     // Both outcomes are correct, and a canvas-wide "no Card anywhere"
     // assertion called the pair a bug — this pins the mixed-size canvas the
     // property below now judges node by node. The heights sit either side of
-    // the theme-derived band documented on the example above.
+    // the measured band documented on the example above, each clear of a
+    // boundary.
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 48, file: 'a.md' },
-        { id: 'big', type: 'file', x: 0, y: 0, width: 200, height: 64, file: 'a.md' },
+        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 43, file: 'a.md' },
+        { id: 'big', type: 'file', x: 0, y: 0, width: 200, height: 56, file: 'a.md' },
       ],
       edges: [],
     }
