@@ -12,7 +12,7 @@ import {
   createDaemonFetch,
   createDocument,
   deleteDocument,
-  getCanvasSnapshot,
+  getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
   setDocumentDisplayName,
@@ -248,7 +248,7 @@ export function DaemonIndexPage({
       // its completion (the rows refresh) to the page is gated separately,
       // below, on whether that workspace is still the one being viewed.
       try {
-        const snapshot = await getCanvasSnapshot(
+        const snapshot = await getDocumentSnapshot(
           daemonFetch,
           daemonBaseUrl,
           workspaceAtStart,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DaemonApiError, getCanvasOkfV1, listCanvasesV1 } from '../../lib/daemon-api-client.js'
+import { DaemonApiError, getDocumentOkfV1, listDocumentsV1 } from '../../lib/daemon-api-client.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -37,7 +37,7 @@ export function WorkspaceFilesPanel({
     setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
-    listCanvasesV1(daemonFetch, daemonBaseUrl, workspaceId)
+    listDocumentsV1(daemonFetch, daemonBaseUrl, workspaceId)
       .then((res) => {
         if (!cancelled) setDocuments(res.documents)
       })
@@ -50,22 +50,22 @@ export function WorkspaceFilesPanel({
     }
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
-  const openCanvas = (canvas: WorkspaceFileTreeDocument) => {
-    setPreview({ kind: 'loading', path: canvas.path })
-    getCanvasOkfV1(daemonFetch, daemonBaseUrl, workspaceId, canvas.documentId)
+  const openDocument = (entry: WorkspaceFileTreeDocument) => {
+    setPreview({ kind: 'loading', path: entry.path })
+    getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
       .then((res) => {
         setPreview((current) =>
-          current.kind === 'loading' && current.path === canvas.path
-            ? { kind: 'loaded', path: canvas.path, markdown: res.markdown }
+          current.kind === 'loading' && current.path === entry.path
+            ? { kind: 'loaded', path: entry.path, markdown: res.markdown }
             : current,
         )
       })
       .catch(() => {
         setPreview((current) =>
-          current.kind === 'loading' && current.path === canvas.path
-            ? // A created-but-never-written canvas 404s; show it as empty
+          current.kind === 'loading' && current.path === entry.path
+            ? // A created-but-never-written document 404s; show it as empty
               // rather than as a failure (see the /okf route's contract).
-              { kind: 'empty', path: canvas.path }
+              { kind: 'empty', path: entry.path }
             : current,
         )
       })
@@ -88,7 +88,7 @@ export function WorkspaceFilesPanel({
   return (
     <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
       <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
-        <WorkspaceFileTree documents={documents} onOpen={openCanvas} />
+        <WorkspaceFileTree documents={documents} onOpen={openDocument} />
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (

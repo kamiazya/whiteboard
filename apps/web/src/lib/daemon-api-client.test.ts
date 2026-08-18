@@ -3,7 +3,7 @@ import {
   createDaemonFetch,
   createDocument,
   deleteDocument,
-  getCanvasSnapshot,
+  getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
   setDocumentDisplayName,
@@ -212,7 +212,7 @@ describe('deleteDocument', () => {
   })
 })
 
-describe('getCanvasSnapshot', () => {
+describe('getDocumentSnapshot', () => {
   it('returns the raw octet-stream body as a Uint8Array', async () => {
     const bytes = new Uint8Array([1, 2, 3, 4])
     const fetchFn = vi.fn().mockResolvedValue(
@@ -221,14 +221,14 @@ describe('getCanvasSnapshot', () => {
         headers: { 'Content-Type': 'application/octet-stream' },
       }),
     )
-    const result = await getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
+    const result = await getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
     expect(new Uint8Array(result)).toEqual(bytes)
     expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/document/main/snapshot`)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
-    await expect(getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
+    await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
       /not found/i,
     )
   })

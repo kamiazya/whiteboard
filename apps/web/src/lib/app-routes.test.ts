@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   browserLocalDocumentPath,
   browserLocalIndexPath,
-  canvasPath,
   daemonRoutePath,
+  documentPath,
   indexPath,
   isKnownAppPath,
   parseBrowserLocalRoute,
@@ -23,11 +23,11 @@ describe('app-routes', () => {
   })
 
   it('builds a canvas path under the workspace it belongs to', () => {
-    expect(canvasPath('w1', 'main')).toBe('/w/w1/document/main')
+    expect(documentPath('w1', 'main')).toBe('/w/w1/document/main')
   })
 
   it('percent-encodes the workspace, and the path per segment', () => {
-    expect(canvasPath('w 1', 'my/path')).toBe('/w/w%201/document/my/path')
+    expect(documentPath('w 1', 'my/path')).toBe('/w/w%201/document/my/path')
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
@@ -78,7 +78,7 @@ describe('parseDaemonRoute', () => {
       workspaceId: 'w1',
       path: 'a b/c d',
     })
-    expect(canvasPath('w1', 'a b/c d')).toBe('/w/w1/document/a%20b/c%20d')
+    expect(documentPath('w1', 'a b/c d')).toBe('/w/w1/document/a%20b/c%20d')
   })
 
   it('treats a malformed segment anywhere in the tail as not-a-route', () => {

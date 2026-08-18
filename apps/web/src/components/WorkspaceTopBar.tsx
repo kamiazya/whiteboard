@@ -7,7 +7,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 import { getAppLogger } from '@/lib/app-logger'
-import { canvasPath } from '../lib/app-routes.js'
+import { documentPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
 import { DocumentActionsMenu } from './workspace-top-bar/DocumentActionsMenu'
@@ -223,9 +223,9 @@ export default function WorkspaceTopBar({
 
   // Kept outside copyDocumentUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
-  const canvasUrl = `${window.location.origin}${canvasPath(workspaceId, path)}`
+  const documentUrl = `${window.location.origin}${documentPath(workspaceId, path)}`
   const { copyStatus, copyDocumentUrl, resetCopyStatus } = useCopyDocumentUrl(
-    canvasUrl,
+    documentUrl,
     log,
     mountedRef,
   )
@@ -279,9 +279,9 @@ export default function WorkspaceTopBar({
 
         {/* Canvas-specific actions such as rename and copy URL. */}
         <DocumentActionsMenu
-          canvasUrl={canvasUrl}
+          documentUrl={documentUrl}
           copyStatus={copyStatus}
-          onCopyCanvasUrl={() => void copyDocumentUrl()}
+          onCopyDocumentUrl={() => void copyDocumentUrl()}
           onResetCopyStatus={resetCopyStatus}
           onStartRename={startRename}
           onExport={onExport ? (format) => void handleExport(format) : undefined}
