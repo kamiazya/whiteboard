@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
 export interface WorkspaceFileTreeDocument {
@@ -19,6 +19,13 @@ export interface WorkspaceFileTreeDocument {
 export interface WorkspaceFileTreeProps {
   documents: readonly WorkspaceFileTreeDocument[]
   onOpen: (canvas: WorkspaceFileTreeDocument) => void
+  /**
+   * A row's icon. Capability slot, like DocumentListView's renderThumb: a
+   * miniature of the document costs a fetch of its bytes, and this component
+   * neither fetches nor renders — so a caller with no daemon to fetch from
+   * still gets a working tree, with the kind icon below.
+   */
+  renderIcon?: (document: WorkspaceFileTreeDocument) => ReactNode
   className?: string
 }
 
@@ -69,9 +76,11 @@ function buildTree(documents: readonly WorkspaceFileTreeDocument[]): TreeNode[] 
 function TreeItem({
   node,
   onOpen,
+  renderIcon,
 }: {
   node: TreeNode
   onOpen: (canvas: WorkspaceFileTreeDocument) => void
+  renderIcon?: (document: WorkspaceFileTreeDocument) => ReactNode
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0
@@ -111,19 +120,20 @@ function TreeItem({
             onClick={() => node.canvas && onOpen(node.canvas)}
             className="hover:bg-accent hover:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
           >
-            {/* The kind the list already carries, which the row was
-                discarding. A miniature of the document's own shape replaces
-                this icon in the increment that gives the tree minimaps; two
-                distinguishable icons is what the plumbing can honestly buy
-                today. */}
-            {node.canvas.kind === 'spatial' ? (
-              <LayoutGrid data-kind="spatial" className="text-muted-foreground size-3.5 shrink-0" />
-            ) : (
-              <FileText
-                data-kind={node.canvas.kind ?? 'markdown'}
-                className="text-muted-foreground size-3.5 shrink-0"
-              />
-            )}
+            {/* A caller-supplied miniature when there is one; otherwise the
+                kind, which the list already carries. */}
+            {renderIcon?.(node.canvas) ??
+              (node.canvas.kind === 'spatial' ? (
+                <LayoutGrid
+                  data-kind="spatial"
+                  className="text-muted-foreground size-3.5 shrink-0"
+                />
+              ) : (
+                <FileText
+                  data-kind={node.canvas.kind ?? 'markdown'}
+                  className="text-muted-foreground size-3.5 shrink-0"
+                />
+              ))}
             {/* The display name, which is what every other surface shows and
                 what a `[[reference]]` resolves by. The segment is the
                 fallback, not the label. */}
@@ -140,7 +150,7 @@ function TreeItem({
         // biome-ignore lint/a11y/useSemanticElements: role="group" inside a role="tree" is the APG tree pattern; the suggested semantic elements (fieldset/optgroup) are invalid tree children
         <div role="group" className="border-border/60 ml-3 border-l pl-2">
           {node.children.map((child) => (
-            <TreeItem key={child.path} node={child} onOpen={onOpen} />
+            <TreeItem key={child.path} node={child} onOpen={onOpen} renderIcon={renderIcon} />
           ))}
         </div>
       )}
@@ -153,7 +163,12 @@ function TreeItem({
  * from the paths the /api/v1 canvas list already carries — this component
  * never re-derives or stores tree structure of its own.
  */
-export function WorkspaceFileTree({ documents, onOpen, className }: WorkspaceFileTreeProps) {
+export function WorkspaceFileTree({
+  documents,
+  onOpen,
+  renderIcon,
+  className,
+}: WorkspaceFileTreeProps) {
   const tree = useMemo(() => buildTree(documents), [documents])
 
   if (tree.length === 0) {
@@ -167,7 +182,7 @@ export function WorkspaceFileTree({ documents, onOpen, className }: WorkspaceFil
   return (
     <div role="tree" aria-label="Workspace documents" className={cn('space-y-0.5', className)}>
       {tree.map((node) => (
-        <TreeItem key={node.path} node={node} onOpen={onOpen} />
+        <TreeItem key={node.path} node={node} onOpen={onOpen} renderIcon={renderIcon} />
       ))}
     </div>
   )
