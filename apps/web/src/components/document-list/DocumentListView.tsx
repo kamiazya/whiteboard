@@ -18,7 +18,8 @@ export interface DocumentListRow {
   // passes the derived display path — the same visual slot either way.
   secondary?: string
   updatedAt: string
-  kind: DocumentKind
+  /** Absent for a document whose kind the daemon does not record; the row then carries no kind badge. */
+  kind?: DocumentKind
 }
 
 // Clock drift between client and daemon can make (now - t) negative; clamp
