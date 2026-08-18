@@ -21,6 +21,7 @@ export {
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
+  naturalNodeContentSize,
 } from './layout/spatial-canvas.js'
 export {
   assignEdgeAnchors,

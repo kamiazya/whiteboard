@@ -219,6 +219,15 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly embedDepth: number
   readonly geometry: SpatialGeometry
   readonly parseBody: (text: string) => MdastRoot
+  /**
+   * Whether content is trimmed to the node's box. INTERNAL — deliberately
+   * not on `SpatialLayoutOptions`, so a normal render can never turn the
+   * fit off by accident. `naturalNodeContentSize` is the one caller that
+   * clears it, and it is a named function precisely so the intent is
+   * legible at the call site instead of being inferred from a degenerate
+   * height.
+   */
+  readonly fitToBox: boolean
 }
 
 /**
@@ -371,13 +380,6 @@ function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[]
  * somewhere better to go — the plain chrome-and-label rendering.
  */
 function fitTextBody(scene: Scene, node: SpatialNode, options: ResolvedLayoutOptions): Scene {
-  // A non-positive content box is "no height to fit against", the same
-  // reading `fitToWidth` gives an unusable `maxWidth`. It is not a
-  // hypothetical: the editor's grow-only auto-fit measures a node's NATURAL
-  // content height by laying it out at height 1 and reading the scene's
-  // bottom edge, so a truncation here would cap what that probe can report
-  // and the box could never grow past one block.
-  if (contentBox(node, options) === undefined) return scene
   return fitSceneInNode(scene, node, options) ?? { nodes: scene.nodes.slice(0, 1) }
 }
 
@@ -544,6 +546,7 @@ function fitSceneInNode(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): Scene | undefined {
+  if (!options.fitToBox) return scene
   const box = contentBox(node, options)
   if (box === undefined) return undefined
 
@@ -560,7 +563,13 @@ function fitBodyInNode(
   root: MdastRoot,
   options: ResolvedLayoutOptions,
 ): Scene | undefined {
-  if (contentBox(node, options) === undefined) return undefined
+  // The degenerate-box guard is part of FITTING, not of laying out: under
+  // `naturalNodeContentSize` there is no box to be degenerate against, and
+  // returning `undefined` here made a file node fall back to its label, so
+  // the one function whose whole contract is "independent of the stored
+  // box" reported the label's height for a small box and the body's for a
+  // large one.
+  if (options.fitToBox && contentBox(node, options) === undefined) return undefined
   const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
   return fitSceneInNode(body, node, options)
 }
@@ -861,7 +870,50 @@ export function layoutSpatialCanvasWithAnchors(
     parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
+    fitToBox: true,
   })
+}
+
+/**
+ * The extent a node's content occupies when NOTHING is trimmed to fit it.
+ *
+ * This is the question an auto-fit asks — "how big does this box have to be"
+ * — and it is deliberately a named function rather than a layout option or a
+ * degenerate-height trick. Laying a node out at `height: 1` and reading the
+ * scene's bottom edge answers it too, but only because a box that small
+ * cannot bound anything: the layout API cannot tell that probe apart from a
+ * node someone really made 1px tall, so the escape hatch it needs was open
+ * for every tiny node as well. A node that needs `h` of content is contained
+ * by a height of `h + 2 * geometry.paddingPx`.
+ *
+ * Chrome is excluded (it spans the stored box by definition, so including it
+ * could never report "the content is shorter than its box"), and so is a
+ * label placed ABOVE the frame — that is not content in the box.
+ */
+export function naturalNodeContentSize(
+  node: SpatialNode,
+  options: SpatialLayoutOptions,
+): { readonly w: number; readonly h: number } {
+  const content = composeNode(node, {
+    ...options,
+    geometry: resolveGeometry(options.geometry),
+    parseBody: options.parseBody ?? parseMarkdownBody,
+    embedPath: new Set(),
+    embedDepth: 0,
+    fitToBox: false,
+  }).filter(
+    (entry): entry is Exclude<SceneNode, { kind: 'edge' }> =>
+      entry.kind !== 'shape' && entry.kind !== 'edge' && entry.bbox.y >= node.y,
+  )
+
+  if (content.length === 0) return { w: 0, h: 0 }
+  const right = Math.max(...content.map((entry) => entry.bbox.x + entry.bbox.w))
+  const bottom = Math.max(...content.map((entry) => entry.bbox.y + entry.bbox.h))
+  const padding = resolveGeometry(options.geometry).paddingPx
+  return {
+    w: Math.max(0, right - (node.x + padding)),
+    h: Math.max(0, bottom - (node.y + padding)),
+  }
 }
 
 /** The embed path needs only the scene; the anchor map is per-top-level-canvas. */
@@ -932,5 +984,6 @@ export function layoutSpatialEdges(
     parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
+    fitToBox: true,
   }).content
 }
