@@ -460,8 +460,8 @@ Warning signs:
 - template headings or helper text survive after losing their meaning
 
 Fix:
-- there is no delete tool, so an unwanted node has to be repurposed with `wb_node_patch` (shrink it,
-  relabel it as a stray note) rather than left as dead placeholder text
+- delete an unwanted node with a `{ op: "node.remove", id }` op rather than leaving it as dead
+  placeholder text; its edges go with it
 - do not force a fixed node count to match a source-item count mechanically
 - if multiple items are getting crammed into one node, add more nodes and reorganize instead
 

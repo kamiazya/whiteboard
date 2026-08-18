@@ -102,7 +102,7 @@ export interface ShapeSceneNode {
    * The DOCUMENT node this chrome belongs to, when the scene was built from
    * one. Semantic provenance in the same sense as a heading's `level` — the
    * SVG backend never emits it, but `sceneDigest` needs it to name what it
-   * reports something the reader can actually address (`wb_node_patch`
+   * reports something the reader can actually address (a `node.patch` op
    * takes a node id, not a position in a list). Optional because a scene
    * can be built by hand, and a chrome rect drawn for something that is not
    * a document node has no id to give.

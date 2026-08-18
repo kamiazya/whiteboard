@@ -93,7 +93,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
           throw new DocumentContentLossError(
             input.documentId,
             `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
-              'Edit it through wb_node_add / wb_node_patch / wb_edge_patch, which records it as spatial and keeps them.',
+              'Edit it through wb_canvas_edit, which records it as spatial and keeps them.',
           )
         }
         writeDocumentKind(doc, 'markdown')
@@ -101,7 +101,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
         throw new DocumentKindMismatchError(
           input.documentId,
           kind,
-          'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_node_add / wb_node_patch / wb_edge_patch instead.',
+          'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_canvas_edit instead.',
         )
       }
 

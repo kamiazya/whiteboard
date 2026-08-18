@@ -202,7 +202,7 @@ describe('wb_document_set tool', () => {
     // A markdown document's stored content is a valid spatial canvas: its
     // body lives in one text node. So "holds nodes" alone would refuse the
     // pre-kind markdown documents the OKF import path produced, and send
-    // them to wb_node_add, which would declare them spatial — the wrong
+    // them to wb_canvas_edit, which would declare them spatial — the wrong
     // kind, and the "no way back" the healing exists to prevent.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)

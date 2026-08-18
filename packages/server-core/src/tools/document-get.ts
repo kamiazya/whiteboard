@@ -44,7 +44,7 @@ export class DocumentKindUnknownError extends Error {
       `Document ${documentId} records no kind, so there is no format to read it as ` +
         '(checked both the document itself and its index row). ' +
         'Documents created before kinds existed are affected. Editing one records a kind: ' +
-        'wb_node_add / wb_node_patch / wb_edge_patch record it as spatial and keep what it holds, ' +
+        'wb_canvas_edit records it as spatial and keeps what it holds, ' +
         'and wb_document_set records it as markdown — which replaces its content, so it is ' +
         'refused unless the document is empty.',
     )

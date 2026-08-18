@@ -23,19 +23,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     profile: MUTATING_IDEMPOTENT,
     title: 'Set the OKF frontmatter facets of a document',
   },
-  wb_edge_add: { profile: MUTATING, title: 'Connect two nodes on the spatial canvas' },
-  wb_node_add: { profile: MUTATING, title: 'Add a node to the spatial canvas' },
-  wb_node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch a node on the spatial canvas' },
-  wb_edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch an edge on the spatial canvas' },
-  wb_node_lock: {
-    profile: MUTATING_IDEMPOTENT,
-    title: 'Lock or unlock a node on the spatial canvas',
-  },
-  wb_edge_lock: {
-    profile: MUTATING_IDEMPOTENT,
-    title: 'Lock or unlock an edge on the spatial canvas',
-  },
-  wb_canvas_tidy: { profile: MUTATING_IDEMPOTENT, title: 'Tidy the spatial canvas layout' },
   wb_canvas_edit: {
     // Destructive because a batch may carry node.remove / edge.remove, and
     // NOT idempotent because an add refuses an id already on the canvas.

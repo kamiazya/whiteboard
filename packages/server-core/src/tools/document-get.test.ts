@@ -165,7 +165,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // at the one action that would destroy what they are trying to read.
     await expect(
       createDocumentGetTool(deviantDeps).execute({ workspaceId: 'ws', documentId }),
-    ).rejects.toThrow(/wb_node_add/)
+    ).rejects.toThrow(/wb_canvas_edit/)
   })
 
   it('a kindless doc whose index row resolves to null (wrong workspace) is still refused', async () => {

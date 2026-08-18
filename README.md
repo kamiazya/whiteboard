@@ -191,10 +191,12 @@ You    Use whiteboard to sketch the request flow for our auth service:
 
 Agent  { canvasId } = wb_document_create({ workspaceId: "default",
                                           path: "auth-flow", kind: "spatial" })
-       wb_node_add({ canvasId, node: /* one of 4 service boxes */ })
-       wb_edge_add({ canvasId, edge: /* an arrow between two of them */ })
-       wb_node_add({ canvasId, node: { id: "cache-note", type: "text",
-                                       x: 240, y: 360, text: "cache lives here" } })
+       wb_canvas_edit({ canvasId, ops: [
+         /* 4 service boxes, the arrows between them, and: */
+         { op: "node.add", node: { id: "cache-note", type: "text",
+                                   text: "cache lives here" } },
+         { op: "tidy" },
+       ] })
        wb_scene_render({ canvasId })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed

@@ -60,8 +60,7 @@ wb_scene_digest({ workspaceId, documentId })  // only meaningful for a known-spa
 
 A document with no recorded kind predates format tracking (`wb_document_get` refuses; the digest
 still answers, misleadingly, from the empty spatial containers). The only way to give it a kind is
-to write to it (`wb_node_add`/`wb_node_patch`/`wb_edge_patch` records `spatial`, `wb_document_set`
-records `markdown`).
+to write to it (a `wb_canvas_edit` call records `spatial`, `wb_document_set` records `markdown`).
 
 ### Step 3: Judge Staleness
 

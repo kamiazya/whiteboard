@@ -27,15 +27,8 @@ import {
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
 import { createDocumentSetTool } from './tools/document-set.js'
-import { createEdgeAddTool } from './tools/edge-add.js'
-import { createEdgeLockTool } from './tools/edge-lock.js'
-import { createEdgePatchTool } from './tools/edge-patch.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
-import { createNodeAddTool } from './tools/node-add.js'
-import { createNodeLockTool } from './tools/node-lock.js'
-import { createNodePatchTool } from './tools/node-patch.js'
-import { createTidyCanvasTool } from './tools/tidy-canvas.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
@@ -134,13 +127,6 @@ export function createServer(deps: ServerDeps) {
 
   const tools = {
     facetSet: createFacetSetTool(deps),
-    nodeLock: createNodeLockTool(deps),
-    edgeLock: createEdgeLockTool(deps),
-    nodeAdd: createNodeAddTool(deps),
-    nodePatch: createNodePatchTool(deps),
-    edgeAdd: createEdgeAddTool(deps),
-    edgePatch: createEdgePatchTool(deps),
-    tidyCanvas: createTidyCanvasTool(deps),
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasView: createCanvasViewTool(deps),
