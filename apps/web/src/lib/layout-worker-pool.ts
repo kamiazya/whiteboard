@@ -44,7 +44,10 @@ export interface LayoutWorkerPool {
    * Defaults to `interactive`: an unlabelled caller is one that has not
    * thought about it, and quietly deprioritising it is the wrong default.
    */
-  run<T extends { id: number }>(request: { id: number }, priority?: LayoutPriority): Promise<T>
+  run<T extends { id: number }>(
+    request: { id: number } & Record<string, unknown>,
+    priority?: LayoutPriority,
+  ): Promise<T>
   /** Abandons a request, whether queued or already in flight. */
   cancel(id: number): void
   dispose(): void
@@ -71,7 +74,7 @@ export function defaultPoolSize(hardwareConcurrency: number | undefined): number
 
 interface Pending {
   readonly id: number
-  readonly request: { id: number }
+  readonly request: { id: number } & Record<string, unknown>
   readonly priority: LayoutPriority
   resolve(value: never): void
   reject(error: Error): void
@@ -117,13 +120,18 @@ export function createLayoutWorkerPool(options: {
 
   const settle = (slot: Slot, id: number, data: { id: number }) => {
     const pending = slot.busyWith
-    slot.busyWith = null
-    if (pending !== null && pending.id === id) {
+    // A reply for something this slot is no longer holding — a cancelled
+    // request the worker finished anyway. Dropping it is the whole handling:
+    // `cancel` already freed the slot, so it is either idle or busy with a
+    // NEWER request, and clearing it here would throw that one's pending
+    // entry away and leave its caller waiting forever.
+    if (pending === null || pending.id !== id) {
       abandoned.delete(id)
-      ;(pending.resolve as (value: unknown) => void)(data)
-    } else {
-      abandoned.delete(id)
+      return
     }
+    slot.busyWith = null
+    abandoned.delete(id)
+    ;(pending.resolve as (value: unknown) => void)(data)
     pump()
   }
 
@@ -180,7 +188,7 @@ export function createLayoutWorkerPool(options: {
 
   return {
     run<T extends { id: number }>(
-      request: { id: number },
+      request: { id: number } & Record<string, unknown>,
       priority: LayoutPriority = 'interactive',
     ): Promise<T> {
       if (disposed) return Promise.reject(new Error('layout worker pool is disposed'))
@@ -227,4 +235,45 @@ export function createLayoutWorkerPool(options: {
       }
     },
   }
+}
+
+/**
+ * The process-wide fleet. One per tab, created on first use, never disposed:
+ * a rail, a favicon and a list all want it, and tearing it down when one of
+ * them unmounts would make the next one pay the font registration again.
+ */
+let shared: LayoutWorkerPool | null = null
+
+export function sharedLayoutWorkerPool(): LayoutWorkerPool {
+  shared ??= createLayoutWorkerPool({
+    size: defaultPoolSize(
+      typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
+    ),
+    createWorker: () => {
+      const worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })
+      // An adapter rather than a cast. `Worker.onmessage` is declared with a
+      // `this` type and a full MessageEvent, so no narrower signature can
+      // receive it — and the pool only ever reads `data`. Forwarding keeps
+      // the pool's interface describing what it actually needs, which is
+      // also what lets a test supply a plain object.
+      const adapter: PoolWorker = {
+        postMessage: (request) => worker.postMessage(request),
+        terminate: () => worker.terminate(),
+        onmessage: null,
+        onerror: null,
+      }
+      worker.onmessage = (event) => adapter.onmessage?.({ data: event.data })
+      worker.onerror = (event) => adapter.onerror?.(event)
+      return adapter
+    },
+  })
+  return shared
+}
+
+let nextRequestId = 1
+
+/** Ids are per-tab and monotonic, so a late reply can never match a live request. */
+export function nextLayoutRequestId(): number {
+  nextRequestId += 1
+  return nextRequestId
 }

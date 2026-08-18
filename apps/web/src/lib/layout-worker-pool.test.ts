@@ -134,6 +134,30 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  // The order that matters and the one the test above misses: a worker keeps
+  // running a cancelled request, so its stale reply can land AFTER the freed
+  // slot has been handed a new one. Treating that reply as this slot's
+  // outcome strands the new request forever.
+  it('does not strand the request that took a cancelled one’s slot', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    const abandoned = pool.run({ id: 1 })
+    pool.cancel(1)
+    await expect(abandoned).rejects.toThrow(/cancelled/i)
+
+    const replacement = pool.run({ id: 2 })
+    expect(factory.live[0].sent).toEqual([1, 2])
+
+    // The cancelled request's reply arrives first, as it must — nothing can
+    // un-send it.
+    factory.live[0].reply(1, { ok: 'stale' })
+    factory.live[0].reply(2, { ok: 'wanted' })
+
+    await expect(replacement).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
   it('creates workers lazily, so an unused pool costs nothing', () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 4, createWorker: factory.create })
@@ -283,7 +307,8 @@ describe('pool sizing', () => {
   })
 })
 
-// A dispatch bug that only shows up under real postMessage timing would
-// escape the fakes above; the pool is exercised end to end by the browser
-// test that renders a real list.
-it.todo('renders a real list through real workers (web-browser)')
+// A dispatch bug that only shows up under real postMessage ordering escapes
+// the fakes above — one did, stranding the request that took a cancelled
+// one's slot. The end-to-end path lives in
+// markdown-editor/rail-write-mode.browser.test.tsx, where a real worker lays
+// out a real document.

@@ -16,6 +16,8 @@ import {
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
+import type { MarkdownRailResponse } from '../../lib/layout-worker-protocol.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
@@ -445,6 +447,37 @@ export function MarkdownEditor({
    * scroll content. Measured live rather than cached, because the document
    * column's padding and header change it.
    */
+  /**
+   * Write mode has no preview, so nothing lays the document out — and the
+   * rail would otherwise show whatever the last preview produced, going
+   * stale with every keystroke. The pool lays it out instead, at background
+   * priority so it can never sit in front of work someone is waiting on.
+   */
+  useEffect(() => {
+    if (effectiveMode !== 'write' || debouncedValue.trim() === '') return
+    const pool = sharedLayoutWorkerPool()
+    const id = nextLayoutRequestId()
+    let live = true
+    pool
+      .run<MarkdownRailResponse>(
+        { type: 'markdown-rail', id, body: debouncedValue, maxWidth: previewWidth },
+        'background',
+      )
+      .then((reply) => {
+        if (!live || reply.type !== 'markdown-rail-done') return
+        anchorsRef.current = reply.anchors
+        blocksRef.current = reply.blocks
+        setRailBlocks(reply.blocks)
+      })
+      // A refusal (no worker font, a superseded request) leaves the rail as
+      // it was. It is a map, not the document.
+      .catch(() => undefined)
+    return () => {
+      live = false
+      pool.cancel(id)
+    }
+  }, [effectiveMode, debouncedValue, previewWidth])
+
   // Write mode: the visible SOURCE lines are what the marker has to show, so
   // the range is read from CodeMirror's own block geometry and mapped onto
   // the laid-out document the bars describe.
