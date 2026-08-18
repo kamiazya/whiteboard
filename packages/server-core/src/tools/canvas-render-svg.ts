@@ -44,9 +44,13 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
       const references = input.embedReferences
         ? await resolveFileReferences(deps, input.workspaceId, canvas)
         : undefined
-      const scene = composeCanvasScene(canvas, constantRatioMeasureText, {
-        ...(references === undefined ? {} : { references }),
-      })
+      const scene = composeCanvasScene(
+        canvas,
+        (await deps.measure?.()) ?? constantRatioMeasureText,
+        {
+          ...(references === undefined ? {} : { references }),
+        },
+      )
       const { width, height } = computeSceneDimensions(scene)
       return { svg: renderSceneToSvg(scene), width, height }
     },

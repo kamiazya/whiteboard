@@ -30,7 +30,7 @@ export function createCanvasDigestTool(deps: ServerDeps) {
     async execute(input: CanvasDigestInput): Promise<SceneDigest> {
       const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'wb_scene_digest')
-      const scene = composeCanvasScene(canvas, constantRatioMeasureText)
+      const scene = composeCanvasScene(canvas, (await deps.measure?.()) ?? constantRatioMeasureText)
       return sceneDigest(scene)
     },
   }

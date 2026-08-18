@@ -96,9 +96,10 @@ paths:
    (`clampAdvance`) before it reaches geometry.
    `constantRatioMeasureText` — the measurer of last resort — lives here
    too, beside the contract it satisfies. Three composition roots had grown
-   their own copy (server-core is forbidden from loading a font at all,
-   mcp-server needs one when the vendored asset is missing, canvas-viewer
-   when the realm has no Canvas 2D context) with three DIFFERENT constant
+   their own copy (server-core cannot load a font itself and gets one
+   injected via `ServerDeps.measure`, mcp-server needs one when the
+   vendored asset is missing, canvas-viewer when the realm has no Canvas 2D
+   context) with three DIFFERENT constant
    sets, so the same canvas measured differently depending on which
    degraded path produced it. The ratios are arbitrary; the point is that
    they are arbitrary in one place. It matches no real font by
