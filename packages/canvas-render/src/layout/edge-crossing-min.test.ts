@@ -5,6 +5,12 @@
 // routed away entirely, not merely jumped.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { createFakeMeasure } from '../test-utils/fake-measure.js'
+// Static, not `await import()` inside the test body: an in-body import of
+// this module graph charges its transform-and-load to the 5s per-test
+// timeout, which is ample on an idle machine and the first thing to blow
+// once every project runs in parallel. Collection phase has no such budget.
+import { layoutSpatialEdges } from './spatial-canvas.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
@@ -101,8 +107,6 @@ describe('frozen side overrides', () => {
 
 describe('edgeSideOverrides through layoutSpatialEdges', () => {
   it('threads the frozen sides through the layout entry point apps/web calls', async () => {
-    const { layoutSpatialEdges } = await import('./spatial-canvas.js')
-    const { createFakeMeasure } = await import('../test-utils/fake-measure.js')
     const canvas = {
       nodes: [
         node('red', 0, 100, 300, 120),
