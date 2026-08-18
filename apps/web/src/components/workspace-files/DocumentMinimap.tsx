@@ -99,15 +99,15 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
       ref={ref}
       data-testid="document-minimap"
       aria-hidden="true"
-      className="relative inline-block size-4 shrink-0 overflow-hidden"
+      className="relative inline-block size-6 shrink-0 overflow-hidden"
     >
       {projected === null || projected.length === 0 ? (
         document.kind === 'spatial' ? (
-          <LayoutGrid data-kind="spatial" className="text-muted-foreground size-4" />
+          <LayoutGrid data-kind="spatial" className="text-muted-foreground size-6" />
         ) : (
           <FileText
             data-kind={document.kind ?? 'markdown'}
-            className="text-muted-foreground size-4"
+            className="text-muted-foreground size-6"
           />
         )
       ) : (
