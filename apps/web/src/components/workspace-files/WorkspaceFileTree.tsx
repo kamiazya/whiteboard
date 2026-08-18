@@ -8,7 +8,7 @@ export interface WorkspaceFileTreeDocument {
   /**
    * What the document is called. Absent when nobody named it, which is when
    * the path's last segment is the honest label — never a fallback invented
-   * from the name (a slug derived from one collapses every non-Latin title
+   * from the name (a path derived from one collapses every non-Latin title
    * to `untitled-N`, which ADR-0008 measured and rejected).
    */
   readonly name?: string
