@@ -5,6 +5,12 @@ import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
 
 export interface NodeTextEditorOverlayProps
   extends Pick<MarkdownEditorProps, 'theme' | 'resolveAlias' | 'resolveEmbed' | 'linkTargets'> {
+  /**
+   * Follows a wiki link out of this surface. Without it the editor's preview
+   * lets the anchor through and the browser navigates to a bare document id,
+   * which is not a URL — so a link that renders here has to be answered here.
+   */
+  readonly onOpenDocument?: (documentId: string) => void
   /** What the surface is editing, shown so the canvas context is not lost. */
   readonly title: string
   readonly initialText: string
@@ -35,6 +41,7 @@ export function NodeTextEditorOverlay({
   resolveAlias,
   resolveEmbed,
   linkTargets,
+  onOpenDocument,
 }: NodeTextEditorOverlayProps) {
   const [text, setText] = useState(initialText)
   // The keydown handler is bound once; without a ref it would close over the
@@ -46,6 +53,16 @@ export function NodeTextEditorOverlay({
     if (textRef.current !== initialText) onCommit(textRef.current)
     onClose()
   }, [initialText, onCommit, onClose])
+
+  // Following a link LEAVES this surface, which is a close under the grammar
+  // above — so the edit in progress is committed rather than dropped.
+  const followLink = useCallback(
+    (documentId: string) => {
+      commitAndClose()
+      onOpenDocument?.(documentId)
+    },
+    [commitAndClose, onOpenDocument],
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -103,6 +120,7 @@ export function NodeTextEditorOverlay({
           resolveAlias={resolveAlias}
           resolveEmbed={resolveEmbed}
           linkTargets={linkTargets}
+          onOpenDocument={onOpenDocument === undefined ? undefined : followLink}
         />
       </div>
     </div>

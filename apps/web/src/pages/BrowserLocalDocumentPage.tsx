@@ -858,6 +858,7 @@ export function BrowserLocalDocumentPage({
                     linkTargets={linkTargets}
                     onCommit={nodeInEditor.commit}
                     onClose={nodeInEditor.close}
+                    onOpenDocument={(id) => navigate(browserLocalDocumentPath(id))}
                   />
                 )}
               </div>
