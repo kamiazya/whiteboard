@@ -73,11 +73,22 @@ describe('linkMarkupFor', () => {
     )
   })
 
-  // An alias runs to the closing bracket, so only those two sequences can
-  // break it — a `|` inside it simply becomes part of the text.
-  it('drops an alias that cannot be written inside brackets', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a ]] b')).toBe('[[Weekly review]]')
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'two\nlines')).toBe('[[Weekly review]]')
+  // The codec's scanner stops at the FIRST `]` and matches only if it is
+  // doubled, so a single one is as fatal as `]]`: `[[A|Draft] x]]` never
+  // resolves at all, and `[[A|note]]]` truncates the alias and leaves a
+  // stray `]` in the body.
+  it.each([
+    ['a ]] b'],
+    ['Draft] proposal'],
+    ['note]'],
+    ['two\nlines'],
+  ])('drops an alias the reference scanner cannot read: %s', (alias) => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, alias)).toBe('[[Weekly review]]')
+  })
+
+  // `|` is fine there: the scanner is already past the target half.
+  it('keeps an alias containing a pipe', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a|b')).toBe('[[Weekly review|a|b]]')
   })
 
   // The picker knows which one was chosen; the reader of `[[untitled]]`
@@ -93,6 +104,7 @@ describe('linkMarkupFor', () => {
   // `canvas:` is parsed as a direct document id instead of a name.
   it.each([
     ['weird ]] name'],
+    ['single ] bracket'],
     ['two\nlines'],
     ['A|B'],
     ['canvas:not-an-id'],
@@ -100,7 +112,7 @@ describe('linkMarkupFor', () => {
     const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
     // The name is unwritable as a TARGET, but the alias half is free text up
     // to the closing bracket, so `|` and `canvas:` are fine there.
-    const expected = /]]|[\r\n]/.test(name) ? '[[canvas:01JODD]]' : `[[canvas:01JODD|${name}]]`
+    const expected = /]|[\r\n]/.test(name) ? '[[canvas:01JODD]]' : `[[canvas:01JODD|${name}]]`
     expect(linkMarkupFor(odd, [odd])).toBe(expected)
   })
 })

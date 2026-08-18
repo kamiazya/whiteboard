@@ -262,6 +262,23 @@ describe('the link picker (real browser)', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('[the guide](https://example.com/guide)')
   })
 
+  // With the caret on whitespace there is no word to carry the link, so an
+  // external one degrades to a bare autolink — the placeholder has to say so
+  // rather than showing an empty default.
+  it('says the URL will carry itself when there is no text to use', async () => {
+    const { container, getByRole } = render(
+      <MarkdownEditor value="a  b" onChange={() => {}} linkTargets={targets} />,
+    )
+    await caretInto(container, 2) // the gap between the words
+
+    const picker = await openPicker(container, getByRole)
+    const search = picker.querySelector('#link-picker-search') as HTMLInputElement
+    await userEvent.fill(search, 'https://example.com')
+
+    const display = picker.querySelector('#link-picker-text') as HTMLInputElement
+    expect(display.placeholder).toBe('The URL itself')
+  })
+
   it('closes on Escape without touching the document', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
