@@ -54,7 +54,7 @@ afterEach(() => {
   stateHolder.current = makeState()
 })
 
-describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)', () => {
+describe('HeaderBranchChip (real Radix dropdown/dialog)', () => {
   it('selecting another branch from the dropdown calls setHead', async () => {
     render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
@@ -380,7 +380,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
   })
 
-  it('does not poison the next genuine hover when the dropdown closes without returning focus to the chip', async () => {
+  it('does not poison the next hover when the dropdown closes without refocusing', async () => {
     render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     const kebab = screen.getByTestId('header-branch-kebab')

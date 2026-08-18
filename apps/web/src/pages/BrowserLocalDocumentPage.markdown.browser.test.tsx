@@ -93,7 +93,7 @@ async function expectTitleValue(expected: string): Promise<void> {
   )
 }
 
-describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)', () => {
+describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
     spatialMounts = 0
@@ -598,7 +598,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     )
   })
 
-  describe('a document written by the daemon before the body writers were unified', () => {
+  describe('a body written the pre-unification way', () => {
     // `wb_document_set` used to store a body as an `okf-body` TEXT NODE
     // rather than the `body` text container CodeMirror binds to. Both sides
     // now write the container, but documents in the old shape are already in
@@ -633,7 +633,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       await new LoroStore().save(LEGACY_ID, doc.export({ mode: 'snapshot' }))
     }
 
-    it('is editable in the real editor without losing the body it was opened with', async () => {
+    it('stays editable without losing the body it opened with', async () => {
       // This needs a real browser for the CRDT binding. `LoroSyncPlugin`
       // syncs the `body` CONTAINER into CodeMirror on mount, overwriting the
       // `value` prop — so for a document whose prose is still in a node, the

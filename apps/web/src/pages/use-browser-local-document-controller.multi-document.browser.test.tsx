@@ -25,7 +25,7 @@ function snapshotWithElements(elements: unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-describe('multi-canvas foundation (browser — real IndexedDB)', () => {
+describe('multi-canvas foundation (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
   })
@@ -120,7 +120,7 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     expect(await store.getDefaultDocumentId()).toBe(idA)
   })
 
-  it('duplicateDocument deep-copies the real IndexedDB-backed Loro doc: later edits to the source never appear in the copy', async () => {
+  it('duplicateDocument deep-copies the Loro doc: later source edits never leak', async () => {
     const store = new IndexedDBStore()
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))

@@ -57,7 +57,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
-describe('BrowserLocalDocumentPage create/delete-node reload persistence (browser — real IndexedDB)', () => {
+describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedDB)', () => {
   let documentId = ''
 
   beforeEach(async () => {
@@ -126,7 +126,7 @@ describe('BrowserLocalDocumentPage create/delete-node reload persistence (browse
     )
   })
 
-  it('a node created via create-node survives remount; deleting it via delete-node stays gone after another remount', async () => {
+  it('a created node survives remount, and a deleted one stays gone', async () => {
     render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
