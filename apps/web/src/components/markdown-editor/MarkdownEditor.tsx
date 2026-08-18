@@ -18,6 +18,7 @@ import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-mark
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
+import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
@@ -169,6 +170,13 @@ function countWords(value: string): number {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
+}
+
+/** The laid-out document's height — the last block's bottom edge. */
+function railContentHeight(blocks: readonly RailBlock[]): number {
+  let bottom = 0
+  for (const block of blocks) bottom = Math.max(bottom, block.y + block.h)
+  return bottom
 }
 
 function totalSourceLines(value: string): number {
@@ -378,6 +386,22 @@ export function MarkdownEditor({
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [value])
 
+  // Write mode has no preview on screen, so the rail drives the SOURCE:
+  // a press is a document position, and the anchors say which line that is.
+  const seekSource = useCallback(
+    (documentY: number) => {
+      const api = sourceApiRef.current
+      if (api === null) return
+      api.revealLine(
+        lineForDocumentY(anchorsRef.current, documentY, {
+          totalLines: totalSourceLines(value),
+          contentHeight: railContentHeight(blocksRef.current),
+        }),
+      )
+    },
+    [value],
+  )
+
   const seekPreview = useCallback((documentY: number) => {
     const preview = previewScrollRef.current
     if (preview === null) return
@@ -421,6 +445,31 @@ export function MarkdownEditor({
    * scroll content. Measured live rather than cached, because the document
    * column's padding and header change it.
    */
+  // Write mode: the visible SOURCE lines are what the marker has to show, so
+  // the range is read from CodeMirror's own block geometry and mapped onto
+  // the laid-out document the bars describe.
+  useEffect(() => {
+    if (effectiveMode !== 'write') return
+    const scroller = sourceWrapRef.current?.querySelector('.cm-scroller')
+    if (!(scroller instanceof HTMLElement)) return
+    const sync = () => {
+      const api = sourceApiRef.current
+      if (api === null) return
+      const blocks = blocksRef.current
+      const tail = {
+        totalLines: totalSourceLines(value),
+        contentHeight: railContentHeight(blocks),
+      }
+      const top = documentYForLine(anchorsRef.current, api.topVisibleLine(), tail)
+      const bottom = documentYForLine(anchorsRef.current, api.bottomVisibleLine(), tail)
+      setRailViewport({ top, height: Math.max(0, bottom - top) })
+      setRailBlocks(blocks)
+    }
+    sync()
+    scroller.addEventListener('scroll', sync, { passive: true })
+    return () => scroller.removeEventListener('scroll', sync)
+  }, [effectiveMode, value, debouncedValue])
+
   useEffect(() => {
     const preview = previewScrollRef.current
     if (preview === null) return
@@ -621,11 +670,23 @@ export function MarkdownEditor({
             </div>
           </div>
         )}
-        {/* Only where the preview is on screen: the rail's blocks come from
-            that layout, so in write-only mode it would map a document the
-            user cannot see. */}
-        {effectiveMode !== 'write' && !previewEmpty && (
-          <MinimapRail blocks={railBlocks} viewport={railViewport} onSeek={seekPreview} />
+        {!previewEmpty && railBlocks.length > 0 && (
+          // The bars are the same in every mode — they describe the document,
+          // not the pane. Only what a press moves differs: the preview when
+          // one is on screen, otherwise the source through its anchors.
+          //
+          // Gated on having blocks because they come from the preview's
+          // layout, and write mode renders no preview: the rail there shows
+          // whatever the last preview produced, and shows NOTHING at all in a
+          // session that never left write mode. An empty strip claims the
+          // document has no shape, which is worse than no rail. Laying the
+          // document out for the rail when no preview is running is the
+          // worker pool's job — the increment after this one.
+          <MinimapRail
+            blocks={railBlocks}
+            viewport={railViewport}
+            onSeek={effectiveMode === 'write' ? seekSource : seekPreview}
+          />
         )}
       </div>
       {linkPicker !== null && linkTargets !== undefined && (

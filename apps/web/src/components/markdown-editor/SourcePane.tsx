@@ -157,6 +157,14 @@ export interface SourcePaneApi {
    * geometry rather than dividing scrollTop by an assumed line height.
    */
   topVisibleLine: () => number
+  /**
+   * The last line with any pixel on screen, by the same block geometry as
+   * `topVisibleLine` — a wrapped or fenced line is taller than the rest, so
+   * a count derived from an assumed line height would drift.
+   */
+  bottomVisibleLine: () => number
+  /** Scrolls so `line` sits in the middle of the viewport. */
+  revealLine: (line: number) => void
 }
 
 export interface SourcePaneProps {
@@ -319,6 +327,19 @@ export function SourcePane({
           const line = view.state.doc.lineAt(block.from).number
           const fraction = block.height > 0 ? (scrollTop - block.top) / block.height : 0
           return line + Math.max(0, Math.min(1, fraction))
+        },
+        bottomVisibleLine: () => {
+          const bottom = view.scrollDOM.scrollTop + view.scrollDOM.clientHeight
+          const block = view.lineBlockAtHeight(bottom)
+          return view.state.doc.lineAt(block.from).number
+        },
+        revealLine: (line: number) => {
+          const clamped = Math.max(1, Math.min(view.state.doc.lines, Math.round(line)))
+          const pos = view.state.doc.line(clamped).from
+          // `center` rather than the default `nearest`: a press on the rail
+          // says "show me here", and nearest leaves an already-visible line
+          // exactly where it was, which reads as the press doing nothing.
+          view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) })
         },
       }
     }
