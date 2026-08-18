@@ -1,7 +1,6 @@
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { SnapshotNotFoundError } from './render/load-spatial-canvas.js'
 import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
@@ -26,8 +25,8 @@ import {
   wbDocumentResolveInputSchema,
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
+import { SnapshotNotFoundError } from './tools/document-io.js'
 import { createDocumentSetTool } from './tools/document-set.js'
-import { DocumentNotFoundError } from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createVersionListTool } from './tools/version-list.js'
@@ -117,9 +116,9 @@ export function createServer(deps: ServerDeps) {
     } catch (err) {
       // A tree node whose doc was never written (created but never
       // imported/edited) has no OKF projection — a read miss, not a 500.
-      // Note: loadSpatialCanvas throws its own WorkspaceDocumentNotFoundError class,
-      // distinct from document-crud's; mapDocumentError only knows the latter.
-      if (err instanceof SnapshotNotFoundError || err instanceof DocumentNotFoundError) {
+      // `mapDocumentError` only knows document-crud's index-level errors, so
+      // the store-level miss is answered here.
+      if (err instanceof SnapshotNotFoundError) {
         return c.json({ error: err.message }, 404)
       }
       return mapDocumentError(c, err)

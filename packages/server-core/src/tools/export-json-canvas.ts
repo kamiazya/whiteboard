@@ -1,8 +1,8 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
@@ -35,7 +35,7 @@ export async function exportJsonCanvas(
   deps: ServerDeps,
   input: ExportJsonCanvasInput,
 ): Promise<ExportJsonCanvasOutput> {
-  const { canvas } = await loadSpatialCanvas(deps, input.documentId)
+  const { canvas } = await loadDocument(deps, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
   return { json: serializeSpatial(canvas, mode) }
 }

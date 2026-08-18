@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vitest'
+import { SnapshotNotFoundError } from './document-io.js'
 import {
-  DocumentNotFoundError,
   NodeNotFoundError,
   NotATextNodeError,
   PatchValidationError,
 } from './errors.js'
 
 describe('server-core tool errors', () => {
-  test('DocumentNotFoundError carries the documentId and a descriptive message', () => {
-    const err = new DocumentNotFoundError('canvas-1')
+  test('SnapshotNotFoundError carries the documentId and a descriptive message', () => {
+    const err = new SnapshotNotFoundError('canvas-1')
     expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('DocumentNotFoundError')
+    expect(err.name).toBe('SnapshotNotFoundError')
     expect(err.documentId).toBe('canvas-1')
     expect(err.message).toContain('canvas-1')
   })

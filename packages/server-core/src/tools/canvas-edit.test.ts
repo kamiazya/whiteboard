@@ -8,7 +8,8 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
-import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { loadDocument } from './document-io.js'
+
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -99,7 +100,7 @@ describe('wb_canvas_edit tool', () => {
       message: expect.stringMatching(/ops\[1\]/),
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
   })
 
@@ -125,7 +126,7 @@ describe('wb_canvas_edit tool', () => {
     expect(placed?.width).toBeGreaterThan(0)
     expect(placed?.height).toBeGreaterThan(0)
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     const stored = canvas.nodes.find((n) => n.id === 'free')
     // What the tool REPORTS and what it STORED have to be the same numbers.
     expect(stored).toMatchObject({ x: placed?.x, y: placed?.y })
@@ -184,7 +185,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'] })
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
     expect(canvas.nodes[0]).toMatchObject({ x: 7, color: '3' })
     expect(canvas.edges).toEqual([])
@@ -211,7 +212,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.touched.edges).toEqual(['e'])
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.edges).toEqual([])
   })
 
@@ -254,7 +255,7 @@ describe('wb_canvas_edit tool', () => {
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
     // The rejected batch above must not have persisted its own lock on 'b'.
-    const { doc } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { doc } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(readNodeLocks(doc).has('a')).toBe(true)
     expect(readNodeLocks(doc).has('b')).toBe(false)
   })
@@ -284,7 +285,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.applied).toBe(2)
-    const { doc, canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { doc, canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(readNodeLocks(doc).has('a')).toBe(false)
     expect(canvas.nodes[0]).toMatchObject({ x: 9 })
   })
@@ -305,7 +306,7 @@ describe('wb_canvas_edit tool', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'edge.lock', id: 'e', locked: true }],
     })
-    const { doc } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { doc } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(readEdgeLocks(doc).has('e')).toBe(true)
 
     await expect(
@@ -340,7 +341,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.geometry.length).toBeGreaterThan(0)
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     // Every geometry entry names where the node really ended up.
     for (const entry of result.geometry) {
       expect(canvas.nodes.find((n) => n.id === entry.id)).toMatchObject({
@@ -399,7 +400,7 @@ describe('wb_canvas_edit tool', () => {
     expect(result.touched.nodes).toHaveLength(1)
     const minted = result.touched.nodes[0]
     expect(minted).toMatch(/\S/)
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual([minted])
   })
 
@@ -465,7 +466,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
     })
 
-    const { doc } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { doc } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(readDocumentKind(doc)).toBe('spatial')
   })
 
@@ -543,7 +544,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       ops: [{ op: 'node.patch', id: 'a', patch: { label: 'not for a text node' } }],
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes[0]).not.toHaveProperty('label')
   })
 
@@ -585,7 +586,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(result.applied).toBe(2)
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.edges[0]).toMatchObject({ label: 'still editable' })
   })
 
@@ -612,7 +613,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(result.applied).toBe(2)
-    const { doc, canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { doc, canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(readEdgeLocks(doc).has('x')).toBe(true)
     expect(readNodeLocks(doc).has('x')).toBe(false)
     expect(canvas.nodes.find((n) => n.id === 'x')).toMatchObject({ x: 5 })
@@ -635,7 +636,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       ops: [{ op: 'node.lock', id: 'pinned', locked: true }, { op: 'tidy' }],
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.find((n) => n.id === 'pinned')).toMatchObject({ x: 0, y: 0 })
   })
 
@@ -658,7 +659,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(result.geometry.every((entry) => entry.id === 'b')).toBe(true)
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.find((n) => n.id === 'c')).toMatchObject({ x: 900, y: 900 })
   })
 

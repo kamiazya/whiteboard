@@ -1,5 +1,4 @@
 import type { LoroDoc } from 'loro-crdt'
-import { loadDocument, saveDocument } from './document-store.js'
 
 // key: "workspaceId/path"
 //
@@ -7,6 +6,11 @@ import { loadDocument, saveDocument } from './document-store.js'
 // documents or during long daemon uptime. One canvas can hold several MiB
 // of CRDT history, so cap the cache at 32 entries. This uses Map insertion order as
 // the minimal implementation with no extra dependency.
+//
+// This module imports nothing of its own: the store passes `getOrLoad` the
+// loader to call on a miss, rather than the cache reaching back into it.
+// That is what keeps `document-store.ts` — which must evict after operations
+// that replace on-disk state — free of an import cycle with this file.
 //
 // Caveat: WS handlers may keep live doc references. Evicting a canvas that still has
 // active connections could leave callers mutating an old doc instance. In practice,
@@ -27,29 +31,25 @@ function touch(key: string, doc: LoroDoc): void {
   }
 }
 
-export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc> {
+/**
+ * Read through the cache, calling `load` only on a miss. The loader is a
+ * parameter rather than an import so this module stays a leaf; see
+ * `getDoc` in document-store.ts for the one caller that supplies it.
+ */
+export async function getOrLoad(
+  workspaceId: string,
+  path: string,
+  load: () => Promise<LoroDoc>,
+): Promise<LoroDoc> {
   const key = `${workspaceId}/${path}`
   const existing = cache.get(key)
   if (existing) {
     touch(key, existing)
     return existing
   }
-  const doc = await loadDocument(workspaceId, path)
+  const doc = await load()
   touch(key, doc)
   return doc
-}
-
-export async function applyAndPersist(
-  workspaceId: string,
-  path: string,
-  updater: (doc: LoroDoc) => void,
-): Promise<Uint8Array> {
-  const doc = await getDoc(workspaceId, path)
-  const prevVV = doc.version()
-  updater(doc)
-  await saveDocument(workspaceId, path, doc, { overwrite: true })
-  // Return the incremental update that was applied so it can be broadcast over WS.
-  return doc.export({ mode: 'update', from: prevVV })
 }
 
 // Test helper: clear the cache.
@@ -60,7 +60,7 @@ export function clearCache(): void {
 // Evict a doc after operations such as compact or rename that replace on-disk state,
 // forcing the next getDoc call to reload it.
 // Callers already holding a live doc reference, such as WS handlers, do not get swapped
-// automatically. applyAndPersist is safe because it always calls getDoc first.
+// automatically. getDoc is safe because it always consults the cache first.
 export function evictDoc(workspaceId: string, path: string): void {
   cache.delete(`${workspaceId}/${path}`)
 }

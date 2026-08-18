@@ -10,8 +10,7 @@ import {
   setHead as setHeadPersist,
   updateBranchTip,
 } from './branches-store.js'
-import { getDoc } from './doc-cache.js'
-import { saveDocument } from './document-store.js'
+import { getDoc, saveDocument } from './document-store.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 

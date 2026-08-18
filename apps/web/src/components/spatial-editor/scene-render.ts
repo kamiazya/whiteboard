@@ -6,11 +6,7 @@
  */
 
 import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
-import {
-  layoutSpatialCanvas,
-  SPATIAL_THEME_GEOMETRY,
-  sceneBounds,
-} from '@kamiazya/whiteboard-canvas-render'
+import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
@@ -31,21 +27,19 @@ export interface RenderCanvasOptions {
 /**
  * The height a text node needs for its laid-out body, in canvas px.
  *
- * Measured by laying out the node ALONE with height 1: the shape chrome
- * always spans the stored height, so measuring at the real height could
- * never report "content is shorter than the box" — collapsing the box to
- * 1px makes the scene's bottom edge the CONTENT's bottom edge. Bottom
- * padding is added back so a grown box keeps the same breathing room the
- * layout gives the top.
+ * `naturalNodeContentSize` is canvas-render's own answer to "how big must
+ * this box be", so this is padding arithmetic and nothing else. It used to
+ * lay the node out at height 1 and read the scene's bottom edge, which
+ * worked only because a box that small cannot bound anything — layout could
+ * not tell this probe apart from a node someone really made 1px tall, so
+ * the escape hatch it needed stayed open for every tiny node as well.
  */
 export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
-  const probe: SpatialCanvas = { nodes: [{ ...node, height: 1 }], edges: [] }
-  const scene = layoutSpatialCanvas(probe, {
+  const content = naturalNodeContentSize(node, {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
   })
-  const bounds = sceneBounds(scene)
-  return bounds.y + bounds.h - node.y + SPATIAL_THEME_GEOMETRY.paddingPx
+  return content.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
 }
 
 export function renderCanvasToSvg(

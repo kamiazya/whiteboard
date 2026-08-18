@@ -28,6 +28,7 @@ import {
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
+import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -36,9 +37,10 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
+import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -336,21 +338,16 @@ export function DaemonDocumentPage({
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
 
-  // `[[Name]]` aliases resolve against the same list the user can see; the
-  // daemon summary carries no display name yet, so the path doubles as one.
+  // `[[Name]]` aliases resolve against the same list the user can see — by
+  // display name AND by path, since only the path is addressable and only
+  // the name is the user's own word for the document.
   const resolveAlias = useMemo(
-    () =>
-      createSnapshotAliasResolver(
-        controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
-      ),
+    () => createSnapshotAliasResolver(daemonLinkEntries(controller.documents)),
     [controller.documents],
   )
-  // The same list the alias resolver reads, carried with ids so the picker
-  // can fall back to one when a name is ambiguous.
-  const linkTargets = useMemo(
-    () => controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
-    [controller.documents],
-  )
+  // The same list, one row per document, carried with ids so the picker can
+  // fall back to one when a name is ambiguous.
+  const linkTargets = useMemo(() => daemonLinkTargets(controller.documents), [controller.documents])
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
@@ -394,20 +391,18 @@ export function DaemonDocumentPage({
   // re-reads reasoning as webMcpEnabled above).
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
+  // One shape for whichever kind this document is — the favicon draws
+  // it today, and a tree row's icon draws the same one.
+  const documentOutline = useDocumentOutline({
+    kind: documentKind,
+    canvas: canvasValue,
+    markdownBody,
+  })
+
   useFavicon({
     style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
-    rects: useMemo(
-      () =>
-        canvasValue.nodes.map((n) => ({
-          x: n.x,
-          y: n.y,
-          w: n.width,
-          h: n.height,
-          color: resolveRectColor(n.color),
-        })),
-      [canvasValue.nodes],
-    ),
+    rects: documentOutline,
   })
 
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
@@ -845,6 +840,7 @@ export function DaemonDocumentPage({
                     linkTargets={linkTargets}
                     onCommit={nodeInEditor.commit}
                     onClose={nodeInEditor.close}
+                    onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
                   />
                 )}
               </div>

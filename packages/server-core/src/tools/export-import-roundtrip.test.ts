@@ -3,12 +3,12 @@ import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whit
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { SnapshotNotFoundError } from './document-io.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'

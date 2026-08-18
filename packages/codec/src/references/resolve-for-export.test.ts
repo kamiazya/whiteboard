@@ -31,7 +31,7 @@ describe('resolveReferencesForExport', () => {
 
     const paragraph = exported.children[0]
     if (paragraph.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(paragraph.children).toEqual([{ type: 'text', value: `[[canvas:${ULID}]]` }])
+    expect(paragraph.children).toEqual([{ type: 'text', value: `[[${ULID}]]` }])
   })
 
   it('is idempotent: applying twice with the same resolver equals applying once', () => {

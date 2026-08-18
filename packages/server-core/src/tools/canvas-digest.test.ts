@@ -5,9 +5,9 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
-import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { createCanvasDigestTool } from './canvas-digest.js'
+import { SnapshotNotFoundError } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
