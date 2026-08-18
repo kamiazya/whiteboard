@@ -164,18 +164,36 @@ the wire format with it. User-visible UI copy still says "canvas" ("New
 canvas", "Canvas actions"): what the product calls a thing to its users is a
 product decision, not a code-vocabulary one, and this rule does not reach it.
 
-**A second one is open for a harder reason: the `docKey` prefix.**
-`docRefKey()` emits `canvas:<documentId>` while `DocRef.kind` is `document`,
-and the mismatch is deliberate. It stopped being an in-memory map key the
-moment the byte store moved into the database — it is now the `docKey` column
-of `documentSnapshots` / `documentSnapshotChunks` / `documentFrontiers` /
-`documentDeltas`. A one-shot migration cannot fix it either:
-`0011-import-fs-blobs` writes that prefix as a frozen literal, and
-`prepareDataDir` calls its import routine again on EVERY boot, so rewritten
-rows would be re-seeded under the old prefix on the next start. Moving it
-means moving that routine's literal in the same increment and deciding what a
-recorded migration may re-read. Renaming it as part of a sweep would have made
-every document imported by 0011 silently invisible.
+**The `docKey` prefix is DONE, and it is the worked example of a stored shape
+that needs more than a migration.** `docRefKey()` now emits
+`document:<documentId>`, and `0013-document-dockey-prefix` rewrites the
+`docKey` column of `documentSnapshots` / `documentSnapshotChunks` /
+`documentFrontiers` / `documentDeltas`. Three things it took, each of which a
+plain rename would have got wrong:
+
+- **A migration alone was not enough.** `prepareDataDir` runs migrations and
+  THEN re-invokes `importFsBlobs` on every boot, so that routine is the one
+  writer that can still land a row after the migration corrected every stored
+  key. Left on the old literal it would re-seed an orphan copy of every blob
+  the sweep had not yet removed — invisible to the read path and
+  indistinguishable from a clean boot. The prefix is now a PARAMETER:
+  `migration.up` passes the frozen `canvas:` it was recorded with, so a replay
+  reproduces its original rows, and the boot path passes the live one.
+  `sweepImportedFsBlobs` follows the live one too, since it verifies what the
+  boot import just wrote.
+- **`pragma defer_foreign_keys` does not rescue an in-place UPDATE here**, and
+  it fails in the most misleading way: it reads back as `1` and the UPDATE
+  still raises `FOREIGN KEY constraint failed`. The pragma only has effect
+  inside an explicit transaction, and kysely's Migrator does not open one, so
+  each statement commits on its own and takes the check with it. The fix is
+  structural — copy the rows under the new key, then delete the old parent and
+  let `on delete cascade` take its children — so every statement is valid on
+  its own regardless of transaction handling.
+- **The anchoring test was vacuous on the first try.** It seeded
+  `workspace-tree:has-canvas:inside` to prove the rewrite touches only the
+  prefix, but that key does not match the `like 'canvas:%'` filter at all, so
+  swapping `substr` for a blanket `REPLACE` left it green. A fixture for a SET
+  expression has to survive the WHERE clause first.
 
 **One container-noun use is still open, deliberately.** The wiki-link scheme
 `[[canvas:<ULID>]]` (`CANVAS_ID_PREFIX` in `codec/src/references/resolve.ts`,
