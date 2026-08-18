@@ -104,8 +104,46 @@ function emphasisAttrs(run: TextRunNode): string {
   return parts.length > 0 ? ` ${parts.join(' ')}` : ''
 }
 
+/**
+ * The id of the one shared truncation-fade mask. A document embedding several
+ * of these SVGs ends up with the id repeated, which is harmless precisely
+ * because every copy is byte-identical: `url(#…)` resolves to the first, and
+ * the first says the same thing as the rest.
+ */
+const FADE_MASK_ID = 'wb-truncation-fade'
+
+/**
+ * `maskContentUnits="objectBoundingBox"` is what makes ONE mask enough: its
+ * content is expressed in the 0..1 box of whatever element references it, so
+ * it scales to each run rather than needing a definition per run. Verified
+ * honoured by resvg (the PNG export path) as well as browsers — a fully black
+ * mask renders byte-identically to an empty canvas there.
+ */
+const FADE_DEFS =
+  `<defs><linearGradient id="${FADE_MASK_ID}-gradient" x1="0" y1="0" x2="1" y2="0">` +
+  '<stop offset="0.75" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/>' +
+  `</linearGradient><mask id="${FADE_MASK_ID}" maskContentUnits="objectBoundingBox">` +
+  `<rect x="0" y="0" width="1" height="1" fill="url(#${FADE_MASK_ID}-gradient)"/>` +
+  '</mask></defs>'
+
+/** Whether anything in the scene needs `FADE_DEFS`; nothing is emitted if not. */
+function hasTruncatedRun(nodes: readonly SceneNode[]): boolean {
+  const stack: SceneNode[] = [...nodes]
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    if (node.kind === 'textRun' && node.truncated === true) return true
+    for (const key of ['runs', 'children', 'items', 'rows', 'cells'] as const) {
+      const children = (node as unknown as Record<string, unknown>)[key]
+      if (Array.isArray(children)) stack.push(...(children as SceneNode[]))
+    }
+  }
+  return false
+}
+
 function renderTextRun(run: TextRunNode): string {
-  const appearance = withLeadingSpace(appearanceAttrs(run.appearance)) + emphasisAttrs(run)
+  const appearance =
+    withLeadingSpace(appearanceAttrs(run.appearance)) +
+    emphasisAttrs(run) +
+    (run.truncated === true ? ` mask="url(#${FADE_MASK_ID})"` : '')
   const position = `x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"`
   const body = escapeXmlText(run.text)
   const halo = run.appearance?.halo
@@ -434,9 +472,12 @@ function renderBackgroundRect(box: BoundingBox, background: string): string {
  */
 export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
   const body = scene.nodes.map(renderNode).join('')
+  // Presence-only, exactly like an absent appearance attribute: a scene with
+  // nothing truncated emits the same bytes it always has.
+  const defs = hasTruncatedRun(scene.nodes) ? FADE_DEFS : ''
 
   if (!hasEnvelopeOptions(options)) {
-    return `<svg xmlns="http://www.w3.org/2000/svg">${body}</svg>`
+    return `<svg xmlns="http://www.w3.org/2000/svg">${defs}${body}</svg>`
   }
 
   const viewBox = resolveViewBox(scene, options)
@@ -451,5 +492,5 @@ export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): st
       ? ` fill="${escapeXmlAttr(options.textFill)}"`
       : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}"${textFillAttr}>${background}${body}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}"${textFillAttr}>${defs}${background}${body}</svg>`
 }

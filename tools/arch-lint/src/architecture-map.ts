@@ -43,7 +43,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   },
   '@kamiazya/whiteboard-canvas-render': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
-    allowedThirdParty: ['zod'],
+    // css-line-break: deciding WHERE a line may break is this package's own
+    // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
+    // which is where Japanese kinsoku lives), not something to hand-roll from
+    // a character table. Pure and DOM-free, so it holds in Node, the browser
+    // and a worker alike — verified before adopting.
+    // BudouX (phrase boundaries for Japanese) is deliberately NOT here: it is
+    // vendored under src/vendor/budoux, because depending on it drags in
+    // linkedom and the native canvas package and breaks the published build.
+    allowedThirdParty: ['zod', 'css-line-break'],
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],

@@ -303,7 +303,7 @@ describe('layoutSpatialCanvas', () => {
       type: 'file',
       x: 0,
       y: 0,
-      width: 100,
+      width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'notes/a.md',
       subpath: '#heading',
@@ -320,7 +320,7 @@ describe('layoutSpatialCanvas', () => {
       type: 'file',
       x: 0,
       y: 0,
-      width: 100,
+      width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'opaque-id-123',
     }
@@ -357,7 +357,7 @@ describe('layoutSpatialCanvas', () => {
       type: 'file',
       x: 0,
       y: 0,
-      width: 100,
+      width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'dangling-id-123',
       subpath: '#heading',
@@ -399,7 +399,7 @@ describe('layoutSpatialCanvas', () => {
       type: 'link',
       x: 0,
       y: 0,
-      width: 100,
+      width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       url: 'https://example.com/page',
     }
