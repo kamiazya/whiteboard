@@ -61,7 +61,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
-describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)', () => {
+describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
     latestOnChange = null
@@ -167,7 +167,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
     expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
   })
 
-  it('persists an edit made immediately (within the 300ms debounce window) before switching to a new canvas', async () => {
+  it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
     const store = new IndexedDBStore()
     render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(

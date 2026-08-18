@@ -58,7 +58,7 @@ function stubFetch(onCreateDocument: (workspaceId: string, path: string) => void
   )
 }
 
-describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', () => {
+describe('DaemonIndexPage New canvas control (real Radix Tooltip)', () => {
   it('reveals the tooltip on real hover', async () => {
     stubFetch(() => {})
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
@@ -71,7 +71,7 @@ describe('DaemonIndexPage New canvas control (browser — real Radix Tooltip)', 
     await userEvent.unhover(button)
   })
 
-  it('reveals the tooltip on real keyboard focus, and Enter opens the kind menu whose entry creates', async () => {
+  it('reveals the tooltip on keyboard focus; Enter opens the kind menu', async () => {
     const created: Array<[string, string]> = []
     stubFetch((workspaceId, path) => created.push([workspaceId, path]))
     const onOpenDocument = vi.fn()

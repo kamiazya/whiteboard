@@ -93,6 +93,17 @@ pnpm run test:browser:trace  # same, with trace artifacts on failure
 
 - Failure traces are stored under `<package>/tmp/vitest-traces`.
 - Check traces before adding temporary debug code.
+- **Keep a browser test's `describe` + `it` titles under 155 characters
+  combined** (characters, not UTF-8 bytes: vitest replaces every
+  non-alphanumeric character with one ASCII `-` before the name reaches the
+  filesystem, so `導線` costs two, not six). vitest copies the trace into `.vitest-attachments/` under a name
+  flattened from its path, and past the filesystem's 255-byte limit that copy
+  throws `ENAMETOOLONG` during teardown — so vitest abandons the REST OF THE
+  FILE. Measured: one forced failure with a 194-char title reported
+  `1 failed | 2 passed (6)`, the same failure with a 58-char title reported
+  `1 failed | 5 passed (6)`. Three tests silently did not run, and the smaller
+  total reads like good news. `apps/web/src/browser-test-name-length.test.ts`
+  enforces the budget.
 - Remove temporary debug overlays, logging, and instrumentation before finishing.
 
 ## MCP Development Mode

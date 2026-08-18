@@ -49,26 +49,73 @@ describe('linkMarkupFor', () => {
     expect(linkMarkupFor(targets[0] as LinkTarget, targets)).toBe('[[Weekly review]]')
   })
 
+  it('carries a different display text as the alias', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'last week')).toBe(
+      '[[Weekly review|last week]]',
+    )
+  })
+
+  // The alias would be noise: it says exactly what the target already says.
+  it('omits an alias that matches the name', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'Weekly review')).toBe(
+      '[[Weekly review]]',
+    )
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, '  ')).toBe('[[Weekly review]]')
+  })
+
+  // The id form is unambiguous but unreadable on its own — the name it came
+  // from is exactly what the reader needs, and the codec's alias half is
+  // where it goes.
+  it('always names the id form, using the display text or the name', () => {
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets, 'the first one')).toBe(
+      '[[01JDUPE1|the first one]]',
+    )
+  })
+
+  // The codec's scanner stops at the FIRST `]` and matches only if it is
+  // doubled, so a single one is as fatal as `]]`: `[[A|Draft] x]]` never
+  // resolves at all, and `[[A|note]]]` truncates the alias and leaves a
+  // stray `]` in the body.
+  it.each([
+    ['a ]] b'],
+    ['Draft] proposal'],
+    ['note]'],
+    ['two\nlines'],
+  ])('drops an alias the reference scanner cannot read: %s', (alias) => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, alias)).toBe('[[Weekly review]]')
+  })
+
+  // `|` is fine there: the scanner is already past the target half.
+  it('keeps an alias containing a pipe', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a|b')).toBe('[[Weekly review|a|b]]')
+  })
+
   // The picker knows which one was chosen; the reader of `[[untitled]]`
-  // would not, and codec resolves an ambiguous alias to nothing.
+  // would not, and codec resolves an ambiguous alias to nothing. The name
+  // still travels, as the alias.
   it('falls back to the id when two documents share the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
   })
 
   // Every character sequence the codec's own reference parser would read as
   // something other than a plain name: `]]` closes the reference, a newline
   // cannot appear in an inline one, and `|` starts the alias half. The last
-  // one is a name shaped exactly like a document id — with the scheme gone,
-  // that IS the id syntax, so writing it as a name would link somewhere else
-  // entirely.
+  // one is a name shaped exactly like a document id — with no scheme in the
+  // syntax, that IS the id form, so writing it as a target would link
+  // somewhere else entirely.
   it.each([
     ['weird ]] name'],
+    ['single ] bracket'],
     ['two\nlines'],
     ['A|B'],
     ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
   ])('uses the id when the name cannot be written inside brackets: %s', (name) => {
     const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
-    expect(linkMarkupFor(odd, [odd])).toBe('[[01JODD]]')
+    // The name is unwritable as a TARGET, but the alias half is free text up
+    // to the closing bracket, so `|` and an id-shaped string are fine there.
+    const expected = /]|[\r\n]/.test(name) ? '[[01JODD]]' : `[[01JODD|${name}]]`
+    expect(linkMarkupFor(odd, [odd])).toBe(expected)
   })
 })
 

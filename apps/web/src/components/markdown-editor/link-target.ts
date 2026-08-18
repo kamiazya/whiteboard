@@ -38,25 +38,41 @@ export function rankLinkTargets(
 }
 
 /**
- * Names the codec's own reference parser would read as something other than a
- * plain name: `]]` closes the reference early, a line break cannot appear in
- * an inline one, and `|` begins the alias half (`[[target|alias]]`).
+ * Names the codec's own reference scanner would read as something other than
+ * a plain name.
+ *
+ * ANY `]` is fatal, not just `]]`: the scanner advances to the first `]` and
+ * accepts the reference only if the very next character is another one, so a
+ * single bracket either kills the whole reference or truncates it and leaves
+ * the remainder as literal text. A line break cannot appear in an inline
+ * reference, and `|` begins the alias half.
  */
-const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]/
+const UNWRITABLE_IN_BRACKETS = /[\]\r\n|]/
 
 /**
- * A name shaped exactly like a document id, which the parser reads as one
- * rather than as a name. Vanishingly unlikely for a human-typed title — a
- * canonical ULID is 26 characters of Crockford base32 — but the picker can
- * check it for free, and the alternative is a link that silently points at
- * whatever document carries that id.
+ * A name shaped exactly like a document id, which the scanner reads as one
+ * rather than as a name — the references syntax carries no scheme, so the id
+ * form IS a bare target. Vanishingly unlikely for a human-typed title (a
+ * canonical ULID is 26 characters of Crockford base32), but the picker can
+ * check it for free, and the alternative is a link pointing somewhere else
+ * entirely.
  */
 function readsAsDocumentId(name: string): boolean {
   return documentIdSchema.safeParse(name).success
 }
 
 /**
- * What to write in the body for a chosen target.
+ * What an ALIAS cannot contain. Shorter than the target's list — `|` and a
+ * document-id-shaped string are ordinary text once the target half is
+ * closed — but the bracket rule is the same and for the same reason: the
+ * scanner stops at
+ * the first `]` and requires the next character to be one too.
+ */
+const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
+
+/**
+ * What to write in the body for a chosen target, optionally displaying
+ * `text` instead of the target's own name.
  *
  * The readable form wins where it works, because the reference is prose the
  * author will read again — but `[[Name]]` resolves only when exactly one
@@ -65,14 +81,30 @@ function readsAsDocumentId(name: string): boolean {
  * picker is the one place that KNOWS which document was chosen, so it spends
  * that knowledge here: the opaque `[[<id>]]` form appears only when the
  * readable one would be wrong.
+ *
+ * That form is unambiguous and unreadable, so it always carries an alias —
+ * the display text if there is one, else the name it could not use as the
+ * target. A reader gets prose either way; only the resolution changes.
  */
-export function linkMarkupFor(target: LinkTarget, all: readonly LinkTarget[]): string {
+export function linkMarkupFor(
+  target: LinkTarget,
+  all: readonly LinkTarget[],
+  text?: string,
+): string {
+  const wanted = (text ?? '').trim()
+  const alias = wanted === '' || UNWRITABLE_AS_ALIAS.test(wanted) ? null : wanted
   const sameName = all.filter((candidate) => candidate.name === target.name)
-  const unambiguous =
+  const nameIsWritable =
     sameName.length === 1 &&
     !UNWRITABLE_IN_BRACKETS.test(target.name) &&
     !readsAsDocumentId(target.name)
-  return unambiguous ? `[[${target.name}]]` : `[[${target.id}]]`
+  if (nameIsWritable) {
+    return alias === null || alias === target.name
+      ? `[[${target.name}]]`
+      : `[[${target.name}|${alias}]]`
+  }
+  const fallbackAlias = alias ?? (UNWRITABLE_AS_ALIAS.test(target.name) ? null : target.name)
+  return fallbackAlias === null ? `[[${target.id}]]` : `[[${target.id}|${fallbackAlias}]]`
 }
 
 /**
