@@ -118,6 +118,23 @@ export function renderMarkdownPreview(
   return { svg, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
 }
 
+/**
+ * The rail's half of the render: block boxes and anchors, WITHOUT serializing
+ * an SVG nobody reads.
+ *
+ * The rail draws rectangles, so the SVG string is pure waste on that path —
+ * and it is paid per keystroke, in a worker, for a document that may be long.
+ * Sharing `layoutScene` keeps the shape identical to what the preview would
+ * paint; only the serialization is skipped.
+ */
+export function layoutMarkdownOutline(
+  value: string,
+  options: Omit<RenderMarkdownPreviewOptions, 'background'>,
+): Pick<RenderedMarkdownPreview, 'anchors' | 'blocks'> {
+  const scene = layoutScene(value, options)
+  return { anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+}
+
 /** Top-level block boxes, shifted onto the SVG's pixel origin like anchors. */
 function blockBoxes(scene: Scene): readonly RailBlock[] {
   if (scene.nodes.length === 0) return []

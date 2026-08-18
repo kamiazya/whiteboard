@@ -40,7 +40,17 @@ export function useMarkdownOutline(
   const [outline, setOutline] = useState<MarkdownOutline>(EMPTY)
 
   useEffect(() => {
-    if (!enabled || body.trim() === '' || !(maxWidth > 0)) return
+    if (!enabled || body.trim() === '' || !(maxWidth > 0)) {
+      // An empty document HAS a known shape — none — so say so rather than
+      // holding the last one. Retaining across a disable is what stops the
+      // rail blinking mid-edit; retaining across a CLEAR would draw a
+      // document that is no longer there.
+      // A functional update, and NOT `outline` in the deps: depending on the
+      // state this effect sets makes it re-run its own dispatch, cancelling
+      // and re-issuing a request on every reply.
+      if (body.trim() === '') setOutline((prev) => (prev === EMPTY ? prev : EMPTY))
+      return
+    }
     const pool = sharedLayoutWorkerPool()
     const id = nextLayoutRequestId()
     let live = true

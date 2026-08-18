@@ -112,10 +112,6 @@ export function createLayoutWorkerPool(options: {
   const size = Number.isFinite(options.size) ? Math.max(1, Math.floor(options.size)) : 1
   const slots: Slot[] = []
   const queue: Pending[] = []
-  // Cancelled ids whose worker has not replied yet. The reply still arrives —
-  // nothing can un-send a postMessage — and without this the slot would be
-  // freed by a message the pool no longer expects, or not at all.
-  const abandoned = new Set<number>()
   let disposed = false
 
   const settle = (slot: Slot, id: number, data: { id: number }) => {
@@ -125,12 +121,8 @@ export function createLayoutWorkerPool(options: {
     // `cancel` already freed the slot, so it is either idle or busy with a
     // NEWER request, and clearing it here would throw that one's pending
     // entry away and leave its caller waiting forever.
-    if (pending === null || pending.id !== id) {
-      abandoned.delete(id)
-      return
-    }
+    if (pending === null || pending.id !== id) return
     slot.busyWith = null
-    abandoned.delete(id)
     ;(pending.resolve as (value: unknown) => void)(data)
     pump()
   }
@@ -143,6 +135,14 @@ export function createLayoutWorkerPool(options: {
       worker.onerror = () => {
         const pending = slot.busyWith
         slot.busyWith = null
+        // A worker whose module failed to load fires this once and then never
+        // posts again. Leaving its slot in the pool makes it look available,
+        // and everything dispatched to it waits forever — permanently, since
+        // the shared pool is a per-tab singleton nothing disposes. Drop it
+        // and let spawn() make a replacement on the next dispatch.
+        const at = slots.indexOf(slot)
+        if (at !== -1) slots.splice(at, 1)
+        worker.terminate()
         pending?.reject(new Error('layout worker errored'))
         pump()
       }
@@ -214,10 +214,10 @@ export function createLayoutWorkerPool(options: {
       const slot = slots.find((candidate) => candidate.busyWith?.id === id)
       if (slot?.busyWith) {
         const pending = slot.busyWith
-        // The worker keeps the slot until its reply lands: terminating it to
+        // The worker keeps running the cancelled request: terminating it to
         // reclaim the slot sooner would throw away a warm font registration,
-        // which is the expensive part of starting one.
-        abandoned.add(id)
+        // which is the expensive part of starting one. Its late reply is
+        // dropped by settle()'s identity check.
         pending.reject(new Error(`layout request ${id} cancelled`))
         slot.busyWith = null
         // Freeing a slot means the queue may have work for it — and every

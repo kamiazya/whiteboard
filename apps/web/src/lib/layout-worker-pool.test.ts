@@ -347,6 +347,28 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  // A worker whose module failed to load fires onerror once and then never
+  // posts again. Leaving its slot in the pool makes it look available, and
+  // every request handed to it waits forever — permanently, since the shared
+  // pool is a per-tab singleton nothing disposes.
+  it('replaces a worker that errored instead of dispatching to it again', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    const doomed = pool.run({ id: 1 })
+    factory.live[0].onerror?.(new Event('error'))
+    await expect(doomed).rejects.toThrow()
+    expect(factory.live[0].terminated).toBe(true)
+
+    const next = pool.run({ id: 2 })
+    // A fresh worker, not the dead one.
+    expect(factory.live).toHaveLength(2)
+    expect(factory.live[1].sent).toEqual([2])
+    factory.live[1].reply(2, { ok: 'wanted' })
+    await expect(next).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
   it('rejects everything still pending when the pool is disposed', async () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })

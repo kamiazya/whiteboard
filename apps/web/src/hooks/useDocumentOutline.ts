@@ -11,7 +11,7 @@
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { outlineFromSpatial } from '../lib/document-outline.js'
-import type { FaviconRect } from '../lib/favicon.js'
+import { type FaviconRect, resolveRectColor } from '../lib/favicon.js'
 import { useMarkdownOutline } from './useMarkdownOutline.js'
 
 /**
@@ -39,5 +39,13 @@ export function useDocumentOutline({
     enabled: kind === 'markdown',
     maxWidth: OUTLINE_LAYOUT_WIDTH,
   })
-  return kind === 'markdown' ? markdown.blocks : spatial
+  // The same rect shape from both sources. A scene block has no colour of
+  // its own, and the favicon happens to default a missing one — so this is
+  // not a visible fix but a shape one: two producers of the same type that
+  // differ is how a later consumer, with no such default, gets a surprise.
+  const markdownRects = useMemo(
+    () => markdown.blocks.map((b) => ({ ...b, color: resolveRectColor(undefined) })),
+    [markdown.blocks],
+  )
+  return kind === 'markdown' ? markdownRects : spatial
 }

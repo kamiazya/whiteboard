@@ -29,7 +29,7 @@
 
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
-import { renderMarkdownPreview } from '../components/markdown-editor/render-preview.js'
+import { layoutMarkdownOutline } from '../components/markdown-editor/render-preview.js'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import {
   composeReferenceSeam,
@@ -64,7 +64,7 @@ self.onmessage = async (event: MessageEvent<LayoutRequest | MarkdownRailRequest>
         self.postMessage(failed)
         return
       }
-      const { blocks, anchors } = renderMarkdownPreview(request.body, {
+      const { blocks, anchors } = layoutMarkdownOutline(request.body, {
         measure,
         maxWidth: request.maxWidth,
       })

@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useDocumentOutline } from '../../hooks/useDocumentOutline.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
@@ -14,7 +14,10 @@ const LONG =
 // under real postMessage ordering is exactly what stranded this once.
 describe('the rail in write mode', () => {
   beforeEach(() => window.localStorage.setItem('whiteboard.markdown-view-mode', 'write'))
-  afterEach(() => window.localStorage.clear())
+  afterEach(() => {
+    window.localStorage.clear()
+    cleanup()
+  })
 
   it('lays the document out through the worker pool, with no preview mounted', async () => {
     const { container, rerender } = render(
@@ -99,6 +102,8 @@ function KeyedProbe({ body }: { body: string }) {
 // describes — the editor refuses to publish one that does not match, and a
 // timing test of that window would assert nothing, since the worker answers
 // either way. This pins the contract that guard depends on.
+afterEach(cleanup)
+
 describe('an outline says which text it describes', () => {
   it('carries the body it was computed for', async () => {
     const { getByTestId, rerender } = render(<KeyedProbe body={'# One\n\nProse.\n'} />)
@@ -114,6 +119,19 @@ describe('an outline says which text it describes', () => {
 })
 
 describe('a markdown document’s outline', () => {
+  // Retaining the last shape across a disable is what stops the rail
+  // blinking mid-edit. Retaining it across a CLEAR would draw a document
+  // that is no longer there.
+  it('is forgotten when the document is emptied', async () => {
+    const { getByTestId, rerender } = render(<OutlineProbe body={'# Title\n\nProse.\n'} />)
+    await waitFor(() => expect(getByTestId('outline-count').textContent).not.toBe('0'), {
+      timeout: 15_000,
+    })
+
+    rerender(<OutlineProbe body="" />)
+    await waitFor(() => expect(getByTestId('outline-count').textContent).toBe('0'))
+  })
+
   it('has a shape at all, which only a layout can give it', async () => {
     const { getByTestId } = render(<OutlineProbe body={'# Title\n\nSome prose.\n\n## Next\n'} />)
     await waitFor(() => expect(getByTestId('outline-count').textContent).not.toBe('0'), {
