@@ -479,3 +479,105 @@ describe('live-drag parity property (PBT)', () => {
     },
   )
 })
+
+/**
+ * The text node's vertical fit, stated as the three laws that fully describe
+ * it. Example tests pin one fixture each; these say what holds for ANY body
+ * in ANY box — which is the difference that matters here, because the first
+ * shape of this fix passed three examples while breaking two cases nobody
+ * had written an example for.
+ *
+ * `fullWidth` charges CJK a full em (the scoreboard's measurer, not
+ * `fake-measure.ts`'s uniform 0.6em) so a wrap is reachable at these widths.
+ */
+const fullWidth = createFakeMeasure(1)
+
+function parseParagraphs(text: string): MdastRoot {
+  return {
+    type: 'root',
+    children: text.split(/\n\s*\n/).map((para) => ({
+      type: 'paragraph',
+      children: [{ type: 'text', value: para }],
+    })),
+  }
+}
+
+const fitOptions = { measure: fullWidth, parseBody: parseParagraphs, appearance }
+const PADDING_PX = 8
+
+/** The laid-out blocks, i.e. everything the node paints that is not chrome. */
+function blocksOf(canvas: SpatialCanvas): ReadonlyArray<{ y: number; h: number }> {
+  return layoutSpatialCanvas(canvas, fitOptions)
+    .nodes.filter((entry) => entry.kind !== 'shape' && entry.kind !== 'edge')
+    .map((entry) => ({ y: entry.bbox.y, h: entry.bbox.h }))
+}
+
+function textNodeAt(width: number, height: number, text: string): SpatialCanvas {
+  return { nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width, height, text }], edges: [] }
+}
+
+/** Bodies that wrap and bodies that do not, in one to five blocks. */
+const bodyArb = fc
+  .array(fc.constantFrom('かあらた', 'かたそ', 'short', 'a longer english line'), {
+    minLength: 1,
+    maxLength: 5,
+  })
+  .map((paras) => paras.join('\n\n'))
+
+const widthArb = fc.integer({ min: 24, max: 200 })
+
+/**
+ * A fraction OF THE NATURAL CONTENT HEIGHT, never an absolute pixel range: a
+ * uniform height would almost always be roomy enough to fit everything and
+ * the properties would pass vacuously. Straddling 0..1.2 puts the generator
+ * on both sides of every block boundary, which is where the rule lives.
+ */
+const fractionArb = fc.integer({ min: 0, max: 120 }).map((n) => n / 100)
+
+/** What the body needs, measured the way the editor's grow probe measures. */
+function naturalHeight(width: number, text: string): number {
+  const blocks = blocksOf(textNodeAt(width, 1, text))
+  const bottom = Math.max(0, ...blocks.map((b) => b.y + b.h))
+  return Math.ceil(bottom + PADDING_PX)
+}
+
+describe('a text node fits its body to its own box (PBT)', () => {
+  fcTest.prop([widthArb, bodyArb, fractionArb], withDefaults())(
+    'at most one block may cross the content box, and only when none fit',
+    (width, text, fraction) => {
+      const height = Math.round(naturalHeight(width, text) * fraction)
+      const contentBottom = height - PADDING_PX
+      fc.pre(height - 2 * PADDING_PX > 0)
+
+      const crossing = blocksOf(textNodeAt(width, height, text)).filter(
+        (block) => block.y + block.h > contentBottom,
+      )
+
+      // Zero when something fits; exactly one — the first block, kept so the
+      // node never renders as an empty box — when nothing does.
+      expect(crossing.length).toBeLessThanOrEqual(1)
+    },
+  )
+
+  fcTest.prop([widthArb, bodyArb, fractionArb], withDefaults())(
+    'never renders a non-empty body as an empty box',
+    (width, text, fraction) => {
+      const height = Math.round(naturalHeight(width, text) * fraction)
+      fc.pre(height - 2 * PADDING_PX > 0)
+
+      expect(blocksOf(textNodeAt(width, height, text)).length).toBeGreaterThan(0)
+    },
+  )
+
+  fcTest.prop([widthArb, bodyArb], withDefaults())(
+    'a box with no room to fit against imposes no truncation, so the natural height stays measurable',
+    (width, text) => {
+      // The editor's grow-only auto-fit lays a node out at height 1 to read
+      // its natural content height. Truncating there caps what the probe can
+      // report and the box can never grow past one block.
+      expect(blocksOf(textNodeAt(width, 1, text)).length).toBe(
+        blocksOf(textNodeAt(width, 100_000, text)).length,
+      )
+    },
+  )
+})

@@ -651,3 +651,140 @@ describe('layoutSpatialEdges', () => {
     expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
   })
 })
+
+describe('a text node keeps its body inside its own box', () => {
+  // CJK is measured a full em wide, the way `text-wrapping-quality.test.ts`
+  // does: `fake-measure.ts`'s uniform 0.6em/char understates Japanese by
+  // ~40%, which is enough to hide the wrap that produces the extra line.
+  const fullWidth = createFakeMeasure(1)
+
+  // `fakeParseBody` above collapses a whole body into ONE paragraph, which
+  // cannot express the case: with a single block there is nothing for
+  // whole-block truncation to keep. Blank-line splitting is the minimal
+  // faithful model of what the real parser does to this text.
+  function parseParagraphs(text: string): MdastRoot {
+    return {
+      type: 'root',
+      children: text.split(/\n\s*\n/).map((para) => ({
+        type: 'paragraph',
+        children: [{ type: 'text', value: para }],
+      })),
+    }
+  }
+
+  /** Every laid-out run's bottom, in absolute scene coordinates. */
+  function runBottoms(scene: Scene): readonly number[] {
+    const out: number[] = []
+    const walk = (nodes: readonly unknown[]): void => {
+      for (const entry of nodes) {
+        const node = entry as {
+          kind: string
+          bbox?: { y: number; h: number }
+          runs?: readonly unknown[]
+          children?: readonly unknown[]
+        }
+        if (node.kind === 'textRun' && node.bbox) out.push(node.bbox.y + node.bbox.h)
+        walk(node.runs ?? node.children ?? [])
+      }
+    }
+    walk(scene.nodes)
+    return out
+  }
+
+  it('drops the blocks that do not fit rather than painting them below the frame', () => {
+    // A node small enough that its wrapped body needs more lines than the
+    // box has room for. Reported from the running app, where the last
+    // paragraph painted OUTSIDE the frame entirely.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 40,
+          y: 260,
+          width: 67,
+          height: 51,
+          text: 'かあらた\n\nかたそ',
+        },
+      ],
+      edges: [],
+    }
+
+    const scene = layoutSpatialCanvas(
+      canvas,
+      baseOptions({ measure: fullWidth, parseBody: parseParagraphs }),
+    )
+
+    // The padded content box is what the body has to live in — the same
+    // bound `fitBodyInNode` applies to the file-markdown and facet-card
+    // seams, which put mdast blocks in a node box exactly like this one.
+    const contentBottom = 260 + 51 - NODE_PADDING_PX
+    for (const bottom of runBottoms(scene)) {
+      expect(bottom).toBeLessThanOrEqual(contentBottom)
+    }
+  })
+
+  it('keeps one block even when the box has room for none', () => {
+    // A node one line tall is the COMMON shape, not a pathological one: at
+    // the default padding a 25px-high node leaves 9px of content box for a
+    // ~16px line. Dropping everything there erased the prose from an
+    // ordinary label-sized node — caught by the widget smoke, whose own
+    // fixture is exactly this.
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 25, text: '日本語ラベル' }],
+      edges: [],
+    }
+
+    const scene = layoutSpatialCanvas(
+      canvas,
+      baseOptions({ measure: fullWidth, parseBody: parseParagraphs }),
+    )
+
+    expect(runBottoms(scene).length).toBeGreaterThan(0)
+  })
+
+  it('does not truncate when the box gives no height to fit against', () => {
+    // The editor's grow-only auto-fit measures a text node's NATURAL content
+    // height by laying it out at height 1 and reading the scene's bottom
+    // edge. Truncating there caps what the probe can report, so a box can
+    // never grow past one block — which is how a fit meant to keep content
+    // inside the frame ends up DEFEATING the feature that keeps it inside
+    // the frame. Same reading `fitToWidth` gives an unusable maxWidth.
+    const probe: SpatialCanvas = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 1, text: 'かあらた\n\nかたそ' },
+      ],
+      edges: [],
+    }
+    const roomy: SpatialCanvas = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 400, text: 'かあらた\n\nかたそ' },
+      ],
+      edges: [],
+    }
+    const opts = baseOptions({ measure: fullWidth, parseBody: parseParagraphs })
+
+    // The degenerate probe must see every block a roomy box would.
+    expect(runBottoms(layoutSpatialCanvas(probe, opts)).length).toBe(
+      runBottoms(layoutSpatialCanvas(roomy, opts)).length,
+    )
+  })
+
+  it('still paints the blocks that do fit', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 51, text: 'かあらた\n\nかたそ' },
+      ],
+      edges: [],
+    }
+
+    const scene = layoutSpatialCanvas(
+      canvas,
+      baseOptions({ measure: fullWidth, parseBody: parseParagraphs }),
+    )
+
+    // Dropping the overflow must not be mistaken for dropping the body:
+    // the first paragraph fits and has to survive.
+    expect(runBottoms(scene).length).toBeGreaterThan(0)
+  })
+})

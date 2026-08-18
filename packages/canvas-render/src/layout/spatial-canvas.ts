@@ -356,6 +356,31 @@ function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[]
  * aborting the canvas — this is the layer's own totality addition on top
  * of canvas-render's already-total layout functions.
  */
+/**
+ * The text node's own fit: the blocks that fit, but never fewer than one.
+ *
+ * A text node has no lower-ranked rendering to degrade to, so dropping
+ * everything erases the user's own prose — and the box that keeps nothing is
+ * not the pathological one, it is a node one line tall: at the default
+ * padding a 25px-high node leaves 9px of content box for a ~16px line. That
+ * is the same reasoning as `fitToWidth` never returning the empty string,
+ * applied to the other axis. The block that stays squeezes the padding rather
+ * than leaving the FRAME, which is the bound this whole fit exists to keep.
+ *
+ * The sibling seams keep `fitSceneInNode`'s `undefined` because they DO have
+ * somewhere better to go — the plain chrome-and-label rendering.
+ */
+function fitTextBody(scene: Scene, node: SpatialNode, options: ResolvedLayoutOptions): Scene {
+  // A non-positive content box is "no height to fit against", the same
+  // reading `fitToWidth` gives an unusable `maxWidth`. It is not a
+  // hypothetical: the editor's grow-only auto-fit measures a node's NATURAL
+  // content height by laying it out at height 1 and reading the scene's
+  // bottom edge, so a truncation here would cap what that probe can report
+  // and the box could never grow past one block.
+  if (contentBox(node, options) === undefined) return scene
+  return fitSceneInNode(scene, node, options) ?? { nodes: scene.nodes.slice(0, 1) }
+}
+
 function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
   options: ResolvedLayoutOptions,
@@ -363,11 +388,11 @@ function composeTextNode(
   const maxWidth = contentWidth(node.width, options)
   let body: Scene
   try {
-    const mdast = options.parseBody(node.text)
-    body = layoutMdastBlocks(mdast, mdastOptionsFor(maxWidth, options))
+    const laid = layoutMdastBlocks(options.parseBody(node.text), mdastOptionsFor(maxWidth, options))
+    body = fitTextBody(laid, node, options)
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-    body = { nodes: [labelRun(node.text, options, maxWidth)] }
+    body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
   }
   return [chromeShape(node, options), ...placeInNode(node, body, options)]
 }
@@ -494,24 +519,50 @@ function composeFileImage(
  * pure-geometry package cannot own. Upgrade path is an editor-side overlay,
  * not a scene node here.
  */
+function contentBox(
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): { readonly w: number; readonly h: number } | undefined {
+  const padding = options.geometry.paddingPx
+  const w = node.width - 2 * padding
+  const h = node.height - 2 * padding
+  return w > 0 && h > 0 ? { w, h } : undefined
+}
+
+/**
+ * Keeps the top prefix of an already-laid-out scene that fits a node's
+ * padded content box, in content-relative coordinates.
+ *
+ * The single place the box's HEIGHT is enforced, so every seam that puts
+ * content in a node box answers to the same bound — the "one producer per
+ * geometry" rule. A seam that lays content out and places it without
+ * passing through here paints outside the frame, which is a rendering
+ * defect this package's "what cannot fit is cut" contract forbids.
+ */
+function fitSceneInNode(
+  scene: Scene,
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): Scene | undefined {
+  const box = contentBox(node, options)
+  if (box === undefined) return undefined
+
+  // Neither producer emits an edge (the one SceneNode variant with no
+  // `bbox`); that guard is for the type checker, not runtime.
+  const fitted = scene.nodes.filter(
+    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= box.h,
+  )
+  return fitted.length === 0 ? undefined : { nodes: fitted }
+}
+
 function fitBodyInNode(
   node: SpatialNode,
   root: MdastRoot,
   options: ResolvedLayoutOptions,
 ): Scene | undefined {
-  const padding = options.geometry.paddingPx
-  const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding
-  if (!(innerW > 0) || !(innerH > 0)) return undefined
-
+  if (contentBox(node, options) === undefined) return undefined
   const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
-
-  // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
-  // no `bbox`); that guard is for the type checker, not runtime.
-  const fitted = body.nodes.filter(
-    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
-  )
-  return fitted.length === 0 ? undefined : { nodes: fitted }
+  return fitSceneInNode(body, node, options)
 }
 
 /**
