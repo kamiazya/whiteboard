@@ -7,6 +7,8 @@ import {
   type Extension,
   Prec,
   type StateCommand,
+  StateEffect,
+  StateField,
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -45,6 +47,34 @@ function wrapSelectionWith(open: string, close: string = open): StateCommand {
     return true
   }
 }
+
+/**
+ * The range a surface that ASKS the user something (the link picker) will
+ * write to when it finally commits.
+ *
+ * It has to be a `StateField` rather than a remembered pair of offsets: the
+ * dialog is not modal, so the document can change under it, and text typed
+ * BEFORE the range shifts every later position. CodeMirror maps positions
+ * through a change set for exactly this, so the pin travels with the text it
+ * points at instead of pointing at whatever now occupies those offsets.
+ *
+ * Bias points INWARD at both ends (`1` at the start, `-1` at the end) so an
+ * insertion at either boundary stays OUTSIDE the pinned range: text typed
+ * immediately before the word must not become part of what the link
+ * replaces. The outward-looking pair is the intuitive choice and is wrong —
+ * `mapPos(from, -1)` keeps the start before an insertion at that offset, so
+ * the range swallows it.
+ */
+const setPinnedRange = StateEffect.define<{ from: number; to: number } | null>()
+
+const pinnedRange = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setPinnedRange)) return effect.value
+    if (value === null) return null
+    return { from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) }
+  },
+})
 
 /**
  * Shared with the spatial node editor (markdown-editor and spatial-editor
@@ -106,6 +136,19 @@ export interface SourcePaneApi {
   run: (command: StateCommand) => void
   /** Heading level of the line the caret sits on; 0 for body text. */
   headingLevel: () => number
+  /**
+   * Pins the range an inline verb would act on — the selection, else the
+   * caret's word — and answers the text it holds.
+   *
+   * For a surface that commits LATER (the link picker): the caret can move
+   * and the document can change under a non-modal dialog, and the range the
+   * user was shown must still be the range that gets written.
+   */
+  pinScope: () => { text: string }
+  /** Replaces the pinned range with `markup` and clears the pin. */
+  replacePinned: (markup: string) => void
+  /** Drops the pin without writing anything. */
+  clearPin: () => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -186,6 +229,7 @@ export function SourcePane({
         // an escaped-source placeholder anyway (see render-preview.ts), so
         // there is nothing yet for a source-side math grammar to agree with.
         markdown({ extensions: [GFM] }),
+        pinnedRange,
         // Above the language keymap's own Enter (`markdown()` registers
         // lang-markdown's auto-continuation at high precedence): Enter on
         // an EMPTY list item must delete the marker, not march it down
@@ -248,6 +292,26 @@ export function SourcePane({
           view.focus()
         },
         headingLevel: () => headingLevelAt(view.state),
+        pinScope: () => {
+          const scope = rangeToActOn(view.state)
+          view.dispatch({ effects: setPinnedRange.of(scope) })
+          return { text: view.state.doc.sliceString(scope.from, scope.to) }
+        },
+        replacePinned: (markup) => {
+          const pin = view.state.field(pinnedRange)
+          if (pin === null) return
+          view.dispatch({
+            changes: { from: pin.from, to: pin.to, insert: markup },
+            selection: { anchor: pin.from + markup.length },
+            effects: setPinnedRange.of(null),
+            scrollIntoView: true,
+            userEvent: 'input',
+          })
+          view.focus()
+        },
+        clearPin: () => {
+          view.dispatch({ effects: setPinnedRange.of(null) })
+        },
         focus: () => view.focus(),
         topVisibleLine: () => {
           const scrollTop = view.scrollDOM.scrollTop

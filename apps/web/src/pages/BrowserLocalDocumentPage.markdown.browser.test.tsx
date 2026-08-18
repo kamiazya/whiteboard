@@ -441,6 +441,45 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     expect(spatialMounts).toBeGreaterThan(before)
   })
 
+  // The picker is only useful if the PAGE hands it the document list it
+  // already holds. Nothing else fails when that one prop stops being passed:
+  // `linkTargets` is optional, so the verb quietly degrades to its bracket
+  // wrap while typecheck and every component test stay green.
+  it("offers the page's own documents to the link picker", async () => {
+    const store = new IndexedDBStore()
+    await store.save({
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FBB',
+      name: 'Neighbour note',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'markdown' as const,
+    })
+    const HERE = '01BX5ZZKBKACTAV9WEVGEMMVAA'
+    await store.save({
+      id: HERE,
+      name: 'This note',
+      updatedAt: '2026-05-24T00:00:01.000Z',
+      kind: 'markdown' as const,
+    })
+    await store.setDefaultDocumentId(HERE)
+    render(<BrowserLocalDocumentPage store={store} />)
+
+    const editable = await waitFor(
+      () => {
+        const el = document.querySelector('[contenteditable="true"]')
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 10_000 },
+    )
+    editable.focus()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Editing actions' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Link' }))
+
+    const picker = await screen.findByTestId('link-picker')
+    expect(picker.textContent).toContain('Neighbour note')
+  })
+
   it('a [[Name]] wikiLink resolves against the canvas list and clicking it opens that note', async () => {
     const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
     const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'

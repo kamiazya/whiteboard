@@ -34,6 +34,7 @@ export interface MarkdownDocumentSession
     | 'theme'
     | 'meta'
     | 'resolveAlias'
+    | 'linkTargets'
     | 'onOpenDocument'
     | 'resolveEmbed'
     | 'autoFocus'

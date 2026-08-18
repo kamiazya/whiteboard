@@ -38,6 +38,10 @@ const MODE_OPTIONS: readonly ModeOption[] = [
  * thing: **how this document is shown** (word count + view mode), plus the
  * doorway to everything that CHANGES the document.
  *
+ * The doorway's name is "Editing actions" rather than the generic "More
+ * actions" the app shell's own ⋯ uses: two controls with the same accessible
+ * name on one screen are indistinguishable to anyone reading it aloud.
+ *
  * Formatting buttons used to sit here and no longer do. They were redundant
  * for the audience that could reach them (⌘B already exists) and out of
  * reach for the one that needed them — a 28px target at the top edge is the
@@ -96,7 +100,7 @@ export function EditorToolbar({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="More actions"
+                aria-label="Editing actions"
                 aria-haspopup="menu"
                 data-testid="editor-catalog-trigger"
                 // Keep focus (and therefore the caret) in the source pane: the
@@ -112,7 +116,7 @@ export function EditorToolbar({
                 <MoreHorizontal aria-hidden className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>More actions</TooltipContent>
+            <TooltipContent>Editing actions</TooltipContent>
           </Tooltip>
         )}
       </div>
