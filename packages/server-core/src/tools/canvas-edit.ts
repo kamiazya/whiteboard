@@ -67,13 +67,27 @@ class CanvasEditError extends Error {
 // id and the four geometry fields become optional; `type` stays required
 // because it is the discriminator, and the per-type content fields stay
 // required because there is no sensible default for a link with no url.
-const DRAFT_OPTIONAL = { id: true, x: true, y: true, width: true, height: true } as const
+const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
+const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
 const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
 const nodeDraftSchema = z.discriminatedUnion('type', [
   textOption.partial(DRAFT_OPTIONAL),
   fileOption.partial(DRAFT_OPTIONAL),
   linkOption.partial(DRAFT_OPTIONAL),
   groupOption.partial(DRAFT_OPTIONAL),
+])
+
+/**
+ * A node as `region.set` declares it: geometry still optional, but the id is
+ * REQUIRED. Reconciliation is matching by id — a declared node with no id
+ * could only ever be a create, which is `node.add`'s job, and would make the
+ * op non-idempotent.
+ */
+const regionNodeSchema = z.discriminatedUnion('type', [
+  textOption.partial(GEOMETRY_OPTIONAL),
+  fileOption.partial(GEOMETRY_OPTIONAL),
+  linkOption.partial(GEOMETRY_OPTIONAL),
+  groupOption.partial(GEOMETRY_OPTIONAL),
 ])
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
@@ -131,6 +145,29 @@ const canvasOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('node.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
   z.object({ op: z.literal('edge.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
   z.object({ op: z.literal('tidy'), scope: z.array(nodeIdSchema).min(1).optional() }).strict(),
+  /**
+   * "This group should look like this." The ONE declarative op, and so the
+   * only one that deletes something it was not told about.
+   *
+   * Scope is STRICT containment in `within`'s stored box. That rule is what
+   * makes the boundary safe rather than a judgement call: a node straddling
+   * the edge — a human mid-drag — is not enclosed, so it is out of scope and
+   * survives. Edges follow the same rule: in scope only when BOTH endpoints
+   * are.
+   *
+   * A declared node that already exists is MERGED, not replaced, so omitting
+   * geometry leaves it where it is and re-applying the same region is a
+   * no-op. The cost of that choice is that this op cannot clear a field;
+   * use `node.patch` for that.
+   */
+  z
+    .object({
+      op: z.literal('region.set'),
+      within: nodeIdSchema,
+      nodes: z.array(regionNodeSchema),
+      edges: z.array(canvasEdgeSchema),
+    })
+    .strict(),
 ])
 
 /**
@@ -275,6 +312,39 @@ class PlacementCursor {
     }
     return at
   }
+}
+
+/**
+ * Lays coordinate-less nodes out INSIDE a box, wrapping at its right edge.
+ *
+ * `region.set` cannot use the board-level cursor: that one places below all
+ * existing content, which for a region op lands the node outside the very
+ * region it was declared in — and therefore out of scope on the next call,
+ * so the op would not be idempotent.
+ *
+ * ponytail: rows from the box's top-left, and a node wider than the box
+ * overflows it rather than being shrunk. Pack properly if regions turn out to
+ * be used for dense layouts.
+ */
+function placeWithin(
+  box: { x: number; y: number; width: number; height: number },
+  sizes: readonly { width: number; height: number }[],
+): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = []
+  let x = box.x + PLACEMENT_GUTTER_PX
+  let y = box.y + PLACEMENT_GUTTER_PX
+  let rowHeight = 0
+  for (const size of sizes) {
+    if (x !== box.x + PLACEMENT_GUTTER_PX && x + size.width > box.x + box.width) {
+      x = box.x + PLACEMENT_GUTTER_PX
+      y += rowHeight + PLACEMENT_GUTTER_PX
+      rowHeight = 0
+    }
+    out.push({ x, y })
+    x += size.width + PLACEMENT_GUTTER_PX
+    rowHeight = Math.max(rowHeight, size.height)
+  }
+  return out
 }
 
 function mintId(taken: ReadonlySet<string>, prefix: string): string {
@@ -475,6 +545,134 @@ export function createCanvasEditTool(deps: ServerDeps) {
             if (op.locked) edgeLocks.add(op.id)
             else edgeLocks.delete(op.id)
             touchedEdges.add(op.id)
+            return
+          }
+
+          case 'region.set': {
+            const group = nodeAt(op.within)
+            if (group === undefined || group.type !== 'group') {
+              fail(
+                index,
+                op.op,
+                `"${op.within}" is not a group on the canvas; region.set needs one to bound the region`,
+              )
+            }
+            const bounds = group
+            const encloses = (node: SpatialNode): boolean =>
+              node.id !== bounds.id &&
+              node.x >= bounds.x &&
+              node.y >= bounds.y &&
+              node.x + node.width <= bounds.x + bounds.width &&
+              node.y + node.height <= bounds.y + bounds.height
+
+            const inScope = nodes.filter(encloses)
+            const inScopeIds = new Set(inScope.map((node) => node.id))
+            const inScopeEdges = edges.filter(
+              (edge) => inScopeIds.has(edge.fromNode) && inScopeIds.has(edge.toNode),
+            )
+            // Refused up front, before anything is removed: this op deletes by
+            // OMISSION, and silently dropping a locked element would be the
+            // worst possible reading of that.
+            for (const node of inScope) {
+              if (nodeLocks.has(node.id)) {
+                fail(index, op.op, `node "${node.id}" inside the region is locked`)
+              }
+            }
+            for (const edge of inScopeEdges) {
+              if (edgeLocks.has(edge.id)) {
+                fail(index, op.op, `edge "${edge.id}" inside the region is locked`)
+              }
+            }
+
+            const declaredNodes = new Set(op.nodes.map((node) => node.id))
+            const declaredEdges = new Set(op.edges.map((edge) => edge.id))
+            const dropped = inScope.filter((node) => !declaredNodes.has(node.id))
+            const droppedIds = new Set(dropped.map((node) => node.id))
+            for (const node of dropped) {
+              touchedNodes.add(node.id)
+              nodeLocks.delete(node.id)
+            }
+            // An edge goes if it was in scope and undeclared, OR if either
+            // endpoint just went — a dangling edge stores a canvas the next
+            // read refuses.
+            for (const edge of edges) {
+              const strandedBy = droppedIds.has(edge.fromNode) || droppedIds.has(edge.toNode)
+              const undeclaredInRegion =
+                inScopeEdges.some((candidate) => candidate.id === edge.id) &&
+                !declaredEdges.has(edge.id)
+              if (strandedBy || undeclaredInRegion) {
+                touchedEdges.add(edge.id)
+                edgeLocks.delete(edge.id)
+              }
+            }
+            nodes = nodes.filter((node) => !droppedIds.has(node.id))
+            edges = edges.filter((edge) => !touchedEdges.has(edge.id) || declaredEdges.has(edge.id))
+
+            // Placement for the declared nodes that carry no position, all at
+            // once so they tile rather than stack.
+            const needPlacing = op.nodes.filter(
+              (node) =>
+                nodeAt(node.id) === undefined && (node.x === undefined || node.y === undefined),
+            )
+            const placements = placeWithin(
+              bounds,
+              needPlacing.map((node) => ({
+                width: node.width ?? DEFAULT_SIZE[node.type].width,
+                height: node.height ?? DEFAULT_SIZE[node.type].height,
+              })),
+            )
+            const placementFor = new Map(
+              needPlacing.map((node, at) => [node.id, placements[at]] as const),
+            )
+
+            for (const declared of op.nodes) {
+              const existing = nodeAt(declared.id)
+              const size = DEFAULT_SIZE[declared.type]
+              const width = declared.width ?? existing?.width ?? size.width
+              const height = declared.height ?? existing?.height ?? size.height
+              const placed = placementFor.get(declared.id)
+              const at =
+                declared.x !== undefined && declared.y !== undefined
+                  ? { x: declared.x, y: declared.y }
+                  : existing !== undefined
+                    ? { x: existing.x, y: existing.y }
+                    : (placed ?? { x: bounds.x, y: bounds.y })
+              // MERGED over what is already there, not replaced: that is what
+              // makes re-applying the same region a no-op.
+              const parsed = spatialNodeSchema.safeParse({
+                ...(existing ?? {}),
+                ...declared,
+                ...at,
+                width,
+                height,
+              })
+              if (!parsed.success) fail(index, op.op, issues(parsed.error))
+              const next = parsed.data
+              nodes =
+                existing === undefined
+                  ? [...nodes, next]
+                  : nodes.map((node) => (node.id === declared.id ? next : node))
+              touchedNodes.add(declared.id)
+              if (placed !== undefined) {
+                geometry.set(declared.id, { id: declared.id, ...placed, width, height })
+              }
+            }
+
+            for (const declared of op.edges) {
+              for (const endpoint of [declared.fromNode, declared.toNode]) {
+                if (nodeAt(endpoint) === undefined) {
+                  fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
+                }
+              }
+              const parsed = canvasEdgeSchema.safeParse(declared)
+              if (!parsed.success) fail(index, op.op, issues(parsed.error))
+              const next = parsed.data
+              edges =
+                edgeAt(declared.id) === undefined
+                  ? [...edges, next]
+                  : edges.map((edge) => (edge.id === declared.id ? next : edge))
+              touchedEdges.add(declared.id)
+            }
             return
           }
 

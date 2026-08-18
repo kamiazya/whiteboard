@@ -163,9 +163,29 @@ express a partial edit to an existing board, so a second tool would have been
 needed anyway.
 
 **Region-scoped declarative op** (`{ op: "region.set", within, nodes, edges }` —
-"this group should look like this"). Not rejected, deferred: it is the only op
-that deletes what it was not told about, and the boundary question (what if a
-human is mid-drag across the group edge?) deserves its own increment.
+"this group should look like this"). Deferred at first and now SHIPPED, because
+the boundary question that deferred it turned out to answer itself.
+
+Scope is STRICT containment in `within`'s stored box. A node straddling the
+group's edge is not enclosed, so it is out of scope and survives untouched —
+which is exactly the human-mid-drag case, handled by the scope rule rather
+than by special-casing it. Edges follow the same rule: in scope only when both
+endpoints are, so an edge leaving the region is never collateral.
+
+Two further rules keep it usable:
+
+- **A declared node that already exists is MERGED, not replaced.** Omitting
+  geometry leaves it where it is, which is what makes re-applying the same
+  region a no-op. The cost is that the op cannot clear a field; `node.patch`
+  can.
+- **A locked element anywhere in the region refuses the whole batch, up
+  front.** This op deletes by omission, and silently dropping a locked node
+  would be the worst possible reading of that.
+
+Coordinate-less declared nodes are placed INSIDE the group rather than through
+the board-level cursor, which places below all existing content — that would
+land a node outside the region it was declared in, and therefore out of scope
+on the next call, breaking idempotence.
 
 **Keeping `wb_canvas_tidy` as a standalone tool.** It is the most likely one-shot
 call and the only pre-existing declarative-ish tool. Retired anyway: a special
