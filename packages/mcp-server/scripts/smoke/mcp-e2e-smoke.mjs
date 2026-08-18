@@ -133,6 +133,7 @@ const WORKSPACE_ID = 'e2e'
 
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
 const EXPECTED_TOOLS = [
+  'wb_viewport_set',
   'wb_body_patch',
   'wb_scene_digest',
   'wb_canvas_snapshot',
@@ -491,6 +492,21 @@ async function main() {
     throw new Error('wb_canvas_edit persisted the first op of a batch it rejected')
   }
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
+
+  // wb_viewport_set with nobody watching. This smoke runs headless, so
+  // delivered:false IS the success path — the point is that asking a
+  // browser to look somewhere does not FAIL when there is no browser, which
+  // is what would make every headless agent run look broken.
+  const viewport = await callTool('wb_viewport_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'fit',
+    elementIds: ['lockable'],
+  })
+  if (viewport.documentId !== documentId || viewport.delivered !== false) {
+    throw new Error(`wb_viewport_set returned unexpected shape: ${JSON.stringify(viewport)}`)
+  }
+  console.log('[e2e] wb_viewport_set → delivered:false with no browser attached (not an error)')
 
   // The tidy op: what this asserts is the full pipeline (input parse → doc
   // load → tidy → structuredContent vs outputSchema), which is the drift

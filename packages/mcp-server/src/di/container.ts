@@ -1,6 +1,12 @@
-import { TOKENS } from '@kamiazya/whiteboard-ports'
+import {
+  type BlobStore,
+  type DocumentIndex,
+  type DocumentStore,
+  TOKENS,
+} from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
+import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
@@ -16,9 +22,18 @@ export function createContainer(storeModule: ContainerModule = storeMemoryModule
  * of letting a missing binding silently produce undefined deps.
  */
 export function resolveServerDeps(container: Container): ServerDeps {
+  // Order matters to container.test.ts, which asserts the not-bound error
+  // names DocumentStore — the first token resolved.
+  const documentStore: DocumentStore = container.get(TOKENS.DocumentStore)
+  const blobStore: BlobStore = container.get(TOKENS.BlobStore)
+  const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
   return {
-    documentStore: container.get(TOKENS.DocumentStore),
-    blobStore: container.get(TOKENS.BlobStore),
-    documentIndex: container.get(TOKENS.DocumentIndex),
+    documentStore,
+    blobStore,
+    documentIndex,
+    // Wired here rather than bound as a port: it is a bridge onto this
+    // package's own WebSocket routes, not an interchangeable implementation
+    // anyone would swap.
+    clientNotifier: createCanvasClientNotifier(documentIndex),
   }
 }

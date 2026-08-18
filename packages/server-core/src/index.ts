@@ -1,7 +1,12 @@
 export { createServer } from './create-server.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
-export type { ServerDeps } from './server-deps.js'
+export type {
+  AgentActivity,
+  CanvasClientNotifier,
+  ServerDeps,
+  ViewportRequest,
+} from './server-deps.js'
 export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
 export {
   bodyPatchInputSchema,

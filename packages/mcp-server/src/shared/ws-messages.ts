@@ -39,6 +39,30 @@ export const restoreCompleteMessageSchema = z.object({
   type: z.literal('restore_complete'),
 })
 
+/**
+ * What an agent just did to this document, for a human watching it.
+ *
+ * Emitted once per applied `wb_canvas_edit` batch — not as a begin/end pair.
+ * A batch is atomic and lands in milliseconds, so a paired form would only
+ * flicker, and an `end` lost to a dropped socket would strand the indicator
+ * on forever. Presence is instead the client's job: hold "an agent is
+ * editing" for a few seconds after the last of these and let it lapse.
+ *
+ * Never cached for replay (unlike `viewport_request`): this is news, and a
+ * tab that connects later should not be told about an edit it already has.
+ */
+export const agentActivityMessageSchema = z.object({
+  type: z.literal('agent_activity'),
+  operator: operatorInfoSchema,
+  /** What to highlight. Ids only — the change itself arrives as a Loro update. */
+  touched: z.object({
+    nodes: z.array(z.string()),
+    edges: z.array(z.string()),
+  }),
+  /** One short line for a toast, e.g. "added 5, tidied the layout". */
+  summary: z.string(),
+})
+
 export const viewportRequestMessageSchema = z.object({
   type: z.literal('viewport_request'),
   requestId: z.string(),
@@ -77,6 +101,7 @@ export const serverTextMessageSchema = z.discriminatedUnion('type', [
   restoreCompleteMessageSchema,
   viewportRequestMessageSchema,
   exportRequestMessageSchema,
+  agentActivityMessageSchema,
 ])
 
 export type VersionCreatedPayload = z.infer<typeof versionCreatedPayloadSchema>
@@ -85,6 +110,7 @@ export type HeadChangedMessage = z.infer<typeof headChangedMessageSchema>
 export type RestoreStartedMessage = z.infer<typeof restoreStartedMessageSchema>
 export type RestoreCompleteMessage = z.infer<typeof restoreCompleteMessageSchema>
 export type ViewportRequestMessage = z.infer<typeof viewportRequestMessageSchema>
+export type AgentActivityMessage = z.infer<typeof agentActivityMessageSchema>
 export type ExportRequestMessage = z.infer<typeof exportRequestMessageSchema>
 export type ServerTextMessage = z.infer<typeof serverTextMessageSchema>
 
