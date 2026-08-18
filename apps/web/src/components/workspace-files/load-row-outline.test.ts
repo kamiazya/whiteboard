@@ -1,3 +1,5 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { createRowOutlineLoader } from './load-row-outline.js'
 
@@ -46,6 +48,66 @@ describe('createRowOutlineLoader', () => {
     // The path is the address a snapshot is served at; the id is what the
     // OKF read takes. Swapping them 404s.
     expect(seen).toEqual(['snapshot:a/b', 'okf:c2'])
+  })
+
+  // The branch that actually produces a miniature. Every other test here
+  // feeds an empty body or a failing read, so none of them reached it — a
+  // mutation replacing this branch with `return null` left the suite green.
+  it('lays a markdown body out and answers its blocks', async () => {
+    const blocks = [
+      { x: 0, y: 0, w: 300, h: 32 },
+      { x: 0, y: 40, w: 460, h: 48 },
+    ]
+    const widths: number[] = []
+    const layoutMarkdown = async (_body: string, maxWidth: number) => {
+      widths.push(maxWidth)
+      return blocks
+    }
+    const load = createRowOutlineLoader({
+      ...base,
+      getSnapshot: async () => new Uint8Array(),
+      getOkf: async () => ({ markdown: '# Title\n\nProse.\n' }),
+      layoutMarkdown,
+    })
+
+    await expect(load(markdown)).resolves.toEqual(blocks)
+    // The width is fixed rather than measured: an icon has no pane, and a
+    // shape that changed with the window would differ between two screens.
+    expect(widths).toEqual([640])
+  })
+
+  it('answers null when the layout refuses', async () => {
+    const load = createRowOutlineLoader({
+      ...base,
+      getSnapshot: async () => new Uint8Array(),
+      getOkf: async () => ({ markdown: '# Title\n' }),
+      layoutMarkdown: async () => null,
+    })
+    await expect(load(markdown)).resolves.toBeNull()
+  })
+
+  // The spatial branch's own success path: a REAL snapshot, so the read and
+  // the outline are both exercised rather than fed empty bytes.
+  it('reads a spatial document’s nodes as its shape', async () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 120, text: 'one' },
+        { id: 'b', type: 'text', x: 240, y: 0, width: 160, height: 90, text: 'two' },
+      ],
+      edges: [],
+    })
+    const snapshot = doc.export({ mode: 'snapshot' })
+
+    const load = createRowOutlineLoader({
+      ...base,
+      getSnapshot: async () => snapshot,
+      getOkf: async () => ({ markdown: '' }),
+    })
+
+    const rects = await load(spatial)
+    expect(rects).toHaveLength(2)
+    expect(rects?.[0]).toMatchObject({ x: 0, y: 0, w: 200, h: 120 })
   })
 
   // A row that cannot be read keeps its kind icon; a throw here would take

@@ -42,6 +42,27 @@ export interface RowOutlineDeps {
     workspaceId: string,
     documentId: string,
   ) => Promise<{ markdown: string }>
+  /**
+   * Lays a markdown body out. Injected like the two reads above so the
+   * success path is assertable without mocking a module — the branch that
+   * actually produces a miniature is the one worth pinning.
+   */
+  readonly layoutMarkdown?: (
+    body: string,
+    maxWidth: number,
+  ) => Promise<readonly FaviconRect[] | null>
+}
+
+/** The shared fleet, at background priority: an icon is never the thing someone is waiting on. */
+async function layoutInSharedPool(
+  body: string,
+  maxWidth: number,
+): Promise<readonly FaviconRect[] | null> {
+  const reply = await sharedLayoutWorkerPool().run<MarkdownRailResponse>(
+    { type: 'markdown-rail', id: nextLayoutRequestId(), body, maxWidth },
+    'background',
+  )
+  return reply.type === 'markdown-rail-done' ? reply.blocks : null
 }
 
 export function createRowOutlineLoader(deps: RowOutlineDeps) {
@@ -55,16 +76,7 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
           document.documentId,
         )
         if (markdown.trim() === '') return null
-        const reply = await sharedLayoutWorkerPool().run<MarkdownRailResponse>(
-          {
-            type: 'markdown-rail',
-            id: nextLayoutRequestId(),
-            body: markdown,
-            maxWidth: ROW_LAYOUT_WIDTH,
-          },
-          'background',
-        )
-        return reply.type === 'markdown-rail-done' ? reply.blocks : null
+        return await (deps.layoutMarkdown ?? layoutInSharedPool)(markdown, ROW_LAYOUT_WIDTH)
       }
 
       const bytes = await deps.getSnapshot(
