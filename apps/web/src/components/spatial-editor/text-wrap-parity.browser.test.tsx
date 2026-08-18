@@ -7,7 +7,7 @@
 // (see text-edit-style-parity.browser.test.tsx's header, which names the
 // same divergence and defers pinning it to here).
 
-import { BODY_FONT_SIZE_PX } from '@kamiazya/whiteboard-canvas-render'
+import { BODY_LINE_HEIGHT_PX } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -31,13 +31,13 @@ const node = {
   x: 100,
   y: 100,
   width: 200,
-  // Deliberately shorter than the wrapped content: the overlay textarea's
-  // box.height comes straight from the node's authored height (not
-  // recomputed from content), and scrollHeight only reports the FULL
-  // unclipped content height once the box is too short to contain it —
-  // otherwise scrollHeight clamps to clientHeight regardless of how little
-  // text there is.
-  height: 20,
+  // Tall enough to hold every wrapped line. It was 20px, from when the
+  // committed render painted a too-tall block whole and simply overflowed
+  // its frame; keep-first now cuts to the first LINE, so a short box makes
+  // the SVG side of this comparison one line and the pin below vacuous. The
+  // CSS side is read from `.cm-line` rectangles rather than `scrollHeight`,
+  // so it needs no clipping to report every line.
+  height: 240,
   text: WRAPPING_TEXT,
 }
 const start: SpatialCanvas = { nodes: [node], edges: [] }
@@ -86,7 +86,7 @@ it('pins the CSS-vs-injected-measure wrap-line-count relationship for a canonica
   const last = lines[lines.length - 1]?.getBoundingClientRect()
   if (!first || !last) throw new Error('expected at least one rendered line')
   const contentHeight = last.bottom - first.top
-  const cssLineCountRaw = contentHeight / BODY_FONT_SIZE_PX
+  const cssLineCountRaw = contentHeight / BODY_LINE_HEIGHT_PX
   // Non-vacuity: must divide out to a whole number of lines using the
   // shared constants, or the arithmetic itself is wrong for this fixture.
   expect(Math.abs(cssLineCountRaw - Math.round(cssLineCountRaw))).toBeLessThan(0.01)

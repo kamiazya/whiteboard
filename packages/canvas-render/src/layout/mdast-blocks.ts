@@ -48,7 +48,16 @@ const HEADING_FONT_SIZE_PX = T.headingFontSizePx
 export const BODY_FONT_SIZE_PX = T.bodyFontSizePx
 const BLOCK_GAP_PX = T.blockGapPx
 const LIST_INDENT_PX = T.listIndentPx
-const BODY_LINE_HEIGHT_PX = T.bodyFontSizePx * T.bodyLineHeight
+/**
+ * Height of one body line box. EXPORTED because the editor's text overlay
+ * has to advance by the same amount: a CodeMirror overlay styled at a
+ * different line height than the committed render makes the text jump the
+ * instant someone double-clicks a node, and every line after the first sits
+ * somewhere the reader did not leave it. It used to be safe to write
+ * `lineHeight: BODY_FONT_SIZE_PX` there because the two were equal; they are
+ * not any more, so the coupling is a shared constant instead of a comment.
+ */
+export const BODY_LINE_HEIGHT_PX = T.bodyFontSizePx * T.bodyLineHeight
 const CODE_FONT_SIZE_PX = T.bodyFontSizePx * T.codeFontScale
 const CODE_LINE_HEIGHT_PX = CODE_FONT_SIZE_PX * T.codeLineHeight
 const THEMATIC_BREAK_HEIGHT_PX = T.thematicBreakHeightPx
