@@ -38,10 +38,13 @@ export function rankLinkTargets(
 }
 
 /**
- * Names that cannot survive being written between `[[` and `]]`: `]]` closes
- * the reference early, and a line break cannot appear inside an inline one.
+ * Names the codec's own reference parser would read as something other than a
+ * plain name: `]]` closes the reference early, a line break cannot appear in
+ * an inline one, `|` begins the alias half (`[[target|alias]]`), and a
+ * leading `canvas:` is parsed as a direct document id — which then fails id
+ * validation and drops the link entirely.
  */
-const UNWRITABLE_IN_BRACKETS = /]]|[\r\n]/
+const UNWRITABLE_IN_BRACKETS = /]]|[\r\n|]|^canvas:/
 
 /**
  * What to write in the body for a chosen target.
@@ -72,14 +75,24 @@ export function linkMarkupFor(target: LinkTarget, all: readonly LinkTarget[]): s
 export function urlFromQuery(query: string): string | null {
   const trimmed = query.trim()
   if (trimmed === '' || /\s/.test(trimmed)) return null
-  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`
-  let parsed: URL
-  try {
-    parsed = new URL(candidate)
-  } catch {
-    return null
+  const parse = (value: string): URL | null => {
+    try {
+      return new URL(value)
+    } catch {
+      return null
+    }
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+  const isHttp = (url: URL | null): boolean =>
+    url !== null && (url.protocol === 'http:' || url.protocol === 'https:')
+
+  // `example.com:8080/path` satisfies the URL scheme grammar — `.` is a legal
+  // scheme character — so the first parse succeeds with protocol
+  // `example.com:`. A second parse behind `https://` is what recognises a
+  // pasted host:port as the address it obviously is.
+  const asWritten = parse(trimmed)
+  const candidate = isHttp(asWritten) ? trimmed : `https://${trimmed}`
+  const parsed = isHttp(asWritten) ? asWritten : parse(candidate)
+  if (!isHttp(parsed) || parsed === null) return null
   // `https://notes` parses fine; a host with no dot is a word, not an address.
   if (!parsed.hostname.includes('.')) return null
   return candidate
@@ -96,7 +109,12 @@ export function urlFromQuery(query: string): string | null {
  */
 export function externalLinkMarkup(text: string, url: string): string {
   if (text.trim() === '') return `<${url}>`
-  const label = text.replace(/[[\]]/g, (bracket) => `\\${bracket}`)
-  const destination = /[\s()]/.test(url) ? `<${url}>` : url
+  // Backslash first, or the escape added for a trailing `\` would itself be
+  // escaped and the closing bracket would lose its meaning.
+  const label = text.replace(/[\\[\]]/g, (char) => `\\${char}`)
+  const destination = /[\s()]/.test(url)
+    ? // The angle-bracket form is closed by the first `>` inside it.
+      `<${url.replace(/</g, '%3C').replace(/>/g, '%3E')}>`
+    : url
   return `[${label}](${destination})`
 }

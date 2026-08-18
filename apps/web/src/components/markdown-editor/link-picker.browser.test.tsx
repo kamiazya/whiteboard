@@ -2,6 +2,7 @@
 // document in this workspace or to a URL. Nothing asks the author to classify
 // the destination before they have typed it.
 import { cleanup, render } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { LinkTarget } from './link-target.js'
@@ -36,6 +37,32 @@ async function openPicker(container: HTMLElement, getByRole: RenderResult['getBy
 }
 
 type RenderResult = ReturnType<typeof render>
+
+/**
+ * A host that actually keeps what is typed. The other cases can pass a fixed
+ * `value` because they make exactly one edit, but a case that types INTO the
+ * document mid-flow needs the controlled value to follow — otherwise
+ * SourcePane's reconcile effect rewinds the typing before the assertion.
+ */
+function StatefulHost({
+  initial,
+  onChange,
+}: {
+  initial: string
+  onChange: (next: string) => void
+}) {
+  const [value, setValue] = useState(initial)
+  return (
+    <MarkdownEditor
+      value={value}
+      onChange={(next) => {
+        setValue(next)
+        onChange(next)
+      }}
+      linkTargets={targets}
+    />
+  )
+}
 
 describe('the link picker (real browser)', () => {
   it("seeds the search box with the caret's word, so the fast path stays one Enter", async () => {
@@ -131,6 +158,28 @@ describe('the link picker (real browser)', () => {
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[Weekly review]] beta')
+  })
+
+  // Pinning an offset is not enough: text typed BEFORE it shifts every later
+  // position, so the pin has to travel with the document, not just survive it.
+  it('follows its range when text is inserted before it', async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <StatefulHost initial="weekly beta" onChange={onChange} />,
+    )
+    await caretInto(container, 3) // inside "weekly"
+
+    const picker = await openPicker(container, getByRole)
+    expect((picker.querySelector('input') as HTMLInputElement).value).toBe('weekly')
+
+    // Type at the very start of the document while the picker is open.
+    const editable = container.querySelector('[contenteditable="true"]') as HTMLElement
+    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+    await userEvent.keyboard('{Control>}{Home}{/Control}')
+    await userEvent.keyboard('SEE ')
+    await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('SEE [[Weekly review]] beta')
   })
 
   it('moves the highlight with the arrow keys and commits the active row', async () => {

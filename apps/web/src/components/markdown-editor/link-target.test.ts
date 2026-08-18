@@ -55,10 +55,17 @@ describe('linkMarkupFor', () => {
     expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[canvas:01JDUPE1]]')
   })
 
-  // `]]` inside a name would close the reference early, and a newline
-  // cannot survive an inline reference at all.
-  it('uses the id when the name cannot be written inside brackets', () => {
-    const odd: LinkTarget = { id: '01JODD', name: 'weird ]] name', kind: 'markdown' }
+  // Every character sequence the codec's own reference parser would read as
+  // something other than a plain name: `]]` closes the reference, a newline
+  // cannot appear in an inline one, `|` starts the alias half, and a leading
+  // `canvas:` is parsed as a direct document id instead of a name.
+  it.each([
+    ['weird ]] name'],
+    ['two\nlines'],
+    ['A|B'],
+    ['canvas:not-an-id'],
+  ])('uses the id when the name cannot be written inside brackets: %s', (name) => {
+    const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
     expect(linkMarkupFor(odd, [odd])).toBe('[[canvas:01JODD]]')
   })
 })
@@ -71,6 +78,12 @@ describe('urlFromQuery', () => {
 
   it('promotes a bare domain to https', () => {
     expect(urlFromQuery('example.com/docs')).toBe('https://example.com/docs')
+  })
+
+  // `example.com:` satisfies the URL scheme grammar, so the first parse
+  // succeeds with a protocol nobody meant.
+  it('promotes a bare host:port too', () => {
+    expect(urlFromQuery('example.com:8080/path')).toBe('https://example.com:8080/path')
   })
 
   it('is not fooled by ordinary prose or a document name', () => {
@@ -96,6 +109,21 @@ describe('externalLinkMarkup', () => {
   it('writes a bare autolink when there is no text to carry it', () => {
     expect(externalLinkMarkup('', 'https://example.com')).toBe('<https://example.com>')
     expect(externalLinkMarkup('   ', 'https://example.com')).toBe('<https://example.com>')
+  })
+
+  // A trailing backslash would escape the closing bracket the escape itself
+  // adds, so backslashes go first.
+  it('escapes a backslash before it can escape our bracket', () => {
+    expect(externalLinkMarkup('ends with \\', 'https://example.com')).toBe(
+      '[ends with \\\\](https://example.com)',
+    )
+  })
+
+  // An angle-bracketed destination is closed by the first `>` inside it.
+  it('percent-encodes angle brackets in a destination that needs wrapping', () => {
+    expect(externalLinkMarkup('docs', 'https://example.com/a(b)>c')).toBe(
+      '[docs](<https://example.com/a(b)%3Ec>)',
+    )
   })
 
   // A `]` in the text would close the label early and leave the rest as prose.

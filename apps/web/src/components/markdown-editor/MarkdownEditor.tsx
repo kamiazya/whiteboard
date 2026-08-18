@@ -274,12 +274,9 @@ export function MarkdownEditor({
    * The open catalog and where it is anchored, in coordinates relative to
    * the editor root (ContextMenu positions against its offsetParent).
    */
-  const [linkPicker, setLinkPicker] = useState<{
-    query: string
-    text: string
-    /** Pinned at open: the caret may move under this non-modal dialog. */
-    range: { from: number; to: number }
-  } | null>(null)
+  // The range itself lives in the editor state (see SourcePane's pinnedRange),
+  // which maps it through any edit made while the dialog is open.
+  const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
   const [catalog, setCatalog] = useState<{
     x: number
     y: number
@@ -462,10 +459,10 @@ export function MarkdownEditor({
           linkTargets === undefined || linkTargets.length === 0
             ? wrap('[[', ']]')
             : () => {
-                const scope = sourceApiRef.current?.scopeRange()
+                const scope = sourceApiRef.current?.pinScope()
                 if (scope === undefined) return
                 setCatalog(null)
-                setLinkPicker({ query: scope.text, text: scope.text, range: scope })
+                setLinkPicker({ query: scope.text, text: scope.text })
               },
       },
       { kind: 'separator' },
@@ -572,11 +569,12 @@ export function MarkdownEditor({
           initialQuery={linkPicker.query}
           linkText={linkPicker.text}
           onPick={(markup) => {
-            sourceApiRef.current?.replaceRange(linkPicker.range, markup)
+            sourceApiRef.current?.replacePinned(markup)
             setLinkPicker(null)
           }}
           onCancel={() => {
             setLinkPicker(null)
+            sourceApiRef.current?.clearPin()
             sourceApiRef.current?.focus()
           }}
         />

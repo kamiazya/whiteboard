@@ -255,11 +255,20 @@ export function BrowserLocalDocumentPage({
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
   const resolveAlias = useMemo(() => createSnapshotAliasResolver(documents), [documents])
-  // The same list, for the link picker: it needs the id as well, so an
-  // ambiguous display name can still produce a link that resolves.
+  // The list read races the save a rename queues, so this canvas's live
+  // truth is its own snapshot and the list is only the copy for the OTHER
+  // documents. Both the switcher and the link picker read THIS, or the
+  // picker would offer a stale name for the document being edited — or omit
+  // it entirely right after it was created.
+  const switcherOptions =
+    pageState.kind === 'editing'
+      ? documents.some((c) => c.id === pageState.snapshot.id)
+        ? documents.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
+        : [...documents, pageState.snapshot]
+      : documents
   const linkTargets = useMemo(
-    () => documents.map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind })),
-    [documents],
+    () => switcherOptions.map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind })),
+    [switcherOptions],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
@@ -467,12 +476,6 @@ export function BrowserLocalDocumentPage({
   // a read that resolves first pins the pre-rename name with nothing left to
   // schedule another refresh. The snapshot is this canvas's live truth; the
   // list is only the copy the switcher reads for the OTHER documents.
-  const switcherOptions =
-    pageState.kind === 'editing'
-      ? documents.some((c) => c.id === pageState.snapshot.id)
-        ? documents.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
-        : [...documents, pageState.snapshot]
-      : documents
 
   if (pageState.kind === 'load-degraded') {
     return (
