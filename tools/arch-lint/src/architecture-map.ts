@@ -139,17 +139,13 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
  * entry that is no longer a real cycle. So adding an entry is a deliberate
  * act with a test that will demand its removal once the debt is paid.
  *
- * Before adding one, know what the last entry cost. It was defended as safe
- * because the closing edge was a call-time `await import()` rather than a
- * static edge both ways — the reasoning being that a deferred fetch happens
- * after both modules have finished loading. It does not follow. A dynamic
- * import defers WHEN the module is fetched, not whether the fetch can
- * observe a module that is mid-evaluation somewhere up the stack: a request
- * reached `ws.ts`'s `sendRestoreEvent` while `ws.ts`'s own body had not run,
- * so its module-level `const connections` was still in its TDZ and the
- * restore route 500'd with a bare ReferenceError, intermittently, under a
- * full parallel suite. An entry here is debt with a known failure mode, not
- * a cycle that has been reasoned safe.
+ * A cycle closed by a call-time `await import()` rather than a static edge
+ * both ways is NOT thereby safe. A dynamic import defers WHEN a module is
+ * fetched, not whether the fetch can observe a module that is mid-evaluation
+ * somewhere up the stack — and a module whose body has not run yet still has
+ * its top-level bindings in TDZ, so the call fails with a bare
+ * ReferenceError, intermittently and under load. An entry here is debt with
+ * a known failure mode, never a cycle that has been reasoned safe.
  */
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
 

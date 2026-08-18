@@ -24,7 +24,12 @@ import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  DocumentHasDescendantsError,
+  DocumentMoveIntoSelfError,
+  reassembleSnapshot,
+} from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
@@ -40,6 +45,7 @@ import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad } from './doc-cache.js'
+import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
@@ -440,6 +446,22 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return false
 
+    // Refusing here rather than cascading is the DocumentIndex contract this
+    // table's other writer already holds: a cascade is reachable from one
+    // call naming one path, and deletion has nothing to undo it.
+    const siblings = await db
+      .selectFrom('documents')
+      .select(['id', 'path'])
+      .where('workspaceId', '=', workspaceId)
+      .execute()
+    const descendant = findDescendantPath(siblings, path)
+    if (descendant !== undefined) {
+      throw new DocumentHasDescendantsError(
+        path,
+        `Delete "${descendant}" and any others below it first.`,
+      )
+    }
+
     // Collect version ids before the row delete — the versions rows are
     // gone the instant the cascade fires, so their ids must be captured
     // first to know which thumbnail files to unlink.
@@ -786,25 +808,52 @@ export async function renameDocumentPath(
     const documentId = await getDocumentIdByPath(db, workspaceId, oldPath)
     if (!documentId) return null
     if (oldPath === newPath) return { documentId }
-    const taken = await getDocumentIdByPath(db, workspaceId, newPath)
-    if (taken) {
-      throw new ConflictError(`Canvas "${workspaceId}/${newPath}" already exists`)
+    // The one rule planSubtreeMove leaves to its callers, and the index's
+    // moveDocument already enforces. Without it the depth-ordered write —
+    // correct for an upward move — is inverted, and the shallow row lands on
+    // a path its own descendant has not vacated, surfacing as a raw unique
+    // constraint error instead of an answer the caller can act on.
+    if (isSelfOrDescendant(newPath, oldPath)) {
+      throw new DocumentMoveIntoSelfError(oldPath, newPath)
     }
-    await db
-      .updateTable('documents')
-      .set({ path: newPath, updatedAt: Date.now() })
-      .where('id', '=', documentId)
+
+    const rows = await db
+      .selectFrom('documents')
+      .select(['id', 'path'])
+      .where('workspaceId', '=', workspaceId)
       .execute()
-    // Force the next getDoc() to reload under both path keys. oldPath: a
-    // caller still reading through it should lazily create a fresh canvas
-    // rather than resurrect the renamed doc's cached instance. newPath: a
-    // WS connect or update-route call against the destination path before
-    // this rename can lazily cache an empty phantom doc there (getDoc()
+    const plan = planSubtreeMove(rows, oldPath, newPath)
+    if (!plan.ok) {
+      // `not-found` is unreachable — getDocumentIdByPath already answered
+      // for oldPath — so the only outcome left is a collision.
+      const collided = plan.reason === 'taken' ? plan.path : newPath
+      throw new ConflictError(`Canvas "${workspaceId}/${collided}" already exists`)
+    }
+
+    const now = Date.now()
+    await db.transaction().execute(async (trx) => {
+      for (const move of plan.moves) {
+        await trx
+          .updateTable('documents')
+          .set({ path: move.path, updatedAt: now })
+          .where('id', '=', move.id)
+          .execute()
+      }
+    })
+
+    // Force the next getDoc() to reload under every key the move touched.
+    // A source path: a caller still reading through it should lazily create
+    // a fresh canvas rather than resurrect the moved doc's cached instance.
+    // A destination path: a WS connect or update-route call against it
+    // before this move can lazily cache an empty phantom doc there (getDoc()
     // creates one for any path with no DB row yet) — leaving that phantom
-    // cached would shadow the just-renamed canvas's real content and the
-    // next write through newPath would persist the phantom over it.
-    evictDoc(workspaceId, oldPath)
-    evictDoc(workspaceId, newPath)
+    // cached would shadow the just-moved canvas's real content and the next
+    // write through it would persist the phantom over it. Both halves apply
+    // to every descendant, not only the two paths the caller named.
+    for (const move of plan.moves) {
+      evictDoc(workspaceId, move.from)
+      evictDoc(workspaceId, move.path)
+    }
     return { documentId }
   })
 }
