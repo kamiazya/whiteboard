@@ -29,7 +29,7 @@ describe('MarkdownEditor (real browser)', () => {
     expect(lastCall).toBe('# Hello world')
   })
 
-  it('the toolbar Bold button wraps the live selection without collapsing it', async () => {
+  it('the catalog Bold wraps the live selection without collapsing it', async () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
       <MarkdownEditor value="make this bold" onChange={onChange} />,
@@ -43,7 +43,8 @@ describe('MarkdownEditor (real browser)', () => {
     await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}')
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
 
-    await userEvent.click(getByRole('button', { name: 'Bold' }))
+    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    await userEvent.click(getByRole('menuitem', { name: 'Bold' }))
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('make **this** bold')
 
     // The selection stayed live inside the delimiters: typing replaces it.

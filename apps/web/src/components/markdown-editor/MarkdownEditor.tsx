@@ -3,10 +3,12 @@ import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canva
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import { Bold, Code, Italic, Link2, SquareCheck } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,11 +17,14 @@ import {
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { cn } from '../../lib/utils.js'
+import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { PreviewPane } from './PreviewPane.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
+import { setHeadingLevel } from './set-heading-level.js'
+import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 
 export interface MarkdownEditorProps {
@@ -118,6 +123,13 @@ const MIN_SPLIT_RATIO = 0.2
 const MAX_SPLIT_RATIO = 0.8
 const KEYBOARD_SPLIT_STEP = 0.05
 const SPLIT_MIN_WIDTH = 640
+
+/**
+ * Below this container width the catalog opens as a bottom sheet instead of
+ * a point-anchored popover — the same breakpoint (and the same reasoning:
+ * thumb reach, not screen size) the spatial canvas uses for its own ⋯.
+ */
+const CATALOG_SHEET_MAX_WIDTH = 768
 const VIEW_MODE_STORAGE_KEY = 'whiteboard.markdown-view-mode'
 
 function isViewMode(value: unknown): value is MarkdownViewMode {
@@ -248,6 +260,15 @@ export function MarkdownEditor({
   const sourceWrapRef = useRef<HTMLDivElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const sourceApiRef = useRef<SourcePaneApi | null>(null)
+  /**
+   * The open catalog and where it is anchored, in coordinates relative to
+   * the editor root (ContextMenu positions against its offsetParent).
+   */
+  const [catalog, setCatalog] = useState<{
+    x: number
+    y: number
+    variant: 'grid' | 'sheet' | 'list'
+  } | null>(null)
   // Filled by PreviewPane on every render; read lazily by the scroll handler.
   const anchorsRef = useRef<readonly PreviewBlockAnchor[]>([])
 
@@ -352,11 +373,87 @@ export function MarkdownEditor({
     Math.min(maxWidth, Math.round((paneWidth - horizontalPadding) / 64) * 64),
   )
 
+  const openCatalogAt = useCallback(
+    (clientX: number, clientY: number, variant: 'grid' | 'list') => {
+      const rect = rootRef.current?.getBoundingClientRect()
+      // Same container breakpoint the canvas uses to choose its vessel:
+      // below it the catalog is a bottom sheet with thumb-sized targets,
+      // above it the point-anchored popover the pointer expects.
+      const narrow = containerWidth !== null && containerWidth < CATALOG_SHEET_MAX_WIDTH
+      setCatalog({
+        x: clientX - (rect?.left ?? 0),
+        y: clientY - (rect?.top ?? 0),
+        variant: narrow ? 'sheet' : variant,
+      })
+    },
+    [containerWidth],
+  )
+
+  // A right-click WITH a selection is a request to act on it, and that is
+  // exactly this catalog. With nothing selected the platform's own menu
+  // (spellcheck, dictionary, translate) is worth more than ours, so the
+  // event is left alone. Bound natively rather than through a JSX prop: the
+  // source pane is a plain container, and giving it a widget role to satisfy
+  // an interactive-element lint would misdescribe it to a screen reader.
+  useEffect(() => {
+    const host = sourceWrapRef.current
+    if (host === null) return
+    const onContextMenu = (event: MouseEvent) => {
+      if (window.getSelection()?.isCollapsed !== false) return
+      event.preventDefault()
+      openCatalogAt(event.clientX, event.clientY, 'list')
+    }
+    host.addEventListener('contextmenu', onContextMenu)
+    return () => host.removeEventListener('contextmenu', onContextMenu)
+  }, [openCatalogAt])
+
+  const catalogItems = useMemo((): readonly ContextMenuItem[] => {
+    const api = sourceApiRef.current
+    const level = api?.headingLevel() ?? 0
+    const run = (command: Parameters<NonNullable<typeof api>['run']>[0]) => () => {
+      sourceApiRef.current?.run(command)
+      sourceApiRef.current?.focus()
+      setCatalog(null)
+    }
+    const wrap = (open: string, close?: string) => () => {
+      sourceApiRef.current?.wrapSelection(open, close)
+      sourceApiRef.current?.focus()
+      setCatalog(null)
+    }
+    return [
+      {
+        kind: 'options',
+        label: 'Heading',
+        options: [
+          { label: 'Body', selected: level === 0, onSelect: run(setHeadingLevel(0)) },
+          { label: 'H1', selected: level === 1, onSelect: run(setHeadingLevel(1)) },
+          { label: 'H2', selected: level === 2, onSelect: run(setHeadingLevel(2)) },
+          { label: 'H3', selected: level === 3, onSelect: run(setHeadingLevel(3)) },
+        ],
+      },
+      { kind: 'separator' },
+      { label: 'Bold', icon: <Bold aria-hidden className="size-4" />, onSelect: wrap('**') },
+      { label: 'Italic', icon: <Italic aria-hidden className="size-4" />, onSelect: wrap('*') },
+      { label: 'Code', icon: <Code aria-hidden className="size-4" />, onSelect: wrap('`') },
+      {
+        label: 'Wiki link',
+        icon: <Link2 aria-hidden className="size-4" />,
+        onSelect: wrap('[[', ']]'),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Toggle task',
+        icon: <SquareCheck aria-hidden className="size-4" />,
+        onSelect: run(toggleTaskCheckbox),
+      },
+    ]
+  }, [catalog])
+
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
 
   return (
-    <div ref={rootRef} className={cn('flex h-full w-full min-w-0 flex-col', className)}>
+    <div ref={rootRef} className={cn('relative flex h-full w-full min-w-0 flex-col', className)}>
       <EditorToolbar
         // The EFFECTIVE mode, not the stored preference: on a narrow
         // container a stored 'split' renders as Write, and the toolbar's
@@ -365,8 +462,8 @@ export function MarkdownEditor({
         onModeChange={changeMode}
         splitAvailable={splitAvailable}
         wordCount={wordCount}
-        formattingEnabled={effectiveMode !== 'read'}
-        onFormat={(delimiter) => sourceApiRef.current?.wrapSelection(delimiter)}
+        onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
+        catalogAvailable={effectiveMode !== 'read'}
       />
       <div className="flex min-h-0 flex-1">
         <div
@@ -441,6 +538,15 @@ export function MarkdownEditor({
           </div>
         )}
       </div>
+      {catalog !== null && (
+        <ContextMenu
+          x={catalog.x}
+          y={catalog.y}
+          variant={catalog.variant}
+          items={catalogItems}
+          onClose={() => setCatalog(null)}
+        />
+      )}
     </div>
   )
 }

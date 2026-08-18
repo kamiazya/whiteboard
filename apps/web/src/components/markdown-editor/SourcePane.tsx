@@ -14,24 +14,34 @@ import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { minimalChange } from './minimal-change.js'
+import { headingLevelAt } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
+import { rangeToActOn } from './word-at.js'
 
-// Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
-// collapsed selection inserts an empty pair and parks the cursor between
-// the delimiters so the next keystroke lands inside. Toggling (detecting
-// an already-wrapped range and unwrapping) is deliberately not attempted:
-// markdown emphasis nesting makes reliable detection lexer work, and a
-// wrong unwrap corrupts text — insert-only is predictable.
-function wrapSelectionWith(delimiter: string): StateCommand {
+// Wraps what the caret is ON in `open`/`close` (Mod-b -> **, Mod-i -> *,
+// the catalog's [[ ]] passing two different delimiters). With a selection
+// that is the selection; without one it is the WORD under the caret, which
+// is what lets every verb work on a phone, where making a selection is the
+// hard part. A caret on whitespace has no word: that inserts an empty pair
+// and parks the cursor between the delimiters so the next keystroke lands
+// inside. Toggling (detecting an already-wrapped range and unwrapping) is
+// deliberately not attempted: markdown emphasis nesting makes reliable
+// detection lexer work, and a wrong unwrap corrupts text — insert-only is
+// predictable.
+function wrapSelectionWith(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
-    const changes = state.changeByRange((range) => ({
-      changes: [
-        { from: range.from, insert: delimiter },
-        { from: range.to, insert: delimiter },
-      ],
-      range: EditorSelection.range(range.from + delimiter.length, range.to + delimiter.length),
-    }))
-    dispatch(state.update(changes, { scrollIntoView: true, userEvent: 'input' }))
+    const scope = rangeToActOn(state)
+    dispatch(
+      state.update({
+        changes: [
+          { from: scope.from, insert: open },
+          { from: scope.to, insert: close },
+        ],
+        selection: EditorSelection.range(scope.from + open.length, scope.to + open.length),
+        scrollIntoView: true,
+        userEvent: 'input',
+      }),
+    )
     return true
   }
 }
@@ -88,7 +98,14 @@ export const markdownHighlightStyle = HighlightStyle.define([
  * controlled `value`/`onChange` pair.
  */
 export interface SourcePaneApi {
-  wrapSelection: (delimiter: string) => void
+  wrapSelection: (open: string, close?: string) => void
+  /**
+   * Runs any editing command against the live view — the seam the catalog
+   * drives, so a new verb is a new command rather than a new API method.
+   */
+  run: (command: StateCommand) => void
+  /** Heading level of the line the caret sits on; 0 for body text. */
+  headingLevel: () => number
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -222,10 +239,15 @@ export function SourcePane({
     viewRef.current = view
     if (apiRef) {
       apiRef.current = {
-        wrapSelection: (delimiter) => {
-          wrapSelectionWith(delimiter)({ state: view.state, dispatch: view.dispatch })
+        wrapSelection: (open, close) => {
+          wrapSelectionWith(open, close)({ state: view.state, dispatch: view.dispatch })
           view.focus()
         },
+        run: (command) => {
+          command({ state: view.state, dispatch: view.dispatch })
+          view.focus()
+        },
+        headingLevel: () => headingLevelAt(view.state),
         focus: () => view.focus(),
         topVisibleLine: () => {
           const scrollTop = view.scrollDOM.scrollTop

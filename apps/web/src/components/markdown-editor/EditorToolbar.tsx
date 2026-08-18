@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Bold, BookOpen, Code, Columns2, Italic, PenLine } from 'lucide-react'
+import { BookOpen, Columns2, MoreHorizontal, PenLine } from 'lucide-react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -11,10 +11,14 @@ export interface EditorToolbarProps {
   /** Split needs room for two columns; narrow containers drop the option. */
   readonly splitAvailable: boolean
   readonly wordCount: number
-  /** Wraps the current source selection (same commands as Mod-b / Mod-i). */
-  readonly onFormat: (delimiter: string) => void
-  /** Formatting targets the source pane, so Read mode disables it. */
-  readonly formattingEnabled: boolean
+  /** Opens the editing catalog, anchored under the ⋯ trigger. */
+  readonly onOpenCatalog: (anchor: { x: number; y: number }) => void
+  /**
+   * Read mode has no source pane, so there is nothing for the catalog's
+   * verbs to act on — the doorway goes away rather than opening onto
+   * disabled entries.
+   */
+  readonly catalogAvailable: boolean
 }
 
 interface ModeOption {
@@ -29,58 +33,27 @@ const MODE_OPTIONS: readonly ModeOption[] = [
   { mode: 'read', label: 'Read', icon: BookOpen },
 ]
 
-interface FormatAction {
-  readonly label: string
-  readonly delimiter: string
-  readonly icon: LucideIcon
-  readonly shortcut: string
-}
-
-const FORMAT_ACTIONS: readonly FormatAction[] = [
-  { label: 'Bold', delimiter: '**', icon: Bold, shortcut: '⌘B' },
-  { label: 'Italic', delimiter: '*', icon: Italic, shortcut: '⌘I' },
-  { label: 'Code', delimiter: '`', icon: Code, shortcut: '⌘E' },
-]
-
 /**
- * The markdown editor's one chrome strip: formatting on the left, word
- * count + view mode on the right. Deliberately shallow — no heading/list
- * menus, no insert gallery — because the source pane is the real editing
- * surface and this row must recede next to it (quiet-tool rule).
+ * The markdown editor's one chrome strip, and it holds exactly one kind of
+ * thing: **how this document is shown** (word count + view mode), plus the
+ * doorway to everything that CHANGES the document.
+ *
+ * Formatting buttons used to sit here and no longer do. They were redundant
+ * for the audience that could reach them (⌘B already exists) and out of
+ * reach for the one that needed them — a 28px target at the top edge is the
+ * worst place on a phone. Verbs live in the catalog behind ⋯, which opens
+ * as a bottom sheet exactly where a thumb already is.
  */
 export function EditorToolbar({
   mode,
   onModeChange,
   splitAvailable,
   wordCount,
-  onFormat,
-  formattingEnabled,
+  onOpenCatalog,
+  catalogAvailable,
 }: EditorToolbarProps) {
   return (
     <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
-      <fieldset className="flex items-center gap-0.5" aria-label="Formatting">
-        {FORMAT_ACTIONS.map(({ label, delimiter, icon: Icon, shortcut }) => (
-          <Tooltip key={label}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={label}
-                disabled={!formattingEnabled}
-                // Keep focus (and therefore the selection) in the source
-                // pane: a focused toolbar button would collapse the very
-                // selection the command is about to wrap.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onFormat(delimiter)}
-                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
-              >
-                <Icon aria-hidden className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{shortcut === '' ? label : `${label} ${shortcut}`}</TooltipContent>
-          </Tooltip>
-        ))}
-      </fieldset>
-
       <div className="ml-auto flex items-center gap-3">
         <span
           data-testid="markdown-word-count"
@@ -118,6 +91,30 @@ export function EditorToolbar({
             )
           })}
         </fieldset>
+        {catalogAvailable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                data-testid="editor-catalog-trigger"
+                // Keep focus (and therefore the caret) in the source pane: the
+                // catalog's verbs resolve their scope from it, and a focused
+                // trigger would move the caret out of the word being acted on.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  onOpenCatalog({ x: rect.left, y: rect.bottom })
+                }}
+                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <MoreHorizontal aria-hidden className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>More actions</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   )
