@@ -420,8 +420,13 @@ describe('layoutMdastBlocks — text run baseline', () => {
     expect(heading?.kind).toBe('heading')
     if (heading?.kind !== 'heading') throw new Error('unreachable')
     const [run] = heading.runs
-    // fake measure: ascent = fontSizePx * 0.8
-    expect(run.baseline).toBe(32 * 0.8)
+    // Half-leading, as CSS does it: the line box is taller than the font, and
+    // the surplus splits evenly above and below, so the baseline sits at
+    // (lineHeight - fontSize) / 2 + ascent rather than at the ascent alone.
+    // A heading's line height is 1.25 (fake measure: ascent = fontSize * 0.8).
+    const lineHeightPx = 32 * 1.25
+    expect(run.baseline).toBe((lineHeightPx - 32) / 2 + 32 * 0.8)
+    expect(run.bbox.h).toBe(lineHeightPx)
     // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds
     // keeps measuring a true top-left box.
     expect(run.bbox.y).toBe(0)
@@ -694,7 +699,9 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
     expect(paragraph.runs.map((r) => r.text)).toEqual(['inline code', 'and a', 'link', 'too.'])
 
     const [code, andA, link, too] = paragraph.runs
-    const fontSize = code.appearance?.fontSize ?? 0
+    // The boundary space is a BODY-font advance even when it follows a code
+    // run: only the code run itself changes family and size.
+    const fontSize = andA.appearance?.fontSize ?? 0
     expect(fontSize).toBeGreaterThan(0)
     const spaceWidth = measure(' ', {
       family: 'sans-serif',
@@ -703,7 +710,13 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
       style: 'normal',
       sizePx: fontSize,
     }).advanceWidth
-    expect(andA.bbox.x).toBeCloseTo(code.bbox.x + code.bbox.w + spaceWidth, 5)
+    // A code run's backdrop padding is occupied space, like CSS horizontal
+    // padding: its bbox.x already sits one pad in, and one more pad separates
+    // its right edge from whatever follows. Without that the pill would be
+    // painted over by the next word.
+    const codePad = code.backdropPadXPx ?? 0
+    expect(codePad).toBeGreaterThan(0)
+    expect(andA.bbox.x).toBeCloseTo(code.bbox.x + code.bbox.w + codePad + spaceWidth, 5)
     expect(link.bbox.x).toBeCloseTo(andA.bbox.x + andA.bbox.w + spaceWidth, 5)
     expect(too.bbox.x).toBeCloseTo(link.bbox.x + link.bbox.w + spaceWidth, 5)
   })

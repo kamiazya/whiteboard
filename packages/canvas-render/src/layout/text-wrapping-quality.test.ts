@@ -104,14 +104,14 @@ const PINNED_SCORES: readonly string[] = [
   'long-token@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=71',
   'long-token@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=67',
   'long-token@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=65',
-  'inline-code@120: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=14',
-  'inline-code@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=22',
-  'inline-code@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=35',
+  'inline-code@120: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=13',
+  'inline-code@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=23',
+  'inline-code@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=38',
   'ja-heading@120: overflow=0 max=+0px bboxLies=0 runs=12 lines=12 measure=51',
   'ja-heading@200: overflow=0 max=+0px bboxLies=0 runs=8 lines=8 measure=32',
   'ja-heading@320: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=21',
-  'ja-list@120: overflow=0 max=+0px bboxLies=0 runs=14 lines=12 measure=52',
-  'ja-list@200: overflow=0 max=+0px bboxLies=0 runs=9 lines=7 measure=40',
+  'ja-list@120: overflow=0 max=+0px bboxLies=0 runs=17 lines=15 measure=64',
+  'ja-list@200: overflow=0 max=+0px bboxLies=0 runs=10 lines=8 measure=42',
   'ja-list@320: overflow=0 max=+0px bboxLies=0 runs=6 lines=4 measure=23',
   'emoji@120: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=13',
   'emoji@200: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=9',
@@ -119,4 +119,4 @@ const PINNED_SCORES: readonly string[] = [
 ]
 
 const PINNED_DEBT = { overflowingRuns: 0, maxOverflowPx: 0, bboxUnderreports: 0 }
-const PINNED_PRICE = { runs: 155, lines: 146, measureCalls: 917 }
+const PINNED_PRICE = { runs: 159, lines: 150, measureCalls: 934 }

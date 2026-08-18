@@ -6,6 +6,8 @@ import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
   BoundingBox,
+  CodeBlockNode,
+  HeadingBlockNode,
   ListItemNode,
   Scene,
   SceneNode,
@@ -73,6 +75,22 @@ function appearanceAttrs(appearance?: Appearance): string {
   if (isNonNegativeLength(appearance.fontSize)) {
     parts.push(`font-size="${formatCoord(appearance.fontSize)}"`)
   }
+  // Emitted after `fill` so the pair reads together; `1` is the SVG initial
+  // value, so it is omitted to keep an opacity-free scene byte-identical.
+  if (
+    typeof appearance.fillOpacity === 'number' &&
+    Number.isFinite(appearance.fillOpacity) &&
+    appearance.fillOpacity !== 1
+  ) {
+    parts.push(`fill-opacity="${formatCoord(appearance.fillOpacity)}"`)
+  }
+  if (
+    typeof appearance.strokeOpacity === 'number' &&
+    Number.isFinite(appearance.strokeOpacity) &&
+    appearance.strokeOpacity !== 1
+  ) {
+    parts.push(`stroke-opacity="${formatCoord(appearance.strokeOpacity)}"`)
+  }
   return parts.join(' ')
 }
 
@@ -94,6 +112,9 @@ function textBaselineY(run: TextRunNode): number {
  * decoration in the arrowhead class: bounds keep reading the bbox, and the
  * 2px overhang never exceeds the hit tolerance. */
 const TEXT_HALO_PAD_PX = 2
+
+/** Corner radius of a text run's backdrop pill (GitHub's inline code). */
+const BACKDROP_RADIUS_PX = 6
 
 /** Inline emphasis the layout measured for — painted, or the flags are lies. */
 function emphasisAttrs(run: TextRunNode): string {
@@ -148,6 +169,26 @@ function hasTruncatedRun(nodes: readonly SceneNode[]): boolean {
   return false
 }
 
+/**
+ * The tinted box behind a run (inline code today). Bleeds `backdropPadXPx`
+ * past the run horizontally so the glyphs are not flush against the edge,
+ * and stays inside the line box vertically so a backdrop can never overlap
+ * the line above. A non-finite bbox renders as nothing rather than reaching
+ * `formatCoord`, which throws by contract.
+ */
+function renderBackdrop(run: TextRunNode): string {
+  if (run.backdrop === undefined || !isFiniteBox(run.bbox)) return ''
+  const pad = isNonNegativeLength(run.backdropPadXPx) ? run.backdropPadXPx : 0
+  const appearance = withLeadingSpace(appearanceAttrs(run.backdrop))
+  const box = {
+    x: run.bbox.x - pad,
+    y: run.bbox.y,
+    w: run.bbox.w + 2 * pad,
+    h: run.bbox.h,
+  }
+  return `<rect ${rectAttrs(box)} rx="${formatCoord(BACKDROP_RADIUS_PX)}"${appearance}/>`
+}
+
 function renderTextRun(run: TextRunNode): string {
   const appearance =
     withLeadingSpace(appearanceAttrs(run.appearance)) +
@@ -163,7 +204,13 @@ function renderTextRun(run: TextRunNode): string {
     halo !== undefined && halo.length > 0
       ? `<rect x="${formatCoord(run.bbox.x - TEXT_HALO_PAD_PX)}" y="${formatCoord(run.bbox.y - TEXT_HALO_PAD_PX)}" width="${formatCoord(run.bbox.w + 2 * TEXT_HALO_PAD_PX)}" height="${formatCoord(run.bbox.h + 2 * TEXT_HALO_PAD_PX)}" rx="${formatCoord(TEXT_HALO_PAD_PX)}" fill="${escapeXmlAttr(halo)}"/>`
       : ''
-  const text = `${underlay}<text ${position}${appearance}>${body}</text>`
+  // Painted before the halo underlay so a run can carry both without the
+  // panel hiding the halo; inline code uses this for its tinted pill.
+  const backdrop = renderBackdrop(run)
+  // A code run's whitespace is CONTENT: XML collapses it otherwise, and a
+  // fenced line loses the indentation that says what nests inside what.
+  const space = run.code === true ? ' xml:space="preserve"' : ''
+  const text = `${backdrop}${underlay}<text ${position}${appearance}${space}>${body}</text>`
   if (!run.link) return text
   const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.documentId
   return `<a href="${escapeXmlAttr(href)}">${text}</a>`
@@ -190,11 +237,55 @@ function renderListItem(item: ListItemNode): string {
 function renderTableCell(cell: TableCellSceneNode): string {
   const tx = cell.bbox.x
   const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
-  return `<g${transform}>${cell.runs.map(renderTextRun).join('')}</g>`
+  // The border is drawn in the cell's OWN translated frame, so its x is 0
+  // rather than `bbox.x` — the same relative-coordinate rule the runs follow.
+  const border =
+    cell.appearance !== undefined && isFiniteBox(cell.bbox)
+      ? `<rect ${rectAttrs({ x: 0, y: cell.bbox.y, w: cell.bbox.w, h: cell.bbox.h })}${withLeadingSpace(appearanceAttrs(cell.appearance))} ${PRESENTATION_ATTR}/>`
+      : ''
+  return `<g${transform}>${border}${cell.runs.map(renderTextRun).join('')}</g>`
 }
 
 function renderTableRow(row: TableRowSceneNode): string {
-  return `<g>${row.cells.map(renderTableCell).join('')}</g>`
+  // Stripe first: it is a full-width wash the cell borders must draw over.
+  const stripe =
+    row.appearance !== undefined && isFiniteBox(row.bbox)
+      ? `<rect ${rectAttrs(row.bbox)}${withLeadingSpace(appearanceAttrs(row.appearance))} ${PRESENTATION_ATTR}/>`
+      : ''
+  return `<g>${stripe}${row.cells.map(renderTableCell).join('')}</g>`
+}
+
+/** The hairline under an h1/h2, along the block's bottom edge. */
+function renderHeadingRule(node: HeadingBlockNode): string {
+  if (node.rule === undefined || !isFiniteBox(node.bbox)) return ''
+  const box = {
+    x: node.bbox.x,
+    y: node.bbox.y + node.bbox.h - node.rule.h,
+    w: node.bbox.w,
+    h: node.rule.h,
+  }
+  return `<rect ${rectAttrs(box)}${withLeadingSpace(appearanceAttrs(node.rule.appearance))} ${PRESENTATION_ATTR}/>`
+}
+
+/**
+ * A fenced block: its tinted panel, then one `<text>` per source line.
+ *
+ * The per-line form is not styling. SVG `<text>` collapses a newline to a
+ * space, so the single-element reading painted an entire fence on one line
+ * inside a box sized for all of them — the code ran off the right edge and
+ * left the rest of the box blank. `runs` is absent only for a scene built
+ * before layout carried them, which still renders through the old path
+ * rather than nothing.
+ */
+function renderCodeBlock(node: CodeBlockNode): string {
+  const panel =
+    node.appearance !== undefined && isFiniteBox(node.bbox)
+      ? `<rect ${rectAttrs(node.bbox)}${isPositiveLength(node.radius) ? ` rx="${formatCoord(node.radius)}"` : ''}${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}/>`
+      : ''
+  if (node.runs === undefined) {
+    return `${panel}<text ${rectAttrs(node.bbox)} xml:space="preserve">${escapeXmlText(node.value)}</text>`
+  }
+  return `${panel}${node.runs.map(renderTextRun).join('')}`
 }
 
 type EdgePoint = { readonly x: number; readonly y: number }
@@ -281,17 +372,24 @@ function renderNode(node: SceneNode): string {
     case 'textRun':
       return renderTextRun(node)
     case 'heading':
+      return `<g>${node.runs.map(renderTextRun).join('')}${renderHeadingRule(node)}</g>`
     case 'paragraph':
       return `<g>${node.runs.map(renderTextRun).join('')}</g>`
     case 'list':
       return `<g>${node.items.map(renderListItem).join('')}</g>`
     case 'codeBlock':
-      return `<text ${rectAttrs(node.bbox)} xml:space="preserve">${escapeXmlText(node.value)}</text>`
+      return renderCodeBlock(node)
     case 'blockquote':
+      // `fill-opacity` on the group is INHERITED by every descendant text
+      // run — which is how quoted prose reads muted without naming a text
+      // colour that would be wrong in one of the two host themes. The bar
+      // child sets its own value, and a descendant's own presentation
+      // attribute wins over the inherited one (it does not multiply).
+      return `<g${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}>${node.children.map(renderNode).join('')}</g>`
     case 'group':
       return `<g ${PRESENTATION_ATTR}>${node.children.map(renderNode).join('')}</g>`
     case 'thematicBreak':
-      return `<rect ${rectAttrs(node.bbox)} ${PRESENTATION_ATTR}/>`
+      return `<rect ${rectAttrs(node.bbox)}${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}/>`
     case 'table':
       return `<g>${node.rows.map(renderTableRow).join('')}</g>`
     case 'rawHtml':
