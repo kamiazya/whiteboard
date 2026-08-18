@@ -83,12 +83,33 @@ knowing before doing it:
 Not a work queue — a lookup, so you can recognise one when you open a file.
 
 `Canvas` as the CONTAINER noun — once the largest entry here — is DONE, in
-four increments (`switchDocument`, the `useDocumentSync` stack, the apps/web
-UI surface, the browser stores, and the server contracts + HTTP routes).
-`SpatialCanvas`, `CanvasEdge`, `CanvasColor`, `CanvasContextMenu`,
-`CanvasDisplaySettings`, `CanvasViewer`, `canvasRef`, `screenToCanvas`,
-`wb_canvas_tidy` and the render/layout helpers are CORRECT and stay: they name
-the spatial surface, which is what the word means.
+five increments: four that moved the bulk (`switchDocument`, the
+`useDocumentSync` stack, the apps/web UI surface, the browser stores, and the
+server contracts + HTTP routes) and a fifth that swept the tail those four
+left behind. `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
+`CanvasContextMenu`, `CanvasDisplaySettings`, `CanvasViewer`, `canvasRef`,
+`screenToCanvas`, `wb_canvas_tidy` and the render/layout helpers are CORRECT
+and stay: they name the spatial surface, which is what the word means.
+
+**The tail is the part worth knowing about, because the four big increments
+were reported as DONE while it was still there.** Renaming the ROUTE
+`/w/:ws/canvas/:path` to `/document/` had left the helper that builds it
+called `canvasPath`; renaming the wire key `canvases` to `documents` had left
+`listCanvasesV1` and `getCanvasSnapshot` fetching them. A sweep keyed on the
+noun finds the nouns and misses the VERBS and HELPERS wrapped around them —
+so after one lands, re-grep for the identifiers that touch what you renamed
+(`get*`, `list*`, `*Path`, `*Url`), not for the word you replaced. The
+survivors here were `canvasPath`, `canvasUrl`/`onCopyCanvasUrl`,
+`listCanvasesV1`, `getCanvasOkfV1`, `getCanvasSnapshot`, a
+`listDocuments as listCanvasesApi` import alias, and
+`canvasPathForAction`/`canvasPathForFile` on the published
+`./api-contracts` subpath.
+
+**One name that reads like a survivor and is not**:
+`documentSyncSession.getCanvas()` returns a `SpatialCanvas` — the spatial
+surface — so `Canvas` is the right word and it stays. The rule to apply is
+the RETURN TYPE, not the owner: a method on a document-shaped object may
+still legitimately answer with a canvas.
 
 Four things about how it went are worth keeping.
 
