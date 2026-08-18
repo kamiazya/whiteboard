@@ -361,15 +361,19 @@ function composeTextNode(
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const maxWidth = contentWidth(node.width, options)
-  let body: Scene
+  let body: Scene | undefined
   try {
-    const mdast = options.parseBody(node.text)
-    body = layoutMdastBlocks(mdast, mdastOptionsFor(maxWidth, options))
+    body = fitBodyInNode(node, options.parseBody(node.text), options)
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-    body = { nodes: [labelRun(node.text, options, maxWidth)] }
+    body = fitSceneInNode({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
   }
-  return [chromeShape(node, options), ...placeInNode(node, body, options)]
+  const chrome = chromeShape(node, options)
+  // A box with room for nothing renders as bare chrome. Painting the first
+  // line anyway is what put a paragraph outside the frame; a "there is more"
+  // affordance needs the editor-side overlay `fitBodyInNode` already names as
+  // its upgrade path, which this pure-geometry package cannot own.
+  return body === undefined ? [chrome] : [chrome, ...placeInNode(node, body, options)]
 }
 
 /**
@@ -494,24 +498,50 @@ function composeFileImage(
  * pure-geometry package cannot own. Upgrade path is an editor-side overlay,
  * not a scene node here.
  */
+function contentBox(
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): { readonly w: number; readonly h: number } | undefined {
+  const padding = options.geometry.paddingPx
+  const w = node.width - 2 * padding
+  const h = node.height - 2 * padding
+  return w > 0 && h > 0 ? { w, h } : undefined
+}
+
+/**
+ * Keeps the top prefix of an already-laid-out scene that fits a node's
+ * padded content box, in content-relative coordinates.
+ *
+ * The single place the box's HEIGHT is enforced, so every seam that puts
+ * content in a node box answers to the same bound — the "one producer per
+ * geometry" rule. A seam that lays content out and places it without
+ * passing through here paints outside the frame, which is a rendering
+ * defect this package's "what cannot fit is cut" contract forbids.
+ */
+function fitSceneInNode(
+  scene: Scene,
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): Scene | undefined {
+  const box = contentBox(node, options)
+  if (box === undefined) return undefined
+
+  // Neither producer emits an edge (the one SceneNode variant with no
+  // `bbox`); that guard is for the type checker, not runtime.
+  const fitted = scene.nodes.filter(
+    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= box.h,
+  )
+  return fitted.length === 0 ? undefined : { nodes: fitted }
+}
+
 function fitBodyInNode(
   node: SpatialNode,
   root: MdastRoot,
   options: ResolvedLayoutOptions,
 ): Scene | undefined {
-  const padding = options.geometry.paddingPx
-  const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding
-  if (!(innerW > 0) || !(innerH > 0)) return undefined
-
+  if (contentBox(node, options) === undefined) return undefined
   const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
-
-  // `layoutMdastBlocks` never emits an edge (the one SceneNode variant with
-  // no `bbox`); that guard is for the type checker, not runtime.
-  const fitted = body.nodes.filter(
-    (entry) => entry.kind !== 'edge' && entry.bbox.y + entry.bbox.h <= innerH,
-  )
-  return fitted.length === 0 ? undefined : { nodes: fitted }
+  return fitSceneInNode(body, node, options)
 }
 
 /**
