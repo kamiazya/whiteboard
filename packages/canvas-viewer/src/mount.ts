@@ -61,7 +61,14 @@ declare global {
 function readEmbeddedScene(): unknown {
   const script = document.querySelector(EMBEDDED_SCENE_SCRIPT_SELECTOR)
   if (script?.textContent) {
-    return JSON.parse(script.textContent)
+    // `json-syntax` is parseViewerScene's own stage name for this failure, so
+    // a truncated embedded payload reports through the same contract as a
+    // structurally-invalid one instead of escaping as a bare SyntaxError.
+    try {
+      return JSON.parse(script.textContent)
+    } catch (err) {
+      throw new ViewerSceneError(`json-syntax: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   return window.__WHITEBOARD_VIEWER_SCENE__
 }

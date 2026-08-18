@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mountCanvasViewer } from './mount.js'
+import { mountCanvasViewer, ViewerSceneError } from './mount.js'
 
 function resetDom() {
   document.body.innerHTML = ''
@@ -33,6 +33,31 @@ describe('mountCanvasViewer', () => {
     expect(() => mountCanvasViewer(container, { scene: { nodes: 'not an array' } })).toThrow(
       /json-canvas-schema/,
     )
+  })
+
+  it('reports a malformed embedded <script> as a ViewerSceneError, not a bare SyntaxError', () => {
+    // The embedded slot is the one input this entrypoint reads that it did
+    // not receive as an argument, and a host that serves truncated or
+    // hand-edited HTML lands here. Without this it surfaces as a raw
+    // SyntaxError, so a caller catching ViewerSceneError — the documented
+    // failure of this API — misses the JSON-syntax case entirely.
+    const script = document.createElement('script')
+    script.type = 'application/json'
+    script.setAttribute('data-whiteboard-scene', '')
+    script.textContent = '{"nodes": ['
+    document.head.appendChild(script)
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+
+    let thrown: unknown
+    try {
+      mountCanvasViewer(container)
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown).toBeInstanceOf(ViewerSceneError)
+    expect((thrown as Error).message).toMatch(/^json-syntax: /)
   })
 
   it('falls back to the embedded <script data-whiteboard-scene> when no scene option is given', () => {
