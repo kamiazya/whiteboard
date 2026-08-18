@@ -29,23 +29,6 @@ export function ensureDevDataDirSecured(dir, platformName = process.platform) {
 }
 
 /**
- * Resolves the repo root from this script's own directory rather than the
- * process cwd — `pnpm -F @kamiazya/whiteboard-mcp mcp:http:dev` runs with
- * cwd=packages/mcp-server, so a cwd-relative guess would be wrong when
- * launched from the repo root (and wrong again from a worktree).
- *
- * dev -> scripts -> mcp-server -> packages -> repoRoot.
- *
- * @deprecated Use {@link resolveRepoRootFromGit} instead — this function
- * resolves from the script's physical filesystem location, which in a pnpm
- * workspace always points to the main checkout even when the script is
- * invoked from a worktree (pnpm resolves through symlinked node_modules).
- */
-export function resolveRepoRootFromScriptDir(scriptDir) {
-  return resolve(scriptDir, '../../../..')
-}
-
-/**
  * Resolves the repo root via `git rev-parse --show-toplevel`, which always
  * returns the correct worktree root when called from inside one. This is
  * the only reliable method because pnpm resolves dev scripts through
