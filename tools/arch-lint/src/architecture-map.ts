@@ -130,40 +130,28 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
 
 /**
  * Cycles `cycle-check.ts`'s value-import graph detects today that are NOT
- * fixed yet — a shrinking allowlist in the same shape as
- * `exemptBoundaryViolationKinds` above: a group leaving this list is
- * progress, a group staying stale (no longer an actual cycle) is caught by
- * `repo-coverage.test.ts`'s allowlist-hygiene assertion. Each group is the
- * SORTED list of file paths (relative to repo root) in the strongly-
- * connected component, matching `findImportCycles`'s output shape exactly —
- * that's what makes a path-keyed lookup viable.
+ * fixed yet. Each group is the SORTED list of file paths (relative to repo
+ * root) in the strongly-connected component, matching `findImportCycles`'s
+ * output shape exactly — that's what makes a path-keyed lookup viable.
  *
- * Both entries below are closed by a deliberate `await import()`, not a
- * static edge both ways: the dynamic side only evaluates at call time,
- * after both modules have already finished loading, so neither carries the
- * module-eval TDZ risk a static-both-ways cycle (like the auth one this
- * check was added to catch) does. The coupling is still real — untangling
- * either is its own lane, not this one's.
+ * It is EMPTY, and `repo-coverage.test.ts` holds it there from both sides:
+ * one assertion fails on a cycle that is not listed, the other on a listed
+ * entry that is no longer a real cycle. So adding an entry is a deliberate
+ * act with a test that will demand its removal once the debt is paid.
+ *
+ * Before adding one, know what the last entry cost. It was defended as safe
+ * because the closing edge was a call-time `await import()` rather than a
+ * static edge both ways — the reasoning being that a deferred fetch happens
+ * after both modules have finished loading. It does not follow. A dynamic
+ * import defers WHEN the module is fetched, not whether the fetch can
+ * observe a module that is mid-evaluation somewhere up the stack: a request
+ * reached `ws.ts`'s `sendRestoreEvent` while `ws.ts`'s own body had not run,
+ * so its module-level `const connections` was still in its TDZ and the
+ * restore route 500'd with a bare ReferenceError, intermittently, under a
+ * full parallel suite. An entry here is debt with a known failure mode, not
+ * a cycle that has been reasoned safe.
  */
-export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = [
-  // doc-cache.ts imports document-store.ts statically; document-store.ts
-  // closes the loop with `await import('./doc-cache.js')` at three eviction
-  // call sites.
-  //
-  // This list used to say a call-time dynamic import carries "no module-eval
-  // TDZ risk". It does not follow, and the sibling entry that said it was
-  // removed after the risk landed: a request reached ws.ts's `sendRestoreEvent`
-  // while ws.ts's own body had not run, so its module-level `const connections`
-  // was still in its TDZ and the restore route 500'd with a bare ReferenceError
-  // — intermittently, under a full parallel suite. A dynamic import defers
-  // WHEN the module is fetched, not whether the fetch can observe a module that
-  // is mid-evaluation somewhere up the stack. Treat an entry here as debt with
-  // a known failure mode, not as a cycle that has been reasoned safe.
-  [
-    'packages/mcp-server/src/server/store/doc-cache.ts',
-    'packages/mcp-server/src/server/store/document-store.ts',
-  ],
-]
+export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []

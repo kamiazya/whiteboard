@@ -3,10 +3,11 @@ import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/document.js'
 import { countAliveNodes } from '../../store/count-alive-nodes.js'
-import { evictDoc, getDoc } from '../../store/doc-cache.js'
+import { evictDoc } from '../../store/doc-cache.js'
 import {
   ConflictError,
   documentExists,
+  getDoc,
   getDocumentKind,
   saveDocument,
 } from '../../store/document-store.js'
