@@ -1,9 +1,10 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
-import { DocumentNotFoundError } from './errors.js'
+import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
@@ -14,11 +15,31 @@ const canvasDeps = (documentStore: FakeDocumentStore) => ({
 })
 
 describe('document-io', () => {
-  test('loadDocument throws DocumentNotFoundError when no snapshot exists', async () => {
+  test('loadDocument throws SnapshotNotFoundError when no snapshot exists', async () => {
     const documentStore = new FakeDocumentStore()
     await expect(loadDocument(canvasDeps(documentStore), DOCUMENT_ID)).rejects.toThrow(
-      DocumentNotFoundError,
+      SnapshotNotFoundError,
     )
+  })
+
+  // Moved here with the loader: this used to live beside a second,
+  // byte-identical `loadSpatialCanvas`, which is what made two classes for
+  // one condition look reasonable.
+  test('loadDocument returns the doc and the decoded canvas for an existing snapshot', async () => {
+    const documentStore = new FakeDocumentStore()
+    await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+        edges: [],
+      })
+    })
+
+    const { doc, canvas } = await loadDocument(canvasDeps(documentStore), DOCUMENT_ID)
+
+    expect(doc).toBeInstanceOf(LoroDoc)
+    expect(canvas.nodes).toEqual([
+      { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
+    ])
   })
 
   test('save then load round trip preserves nodes untouched by the patch', async () => {
