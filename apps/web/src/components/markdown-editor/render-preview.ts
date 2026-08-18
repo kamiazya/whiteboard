@@ -11,6 +11,8 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
+import { outlineFromScene } from '../../lib/document-outline.js'
+import type { RailBlock } from './rail-geometry.js'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
@@ -73,6 +75,12 @@ export interface PreviewBlockAnchor {
 export interface RenderedMarkdownPreview {
   readonly svg: string
   readonly anchors: readonly PreviewBlockAnchor[]
+  /**
+   * Each top-level block's box, in the SVG's own pixel space — the same
+   * origin the anchors use, and from the SAME layout pass, so the rail that
+   * draws them can never disagree with what is painted beside it.
+   */
+  readonly blocks: readonly RailBlock[]
 }
 
 const PREVIEW_PADDING_PX = 8
@@ -107,7 +115,21 @@ export function renderMarkdownPreview(
     renderDiagram,
   })
   const svg = renderSceneToSvg(scene, { padding: PREVIEW_PADDING_PX, background })
-  return { svg, anchors: blockAnchors(value, scene) }
+  return { svg, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+}
+
+/** Top-level block boxes, shifted onto the SVG's pixel origin like anchors. */
+function blockBoxes(scene: Scene): readonly RailBlock[] {
+  if (scene.nodes.length === 0) return []
+  const bounds = sceneBounds(scene)
+  const originY = bounds.y - PREVIEW_PADDING_PX
+  const originX = bounds.x - PREVIEW_PADDING_PX
+  return outlineFromScene(scene).map((rect) => ({
+    x: rect.x - originX,
+    y: rect.y - originY,
+    w: rect.w,
+    h: rect.h,
+  }))
 }
 
 function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[] {

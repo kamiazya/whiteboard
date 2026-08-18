@@ -22,7 +22,9 @@ import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
+import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
+import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { setHeadingLevel } from './set-heading-level.js'
@@ -284,6 +286,12 @@ export function MarkdownEditor({
   } | null>(null)
   // Filled by PreviewPane on every render; read lazily by the scroll handler.
   const anchorsRef = useRef<readonly PreviewBlockAnchor[]>([])
+  const blocksRef = useRef<readonly RailBlock[]>([])
+  // The rail needs to RE-RENDER as the preview scrolls and as its blocks
+  // change, so unlike the anchors — read imperatively inside a scroll
+  // handler — these have to be state.
+  const [railBlocks, setRailBlocks] = useState<readonly RailBlock[]>([])
+  const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -369,6 +377,50 @@ export function MarkdownEditor({
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [value])
+
+  /**
+   * Keeps the rail in step with the preview it maps.
+   *
+   * Both halves are read from the SAME element on the same tick: the blocks
+   * live in the SVG's pixel space, so the visible slice has to be expressed
+   * there too, which means subtracting the SVG's own offset inside the
+   * scroll content. Measured live rather than cached, because the document
+   * column's padding and header change it.
+   */
+  useEffect(() => {
+    const preview = previewScrollRef.current
+    if (preview === null) return
+    const sync = () => {
+      const svg = preview.querySelector('svg')
+      const svgTop =
+        svg instanceof SVGElement
+          ? svg.getBoundingClientRect().top -
+            preview.getBoundingClientRect().top +
+            preview.scrollTop
+          : 0
+      setRailViewport({ top: preview.scrollTop - svgTop, height: preview.clientHeight })
+      setRailBlocks(blocksRef.current)
+    }
+    sync()
+    preview.addEventListener('scroll', sync, { passive: true })
+    return () => preview.removeEventListener('scroll', sync)
+    // Not keyed on previewWidth: it is declared below this effect, and a
+    // width change re-renders the preview anyway, which lands here through
+    // debouncedValue.
+  }, [effectiveMode, debouncedValue])
+
+  const seekPreview = useCallback((documentY: number) => {
+    const preview = previewScrollRef.current
+    if (preview === null) return
+    const svg = preview.querySelector('svg')
+    const svgTop =
+      svg instanceof SVGElement
+        ? svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
+        : 0
+    // Centre what was pointed at, the way a minimap press does — landing it
+    // at the very top would hide the context just above it.
+    preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
+  }, [])
 
   // Layout width the preview typesets at: what the pane can actually offer
   // (minus the document column's padding), clamped to a readable measure.
@@ -557,10 +609,17 @@ export function MarkdownEditor({
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
                   anchorsRef={anchorsRef}
+                  blocksRef={blocksRef}
                 />
               )}
             </div>
           </div>
+        )}
+        {/* Only where the preview is on screen: the rail's blocks come from
+            that layout, so in write-only mode it would map a document the
+            user cannot see. */}
+        {effectiveMode !== 'write' && !previewEmpty && (
+          <MinimapRail blocks={railBlocks} viewport={railViewport} onSeek={seekPreview} />
         )}
       </div>
       {linkPicker !== null && linkTargets !== undefined && (
