@@ -5,6 +5,7 @@ import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
+import { DOCUMENT_DOC_KEY_PREFIX } from '../doc-ref-key.js'
 import { closeDb, getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'
@@ -75,7 +76,11 @@ describe('sweepImportedFsBlobs', () => {
 
     const bytes = snapshotBytes('hello sweep')
     const blobPath = await writeBlob('ws-1', 'doc-a', bytes)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
     expect(await exists(blobPath)).toBe(true) // import never deletes
 
     await sweepImportedFsBlobs(db, tempDir)
@@ -85,12 +90,12 @@ describe('sweepImportedFsBlobs', () => {
     const header = await db
       .selectFrom('documentSnapshots')
       .select(['chunkCount', 'totalBytes', 'maxChunkBytes'])
-      .where('docKey', '=', 'canvas:doc-a')
+      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}doc-a`)
       .executeTakeFirstOrThrow()
     const chunkRows = await db
       .selectFrom('documentSnapshotChunks')
       .select(['chunkIndex', 'bytes'])
-      .where('docKey', '=', 'canvas:doc-a')
+      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}doc-a`)
       .orderBy('chunkIndex', 'asc')
       .execute()
     const reassembled = reassembleSnapshot(
@@ -114,7 +119,7 @@ describe('sweepImportedFsBlobs', () => {
     await db
       .insertInto('documentSnapshots')
       .values({
-        docKey: 'canvas:doc-b',
+        docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-b`,
         chunkCount: manifest.chunkCount,
         totalBytes: manifest.totalBytes,
         maxChunkBytes: manifest.maxChunkBytes,
@@ -123,11 +128,17 @@ describe('sweepImportedFsBlobs', () => {
       .execute()
     await db
       .insertInto('documentSnapshotChunks')
-      .values(chunks.map((c) => ({ docKey: 'canvas:doc-b', chunkIndex: c.index, bytes: c.bytes })))
+      .values(
+        chunks.map((c) => ({
+          docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-b`,
+          chunkIndex: c.index,
+          bytes: c.bytes,
+        })),
+      )
       .execute()
     await db
       .insertInto('documentFrontiers')
-      .values({ docKey: 'canvas:doc-b', frontier: new Uint8Array([9]) })
+      .values({ docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-b`, frontier: new Uint8Array([9]) })
       .execute()
 
     const divergentBytes = snapshotBytes('a totally different document')
@@ -135,7 +146,11 @@ describe('sweepImportedFsBlobs', () => {
 
     const capture = captureLogsForTests()
     try {
-      await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+      await importFsBlobs(
+        db as unknown as Parameters<typeof importFsBlobs>[0],
+        tempDir,
+        DOCUMENT_DOC_KEY_PREFIX,
+      )
       const warnings = capture.records.filter(
         (r) => r.level === 'warning' && r.data?.documentId === 'doc-b',
       )
@@ -157,7 +172,11 @@ describe('sweepImportedFsBlobs', () => {
     const blobPath = await writeBlob('ws-1', 'doc-garbage', new Uint8Array([1, 2, 3]))
     const capture = captureLogsForTests()
     try {
-      await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+      await importFsBlobs(
+        db as unknown as Parameters<typeof importFsBlobs>[0],
+        tempDir,
+        DOCUMENT_DOC_KEY_PREFIX,
+      )
     } finally {
       capture.restore()
     }
@@ -180,7 +199,7 @@ describe('sweepImportedFsBlobs', () => {
     await db
       .insertInto('documentSnapshots')
       .values({
-        docKey: 'canvas:doc-partial',
+        docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-partial`,
         chunkCount: manifest.chunkCount,
         totalBytes: manifest.totalBytes,
         maxChunkBytes: manifest.maxChunkBytes,
@@ -190,7 +209,11 @@ describe('sweepImportedFsBlobs', () => {
     await db
       .insertInto('documentSnapshotChunks')
       .values(
-        chunks.map((c) => ({ docKey: 'canvas:doc-partial', chunkIndex: c.index, bytes: c.bytes })),
+        chunks.map((c) => ({
+          docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-partial`,
+          chunkIndex: c.index,
+          bytes: c.bytes,
+        })),
       )
       .execute()
     // Deliberately no documentFrontiers row.
@@ -217,7 +240,7 @@ describe('sweepImportedFsBlobs', () => {
     await db
       .insertInto('documentSnapshots')
       .values({
-        docKey: 'canvas:doc-inconsistent',
+        docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-inconsistent`,
         chunkCount: manifest.chunkCount,
         totalBytes: manifest.totalBytes,
         maxChunkBytes: manifest.maxChunkBytes,
@@ -227,14 +250,17 @@ describe('sweepImportedFsBlobs', () => {
     await db
       .insertInto('documentSnapshotChunks')
       .values({
-        docKey: 'canvas:doc-inconsistent',
+        docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-inconsistent`,
         chunkIndex: chunks[0].index,
         bytes: chunks[0].bytes,
       })
       .execute()
     await db
       .insertInto('documentFrontiers')
-      .values({ docKey: 'canvas:doc-inconsistent', frontier: new Uint8Array([1]) })
+      .values({
+        docKey: `${DOCUMENT_DOC_KEY_PREFIX}doc-inconsistent`,
+        frontier: new Uint8Array([1]),
+      })
       .execute()
 
     const blobPath = await writeBlob('ws-1', 'doc-inconsistent', bytes)
@@ -252,12 +278,20 @@ describe('sweepImportedFsBlobs', () => {
 
     const bytes = snapshotBytes('sole document')
     await writeBlob('ws-1', 'doc-only', bytes)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
 
     // ws-2 has a thumbnail sibling that must keep its workspace dir alive.
     const bytes2 = snapshotBytes('other workspace document')
     await writeBlob('ws-2', 'doc-2', bytes2)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
     const versionsDir = join(tempDir, 'blobs', 'ws-2', 'versions')
     await mkdir(versionsDir, { recursive: true })
     await writeFile(join(versionsDir, 'thumb.png'), new Uint8Array([1]))
@@ -278,7 +312,11 @@ describe('sweepImportedFsBlobs', () => {
 
     const bytes = snapshotBytes('raced away')
     const blobPath = await writeBlob('ws-1', 'doc-race', bytes)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
 
     // Simulate a writer replacing/removing the blob after readDirSafe listed
     // it but before sweepOneBlob's readFile runs — the TOCTOU window the
@@ -298,7 +336,7 @@ describe('sweepImportedFsBlobs', () => {
     const header = await db
       .selectFrom('documentSnapshots')
       .select(['chunkCount'])
-      .where('docKey', '=', 'canvas:doc-race')
+      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}doc-race`)
       .executeTakeFirst()
     expect(header).toBeDefined()
   })
@@ -316,7 +354,11 @@ describe('sweepImportedFsBlobs', () => {
 
     const originalBytes = snapshotBytes('claimed by a crashed pass')
     const blobPath = await writeBlob('ws-1', 'doc-race', originalBytes)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
     // Stage the crash: the candidate is claimed, and a writer has since
     // recreated the original name with different bytes.
     const claimedPath = `${blobPath}.sweeping`
@@ -358,7 +400,11 @@ describe('sweepImportedFsBlobs', () => {
 
     const bytes = snapshotBytes('sweep once')
     await writeBlob('ws-1', 'doc-a', bytes)
-    await importFsBlobs(db as unknown as Parameters<typeof importFsBlobs>[0], tempDir)
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      tempDir,
+      DOCUMENT_DOC_KEY_PREFIX,
+    )
     await sweepImportedFsBlobs(db, tempDir)
 
     const capture = captureLogsForTests()

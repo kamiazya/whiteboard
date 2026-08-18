@@ -15,12 +15,19 @@ const log = getLogger('migration-0011')
 // this migration's lifetime, and document-store.ts/file-gc-sweeper.ts keep
 // operating on it unmodified.
 //
-// The blob path segment (`blobs/<workspaceId>/canvas/<documentId>.loro`) and
-// the `canvas:<documentId>` docKey prefix are FROZEN literals copied from
-// document-store.ts / doc-ref-key.ts as they stand today — a migration must
-// not depend on living code that can change out from under a recorded
-// migration key. Same for the table/column shapes in `MigrationSchema`
-// below, current as of 0010.
+// The blob path segment (`blobs/<workspaceId>/canvas/<documentId>.loro`) is a
+// FROZEN literal copied from document-store.ts as it stands today — a
+// migration must not depend on living code that can change out from under a
+// recorded migration key. Same for the table/column shapes in
+// `MigrationSchema` below, current as of 0010.
+//
+// The docKey prefix is a PARAMETER for the same reason, not a convenience.
+// `migration.up` passes the frozen `canvas:` it was recorded with, so a
+// replay reproduces exactly the rows it originally wrote. prepareDataDir
+// re-invokes `importFsBlobs` on every boot, AFTER all migrations, and must
+// pass the live prefix instead: `0013-document-dockey-prefix` rewrites the
+// stored rows to `document:`, and a boot-time import still writing `canvas:`
+// would re-seed an orphan copy of every blob the sweep had not yet removed.
 const IMPORT_MAX_CHUNK_BYTES = 1_000_000
 
 interface MigrationSchema {
@@ -42,9 +49,12 @@ interface MigrationSchema {
   }
 }
 
+/** The docKey prefix this migration was recorded with. Frozen; see the note above. */
+const RECORDED_DOC_KEY_PREFIX = 'canvas:'
+
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
-    await importFsBlobs(db, getDataDir())
+    await importFsBlobs(db, getDataDir(), RECORDED_DOC_KEY_PREFIX)
   },
 
   async down(): Promise<void> {
@@ -55,7 +65,7 @@ export const migration: Migration = {
 
 /**
  * Import every `.loro` blob under `{dataDir}/blobs/*\/canvas/*.loro` that has
- * no `documentSnapshots` row for its `canvas:<documentId>` docKey.
+ * no `documentSnapshots` row for its `<docKeyPrefix><documentId>` docKey.
  *
  * Exported standalone (not only via the `Migration.up` wrapper) because the
  * repo's migrator runs a migration key exactly once per database — the
@@ -64,7 +74,11 @@ export const migration: Migration = {
  * "this migration ran" and "the flip stopped writing to the FS store", during
  * which an old process can still write a fresh blob this migration never saw.
  */
-export async function importFsBlobs(db: Kysely<unknown>, dataDir: string): Promise<void> {
+export async function importFsBlobs(
+  db: Kysely<unknown>,
+  dataDir: string,
+  docKeyPrefix: string,
+): Promise<void> {
   const tdb = db as Kysely<MigrationSchema>
   const blobsRoot = join(dataDir, 'blobs')
 
@@ -75,7 +89,7 @@ export async function importFsBlobs(db: Kysely<unknown>, dataDir: string): Promi
     for (const file of files) {
       if (!file.endsWith('.loro')) continue
       const documentId = file.slice(0, -'.loro'.length)
-      await importOneBlob(tdb, workspaceId, documentId, join(canvasDir, file))
+      await importOneBlob(tdb, workspaceId, documentId, join(canvasDir, file), docKeyPrefix)
     }
   }
 }
@@ -107,8 +121,9 @@ async function importOneBlob(
   workspaceId: string,
   documentId: string,
   blobPath: string,
+  docKeyPrefix: string,
 ): Promise<void> {
-  const docKey = `canvas:${documentId}`
+  const docKey = `${docKeyPrefix}${documentId}`
 
   let bytes: Uint8Array
   try {

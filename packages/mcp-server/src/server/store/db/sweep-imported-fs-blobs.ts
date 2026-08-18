@@ -1,6 +1,7 @@
 import { access, readFile, rename, rmdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import { DOCUMENT_DOC_KEY_PREFIX } from '../doc-ref-key.js'
 import type { Database } from './index.js'
 import { readDirSafe } from './migrations/0011-import-fs-blobs.js'
 
@@ -66,7 +67,9 @@ async function rmdirIfEmpty(dir: string): Promise<void> {
 }
 
 async function sweepOneBlob(db: Database, documentId: string, blobPath: string): Promise<void> {
-  const docKey = `canvas:${documentId}`
+  // Must match what the boot-time import just wrote, which is the live
+  // prefix — not the one migration 0011 was recorded with.
+  const docKey = `${DOCUMENT_DOC_KEY_PREFIX}${documentId}`
 
   const snapshot = await db
     .selectFrom('documentSnapshots')

@@ -23,4 +23,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0010-document-path',
   '0011-import-fs-blobs',
   '0012-ulid-remaining-document-ids',
+  '0013-document-dockey-prefix',
 ] as const satisfies readonly string[]

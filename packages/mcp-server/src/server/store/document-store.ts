@@ -1,7 +1,7 @@
 /**
  * The daemon's document store: a Loro snapshot per document, persisted
  * through the same `LibsqlDocumentStore` the MCP tool surface writes
- * (`canvas:<documentId>` rows), plus the `documents` row that gives it a
+ * (`document:<documentId>` rows), plus the `documents` row that gives it a
  * workspace and a path. Everything the web app shows and edits goes through
  * here (ADR-0007's workspace/path store), and now reads/writes the SAME
  * bytes a `wb_document_*` tool call would — the FS `.loro` blob tree
@@ -97,7 +97,7 @@ async function dbReady() {
 
 // The MCP tool surface (server-core's ServerDeps) builds its own instance
 // from the same one-db-per-dataDir Kysely handle, so both sides read/write
-// the same `canvas:<documentId>` rows. The class is a stateless wrapper
+// the same `document:<documentId>` rows. The class is a stateless wrapper
 // around that handle, so a fresh instance per call is equivalent.
 async function documentStoreReady(): Promise<LibsqlDocumentStore> {
   return new LibsqlDocumentStore(await dbReady())

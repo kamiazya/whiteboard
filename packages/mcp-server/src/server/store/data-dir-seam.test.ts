@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { DOCUMENT_DOC_KEY_PREFIX } from './doc-ref-key.js'
 
 const importBaseDir = mkdtempSync(join(tmpdir(), 'whiteboard-seam-base-'))
 process.env.WHITEBOARD_DATA_DIR = importBaseDir
@@ -57,7 +58,7 @@ describe('storage layer follows the effective data dir seam', () => {
     const snapshotRow = await db
       .selectFrom('documentSnapshots')
       .select(['docKey'])
-      .where('docKey', '=', `canvas:${documentId}`)
+      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}${documentId}`)
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 

@@ -15,7 +15,7 @@ import type {
 
 function docRefKey(docRef: DocRef): string {
   return docRef.kind === 'document'
-    ? `canvas:${docRef.documentId}`
+    ? `document:${docRef.documentId}`
     : `workspace-tree:${docRef.workspaceId}`
 }
 

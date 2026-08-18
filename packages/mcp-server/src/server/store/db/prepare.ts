@@ -1,5 +1,6 @@
 import type { Kysely } from 'kysely'
 import { getLogger } from '../../log.js'
+import { DOCUMENT_DOC_KEY_PREFIX } from '../doc-ref-key.js'
 import { getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'
@@ -30,7 +31,7 @@ export function prepareDataDir(dataDir: string): Promise<void> {
     // Database type is not structurally assignable without this cast; the
     // same widening Kysely's own Migrator performs internally when it calls
     // migration.up(db).
-    await importFsBlobs(db as unknown as Kysely<unknown>, dataDir)
+    await importFsBlobs(db as unknown as Kysely<unknown>, dataDir, DOCUMENT_DOC_KEY_PREFIX)
     // Best-effort: a sweep failure (e.g. an unreadable blobs root) must not
     // block startup the way a failed import does — the FS copies it would
     // have deleted are still safe on disk, so the worst case is deferring
