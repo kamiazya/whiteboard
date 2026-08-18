@@ -44,6 +44,7 @@ import {
 import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { evictDoc, getOrLoad } from './doc-cache.js'
 import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
@@ -188,8 +189,8 @@ async function mergeAndSaveSnapshotLocked(
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
 //    upserting the matching DB rows. ──
 // overwrite defaults to false so canvas_create does not destroy existing
-// data by mistake. Normal incremental saves (WS updates, applyAndPersist,
-// compactDocument) must pass overwrite: true.
+// data by mistake. Normal incremental saves (WS updates, live-doc and
+// restore writes, compactDocument) must pass overwrite: true.
 export async function saveDocument(
   workspaceId: string,
   path: string,
@@ -227,7 +228,7 @@ export async function saveDocument(
     const savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingDocumentId) {
-      // A plain re-save (WS updates, applyAndPersist, compactDocument) omits
+      // A plain re-save (WS updates, live-doc writes, compactDocument) omits
       // `kind` and must never touch the stored value. An explicit `kind` is
       // an intentional sync request (e.g. restore reconciling a different-
       // kind source's content onto an existing target) and is honored.
@@ -356,6 +357,17 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
   return doc
 }
 
+/**
+ * `loadDocument` through the resident LRU (doc-cache.ts), which is what most
+ * callers want: a WS frame, an export, and a version read of the same
+ * document within a session should share one LoroDoc rather than each
+ * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
+ * only when a *fresh* instance is the point.
+ */
+export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc> {
+  return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path))
+}
+
 function migrateLegacyListToMovable(doc: LoroDoc): boolean {
   const list = doc.getList('elements')
   const movable = doc.getMovableList('elements')
@@ -481,7 +493,6 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     // Force the next getDoc() to reload from disk (there is nothing left to
     // reload from — a fresh create should not inherit a doc instance that
     // still holds the deleted canvas's history).
-    const { evictDoc } = await import('./doc-cache.js')
     evictDoc(workspaceId, path)
 
     return true
@@ -608,7 +619,6 @@ export async function compactDocument(
     // we just wrote. Done inside compactDocument so every caller — manual
     // optimize_canvases route and the debounced auto-compact alike — gets
     // the same invariant for free.
-    const { evictDoc } = await import('./doc-cache.js')
     evictDoc(workspaceId, path)
     return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
   })
@@ -840,7 +850,6 @@ export async function renameDocumentPath(
     // cached would shadow the just-moved canvas's real content and the next
     // write through it would persist the phantom over it. Both halves apply
     // to every descendant, not only the two paths the caller named.
-    const { evictDoc } = await import('./doc-cache.js')
     for (const move of plan.moves) {
       evictDoc(workspaceId, move.from)
       evictDoc(workspaceId, move.path)

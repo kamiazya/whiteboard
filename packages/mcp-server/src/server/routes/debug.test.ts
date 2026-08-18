@@ -16,8 +16,9 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache, getDoc } = await import('../store/doc-cache.js')
-const { saveDocument } = await import('../store/document-store.js')
+const { clearCache } = await import('../store/doc-cache.js')
+
+const { getDoc, saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
 
 function makeDocWithElements(visible: number, tombstones: number): LoroDoc {
