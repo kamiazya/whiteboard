@@ -15,9 +15,8 @@ import {
   useState,
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
+import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
-import type { MarkdownRailResponse } from '../../lib/layout-worker-protocol.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
@@ -450,33 +449,19 @@ export function MarkdownEditor({
   /**
    * Write mode has no preview, so nothing lays the document out — and the
    * rail would otherwise show whatever the last preview produced, going
-   * stale with every keystroke. The pool lays it out instead, at background
-   * priority so it can never sit in front of work someone is waiting on.
+   * stale with every keystroke. The shared hook lays it out in the pool
+   * instead, at background priority.
    */
+  const writeModeOutline = useMarkdownOutline(debouncedValue, {
+    enabled: effectiveMode === 'write',
+    maxWidth: previewWidth,
+  })
   useEffect(() => {
-    if (effectiveMode !== 'write' || debouncedValue.trim() === '') return
-    const pool = sharedLayoutWorkerPool()
-    const id = nextLayoutRequestId()
-    let live = true
-    pool
-      .run<MarkdownRailResponse>(
-        { type: 'markdown-rail', id, body: debouncedValue, maxWidth: previewWidth },
-        'background',
-      )
-      .then((reply) => {
-        if (!live || reply.type !== 'markdown-rail-done') return
-        anchorsRef.current = reply.anchors
-        blocksRef.current = reply.blocks
-        setRailBlocks(reply.blocks)
-      })
-      // A refusal (no worker font, a superseded request) leaves the rail as
-      // it was. It is a map, not the document.
-      .catch(() => undefined)
-    return () => {
-      live = false
-      pool.cancel(id)
-    }
-  }, [effectiveMode, debouncedValue, previewWidth])
+    if (effectiveMode !== 'write' || writeModeOutline.blocks.length === 0) return
+    anchorsRef.current = writeModeOutline.anchors
+    blocksRef.current = writeModeOutline.blocks
+    setRailBlocks(writeModeOutline.blocks)
+  }, [effectiveMode, writeModeOutline])
 
   // Write mode: the visible SOURCE lines are what the marker has to show, so
   // the range is read from CodeMirror's own block geometry and mapped onto
