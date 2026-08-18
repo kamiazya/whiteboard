@@ -356,24 +356,45 @@ function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[]
  * aborting the canvas — this is the layer's own totality addition on top
  * of canvas-render's already-total layout functions.
  */
+/**
+ * The text node's own fit: the blocks that fit, but never fewer than one.
+ *
+ * A text node has no lower-ranked rendering to degrade to, so dropping
+ * everything erases the user's own prose — and the box that keeps nothing is
+ * not the pathological one, it is a node one line tall: at the default
+ * padding a 25px-high node leaves 9px of content box for a ~16px line. That
+ * is the same reasoning as `fitToWidth` never returning the empty string,
+ * applied to the other axis. The block that stays squeezes the padding rather
+ * than leaving the FRAME, which is the bound this whole fit exists to keep.
+ *
+ * The sibling seams keep `fitSceneInNode`'s `undefined` because they DO have
+ * somewhere better to go — the plain chrome-and-label rendering.
+ */
+function fitTextBody(scene: Scene, node: SpatialNode, options: ResolvedLayoutOptions): Scene {
+  // A non-positive content box is "no height to fit against", the same
+  // reading `fitToWidth` gives an unusable `maxWidth`. It is not a
+  // hypothetical: the editor's grow-only auto-fit measures a node's NATURAL
+  // content height by laying it out at height 1 and reading the scene's
+  // bottom edge, so a truncation here would cap what that probe can report
+  // and the box could never grow past one block.
+  if (contentBox(node, options) === undefined) return scene
+  return fitSceneInNode(scene, node, options) ?? { nodes: scene.nodes.slice(0, 1) }
+}
+
 function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const maxWidth = contentWidth(node.width, options)
-  let body: Scene | undefined
+  let body: Scene
   try {
-    body = fitBodyInNode(node, options.parseBody(node.text), options)
+    const laid = layoutMdastBlocks(options.parseBody(node.text), mdastOptionsFor(maxWidth, options))
+    body = fitTextBody(laid, node, options)
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-    body = fitSceneInNode({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
+    body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
   }
-  const chrome = chromeShape(node, options)
-  // A box with room for nothing renders as bare chrome. Painting the first
-  // line anyway is what put a paragraph outside the frame; a "there is more"
-  // affordance needs the editor-side overlay `fitBodyInNode` already names as
-  // its upgrade path, which this pure-geometry package cannot own.
-  return body === undefined ? [chrome] : [chrome, ...placeInNode(node, body, options)]
+  return [chromeShape(node, options), ...placeInNode(node, body, options)]
 }
 
 /**

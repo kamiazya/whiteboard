@@ -724,6 +724,52 @@ describe('a text node keeps its body inside its own box', () => {
     }
   })
 
+  it('keeps one block even when the box has room for none', () => {
+    // A node one line tall is the COMMON shape, not a pathological one: at
+    // the default padding a 25px-high node leaves 9px of content box for a
+    // ~16px line. Dropping everything there erased the prose from an
+    // ordinary label-sized node — caught by the widget smoke, whose own
+    // fixture is exactly this.
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 25, text: '日本語ラベル' }],
+      edges: [],
+    }
+
+    const scene = layoutSpatialCanvas(
+      canvas,
+      baseOptions({ measure: fullWidth, parseBody: parseParagraphs }),
+    )
+
+    expect(runBottoms(scene).length).toBeGreaterThan(0)
+  })
+
+  it('does not truncate when the box gives no height to fit against', () => {
+    // The editor's grow-only auto-fit measures a text node's NATURAL content
+    // height by laying it out at height 1 and reading the scene's bottom
+    // edge. Truncating there caps what the probe can report, so a box can
+    // never grow past one block — which is how a fit meant to keep content
+    // inside the frame ends up DEFEATING the feature that keeps it inside
+    // the frame. Same reading `fitToWidth` gives an unusable maxWidth.
+    const probe: SpatialCanvas = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 1, text: 'かあらた\n\nかたそ' },
+      ],
+      edges: [],
+    }
+    const roomy: SpatialCanvas = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 400, text: 'かあらた\n\nかたそ' },
+      ],
+      edges: [],
+    }
+    const opts = baseOptions({ measure: fullWidth, parseBody: parseParagraphs })
+
+    // The degenerate probe must see every block a roomy box would.
+    expect(runBottoms(layoutSpatialCanvas(probe, opts)).length).toBe(
+      runBottoms(layoutSpatialCanvas(roomy, opts)).length,
+    )
+  })
+
   it('still paints the blocks that do fit', () => {
     const canvas: SpatialCanvas = {
       nodes: [
