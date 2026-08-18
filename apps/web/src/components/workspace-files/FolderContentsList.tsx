@@ -1,8 +1,8 @@
 import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { cn } from '../../lib/utils.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { folderContents } from './folder-contents.js'
-import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 /**
  * What a click in the middle pane means. A folder and a document are opened
@@ -12,17 +12,17 @@ import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
  */
 export type FolderContentsOpen =
   | { kind: 'folder'; path: string }
-  | { kind: 'document'; document: WorkspaceFileTreeDocument }
+  | { kind: 'document'; document: WorkspaceDocumentEntry }
 
 export interface FolderContentsListProps {
-  documents: readonly WorkspaceFileTreeDocument[]
+  documents: readonly WorkspaceDocumentEntry[]
   /** The folder being looked inside. `''` is the workspace root. */
   folder: string
   onOpen: (target: FolderContentsOpen) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
   /** A row's miniature — the same capability slot the tree takes. */
-  renderIcon?: (document: WorkspaceFileTreeDocument) => ReactNode
+  renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
 

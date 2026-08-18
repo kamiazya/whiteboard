@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import { fitMinimap, projectBox } from '../spatial-editor/minimap.js'
-import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
  * The icon's own box, in percent-of-element units.
@@ -41,15 +41,13 @@ const MIN_EXTENT_PCT = 6
 const MAX_RECTS = 10
 
 export interface DocumentMinimapProps {
-  readonly document: WorkspaceFileTreeDocument
+  readonly document: WorkspaceDocumentEntry
   /**
    * Reads a document's shape. Injected rather than fetched here so this
    * component stays free of the daemon client — and so a test can answer
    * without a network or a worker.
    */
-  readonly loadOutline: (
-    document: WorkspaceFileTreeDocument,
-  ) => Promise<readonly FaviconRect[] | null>
+  readonly loadOutline: (document: WorkspaceDocumentEntry) => Promise<readonly FaviconRect[] | null>
 }
 
 /** The largest few rects, fitted to the whole icon box. */

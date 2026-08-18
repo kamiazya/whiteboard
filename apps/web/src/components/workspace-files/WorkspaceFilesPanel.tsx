@@ -6,9 +6,10 @@ import {
   listDocuments,
 } from '../../lib/daemon-api-client.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderContentsList } from './FolderContentsList.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
-import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
+import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
 export interface WorkspaceFilesPanelProps {
   daemonFetch: typeof globalThis.fetch
@@ -38,7 +39,7 @@ export function WorkspaceFilesPanel({
   daemonBaseUrl,
   workspaceId,
 }: WorkspaceFilesPanelProps) {
-  const [documents, setDocuments] = useState<WorkspaceFileTreeDocument[] | null>(null)
+  const [documents, setDocuments] = useState<WorkspaceDocumentEntry[] | null>(null)
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
@@ -92,7 +93,7 @@ export function WorkspaceFilesPanel({
     }
   }, [daemonFetch, daemonBaseUrl, workspaceId])
 
-  const openDocument = (entry: WorkspaceFileTreeDocument) => {
+  const openDocument = (entry: WorkspaceDocumentEntry) => {
     setPreview({ kind: 'loading', path: entry.path })
     getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
       .then((res) => {
@@ -136,14 +137,10 @@ export function WorkspaceFilesPanel({
           the same hierarchy, and three columns in a phone's width leaves
           none of them readable. */}
       <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
-        <WorkspaceFileTree
+        <WorkspaceFolderTree
           documents={documents}
-          onOpen={openDocument}
           onSelectFolder={setFolder}
           selectedFolder={folder}
-          renderIcon={(entry) => (
-            <DocumentMinimap key={entry.documentId} document={entry} loadOutline={loadRowOutline} />
-          )}
         />
       </div>
       <div className="w-full shrink-0 overflow-y-auto md:w-64 md:border-r md:pr-3">

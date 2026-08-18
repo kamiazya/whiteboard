@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderContentsList } from './FolderContentsList.js'
-import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
-const docs: WorkspaceFileTreeDocument[] = [
+const docs: WorkspaceDocumentEntry[] = [
   { documentId: 'd1', path: 'design/login', name: 'Login', kind: 'markdown' },
   { documentId: 'd2', path: 'design/notes/kickoff', name: 'Kickoff', kind: 'markdown' },
   { documentId: 'd3', path: 'roadmap', name: 'Roadmap', kind: 'spatial' },
@@ -52,7 +52,7 @@ describe('FolderContentsList', () => {
   })
 
   it('labels a document by its path segment when nobody named it', () => {
-    const unnamed: WorkspaceFileTreeDocument[] = [{ documentId: 'd9', path: 'design/untitled-3' }]
+    const unnamed: WorkspaceDocumentEntry[] = [{ documentId: 'd9', path: 'design/untitled-3' }]
     render(<FolderContentsList documents={unnamed} folder="design" onOpen={vi.fn()} />)
     expect(screen.getByRole('button', { name: /untitled-3/ }).textContent).toBe('untitled-3')
   })

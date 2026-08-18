@@ -81,7 +81,7 @@ afterEach(() => {
 })
 
 describe('DaemonIndexPage tree view', () => {
-  it('shows the path tree and previews a canvas OKF on click', async () => {
+  it('shows folders as tree branches and nothing else', async () => {
     installFetchMock()
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -92,14 +92,13 @@ describe('DaemonIndexPage tree view', () => {
     await waitFor(() => {
       expect(screen.getByTestId('workspace-files-panel')).not.toBeNull()
     })
-    // A nested path renders as a tree branch, not a flat 'notes/design' row.
-    expect(screen.queryByText('notes/design')).toBeNull()
-    const design = await screen.findByText('design')
-
-    fireEvent.click(design)
-    await waitFor(() => {
-      expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
-    })
+    const tree = screen.getByRole('tree')
+    // A nested path renders as a branch, not a flat 'notes/design' row.
+    expect(within(tree).queryByText('notes/design')).toBeNull()
+    expect(within(tree).getByText('notes')).not.toBeNull()
+    // `notes/design` is a document, so the tree — which answers WHERE, not
+    // what — does not list it. The contents pane does.
+    expect(within(tree).queryByText('design')).toBeNull()
   })
 
   it('lists a folder’s contents in the middle pane and previews from there', async () => {
