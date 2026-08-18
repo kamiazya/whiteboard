@@ -331,7 +331,12 @@ export function SourcePane({
         bottomVisibleLine: () => {
           const bottom = view.scrollDOM.scrollTop + view.scrollDOM.clientHeight
           const block = view.lineBlockAtHeight(bottom)
-          return view.state.doc.lineAt(block.from).number
+          const line = view.state.doc.lineAt(block.from).number
+          // Fractional, like topVisibleLine: the last line is usually only
+          // PARTLY on screen, and returning its start would make a viewport
+          // marker computed from this pair too short by that remainder.
+          const fraction = block.height > 0 ? (bottom - block.top) / block.height : 0
+          return line + Math.max(0, Math.min(1, fraction))
         },
         revealLine: (line: number) => {
           const clamped = Math.max(1, Math.min(view.state.doc.lines, Math.round(line)))

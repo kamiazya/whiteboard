@@ -87,6 +87,14 @@ describe('lineForDocumentY', () => {
 })
 
 describe('round trip', () => {
+  // The two directions have to agree about where the LAST band ends, or a
+  // press in it lands on an earlier line than the marker showed. They did
+  // not: 20 -> 390 -> 19.1.
+  it('returns to the line it started from in the final band, not an earlier one', () => {
+    const y = documentYForLine(anchors, 20, TAIL)
+    expect(lineForDocumentY(anchors, y, TAIL)).toBeCloseTo(20)
+  })
+
   it('returns to the line it started from, at every block boundary', () => {
     for (const anchor of anchors) {
       expect(lineForDocumentY(anchors, documentYForLine(anchors, anchor.line, TAIL), TAIL)).toBe(

@@ -65,7 +65,11 @@ export function lineForDocumentY(
   const index = bandIndex(anchors, (anchor) => anchor.y <= y)
   const current = anchors[index] as PreviewBlockAnchor
   const next = anchors[index + 1]
-  const endLine = next?.line ?? totalLines
+  // `+ 1` to match documentYForLine: the final band runs to just past the
+  // last line, so the two directions agree about where it ends. Using
+  // `totalLines` here made a press in that band land on an earlier line than
+  // the marker had shown for it.
+  const endLine = next?.line ?? totalLines + 1
   const endY = next?.y ?? contentHeight
   // A zero-height band (an empty block laid out at its neighbour's Y) would
   // otherwise divide by zero and answer NaN.

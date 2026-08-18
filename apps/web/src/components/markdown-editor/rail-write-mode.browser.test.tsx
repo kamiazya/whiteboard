@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useDocumentOutline } from '../../hooks/useDocumentOutline.js'
+import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 const SHORT = '# One\n\nJust a line.\n'
@@ -82,6 +83,35 @@ function OutlineProbe({ body }: { body: string }) {
   })
   return <div data-testid="outline-count">{rects.length}</div>
 }
+
+function KeyedProbe({ body }: { body: string }) {
+  const outline = useMarkdownOutline(body, { enabled: true, maxWidth: 400 })
+  return (
+    <div data-testid="keyed">
+      {outline.forBody === body ? `current:${outline.blocks.length}` : 'stale'}
+    </div>
+  )
+}
+
+// The hook holds its last shape across a disable and a refusal so the rail
+// does not blink, which means a consumer can be handed the shape of text
+// that is no longer on screen. `forBody` is how it says which text it
+// describes — the editor refuses to publish one that does not match, and a
+// timing test of that window would assert nothing, since the worker answers
+// either way. This pins the contract that guard depends on.
+describe('an outline says which text it describes', () => {
+  it('carries the body it was computed for', async () => {
+    const { getByTestId, rerender } = render(<KeyedProbe body={'# One\n\nProse.\n'} />)
+    await waitFor(() => expect(getByTestId('keyed').textContent).toMatch(/^current:[1-9]/), {
+      timeout: 15_000,
+    })
+
+    rerender(<KeyedProbe body={'# Two\n\nDifferent prose entirely.\n\n## More\n'} />)
+    await waitFor(() => expect(getByTestId('keyed').textContent).toMatch(/^current:[1-9]/), {
+      timeout: 15_000,
+    })
+  })
+})
 
 describe('a markdown document’s outline', () => {
   it('has a shape at all, which only a layout can give it', async () => {

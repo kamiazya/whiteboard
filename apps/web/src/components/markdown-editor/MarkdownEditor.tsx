@@ -457,11 +457,16 @@ export function MarkdownEditor({
     maxWidth: previewWidth,
   })
   useEffect(() => {
-    if (effectiveMode !== 'write' || writeModeOutline.blocks.length === 0) return
+    // Only a shape computed for THIS text. The hook keeps its last result
+    // across a disable so the rail does not blink, which means the first
+    // render after re-entering write mode offers the shape of whatever was
+    // there before — and a seek through those anchors reveals the wrong
+    // line.
+    if (effectiveMode !== 'write' || writeModeOutline.forBody !== debouncedValue) return
     anchorsRef.current = writeModeOutline.anchors
     blocksRef.current = writeModeOutline.blocks
     setRailBlocks(writeModeOutline.blocks)
-  }, [effectiveMode, writeModeOutline])
+  }, [effectiveMode, writeModeOutline, debouncedValue])
 
   // Write mode: the visible SOURCE lines are what the marker has to show, so
   // the range is read from CodeMirror's own block geometry and mapped onto
@@ -486,7 +491,10 @@ export function MarkdownEditor({
     sync()
     scroller.addEventListener('scroll', sync, { passive: true })
     return () => scroller.removeEventListener('scroll', sync)
-  }, [effectiveMode, value, debouncedValue])
+    // writeModeOutline belongs here: new rows arriving without a matching
+    // viewport recomputation leaves the marker placed by the PREVIOUS
+    // layout until the user happens to scroll.
+  }, [effectiveMode, value, debouncedValue, writeModeOutline])
 
   useEffect(() => {
     const preview = previewScrollRef.current

@@ -19,9 +19,19 @@ import type { MarkdownRailResponse } from '../lib/layout-worker-protocol.js'
 export interface MarkdownOutline {
   readonly blocks: readonly RailBlock[]
   readonly anchors: readonly { line: number; y: number }[]
+  /**
+   * The body this shape was computed FOR.
+   *
+   * The hook holds its last result while disabled and after a refusal, which
+   * is what stops a rail from blinking empty on every keystroke — and is
+   * exactly why a consumer must not assume the shape describes what it is
+   * looking at now. A document edited while the hook was disabled comes back
+   * to a shape of the OLD text, and anchors from it reveal the wrong line.
+   */
+  readonly forBody: string | null
 }
 
-const EMPTY: MarkdownOutline = { blocks: [], anchors: [] }
+const EMPTY: MarkdownOutline = { blocks: [], anchors: [], forBody: null }
 
 export function useMarkdownOutline(
   body: string,
@@ -38,7 +48,7 @@ export function useMarkdownOutline(
       .run<MarkdownRailResponse>({ type: 'markdown-rail', id, body, maxWidth }, 'background')
       .then((reply) => {
         if (live && reply.type === 'markdown-rail-done') {
-          setOutline({ blocks: reply.blocks, anchors: reply.anchors })
+          setOutline({ blocks: reply.blocks, anchors: reply.anchors, forBody: body })
         }
       })
       // A refusal — no worker font, a superseded request — leaves the last
