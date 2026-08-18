@@ -369,14 +369,20 @@ function layoutPhrasing(
       // Trailing whitespace is a cursor advance, never glyphs: XML strips a
       // run's boundary whitespace, so a run carrying it would paint a
       // space-width left of where layout measured it.
-      const painted = buffered.replace(/\s+$/, '')
+      //
+      // `trimEnd`, not `/\s+$/`: an anchored `\s+` retries at every position
+      // and is quadratic on a long whitespace run (CodeQL js/polynomial-redos,
+      // high). Document text is untrusted input, so the linear form is the
+      // only one worth having here even though `emit` collapses whitespace
+      // before this point.
+      const painted = buffered.trimEnd()
       if (painted !== '') pushRun(painted, extra, runStyle)
       buffered = ''
     }
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index] ?? ''
       const candidate = buffered + segment
-      if (line.x + widthOf(candidate.replace(/\s+$/, '')) <= options.maxWidth) {
+      if (line.x + widthOf(candidate.trimEnd()) <= options.maxWidth) {
         buffered = candidate
         continue
       }
@@ -385,7 +391,7 @@ function layoutPhrasing(
         line.x = 0
         line.index += 1
         // A boundary space at the start of a line is dropped, not advanced.
-        segments[index] = segment.replace(/^\s+/, '')
+        segments[index] = segment.trimStart()
         index -= 1
         continue
       }
