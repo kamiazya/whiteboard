@@ -10,10 +10,11 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
-import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * Per-node text budget, in characters. A text node can hold a whole markdown
@@ -50,6 +51,20 @@ const canvasSnapshotNodeSchema = z
     url: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
+    /**
+     * The node's content does not fit the box it is drawn in, so the editor
+     * paints its last surviving line under a fade and the rest is invisible.
+     *
+     * Deliberately NOT `textTruncated`, which is this READ cutting `text` at
+     * `SNAPSHOT_TEXT_MAX_CHARS` for transport. That one is an artifact of
+     * asking; this one is a property of the board, and the fix for it is to
+     * resize the node or shorten its text.
+     *
+     * Present only under `layout: true` — whether content fits is knowable
+     * only from a layout pass, so its ABSENCE means "not measured", never
+     * "fits".
+     */
+    overflows: z.literal(true).optional(),
   })
   .strict()
 
@@ -84,8 +99,8 @@ export const canvasSnapshotSchema = z
      * above, which are what is stored and what an edit writes back.
      *
      * `nodes` is dropped from what `sceneDigest` produces — its ids and
-     * z-order restate the node list above, and the relations are the part a
-     * reader cannot derive.
+     * z-order restate the node list above. What a reader could NOT derive is
+     * carried up instead, onto the nodes themselves as `overflows`.
      */
     layout: sceneDigestSchema.omit({ nodes: true }).optional(),
   })
@@ -98,9 +113,9 @@ const canvasSnapshotInputSchema = z
     documentId: documentIdSchema,
     /**
      * Also analyse the laid-out scene: what overlaps, what contains what,
-     * what clusters, and where the free space is. Off by default because it
-     * costs a full layout pass, and "what is on this board" is the far more
-     * common question.
+     * what clusters, where the free space is, and which nodes' content does
+     * not fit its box. Off by default because it costs a full layout pass,
+     * and "what is on this board" is the far more common question.
      */
     layout: z.boolean().optional(),
   })
@@ -193,32 +208,18 @@ export function projectCanvasSnapshot(
 }
 
 /**
- * The one read of a spatial canvas — what an agent reaches for before
- * editing one, and after, to see what it did.
+ * The compact, semantic read of a spatial canvas — what an agent should
+ * reach for before editing one.
  *
- * It answers two questions that used to be two tools. By default, WHAT IS ON
- * the board: every node's type, text, stored geometry and lock state, plus
- * every edge. With `layout: true`, additionally whether the board is TIDY:
- * overlaps, containment, clusters and free space, from the retired
- * `wb_scene_digest`.
+ * It is deliberately NOT `wb_scene_digest`, which reports laid-out geometry
+ * (overlaps, clusters, free regions) and carries no text, edges or node
+ * types at all. The two answer different questions and neither subsumes the
+ * other: digest says whether a board is tidy, this says what is on it.
  *
- * Splitting those across two tools made the model choose between reads that
- * both answered with a node list — the same selection problem the seven
- * retired mutation tools had, one layer down. Merging them also collapses
- * two disagreeing honesty rules into one: the analysis used to degrade
- * SILENTLY to empty arrays past its guards, so a board too large to scan
- * reported "nothing overlaps".
- *
- * The layout half stays opt-in because it costs a full layout pass — text
- * measurement and edge routing — and "what is on this board" is the far more
- * common question. Its boxes are also a different thing from the geometry
- * above: laid out, i.e. where content is actually drawn, rather than stored,
- * i.e. what an edit writes back.
- *
- * It is not `wb_document_get`, which returns the untruncated JSON Canvas: on
- * a large board, or a node holding a whole markdown document, that payload
- * is unbounded, and being safe to call on any board is the whole reason this
- * tool exists.
+ * It is also not `wb_document_get`, which returns the untruncated JSON
+ * Canvas: on a large board or a node holding a whole markdown document that
+ * payload is unbounded, and being safe to call on any board is the whole
+ * reason this tool exists.
  *
  * Both caps take the FIRST N in stored order.
  * ponytail: stored order, viewport- or selection-scoped windowing if
@@ -228,11 +229,11 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_snapshot' as const,
     description:
-      'Read a spatial canvas: every node with its type, text, geometry and lock state, plus every edge. Long text and large boards are cut, and the true totals are reported alongside so nothing is hidden silently. Pass layout:true to also get the laid-out analysis — what overlaps, what contains what, what clusters, and where the free space is — at the cost of a layout pass. Prefer this over wb_document_get when reading a canvas to decide what to change.',
+      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry and lock state, plus every edge. Long text and large boards are cut, and the true totals are reported alongside so nothing is hidden silently. Prefer this over wb_document_get when reading a canvas to decide what to change.',
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
-      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
       await assertSpatialDocument(
         deps,
         input.workspaceId,
@@ -249,10 +250,19 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
       )
       if (input.layout !== true) return snapshot
 
-      const { nodes: _laidOut, ...relations } = sceneDigest(
+      const { nodes: laidOut, ...relations } = sceneDigest(
         composeCanvasScene(canvas, fallbackMeasureText),
       )
-      return { ...snapshot, layout: relations }
+      // The one fact the node list above cannot restate. Matched by id, so a
+      // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.
+      const overflowing = new Set(laidOut.filter((n) => n.truncated === true).map((n) => n.id))
+      return {
+        ...snapshot,
+        nodes: snapshot.nodes.map((node) =>
+          overflowing.has(node.id) ? { ...node, overflows: true as const } : node,
+        ),
+        layout: relations,
+      }
     },
   }
 }

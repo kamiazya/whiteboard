@@ -1,5 +1,5 @@
 /**
- * Files tab: the workspace document tree (/api/v1 path world)
+ * Files tab: the workspace document tree
  * reachable from the daemon index page, with a read-only OKF preview.
  */
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
@@ -26,15 +26,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const OKF_DOC = '---\ntype: note\ntitle: Design\n---\n\n# Palette decisions'
 
+// The tree reads the same rich list the grid does — the /api/v1 one carries
+// no display name and no kind, and the tree needs both.
 function installFetchMock(
-  v1ListResponse: { status: number; body: unknown } = {
+  listResponse: { status: number; body: unknown } = {
     status: 200,
     body: {
       documents: [
-        { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'notes' },
         {
-          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
+          id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          path: 'notes',
+          updatedAt: '2026-05-01T12:00:00.000Z',
+          kind: 'markdown',
+        },
+        {
+          id: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
           path: 'notes/design',
+          updatedAt: '2026-05-01T12:00:00.000Z',
+          kind: 'markdown',
         },
       ],
     },
@@ -45,16 +54,13 @@ function installFetchMock(
     if (url.endsWith('/api/workspaces')) {
       return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
     }
-    if (url.endsWith('/api/v1/workspaces/default/documents')) {
-      return Promise.resolve(jsonResponse(v1ListResponse.body, v1ListResponse.status))
-    }
     if (url.endsWith('/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
       return Promise.resolve(
         jsonResponse({ markdown: OKF_DOC, frontmatter: { type: 'note', title: 'Design' } }),
       )
     }
     if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
-      return Promise.resolve(jsonResponse({ documents: [] }))
+      return Promise.resolve(jsonResponse(listResponse.body, listResponse.status))
     }
     return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
   })
@@ -89,7 +95,7 @@ describe('DaemonIndexPage tree view', () => {
     })
   })
 
-  it('shows a calm no-tree message (not an alert) when the v1 list 404s', async () => {
+  it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -101,7 +107,7 @@ describe('DaemonIndexPage tree view', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('still shows the failure alert when the v1 list fails for a non-404 reason', async () => {
+  it('still shows the failure alert when the list fails for a non-404 reason', async () => {
     installFetchMock({ status: 500, body: { error: 'boom' } })
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,

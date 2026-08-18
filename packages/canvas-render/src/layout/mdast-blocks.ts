@@ -900,3 +900,100 @@ export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions):
   const nodes = root.children.map((child) => layoutBlock(child, cursor, options, 0))
   return { nodes }
 }
+
+export interface FittedBlocks {
+  readonly nodes: readonly SceneNode[]
+  /** Something a reader cannot see was removed to make the rest fit. */
+  readonly truncated: boolean
+}
+
+/**
+ * Marks the LAST run in paint order, which is the one thing a reader can see
+ * next to whatever was removed.
+ *
+ * Rebuilds only the spine down to that run — every bbox is left exactly as
+ * laid out, so the wrapper-relative x convention (`subtreeOffsetX`) is
+ * untouched.
+ */
+function markLastRun(nodes: readonly SceneNode[]): readonly SceneNode[] {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index] as SceneNode & {
+      runs?: readonly SceneNode[]
+      children?: readonly SceneNode[]
+      items?: readonly SceneNode[]
+    }
+    if (node.kind === 'textRun') {
+      const copy = [...nodes]
+      copy[index] = { ...node, truncated: true as const }
+      return copy
+    }
+    for (const key of ['runs', 'children', 'items'] as const) {
+      const branch = node[key]
+      if (branch === undefined || branch.length === 0) continue
+      const marked = markLastRun(branch)
+      if (marked !== branch) {
+        const copy = [...nodes]
+        copy[index] = { ...node, [key]: marked } as SceneNode
+        return copy
+      }
+    }
+  }
+  return nodes
+}
+
+/**
+ * Trims laid-out blocks to what fits `maxHeight`, and says whether anything
+ * was removed.
+ *
+ * Granularity steps down the way the wrap does: whole blocks first, then the
+ * LINES of the block that straddles the edge (`layoutPhrasing` emits one run
+ * per wrapped line) or the ITEMS of a list. Whole-block alone leaves the
+ * commonest body of all unbounded — a single long paragraph is ONE block, so
+ * it either fits or is kept whole and painted outside its box.
+ *
+ * `blockquote`/`table`/`code` stay whole-block: their children are not lines,
+ * and two of them are the `subtreeOffsetX` transform-boundary class.
+ *
+ * This lives here rather than beside the spatial fitter that calls it because
+ * "which part of a block is a line" is this module's own knowledge — the
+ * caller supplies a height and learns nothing about block internals.
+ */
+export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number): FittedBlocks {
+  const kept: SceneNode[] = []
+  let truncated = false
+  for (const entry of nodes) {
+    // `layoutMdastBlocks` never emits an edge (the one variant with no
+    // `bbox`); that guard is for the type checker, not runtime.
+    if (entry.kind === 'edge') continue
+    if (entry.bbox.y + entry.bbox.h <= maxHeight) {
+      kept.push(entry)
+      continue
+    }
+    // The first block that does not fit is the last one considered: blocks
+    // are laid out with strictly increasing bottoms, so everything after it
+    // starts lower still.
+    const trimmed = trimBlock(entry, maxHeight)
+    if (trimmed !== undefined) kept.push(trimmed)
+    truncated = true
+    break
+  }
+  if (kept.length < nodes.length) truncated = true
+  return { nodes: truncated ? markLastRun(kept) : kept, truncated }
+}
+
+function trimBlock(
+  block: Exclude<SceneNode, { kind: 'edge' }>,
+  maxBottom: number,
+): SceneNode | undefined {
+  if (block.kind === 'list') {
+    const items = block.items.filter((item) => item.bbox.y + item.bbox.h <= maxBottom)
+    if (items.length === 0) return undefined
+    const bottom = Math.max(...items.map((item) => item.bbox.y + item.bbox.h))
+    return { ...block, items, bbox: { ...block.bbox, h: bottom - block.bbox.y } }
+  }
+  if (block.kind !== 'paragraph' && block.kind !== 'heading') return undefined
+  const runs = block.runs.filter((run) => run.bbox.y + run.bbox.h <= maxBottom)
+  if (runs.length === 0) return undefined
+  const bottom = Math.max(...runs.map((run) => run.bbox.y + run.bbox.h))
+  return { ...block, runs, bbox: { ...block.bbox, h: bottom - block.bbox.y } }
+}

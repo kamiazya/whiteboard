@@ -7,7 +7,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
-import { SnapshotNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import {
   canvasSnapshotSchema,
@@ -16,6 +15,7 @@ import {
   SNAPSHOT_MAX_NODES,
   SNAPSHOT_TEXT_MAX_CHARS,
 } from './canvas-snapshot.js'
+import { SnapshotNotFoundError } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -257,7 +257,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
         { x: 0, y: 120, w: 40, h: 20 },
         { x: 0, y: 140, w: 40, h: 20 },
       ],
-      truncated: false,
+      partial: false,
     })
     expect(() => canvasSnapshotSchema.parse(result)).not.toThrow()
   })
@@ -325,5 +325,61 @@ describe('wb_canvas_snapshot — layout analysis', () => {
 
     expect(result.nodes).toHaveLength(1)
     expect(result.layout).toBeDefined()
+  })
+})
+
+/**
+ * The one fact a reader cannot derive from the node list, and the reason
+ * `layout` drops `sceneDigest`'s own `nodes` but carries this up: whether a
+ * node's content actually fits the box it is drawn in. Distinct from
+ * `textTruncated`, which is this read cutting `text` for transport.
+ */
+describe('wb_canvas_snapshot — overflows', () => {
+  const CRAMPED = 'これは日本語のテキストで折り返します'
+
+  async function snapshotOf(nodes: SpatialNode[], layout: boolean) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, { nodes, edges: [] })
+    })
+    return createCanvasSnapshotTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ...(layout ? { layout: true } : {}),
+    })
+  }
+
+  test('marks a node whose content does not fit the box it is drawn in', async () => {
+    const result = await snapshotOf(
+      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      true,
+    )
+
+    expect(result.nodes[0].overflows).toBe(true)
+    // Not `textTruncated`: 18 characters is nowhere near the 400-char read
+    // budget. The text came back whole and still does not fit.
+    expect(result.nodes[0]).not.toHaveProperty('textTruncated')
+    expect(result.nodes[0].text).toBe(CRAMPED)
+  })
+
+  test('leaves a node with room to spare unmarked', async () => {
+    const result = await snapshotOf(
+      [{ id: 'roomy', type: 'text', x: 0, y: 0, width: 400, height: 400, text: CRAMPED }],
+      true,
+    )
+
+    expect(result.nodes[0]).not.toHaveProperty('overflows')
+  })
+
+  // Absence has to mean "not measured", never "fits" — a reader that took the
+  // default read as evidence of fitting would be wrong on every cramped node.
+  test('never claims to know without a layout pass', async () => {
+    const result = await snapshotOf(
+      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      false,
+    )
+
+    expect(result.nodes[0]).not.toHaveProperty('overflows')
+    expect(result).not.toHaveProperty('layout')
   })
 })

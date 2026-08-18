@@ -67,9 +67,9 @@ describe('linkMarkupFor', () => {
   // from is exactly what the reader needs, and the codec's alias half is
   // where it goes.
   it('always names the id form, using the display text or the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[canvas:01JDUPE1|untitled]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
     expect(linkMarkupFor(targets[3] as LinkTarget, targets, 'the first one')).toBe(
-      '[[canvas:01JDUPE1|the first one]]',
+      '[[01JDUPE1|the first one]]',
     )
   })
 
@@ -95,24 +95,26 @@ describe('linkMarkupFor', () => {
   // would not, and codec resolves an ambiguous alias to nothing. The name
   // still travels, as the alias.
   it('falls back to the id when two documents share the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[canvas:01JDUPE1|untitled]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
   })
 
   // Every character sequence the codec's own reference parser would read as
   // something other than a plain name: `]]` closes the reference, a newline
-  // cannot appear in an inline one, `|` starts the alias half, and a leading
-  // `canvas:` is parsed as a direct document id instead of a name.
+  // cannot appear in an inline one, and `|` starts the alias half. The last
+  // one is a name shaped exactly like a document id — with no scheme in the
+  // syntax, that IS the id form, so writing it as a target would link
+  // somewhere else entirely.
   it.each([
     ['weird ]] name'],
     ['single ] bracket'],
     ['two\nlines'],
     ['A|B'],
-    ['canvas:not-an-id'],
+    ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
   ])('uses the id when the name cannot be written inside brackets: %s', (name) => {
     const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
     // The name is unwritable as a TARGET, but the alias half is free text up
-    // to the closing bracket, so `|` and `canvas:` are fine there.
-    const expected = /]|[\r\n]/.test(name) ? '[[canvas:01JODD]]' : `[[canvas:01JODD|${name}]]`
+    // to the closing bracket, so `|` and an id-shaped string are fine there.
+    const expected = /]|[\r\n]/.test(name) ? '[[01JODD]]' : `[[01JODD|${name}]]`
     expect(linkMarkupFor(odd, [odd])).toBe(expected)
   })
 })

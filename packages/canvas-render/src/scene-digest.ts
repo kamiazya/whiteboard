@@ -14,13 +14,32 @@ import type { BoundingBox, Scene } from './scene-graph.js'
 const bboxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
 
 export const sceneDigestSchema = z.object({
-  nodes: z.array(z.object({ id: z.string(), bbox: bboxSchema, z: z.number().int() })),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      bbox: bboxSchema,
+      z: z.number().int(),
+      /**
+       * Present only when this node's content was cut to fit its box, so a
+       * reader knows the document holds more than the canvas shows. The
+       * painted half of the same fact is a fade on the last surviving line,
+       * which a reader of this JSON never sees.
+       */
+      truncated: z.literal(true).optional(),
+    }),
+  ),
   overlaps: z.array(z.tuple([z.string(), z.string()])),
   containment: z.array(z.object({ parent: z.string(), child: z.string() })),
   clusters: z.array(z.array(z.string())),
   freeRegions: z.array(bboxSchema),
   /**
    * Whether a guard below dropped a derivation rather than computing it.
+   *
+   * Named `partial` rather than `truncated` because the payload this rides
+   * in already spends that word on transport cutting — the snapshot's caps
+   * and its per-node `textTruncated`. Three fields called `truncated` and
+   * distinguished only by position is a reader's problem, and the reader
+   * here is an agent.
    *
    * Without this the guards are indistinguishable from a genuine answer: a
    * board too large for the pairwise scan reports `overlaps: []`, which
@@ -29,7 +48,7 @@ export const sceneDigestSchema = z.object({
    * a node count, the other a derived grid size), so it is the only place
    * that can say so.
    */
-  truncated: z.boolean(),
+  partial: z.boolean(),
 })
 
 export type SceneDigest = z.infer<typeof sceneDigestSchema>
@@ -58,6 +77,7 @@ interface DigestEntry {
   readonly id: string
   readonly bbox: BoundingBox
   readonly z: number
+  readonly truncated?: true
 }
 
 function overlapArea(a: BoundingBox, b: BoundingBox): number {
@@ -235,9 +255,13 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
  * every bbox-carrying node, named by position. There is nothing better to
  * name them by, and the alternative is answering with nothing.
  */
-function collectEntries(scene: Scene): { readonly id?: string; readonly bbox: BoundingBox }[] {
+function collectEntries(
+  scene: Scene,
+): { readonly id?: string; readonly bbox: BoundingBox; readonly truncated?: true }[] {
   const identified = scene.nodes.flatMap((node) =>
-    node.kind === 'shape' && node.id !== undefined ? [{ id: node.id, bbox: node.bbox }] : [],
+    node.kind === 'shape' && node.id !== undefined
+      ? [{ id: node.id, bbox: node.bbox, ...(node.truncated ? { truncated: true as const } : {}) }]
+      : [],
   )
   if (identified.length > 0) return identified
   return scene.nodes.flatMap((node) => (node.kind === 'edge' ? [] : [{ bbox: node.bbox }]))
@@ -254,11 +278,17 @@ export function sceneDigest(scene: Scene): SceneDigest {
     id: entry.id ?? `n${index}`,
     bbox: entry.bbox,
     z: index,
+    ...(entry.truncated ? { truncated: true as const } : {}),
   }))
 
   const freeRegions = computeFreeRegions(entries)
   return {
-    nodes: entries.map((e) => ({ id: e.id, bbox: e.bbox, z: e.z })),
+    nodes: entries.map((e) => ({
+      id: e.id,
+      bbox: e.bbox,
+      z: e.z,
+      ...(e.truncated ? { truncated: true as const } : {}),
+    })),
     overlaps: computeOverlaps(entries),
     containment: computeContainment(entries),
     clusters: computeClusters(entries),
@@ -267,7 +297,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
     // grid guard depends on the scene's extent, so it is inferred from its
     // one observable effect: no free regions on a scene that HAS nodes, which
     // a real layout never produces (a board of boxes always leaves gaps).
-    truncated:
+    partial:
       entries.length > PAIRWISE_MAX_ENTRIES || (entries.length > 0 && freeRegions.length === 0),
   }
 }

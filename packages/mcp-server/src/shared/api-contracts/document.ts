@@ -143,6 +143,13 @@ export const documentSummarySchema = z.object({
   // (the web app and the locally installed daemon version independently);
   // clients fall back to the path when the id is absent.
   id: z.string().min(1).optional(),
+  // The name the user actually chose, ABSENT when they never chose one. The
+  // path is an auto-generated ASCII address ('untitled-2') that cannot carry
+  // a title in most scripts, so it is an identity for the URL and never one
+  // for a reader. Carried on this list precisely so a client resolving a
+  // `[[Name]]` reference reads the name from the same response it renders
+  // the list from — the split is what let the two disagree.
+  displayName: z.string().min(1).optional(),
   updatedAt: z.string(),
   // ABSENT when the row records no kind. Defaulting it to 'spatial' used to
   // hide that state: a caller could not tell a stored spatial document from

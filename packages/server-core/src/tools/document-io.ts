@@ -3,7 +3,6 @@ import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
-import { DocumentNotFoundError } from './errors.js'
 
 /**
  * A single chunk always fits Loro's snapshot output for the geometry/text
@@ -12,6 +11,28 @@ import { DocumentNotFoundError } from './errors.js'
  * out of this shared layer's scope.
  */
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
+
+/**
+ * Thrown when a document has no saved snapshot. Not a Zod schema — only
+ * `.message` crosses the MCP wire via the SDK's existing tool-error path, so
+ * this is a plain Error subclass rather than a DTO.
+ *
+ * It lives beside the loader that raises it, and it is the ONLY class for
+ * this condition: read-side and write-side callers alike go through
+ * `loadDocument`, so `create-server.ts` maps one class to its 404 rather
+ * than a list that a new loader could silently grow.
+ *
+ * Distinct from `WorkspaceDocumentNotFoundError` (the workspace INDEX has no
+ * such document) and from ports' own `DocumentNotFoundError` (an operation
+ * named a document the index does not hold) — different conditions, and
+ * naming this one for the snapshot keeps all three tellable apart.
+ */
+export class SnapshotNotFoundError extends Error {
+  constructor(readonly documentId: string) {
+    super(`document has no saved snapshot: ${documentId}`)
+    this.name = 'SnapshotNotFoundError'
+  }
+}
 
 export interface LoadedDocument {
   doc: LoroDoc
@@ -31,7 +52,7 @@ export async function loadDocument(
 ): Promise<LoadedDocument> {
   const docRef = { kind: 'document' as const, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
-  if (existing === null) throw new DocumentNotFoundError(documentId)
+  if (existing === null) throw new SnapshotNotFoundError(documentId)
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))

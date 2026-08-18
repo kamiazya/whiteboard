@@ -5,9 +5,10 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { z } from 'zod'
-import { assertSpatialDocument, loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { resolveFileReferences } from '../render/resolve-file-references.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * What one file reference resolved to, as the widget receives it.
@@ -73,7 +74,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
     inputSchema: canvasViewInputSchema,
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
-      const { doc, canvas } = await loadSpatialCanvas(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
       return {

@@ -15,14 +15,18 @@ import {
   useState,
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
+import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
+import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
+import { MinimapRail, RAIL_WIDTH_PX } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
+import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { setHeadingLevel } from './set-heading-level.js'
@@ -55,7 +59,7 @@ export interface MarkdownEditorProps {
   title?: string
   /**
    * Maps `[[Name]]` aliases to canvas ids for the preview (codec's
-   * separate resolution pass). Absent, only `[[canvas:ULID]]` resolves.
+   * separate resolution pass). Absent, only a bare `[[ULID]]` resolves.
    */
   resolveAlias?: AliasResolver
   /**
@@ -167,6 +171,13 @@ function countWords(value: string): number {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
+}
+
+/** The laid-out document's height — the last block's bottom edge. */
+function railContentHeight(blocks: readonly RailBlock[]): number {
+  let bottom = 0
+  for (const block of blocks) bottom = Math.max(bottom, block.y + block.h)
+  return bottom
 }
 
 function totalSourceLines(value: string): number {
@@ -284,6 +295,12 @@ export function MarkdownEditor({
   } | null>(null)
   // Filled by PreviewPane on every render; read lazily by the scroll handler.
   const anchorsRef = useRef<readonly PreviewBlockAnchor[]>([])
+  const blocksRef = useRef<readonly RailBlock[]>([])
+  // The rail needs to RE-RENDER as the preview scrolls and as its blocks
+  // change, so unlike the anchors — read imperatively inside a scroll
+  // handler — these have to be state.
+  const [railBlocks, setRailBlocks] = useState<readonly RailBlock[]>([])
+  const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -370,21 +387,137 @@ export function MarkdownEditor({
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [value])
 
+  // Write mode has no preview on screen, so the rail drives the SOURCE:
+  // a press is a document position, and the anchors say which line that is.
+  const seekSource = useCallback(
+    (documentY: number) => {
+      const api = sourceApiRef.current
+      if (api === null) return
+      api.revealLine(
+        lineForDocumentY(anchorsRef.current, documentY, {
+          totalLines: totalSourceLines(value),
+          contentHeight: railContentHeight(blocksRef.current),
+        }),
+      )
+    },
+    [value],
+  )
+
+  const seekPreview = useCallback((documentY: number) => {
+    const preview = previewScrollRef.current
+    if (preview === null) return
+    const svg = preview.querySelector('svg')
+    const svgTop =
+      svg instanceof SVGElement
+        ? svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
+        : 0
+    // Centre what was pointed at, the way a minimap press does — landing it
+    // at the very top would hide the context just above it.
+    preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
+  }, [])
+
   // Layout width the preview typesets at: what the pane can actually offer
   // (minus the document column's padding), clamped to a readable measure.
   const horizontalPadding = 48
+  // The rail is a sibling of the preview, so the width it occupies is width
+  // the preview does not get. Typesetting against the container's full width
+  // instead overflows by exactly the rail — the document is then clipped at
+  // the very edge the rail is drawn on.
+  const railWidth = effectiveMode !== 'write' && debouncedValue.trim() !== '' ? RAIL_WIDTH_PX : 0
   const paneWidth =
     containerWidth === null
       ? maxWidth
       : effectiveMode === 'split'
-        ? containerWidth * (1 - splitRatio)
-        : containerWidth
+        ? containerWidth * (1 - splitRatio) - railWidth
+        : containerWidth - railWidth
   // Quantized so a divider drag re-typesets the whole document at 64px
   // steps instead of on every pointermove.
   const previewWidth = Math.max(
     MIN_PREVIEW_WIDTH,
     Math.min(maxWidth, Math.round((paneWidth - horizontalPadding) / 64) * 64),
   )
+
+  /**
+   * Keeps the rail in step with the preview it maps.
+   *
+   * Both halves are read from the SAME element on the same tick: the blocks
+   * live in the SVG's pixel space, so the visible slice has to be expressed
+   * there too, which means subtracting the SVG's own offset inside the
+   * scroll content. Measured live rather than cached, because the document
+   * column's padding and header change it.
+   */
+  /**
+   * Write mode has no preview, so nothing lays the document out — and the
+   * rail would otherwise show whatever the last preview produced, going
+   * stale with every keystroke. The shared hook lays it out in the pool
+   * instead, at background priority.
+   */
+  const writeModeOutline = useMarkdownOutline(debouncedValue, {
+    enabled: effectiveMode === 'write',
+    maxWidth: previewWidth,
+  })
+  useEffect(() => {
+    // Only a shape computed for THIS text. The hook keeps its last result
+    // across a disable so the rail does not blink, which means the first
+    // render after re-entering write mode offers the shape of whatever was
+    // there before — and a seek through those anchors reveals the wrong
+    // line.
+    if (effectiveMode !== 'write' || writeModeOutline.forBody !== debouncedValue) return
+    anchorsRef.current = writeModeOutline.anchors
+    blocksRef.current = writeModeOutline.blocks
+    setRailBlocks(writeModeOutline.blocks)
+  }, [effectiveMode, writeModeOutline, debouncedValue])
+
+  // Write mode: the visible SOURCE lines are what the marker has to show, so
+  // the range is read from CodeMirror's own block geometry and mapped onto
+  // the laid-out document the bars describe.
+  useEffect(() => {
+    if (effectiveMode !== 'write') return
+    const scroller = sourceWrapRef.current?.querySelector('.cm-scroller')
+    if (!(scroller instanceof HTMLElement)) return
+    const sync = () => {
+      const api = sourceApiRef.current
+      if (api === null) return
+      const blocks = blocksRef.current
+      const tail = {
+        totalLines: totalSourceLines(value),
+        contentHeight: railContentHeight(blocks),
+      }
+      const top = documentYForLine(anchorsRef.current, api.topVisibleLine(), tail)
+      const bottom = documentYForLine(anchorsRef.current, api.bottomVisibleLine(), tail)
+      setRailViewport({ top, height: Math.max(0, bottom - top) })
+      setRailBlocks(blocks)
+    }
+    sync()
+    scroller.addEventListener('scroll', sync, { passive: true })
+    return () => scroller.removeEventListener('scroll', sync)
+    // writeModeOutline belongs here: new rows arriving without a matching
+    // viewport recomputation leaves the marker placed by the PREVIOUS
+    // layout until the user happens to scroll.
+  }, [effectiveMode, value, debouncedValue, writeModeOutline])
+
+  useEffect(() => {
+    const preview = previewScrollRef.current
+    if (preview === null) return
+    const sync = () => {
+      const svg = preview.querySelector('svg')
+      const svgTop =
+        svg instanceof SVGElement
+          ? svg.getBoundingClientRect().top -
+            preview.getBoundingClientRect().top +
+            preview.scrollTop
+          : 0
+      setRailViewport({ top: preview.scrollTop - svgTop, height: preview.clientHeight })
+      setRailBlocks(blocksRef.current)
+    }
+    sync()
+    preview.addEventListener('scroll', sync, { passive: true })
+    return () => preview.removeEventListener('scroll', sync)
+    // previewWidth belongs here: a resize re-typesets the document and
+    // changes every block, and debouncedValue does NOT change with it —
+    // reading the ref without it leaves the rail describing the layout the
+    // previous width produced.
+  }, [effectiveMode, debouncedValue, previewWidth])
 
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {
@@ -557,10 +690,29 @@ export function MarkdownEditor({
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
                   anchorsRef={anchorsRef}
+                  blocksRef={blocksRef}
                 />
               )}
             </div>
           </div>
+        )}
+        {!previewEmpty && railBlocks.length > 0 && (
+          // The bars are the same in every mode — they describe the document,
+          // not the pane. Only what a press moves differs: the preview when
+          // one is on screen, otherwise the source through its anchors.
+          //
+          // Gated on having blocks because they come from the preview's
+          // layout, and write mode renders no preview: the rail there shows
+          // whatever the last preview produced, and shows NOTHING at all in a
+          // session that never left write mode. An empty strip claims the
+          // document has no shape, which is worse than no rail. Laying the
+          // document out for the rail when no preview is running is the
+          // worker pool's job — the increment after this one.
+          <MinimapRail
+            blocks={railBlocks}
+            viewport={railViewport}
+            onSeek={effectiveMode === 'write' ? seekSource : seekPreview}
+          />
         )}
       </div>
       {linkPicker !== null && linkTargets !== undefined && (
