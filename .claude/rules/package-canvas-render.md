@@ -64,8 +64,10 @@ paths:
 ## Dependency rules
 
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
-  edges + the `./mdast` subset) and `zod` (via `catalog:`), for
-  `sceneDigestSchema` only.
+  edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
+  `parseBody`; every consumer already bundled it to pass that same function
+  in), `css-line-break` (UAX #14 break opportunities) and `zod` (via
+  `catalog:`), for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -500,6 +502,92 @@ paths:
     canvasId appearing in PROSE, a different key space from a spatial node's
     reference, and it serves markdown documents with no file nodes at all.
 
+12. **Line breaking is UAX #14, not a hand-rolled character table**
+    (`layout/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
+    `lineBreak: 'strict'` supplies the break opportunities, which is what
+    makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
+    Japanese paragraph had no break opportunity anywhere and was emitted as
+    one run painting straight through the node border) and what supplies
+    Japanese kinsoku for free: a closing character never opens a line, an
+    opening character never ends one. This is the one third-party dependency
+    besides `zod`, registered in `tools/arch-lint`'s allowed list — deciding
+    WHERE a line may break is this package's own job and the answer is a
+    Unicode standard. It is pure and DOM-free, so Node, the browser and a
+    worker agree, which is what the byte-identical-SVG guarantee needs.
+    Four consequences worth knowing:
+    - **`wordBreak` stays `normal`.** `break-all` would also break English
+      mid-word. A segment that alone exceeds `maxWidth` is instead expanded to
+      CODE POINTS at the point it arises, so only the string that needs it
+      pays. A single code point wider than `maxWidth` is the one irreducible
+      overflow and is left to overflow rather than dropped.
+    - **A line is ONE run.** Emitting a run per break opportunity also fits,
+      and multiplies the SVG's `<text>` elements by the character count of
+      every CJK paragraph.
+    - **An ATOMIC run (inline code, raw HTML, inline math) is still never
+      split** — an interior space in a code span is not a word boundary — so
+      it can still overflow. Truncating it belongs to a later ellipsis/fade
+      slice, not to the line breaker.
+    - **A block's declared width covers its ink** (`blockWidth`). A block
+      claiming `maxWidth` while an atomic run paints past it is what let
+      `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
+      all agree on a size nothing actually fitted in.
+    On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
+    boundaries for Japanese**, a strict subset of the UAX opportunities, so
+    preferring them costs nothing in fit and buys a line that breaks where a
+    reader would pause rather than mid-word. Applied only to text containing
+    KANA — Chinese and Korean stay on UAX #14, since BudouX ships a separate
+    model per script and this package has no evidence yet that it needs them.
+    The parser is built on first Japanese text, NOT at module load: its
+    constructor turns a ~24KB model into a Map, and charging that to whichever
+    lazily-imported chunk pulls this module in turned two apps/web browser
+    tests red before it was made lazy.
+
+13. **`parseBody` DEFAULTS to codec's `parseMarkdownBody`** and stays
+    overridable. It was a required injected seam only because this package was
+    forbidden to depend on codec, and every production caller passed that one
+    function — seven identical lines across apps/web (x3), canvas-viewer,
+    server-core and mcp-server, plus an option threaded through apps/web's
+    `scene-render-core.ts` for a worker chunk that imported codec directly
+    anyway. It remains injectable because layout tests parse with a stub for
+    the same reason they measure with one: a layout assertion should not fail
+    because a markdown parser changed. No bundle grew — every one of those
+    consumers already bundled codec in order to pass the function in. BudouX is VENDORED
+    (`src/vendor/budoux/`, Apache-2.0, with the equivalence check that was run
+    before the dependency was dropped recorded in its README) and NOT a
+    dependency: its only entry point re-exports the HTML processor, which
+    imports `linkedom` and from there the native `canvas` package, and the
+    published mcp-server bundle then fails to build at all. Tree-shaking
+    cannot help — esbuild resolves the whole graph before eliminating
+    anything — and the deep import is blocked by budoux's `exports` map.
+    **What cannot wrap is CUT, not left to overflow** (`layout/truncate.ts`,
+    `fitToWidth`): a node label (one line is what makes it a label) and an
+    atomic run. The run keeps the longest prefix that fits and is marked
+    `truncated`, which the SVG backend paints as a fade — never an ellipsis,
+    because a label is cut precisely where width is scarce and three dots
+    spend the width they save. `fitToWidth` never returns the empty string for
+    non-empty input: one glyph over the edge still says a label is there.
+    Two carve-outs:
+    - **Inline MATH is neither split nor cut.** `a + b + c` cut to `a + b`
+      reads as a complete formula that is simply wrong, where cut code or cut
+      markup reads as cut. It is the one thing still allowed to overflow, and
+      the scoreboard's zeroes are pinned knowing it.
+    - **An EDGE label is not cut**, because it floats on the edge rather than
+      inside a box, so there is no width to fit it to.
+    The fade itself is ONE `<mask>` in `<defs>` with
+    `maskContentUnits="objectBoundingBox"`, so it scales to every referencing
+    element instead of needing a definition per run, and it is emitted only
+    when something is truncated — presence-only, exactly like an absent
+    appearance attribute, which is what keeps every existing golden
+    byte-identical. Verified honoured by resvg (the PNG export path) as well
+    as browsers. A page embedding several of these SVGs repeats the mask id,
+    which is harmless precisely because every copy is byte-identical.
+    NOT done, and deliberately: `sceneDigest` does not report truncation. A
+    fade says "there is more" without saying how much, and the digest carries
+    no text content to be inconsistent with — add it when a reader has a
+    reason to act on it.
+    `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
+    see the Tests section.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
@@ -549,6 +637,17 @@ paths:
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+- `layout/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
+  same instrument-first shape as the routing one below: 11 corpus cases x 3
+  narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
+  overflow px, blocks whose bbox under-reports their ink) targets zero; price
+  (runs, lines, `measure` calls) has no target and exists so a breaking
+  strategy that buys quality with a per-character measure loop cannot do it
+  silently. Its measurer charges CJK a FULL em, unlike `fake-measure.ts`'s
+  uniform 0.6em/char, which understates Japanese by ~40% — the single number
+  the scoreboard exists to report. Metrics are an independent oracle
+  (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
+  and never calls the wrapping code.
 - `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

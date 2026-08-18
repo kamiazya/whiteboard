@@ -98,11 +98,16 @@ it('Add link opens the URL dialog and a valid submit creates a link node', async
     url: 'https://jsoncanvas.org/spec/1.0/',
   })
   expect(latest.commands).toContain('create-node')
-  // The dialog closes and the node renders its URL as the label.
+  // The dialog closes and the node renders its URL as the label — cut to the
+  // prefix that fits the default node width, since a label never wraps.
   expect(container.querySelector('[data-testid="link-url-dialog"]')).toBeNull()
-  await vi.waitFor(() =>
-    expect(container.textContent).toContain('https://jsoncanvas.org/spec/1.0/'),
-  )
+  await vi.waitFor(() => {
+    const label = [...container.querySelectorAll('svg text')]
+      .map((node) => node.textContent ?? '')
+      .find((text) => text.startsWith('https://'))
+    expect(label).toBeTruthy()
+    expect('https://jsoncanvas.org/spec/1.0/'.startsWith(label ?? '')).toBe(true)
+  })
 })
 
 it('an invalid URL cannot be submitted', async () => {

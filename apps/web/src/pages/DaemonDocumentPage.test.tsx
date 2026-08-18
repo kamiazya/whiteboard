@@ -427,9 +427,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: false,
               versions: true,
               branches: true,
@@ -1148,9 +1145,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: true,
               versions: false,
               branches: true,
@@ -1365,9 +1359,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: true,
               versions: false,
               branches: true,
@@ -1565,9 +1556,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: true,
               versions: true,
               branches: false,
@@ -1736,9 +1724,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: true,
               versions: true,
               branches: false,
@@ -1811,9 +1796,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              canvasReadWrite: true,
-              migrationExport: false,
-              migrationImport: true,
               workspaces: true,
               versions: true,
               branches: true,

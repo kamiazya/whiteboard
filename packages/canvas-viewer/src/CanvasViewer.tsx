@@ -5,7 +5,6 @@ import {
   renderSceneToSvg,
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
@@ -79,7 +78,6 @@ export function CanvasViewer({
   const svg = useMemo(() => {
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
-      parseBody: parseMarkdownBody,
       appearance: VIEWER_APPEARANCE,
       ...(resolveReference === undefined ? {} : { resolveReference }),
       // No onDegrade: the viewer degrades silently by choice — it has no

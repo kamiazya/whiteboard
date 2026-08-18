@@ -2005,3 +2005,111 @@ describe('node placement and affordances', () => {
     expect(document.activeElement).toBe(button)
   })
 })
+
+/**
+ * The Japanese sibling of the overflow defect above. The greedy space-only
+ * wrapper could not wrap a string with no spaces in it at all — it required a
+ * space to be present before it would even consider wrapping — so a Japanese
+ * note was emitted as one run and painted straight through its node's border
+ * and across whatever sat to the right of it.
+ *
+ * Deliberately a REAL browser test with the real Canvas 2D measurer: the whole
+ * defect is about advance widths, and a fixed-width fake measurer models CJK
+ * and Latin as the same width, which is the one assumption that hides it.
+ */
+describe('SpatialEditor (browser) — CJK text layout', () => {
+  it('wraps a Japanese note inside its node instead of painting past the border', async () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'ja-node',
+          type: 'text',
+          x: 20,
+          y: 20,
+          width: 200,
+          height: 160,
+          text: 'これは日本語の長い文章です。ノードの幅を超えても、枠の内側で折り返されなければなりません。',
+        },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <div style={{ width: 900, height: 600 }}>
+        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+      </div>,
+    )
+
+    const chrome = await vi.waitFor(() => {
+      // Not the first `svg rect`: the truncation fade's <mask> owns a 1x1
+      // rect in <defs>, which comes first in document order.
+      const rect = [...container.querySelectorAll('svg rect')].find(
+        (candidate) => candidate.closest('defs') === null,
+      )
+      if (!rect) throw new Error('no node chrome yet')
+      return rect
+    })
+    const runs = [...container.querySelectorAll('svg text')].filter(
+      (node) => (node.textContent ?? '').trim() !== '',
+    )
+    const chromeBox = chrome.getBoundingClientRect()
+
+    // More than one line: a single run means nothing wrapped at all.
+    expect(
+      new Set(runs.map((run) => Math.round(run.getBoundingClientRect().top))).size,
+    ).toBeGreaterThan(1)
+    for (const run of runs) {
+      expect(run.getBoundingClientRect().right).toBeLessThanOrEqual(chromeBox.right + 1)
+    }
+    // Kinsoku: a closing character never opens a line.
+    for (const run of runs) {
+      expect(run.textContent ?? '').not.toMatch(/^[。、）」』，]/)
+    }
+  })
+
+  it('cuts a long file label to fit its node and fades the cut edge', async () => {
+    // A label never wraps — one line is what makes it a label — so this is
+    // the other half of "content stays inside the box". The fade is a single
+    // shared <mask>, so its presence is checked by the reference, not by
+    // counting definitions.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'file-node',
+          type: 'file',
+          x: 20,
+          y: 20,
+          width: 160,
+          height: 60,
+          file: 'とても長い日本語のファイル名です.md',
+        },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <div style={{ width: 900, height: 600 }}>
+        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+      </div>,
+    )
+
+    const chrome = await vi.waitFor(() => {
+      // Not the first `svg rect`: the truncation fade's <mask> owns a 1x1
+      // rect in <defs>, which comes first in document order.
+      const rect = [...container.querySelectorAll('svg rect')].find(
+        (candidate) => candidate.closest('defs') === null,
+      )
+      if (!rect) throw new Error('no node chrome yet')
+      return rect
+    })
+    const label = [...container.querySelectorAll('svg text')].find(
+      (node) => (node.textContent ?? '').trim() !== '',
+    )
+    expect(label).toBeTruthy()
+    if (!label) return
+    expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
+      chrome.getBoundingClientRect().right + 1,
+    )
+    expect(label.getAttribute('mask')).toMatch(/^url\(#/)
+    // Cut, not rewritten: what is painted is a prefix of the real name.
+    expect('とても長い日本語のファイル名です.md'.startsWith(label.textContent ?? '')).toBe(true)
+  })
+})

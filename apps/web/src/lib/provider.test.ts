@@ -22,27 +22,19 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'local-daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser-local capabilities: canvasReadWrite and migrationExport are true', () => {
+  it('browser-local capabilities: workspaces and versions are false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
     expect(state).toMatchObject({
       kind: 'browser-local',
-      capabilities: { canvasReadWrite: true, migrationExport: true },
+      capabilities: { workspaces: false, versions: false },
     })
   })
 
-  it('browser-local capabilities: migrationImport workspaces versions are false', () => {
-    const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({
-      kind: 'browser-local',
-      capabilities: { migrationImport: false, workspaces: false, versions: false },
-    })
-  })
-
-  it('local-daemon capabilities: workspaces versions migrationImport are true', () => {
+  it('local-daemon capabilities: workspaces and versions are true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({
       kind: 'local-daemon',
-      capabilities: { workspaces: true, versions: true, migrationImport: true },
+      capabilities: { workspaces: true, versions: true },
     })
   })
 

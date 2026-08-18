@@ -4,12 +4,12 @@
 // decision. Process-internal (a value in, a value out), so per
 // zod-schema-discipline no Zod schema is warranted.
 //
-// A markdown parser is an injected dependency, the same seam class as
-// `measure`/`renderMath`: this package never imports codec, so
-// `parseBody` is supplied by the caller (codec's
-// `parseMarkdownBody` in both current consumers). Likewise `appearance` is
-// an injected `SpatialAppearanceResolver` (spatial-appearance.ts) — layout
-// never chooses a color.
+// The markdown parser DEFAULTS to codec's `parseMarkdownBody` and stays
+// overridable: every production caller passed that exact function, so the
+// seam was seven identical lines, but layout tests parse with a stub for the
+// same reason they measure with one. `appearance` is a genuinely injected
+// `SpatialAppearanceResolver` (spatial-appearance.ts) — layout never chooses
+// a color.
 //
 // Total by construction: canvas-render's own layout/routing entry points
 // already degrade instead of throwing, and this module's one addition —
@@ -24,6 +24,7 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
@@ -48,6 +49,7 @@ import {
   routeEdge,
 } from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
+import { fitToWidth } from './truncate.js'
 
 /**
  * A degradation `layoutSpatialCanvas` hit while composing one node, reported
@@ -85,7 +87,16 @@ export interface FacetCardData {
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
-  readonly parseBody: (text: string) => MdastRoot
+  /**
+   * How a `text` node's body becomes mdast. Defaults to codec's
+   * `parseMarkdownBody`, which is what EVERY production caller passed —
+   * seven identical lines whose only reason to exist was this package once
+   * being forbidden to depend on codec. It stays injectable because layout
+   * tests deliberately parse with a stub, the same way they measure with
+   * one: a layout assertion should not fail because a markdown parser
+   * changed.
+   */
+  readonly parseBody?: (text: string) => MdastRoot
   readonly appearance: SpatialAppearanceResolver
   /**
    * Geometry constants (padding/label font size/min content width).
@@ -207,6 +218,7 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly embedPath: ReadonlySet<string>
   readonly embedDepth: number
   readonly geometry: SpatialGeometry
+  readonly parseBody: (text: string) => MdastRoot
 }
 
 /**
@@ -277,7 +289,7 @@ function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSc
  * `placeInNode`. An absolute-coordinate variant here would be applied
  * twice wherever its output also flows through the translation step.
  */
-function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
+function labelRun(text: string, options: ResolvedLayoutOptions, maxWidth: number): TextRunNode {
   const labelAppearance = options.appearance.resolveLabel()
   const font = {
     family: labelAppearance.fontFamily ?? 'sans-serif',
@@ -286,7 +298,11 @@ function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
     style: 'normal' as const,
     sizePx: options.geometry.labelFontSizePx,
   }
-  const metrics = options.measure(text, font)
+  // A label never wraps — one line is what makes it a label — so the only way
+  // to keep it inside the box is to cut it, and `truncated` is what the SVG
+  // backend fades.
+  const fitted = fitToWidth(text, font, options.measure, maxWidth)
+  const metrics = options.measure(fitted.text, font)
   // A TRUE top-left bbox with an explicit baseline — the earlier
   // baseline-smuggled-into-bbox.y convention made every geometric
   // computation over the box (outside-label placement, bounds) off by one
@@ -300,7 +316,8 @@ function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
       h: metrics.ascent + metrics.descent,
     },
     baseline: metrics.ascent,
-    text,
+    text: fitted.text,
+    ...(fitted.truncated ? { truncated: true as const } : {}),
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
 }
@@ -350,7 +367,7 @@ function composeTextNode(
     body = layoutMdastBlocks(mdast, mdastOptionsFor(maxWidth, options))
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-    body = { nodes: [labelRun(node.text, options)] }
+    body = { nodes: [labelRun(node.text, options, maxWidth)] }
   }
   return [chromeShape(node, options), ...placeInNode(node, body, options)]
 }
@@ -542,7 +559,11 @@ function composeFileMarkdown(
   const placed = placeInNode(node, body, options)
   return label === undefined
     ? [chrome, ...placed]
-    : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), ...placed]
+    : [
+        chrome,
+        ...placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] }),
+        ...placed,
+      ]
 }
 
 /**
@@ -640,7 +661,11 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
         const label = labelOf(node, resolved)
         return label === undefined
           ? [chrome, embed]
-          : [chrome, ...placeAboveNode(node, { nodes: [labelRun(label, options)] }), embed]
+          : [
+              chrome,
+              ...placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] }),
+              embed,
+            ]
       }
       const markdown = composeFileMarkdown(node, resolved, options)
       if (markdown !== undefined) return markdown
@@ -650,7 +675,14 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
       const label = labelOf(node, resolved)
       return label === undefined
         ? [chrome]
-        : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options)]
+        : [
+            chrome,
+            ...placeInNode(
+              node,
+              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              options,
+            ),
+          ]
     }
     default:
       break
@@ -665,14 +697,21 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
       const label = labelOf(node, undefined)
       return label === undefined
         ? base
-        : [...base, ...placeAboveNode(node, { nodes: [labelRun(label, options)] })]
+        : [...base, ...placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] })]
     }
     case 'link': {
       const chrome = chromeShape(node, options)
       const label = labelOf(node, undefined)
       return label === undefined
         ? [chrome]
-        : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options)]
+        : [
+            chrome,
+            ...placeInNode(
+              node,
+              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              options,
+            ),
+          ]
     }
     default: {
       // Defensive branch: `SpatialNode` is a closed discriminated union, so
@@ -768,6 +807,7 @@ export function layoutSpatialCanvasWithAnchors(
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
+    parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
   })
@@ -838,6 +878,7 @@ export function layoutSpatialEdges(
   return composeEdgesAndLabels(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
+    parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
   }).content

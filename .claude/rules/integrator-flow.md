@@ -92,6 +92,33 @@ When a preview contradicts a green test, suspect the cache before suspecting the
   from the page that owns it — `/title/i` matched on the outgoing page too, which is how it
   bound to the wrong one. Made likelier by anything that speeds up a transition; here it
   surfaced when a dropdown became non-modal and stopped waiting out a focus trap.
+- **An eighth, and the one that multiplies the others: a timed-out browser test
+  keeps typing.** Vitest abandons the test at `testTimeout`, but the
+  `userEvent.keyboard` it was awaiting is a real key-event stream into a real
+  browser and nothing cancels it — so the NEXT test in the file receives the
+  leftover keystrokes interleaved with its own. Measured:
+  `'nadn dm oarne  atpyppeinndged line'`, one test's `and an appended line`
+  shuffled into the previous test's `and more typing`. The victim reads as lost
+  input, names a test that is not the problem, and hides the one that is. One
+  overrun therefore fails two or three tests, so **triage the EARLIEST failure
+  in a file first and re-measure before believing the later ones are real.**
+  `web-browser`'s budget is 60s for exactly this reason: the overrun is not
+  merely a slow test, it is a corrupter.
+  - Its companion, from the same run: **type ASCII.** A character with no
+    keycode (an em dash) is synthesized separately from the plain keystrokes
+    around it and is the one that goes missing under load — observed as
+    `'# Hello from an agent  edited here'`, both spaces present and the dash
+    gone, indistinguishable from an edit that never reached the backend.
+- **Whether the whole browser PROJECT is in flight is itself a variable, and
+  the only one that mattered here.** The costliest `web-browser` test measured
+  1.5s with its file alone, 1.6s with the twelve IndexedDB-heavy page files
+  together, and 30–39s with all 115 browser files running — so an isolated
+  green proves nothing about the run that flakes, and a mutation check that
+  stays green in isolation has not exonerated the guard it removed (one did,
+  against a comment claiming the test would fail *every* run without it).
+  Two obvious causes were refuted by measurement rather than argument: cutting
+  `--maxWorkers` to 4 made it WORSE (33–39s, 40% more wall clock), and the
+  shared-IndexedDB theory died on the twelve-file run.
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.

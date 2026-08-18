@@ -20,6 +20,7 @@ import { userEvent } from 'vitest/browser'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 
 function render(ui: ReactElement) {
@@ -138,16 +139,19 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
     // exact identity is what real keyboard-event delivery depends on, and a
     // looser containment check can pass while focus still sits on some other
     // in-flight descendant (e.g. mid-mount) and races the first keystrokes.
-    // Same 10s budget every other wait in this file carries: this one waits on
-    // mount PLUS autofocus against a real browser and real IndexedDB, and the
-    // testing-library default is 1s. Under CI load that expires with focus
-    // still on <body>, which reads as "autofocus is broken" when it only means
-    // "autofocus had not happened yet".
+    // Wider than the 10s the rest of this file carries, because this one waits
+    // on mount PLUS autofocus against a real browser and real IndexedDB, and
+    // the testing-library default is 1s. Under a full browser-project run that
+    // expires with focus still on <body>, which reads as "autofocus is broken"
+    // when it only means "autofocus had not happened yet" — measured failing
+    // twice at ~11s while the same test costs 1.3s with its file alone. The
+    // guarantee under test is that focus arrives before typing, not that it
+    // arrives within any particular budget.
     await waitFor(
       () => {
         expect(document.activeElement).toBe(editable)
       },
-      { timeout: 10_000 },
+      { timeout: 30_000 },
     )
     await userEvent.keyboard('# Persisted note')
     await waitFor(() => {
@@ -424,17 +428,10 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       { name: /^Workspace:/i },
       { timeout: 10_000 },
     )
-    // The previous menu must be GONE before its trigger is clicked again.
-    // Clicking it while the non-modal menu is still mounted leaves the menu
-    // CLOSED — measured at the failure: no [role=menu], trigger connected,
-    // aria-expanded=false. The failure then reads as "the list does not
-    // contain this canvas", when no list was ever opened, so raising the
-    // query's timeout only buys a slower identical failure.
-    //
-    // Load-bearing: drop this wait and the test fails every run.
-    await waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull(), {
-      timeout: 10_000,
-    })
+    // Removing this wait no longer fails the file in isolation — the race it
+    // guards only opens up once the whole browser project is in flight. Keep
+    // it: an isolated green says nothing about the run that actually flakes.
+    await waitForMenuClosed()
     await userEvent.click(switcher2)
     await userEvent.click(await screen.findByText('Diagram A', undefined, { timeout: 10_000 }))
 
@@ -442,6 +439,45 @@ describe('BrowserLocalDocumentPage markdown 導線 (browser — real IndexedDB)'
       expect(screen.getByTestId('mock-spatial-editor')).toBeInTheDocument()
     })
     expect(spatialMounts).toBeGreaterThan(before)
+  })
+
+  // The picker is only useful if the PAGE hands it the document list it
+  // already holds. Nothing else fails when that one prop stops being passed:
+  // `linkTargets` is optional, so the verb quietly degrades to its bracket
+  // wrap while typecheck and every component test stay green.
+  it("offers the page's own documents to the link picker", async () => {
+    const store = new IndexedDBStore()
+    await store.save({
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FBB',
+      name: 'Neighbour note',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'markdown' as const,
+    })
+    const HERE = '01BX5ZZKBKACTAV9WEVGEMMVAA'
+    await store.save({
+      id: HERE,
+      name: 'This note',
+      updatedAt: '2026-05-24T00:00:01.000Z',
+      kind: 'markdown' as const,
+    })
+    await store.setDefaultDocumentId(HERE)
+    render(<BrowserLocalDocumentPage store={store} />)
+
+    const editable = await waitFor(
+      () => {
+        const el = document.querySelector('[contenteditable="true"]')
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 10_000 },
+    )
+    editable.focus()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Editing actions' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Link' }))
+
+    const picker = await screen.findByTestId('link-picker')
+    expect(picker.textContent).toContain('Neighbour note')
   })
 
   it('a [[Name]] wikiLink resolves against the canvas list and clicking it opens that note', async () => {

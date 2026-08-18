@@ -31,6 +31,7 @@ import {
   setTextCommand,
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
+import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 
 // The page reads/writes the canvas id through the router, so it needs a router
@@ -133,17 +134,8 @@ describe('BrowserLocalDocumentPage multi-canvas UI (browser — real IndexedDB)'
     // No stray placeholder row from the backend re-key.
     expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
 
-    // The switcher's menu is still dismissing from the "New canvas" click
-    // above, and it is non-modal — so re-opening the trigger while it is
-    // mounted has the click CONSUMED and the menu stays shut. Measured at one
-    // such CI failure: no [role=menu] anywhere and every aria-expanded=false,
-    // which makes the failure read as "the list does not contain this canvas"
-    // when no list was ever opened. Raising the query timeout only buys a
-    // slower identical failure. Same shape, and same wait, as the markdown
-    // suite's canvas-switch test.
-    await waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull(), {
-      timeout: 10_000,
-    })
+    // The switcher's menu is still dismissing from the "New canvas" click above.
+    await waitForMenuClosed()
 
     // Switch back to A via the switcher control. Both A and B default to the
     // "untitled" display name, so disambiguate by the raw id shown in each

@@ -143,12 +143,24 @@ describe('listDocuments', () => {
       .fn()
       .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
     const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
-    // kind is absent from the mocked daemon response (pre-change shape) and
-    // defaults to 'spatial' — the back-compat rule that lets a new client
-    // parse an old daemon's kind-less list.
+    // A kind-less entry stays kind-less: the client no longer invents
+    // 'spatial' for a daemon that recorded no kind, so "stored as spatial"
+    // and "never recorded" stay distinguishable. Consumers that must render
+    // something (the gallery badge, the daemon page's editor choice) default
+    // locally and visibly.
     expect(result).toEqual({
-      documents: [{ path: 'main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [{ path: 'main', updatedAt: '2026-01-01' }],
     })
+  })
+
+  it('preserves a recorded kind', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ documents: [{ path: 'note', updatedAt: '2026-01-01', kind: 'markdown' }] }),
+      )
+    const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
+    expect(result.documents[0]?.kind).toBe('markdown')
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {

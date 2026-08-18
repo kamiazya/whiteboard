@@ -22,9 +22,6 @@ function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'inv
 // or persisted contract (no negotiation, no wire payload), so this stays a
 // plain type + const map rather than a Zod schema. Deliberate, not an oversight.
 export type WhiteboardCapabilities = {
-  readonly canvasReadWrite: boolean
-  readonly migrationExport: boolean
-  readonly migrationImport: boolean
   readonly workspaces: boolean
   readonly versions: boolean
   readonly branches: boolean
@@ -41,9 +38,6 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_LOCAL_CAPABILITIES: WhiteboardCapabilities = {
-  canvasReadWrite: true,
-  migrationExport: true,
-  migrationImport: false,
   workspaces: false,
   versions: false,
   branches: false,
@@ -51,9 +45,6 @@ export const BROWSER_LOCAL_CAPABILITIES: WhiteboardCapabilities = {
 }
 
 export const LOCAL_DAEMON_CAPABILITIES: WhiteboardCapabilities = {
-  canvasReadWrite: true,
-  migrationExport: false,
-  migrationImport: true,
   workspaces: true,
   versions: true,
   branches: true,

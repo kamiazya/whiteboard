@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { operatorInfoSchema } from './api-contracts/document.js'
 
 // Server's VersionEntry / OperatorInfo (in server/store/version-store.ts) is
 // the runtime source of truth for these payloads. We don't import that type
@@ -6,14 +7,6 @@ import { z } from 'zod'
 // modules; instead the server-side compile pass on `tools/canvas.ts` /
 // `routes/ws.ts` exercises the equivalence by passing VersionEntry into
 // `sendVersionCreated`, which expects a payload that satisfies this schema.
-
-const operatorInfoSchema = z.object({
-  kind: z.enum(['ai', 'human', 'system']),
-  peerId: z.string().min(1),
-  displayName: z.string().optional(),
-  agentId: z.string().optional(),
-  workspaceId: z.string().optional(),
-})
 
 const versionCreatedPayloadSchema = z.object({
   id: z.string(),

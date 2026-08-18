@@ -64,6 +64,13 @@ export interface TextRunNode {
   readonly deleted?: boolean
   /** Present when this run is (or is inside) a link/wikiLink/reference. */
   readonly link?: LinkProvenance
+  /**
+   * The run's text was CUT to fit — there is more of it than is painted.
+   * Set by layout, honoured by the SVG backend as a fade over the run's
+   * trailing edge. Deliberately not an ellipsis: a label is cut precisely
+   * because width is scarce, and three dots spend the width they save.
+   */
+  readonly truncated?: true
   readonly appearance?: Appearance
   /**
    * Distance (px) from `bbox.y` (the line TOP) down to the text baseline,

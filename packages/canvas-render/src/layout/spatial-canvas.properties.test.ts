@@ -291,13 +291,17 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
   )
 
   it('degrades to the facet card when the box fits the card but not the body (pinned counterexample)', () => {
-    // Shrunk from seed=1925800259: at 17x40 the one-line card fits the inner
-    // box but the taller markdown body does not, and composeFileMarkdown's
-    // documented fall-through hands the node to the card. The body outranks
-    // the card only where the body can actually render — the property below
-    // states exactly that, and this example pins the degradation half.
+    // At 200x40 the one-line card fits the inner box but the taller markdown
+    // body does not, and composeFileMarkdown's documented fall-through hands
+    // the node to the card. The body outranks the card only where the body
+    // can actually render — the property below states exactly that, and this
+    // example pins the degradation half.
+    // The size is deliberately roomy in WIDTH: the original shrunk
+    // counterexample was 17px wide, which leaves a 1px content width, and a
+    // width that narrow now says nothing about ranking — every body fails to
+    // render there. Height is what this example is about.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 17, height: 40, file: 'a.md' }],
+      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 40, file: 'a.md' }],
       edges: [],
     }
     const text = collectRunText(
@@ -314,15 +318,15 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
   })
 
   it('lets a small node degrade to the card while a bigger sibling renders the body', () => {
-    // Shrunk from seed=-466764184. Two `a.md` file nodes differing only in
-    // height: 17x44 fits the markdown body, 17x40 does not and falls through
-    // to the one-line card. Both outcomes are correct, and a canvas-wide
-    // "no Card anywhere" assertion called the pair a bug — this pins the
-    // mixed-size canvas the property below now judges node by node.
+    // Two `a.md` file nodes differing only in height: 200x50 fits the
+    // markdown body, 200x40 does not and falls through to the one-line card.
+    // Both outcomes are correct, and a canvas-wide "no Card anywhere"
+    // assertion called the pair a bug — this pins the mixed-size canvas the
+    // property below now judges node by node.
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'small', type: 'file', x: 0, y: 0, width: 17, height: 40, file: 'a.md' },
-        { id: 'big', type: 'file', x: 0, y: 0, width: 17, height: 44, file: 'a.md' },
+        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 40, file: 'a.md' },
+        { id: 'big', type: 'file', x: 0, y: 0, width: 200, height: 50, file: 'a.md' },
       ],
       edges: [],
     }

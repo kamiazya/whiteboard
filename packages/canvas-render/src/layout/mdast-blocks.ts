@@ -5,6 +5,7 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
+import { LineBreaker } from 'css-line-break'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
 import type {
@@ -29,6 +30,9 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
+import { jaModel } from '../vendor/budoux/ja-model.js'
+import { Parser } from '../vendor/budoux/parser.js'
+import { fitToWidth } from './truncate.js'
 
 /**
  * Minimal layout constants. Deliberately NOT a theme/design-token system
@@ -181,6 +185,99 @@ interface PhrasingLayout {
   readonly runs: readonly TextRunNode[]
   /** Number of lines produced (>= 1); a hard break starts a new line. */
   readonly lineCount: number
+  /**
+   * How far right the runs actually paint. Not always `maxWidth`: an atomic
+   * run (inline code, raw HTML, inline math) is never split, so it can still
+   * exceed the wrap width, and a block that declares `maxWidth` regardless is
+   * lying to `sceneBounds`, the export viewBox and the editor's auto-fit.
+   */
+  readonly inkWidth: number
+}
+
+/**
+ * Break opportunities per UAX #14 with CSS `line-break: strict` — the same
+ * algorithm a browser applies to `<p>`, which is where Japanese kinsoku
+ * lives: a closing character never starts a line and an opening character
+ * never ends one, and between two CJK ideographs almost anywhere is a break.
+ * Each returned segment carries its own trailing whitespace.
+ *
+ * `wordBreak: 'normal'` is deliberate: `break-all` would also break English
+ * mid-word, and an over-wide segment is handled where it arises (by finer
+ * segments, then by code point) rather than by loosening the rule for every
+ * string.
+ */
+function uaxSegments(text: string): readonly string[] {
+  const breaker = LineBreaker(text, { lineBreak: 'strict', wordBreak: 'normal' })
+  const segments: string[] = []
+  for (let entry = breaker.next(); entry.done !== true; entry = breaker.next()) {
+    segments.push(entry.value.slice())
+  }
+  return segments
+}
+
+/**
+ * UAX #14 says a Japanese line MAY break between almost any two characters,
+ * which is enough to keep text inside its box and not enough to read well —
+ * it breaks mid-word, which no Japanese typesetter would. BudouX supplies
+ * phrase (文節) boundaries, a strict subset of those opportunities, so
+ * preferring them costs nothing in fit and buys a line that breaks where a
+ * reader would pause.
+ *
+ * Pure and DOM-free (verified in a worker before adopting), and its output is
+ * a total function of its input, which is what the byte-identical-SVG
+ * guarantee needs.
+ *
+ * Built on first Japanese text rather than at module load: the constructor
+ * turns a ~24KB model into a Map, and charging that to whichever lazily
+ * imported chunk happens to pull this module in makes every consumer pay for
+ * a script it may never lay out. Two apps/web browser tests went red on
+ * exactly that before this was made lazy.
+ *
+ * The parser and its model are VENDORED rather than depended on: budoux's
+ * only entry point drags in `linkedom` and from there the native `canvas`
+ * package, which breaks the published mcp-server build outright. See
+ * `../vendor/budoux/README.md`.
+ */
+let japaneseParser: Parser | undefined
+
+function parseJapanesePhrases(text: string): readonly string[] {
+  japaneseParser ??= new Parser(jaModel)
+  return japaneseParser.parse(text)
+}
+
+/** Hiragana and katakana — the scripts the bundled BudouX model is trained on. */
+const KANA_PATTERN = /[\u3040-\u30ff]/
+
+/**
+ * The coarsest useful break opportunities: phrases where the text is Japanese,
+ * UAX #14 segments otherwise. Chinese and Korean deliberately stay on UAX #14
+ * — BudouX ships separate models for them and one model per script is weight
+ * this package has no evidence it needs yet.
+ */
+function breakSegments(text: string): readonly string[] {
+  return KANA_PATTERN.test(text) ? parseJapanesePhrases(text) : uaxSegments(text)
+}
+
+/**
+ * One level finer than `segment`, for when it does not fit a line of its own.
+ * A phrase resolves to its UAX #14 segments; something UAX #14 already calls
+ * atomic (a long identifier, a URL with no separator left) resolves to code
+ * points, which is the floor.
+ */
+function finerSegments(segment: string): readonly string[] {
+  const finer = uaxSegments(segment)
+  return finer.length > 1 ? finer : [...segment]
+}
+
+/**
+ * A block's declared width. Normally the wrap width, but widened to cover an
+ * atomic run that could not be split — the bbox has to describe what is
+ * painted, since `sceneBounds` and every consumer downstream of it read this
+ * and nothing else. A non-finite wrap width (wrapping disabled) is passed
+ * through unchanged rather than turned into a number.
+ */
+function blockWidth(maxWidth: number, inkWidth: number): number {
+  return Number.isFinite(maxWidth) ? Math.max(maxWidth, inkWidth) : maxWidth
 }
 
 /**
@@ -192,18 +289,21 @@ interface PhrasingLayout {
  * break (mdast `break`) always resets the cursor to the block's left edge
  * and advances to a new line one `fontSizePx` down.
  *
- * Word-wrap: a chunk of text that would exceed `options.maxWidth` on its
- * current line splits into per-word runs at whitespace boundaries, packed
- * greedily onto successive lines. A chunk that already fits (the common
- * case) stays a single run, unchanged from before wrapping existed — this
- * keeps wrapping's blast radius limited to the cases that actually overflow.
- * A single word wider than `maxWidth` on its own line is a deliberate
- * exception: it is left as one overflowing run rather than broken mid-word.
- * Wrapping is skipped entirely when `maxWidth` is non-finite or <= 0 (no
- * meaningful width to wrap against). Inline code, raw HTML, and inline math
- * runs are atomic — their source text may contain whitespace that is not a
- * word boundary (a code span's argument list, an HTML tag's attributes),
- * so they are always emitted as one run even when they overflow.
+ * Word-wrap: a chunk that would exceed `options.maxWidth` on its current line
+ * is packed greedily onto successive lines at the break opportunities
+ * `breakSegments` offers, and everything landing on one line is emitted as
+ * ONE run. A chunk that already fits (the common case) stays a single run
+ * measured once, so wrapping costs nothing for text that never overflows.
+ *
+ * A segment too wide for a line of its own steps down one level of
+ * granularity at a time (phrase -> UAX #14 segment -> code point); only a
+ * single code point wider than `maxWidth` is left to overflow, because there
+ * is nothing below it to split and dropping it would be worse. Wrapping is
+ * skipped entirely when `maxWidth` is non-finite or <= 0 (no meaningful width
+ * to wrap against). Inline code, raw HTML, and inline math runs are atomic —
+ * their source text may contain whitespace that is not a word boundary (a
+ * code span's argument list, an HTML tag's attributes) — so they are always
+ * emitted as one run even when they overflow.
  */
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
@@ -246,31 +346,68 @@ function layoutPhrasing(
     extra: Partial<TextRunNode>,
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
-    // Input arrives collapse-normalized from `emit` (no boundary
-    // whitespace, single-space separated), so a separator is due before
-    // every word except the first — `emit` has already advanced the cursor
-    // for the chunk's own leading space when one existed in the source.
-    const words = text.split(' ')
-    const spaceWidth = measureRunWidth(
-      options.measure,
-      options.fontFamily,
-      ' ',
-      fontSizePx,
-      runStyle,
-    )
-    words.forEach((word, index) => {
-      const width = measureRunWidth(options.measure, options.fontFamily, word, fontSizePx, runStyle)
-      if (line.x > 0) {
-        const separator = index > 0 ? spaceWidth : 0
-        if (line.x + separator + width > options.maxWidth) {
-          line.x = 0
-          line.index += 1
-        } else {
-          line.x += separator
-        }
+    const widthOf = (value: string) =>
+      measureRunWidth(options.measure, options.fontFamily, value, fontSizePx, runStyle)
+    // Mutable: an over-wide segment is replaced IN PLACE by its code points
+    // (see below), and a segment that did not fit is retried at the start of
+    // the next line.
+    const segments = [...breakSegments(text)]
+    // Everything that lands on one line is emitted as ONE run. Emitting a run
+    // per break opportunity would also fit, and would multiply the SVG's
+    // <text> elements by the character count of every CJK paragraph.
+    //
+    // ponytail: linear scan re-measuring the whole accumulated line each
+    // segment — exact, and O(line length) characters measured per segment.
+    // Measured on the scoreboard corpus it costs 0.06ms -> 0.75ms for 33
+    // layouts (~23us each), which is noise beside edge routing's 46-405ms per
+    // canvas, so it is not worth trading exactness for yet. If text layout
+    // ever shows up in a profile, binary-search the largest fitting prefix
+    // instead: width is monotone in prefix length, so that is O(log segments)
+    // measures per line with no loss of exactness.
+    let buffered = ''
+    const flush = () => {
+      // Trailing whitespace is a cursor advance, never glyphs: XML strips a
+      // run's boundary whitespace, so a run carrying it would paint a
+      // space-width left of where layout measured it.
+      //
+      // `trimEnd`, not `/\s+$/`: an anchored `\s+` retries at every position
+      // and is quadratic on a long whitespace run (CodeQL js/polynomial-redos,
+      // high). Document text is untrusted input, so the linear form is the
+      // only one worth having here even though `emit` collapses whitespace
+      // before this point.
+      const painted = buffered.trimEnd()
+      if (painted !== '') pushRun(painted, extra, runStyle)
+      buffered = ''
+    }
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index] ?? ''
+      const candidate = buffered + segment
+      if (line.x + widthOf(candidate.trimEnd()) <= options.maxWidth) {
+        buffered = candidate
+        continue
       }
-      pushRun(word, extra, runStyle)
-    })
+      if (buffered !== '' || line.x > 0) {
+        flush()
+        line.x = 0
+        line.index += 1
+        // A boundary space at the start of a line is dropped, not advanced.
+        segments[index] = segment.trimStart()
+        index -= 1
+        continue
+      }
+      // Alone at the start of a line and still too wide: step down one level
+      // of granularity (phrase -> UAX #14 segments -> code points). A single
+      // code point wider than maxWidth is irreducible and is left to overflow
+      // rather than dropped.
+      const finer = finerSegments(segment)
+      if (finer.length <= 1) {
+        buffered = candidate
+        continue
+      }
+      segments.splice(index, 1, ...finer)
+      index -= 1
+    }
+    flush()
   }
 
   const emit = (
@@ -281,9 +418,25 @@ function layoutPhrasing(
     // mid-token at a whitespace boundary — unlike prose, an internal space
     // in their source text is not a word boundary.
     wrappable = true,
+    // Inline MATH is atomic AND uncuttable: `a + b + c` cut to `a + b`
+    // reads as a complete formula that is simply wrong, where cut code or
+    // cut markup reads as cut. Overflowing is the lesser harm.
+    truncatable = true,
   ) => {
     if (!wrappable) {
-      pushRun(text, extra, runStyle)
+      // Atomic: never SPLIT, because an interior space in a code span or an
+      // HTML tag is not a word boundary. Cutting it is the only way left to
+      // keep it inside the box, and the run says so.
+      const fitted =
+        canWrap && truncatable
+          ? fitToWidth(
+              text,
+              bodyFont(options.fontFamily, fontSizePx, runStyle),
+              options.measure,
+              options.maxWidth - line.x,
+            )
+          : { text }
+      pushRun(fitted.text, { ...extra, ...(fitted.truncated ? { truncated: true } : {}) }, runStyle)
       return
     }
     // XML — and therefore an SVG <text> element — strips leading/trailing
@@ -314,7 +467,7 @@ function layoutPhrasing(
         fontSizePx,
         runStyle,
       )
-      if (canWrap && line.x + fullWidth > options.maxWidth && /\s/.test(collapsed)) {
+      if (canWrap && line.x + fullWidth > options.maxWidth) {
         wrapAndPush(collapsed, extra, runStyle)
       } else {
         pushRun(collapsed, extra, runStyle)
@@ -391,7 +544,7 @@ function layoutPhrasing(
           emit(child.alt ?? child.identifier, {}, currentStyle)
           break
         case 'inlineMath':
-          emit(child.value, {}, currentStyle, false)
+          emit(child.value, {}, currentStyle, false, false)
           break
         case 'wikiLink':
           emit(
@@ -420,7 +573,8 @@ function layoutPhrasing(
   }
 
   walk(children, style)
-  return { runs, lineCount: line.index + 1 }
+  const inkWidth = runs.reduce((widest, run) => Math.max(widest, run.bbox.x + run.bbox.w), 0)
+  return { runs, lineCount: line.index + 1, inkWidth }
 }
 
 function layoutBlock(
@@ -436,11 +590,16 @@ function layoutBlock(
   switch (node.type) {
     case 'heading': {
       const fontSizePx = HEADING_FONT_SIZE_PX[node.depth]
-      const { runs, lineCount } = layoutPhrasing(node.children, cursor, options, fontSizePx)
+      const { runs, lineCount, inkWidth } = layoutPhrasing(
+        node.children,
+        cursor,
+        options,
+        fontSizePx,
+      )
       const height = lineCount * fontSizePx
       const heading: HeadingBlockNode = {
         kind: 'heading',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
+        bbox: { x: 0, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         level: node.depth,
         runs,
       }
@@ -454,11 +613,16 @@ function layoutBlock(
       if (only?.type === 'embed' && options.resolveEmbed !== undefined) {
         return layoutEmbedBlock(only.documentId, cursor, options, embedPath)
       }
-      const { runs, lineCount } = layoutPhrasing(node.children, cursor, options, BODY_FONT_SIZE_PX)
+      const { runs, lineCount, inkWidth } = layoutPhrasing(
+        node.children,
+        cursor,
+        options,
+        BODY_FONT_SIZE_PX,
+      )
       const height = lineCount * BODY_FONT_SIZE_PX
       const paragraph: ParagraphBlockNode = {
         kind: 'paragraph',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
+        bbox: { x: 0, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         runs,
       }
       cursor.y += height + BLOCK_GAP_PX

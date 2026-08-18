@@ -7,6 +7,8 @@ import {
   type Extension,
   Prec,
   type StateCommand,
+  StateEffect,
+  StateField,
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -14,27 +16,65 @@ import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { minimalChange } from './minimal-change.js'
+import { headingLevelAt } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
+import { rangeToActOn } from './word-at.js'
 
-// Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
-// collapsed selection inserts an empty pair and parks the cursor between
-// the delimiters so the next keystroke lands inside. Toggling (detecting
-// an already-wrapped range and unwrapping) is deliberately not attempted:
-// markdown emphasis nesting makes reliable detection lexer work, and a
-// wrong unwrap corrupts text — insert-only is predictable.
-function wrapSelectionWith(delimiter: string): StateCommand {
+// Wraps what the caret is ON in `open`/`close` (Mod-b -> **, Mod-i -> *,
+// the catalog's [[ ]] passing two different delimiters). With a selection
+// that is the selection; without one it is the WORD under the caret, which
+// is what lets every verb work on a phone, where making a selection is the
+// hard part. A caret on whitespace has no word: that inserts an empty pair
+// and parks the cursor between the delimiters so the next keystroke lands
+// inside. Toggling (detecting an already-wrapped range and unwrapping) is
+// deliberately not attempted: markdown emphasis nesting makes reliable
+// detection lexer work, and a wrong unwrap corrupts text — insert-only is
+// predictable.
+function wrapSelectionWith(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
-    const changes = state.changeByRange((range) => ({
-      changes: [
-        { from: range.from, insert: delimiter },
-        { from: range.to, insert: delimiter },
-      ],
-      range: EditorSelection.range(range.from + delimiter.length, range.to + delimiter.length),
-    }))
-    dispatch(state.update(changes, { scrollIntoView: true, userEvent: 'input' }))
+    const scope = rangeToActOn(state)
+    dispatch(
+      state.update({
+        changes: [
+          { from: scope.from, insert: open },
+          { from: scope.to, insert: close },
+        ],
+        selection: EditorSelection.range(scope.from + open.length, scope.to + open.length),
+        scrollIntoView: true,
+        userEvent: 'input',
+      }),
+    )
     return true
   }
 }
+
+/**
+ * The range a surface that ASKS the user something (the link picker) will
+ * write to when it finally commits.
+ *
+ * It has to be a `StateField` rather than a remembered pair of offsets: the
+ * dialog is not modal, so the document can change under it, and text typed
+ * BEFORE the range shifts every later position. CodeMirror maps positions
+ * through a change set for exactly this, so the pin travels with the text it
+ * points at instead of pointing at whatever now occupies those offsets.
+ *
+ * Bias points INWARD at both ends (`1` at the start, `-1` at the end) so an
+ * insertion at either boundary stays OUTSIDE the pinned range: text typed
+ * immediately before the word must not become part of what the link
+ * replaces. The outward-looking pair is the intuitive choice and is wrong —
+ * `mapPos(from, -1)` keeps the start before an insertion at that offset, so
+ * the range swallows it.
+ */
+const setPinnedRange = StateEffect.define<{ from: number; to: number } | null>()
+
+const pinnedRange = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setPinnedRange)) return effect.value
+    if (value === null) return null
+    return { from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) }
+  },
+})
 
 /**
  * Shared with the spatial node editor (markdown-editor and spatial-editor
@@ -88,7 +128,27 @@ export const markdownHighlightStyle = HighlightStyle.define([
  * controlled `value`/`onChange` pair.
  */
 export interface SourcePaneApi {
-  wrapSelection: (delimiter: string) => void
+  wrapSelection: (open: string, close?: string) => void
+  /**
+   * Runs any editing command against the live view — the seam the catalog
+   * drives, so a new verb is a new command rather than a new API method.
+   */
+  run: (command: StateCommand) => void
+  /** Heading level of the line the caret sits on; 0 for body text. */
+  headingLevel: () => number
+  /**
+   * Pins the range an inline verb would act on — the selection, else the
+   * caret's word — and answers the text it holds.
+   *
+   * For a surface that commits LATER (the link picker): the caret can move
+   * and the document can change under a non-modal dialog, and the range the
+   * user was shown must still be the range that gets written.
+   */
+  pinScope: () => { text: string }
+  /** Replaces the pinned range with `markup` and clears the pin. */
+  replacePinned: (markup: string) => void
+  /** Drops the pin without writing anything. */
+  clearPin: () => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -169,6 +229,7 @@ export function SourcePane({
         // an escaped-source placeholder anyway (see render-preview.ts), so
         // there is nothing yet for a source-side math grammar to agree with.
         markdown({ extensions: [GFM] }),
+        pinnedRange,
         // Above the language keymap's own Enter (`markdown()` registers
         // lang-markdown's auto-continuation at high precedence): Enter on
         // an EMPTY list item must delete the marker, not march it down
@@ -222,9 +283,34 @@ export function SourcePane({
     viewRef.current = view
     if (apiRef) {
       apiRef.current = {
-        wrapSelection: (delimiter) => {
-          wrapSelectionWith(delimiter)({ state: view.state, dispatch: view.dispatch })
+        wrapSelection: (open, close) => {
+          wrapSelectionWith(open, close)({ state: view.state, dispatch: view.dispatch })
           view.focus()
+        },
+        run: (command) => {
+          command({ state: view.state, dispatch: view.dispatch })
+          view.focus()
+        },
+        headingLevel: () => headingLevelAt(view.state),
+        pinScope: () => {
+          const scope = rangeToActOn(view.state)
+          view.dispatch({ effects: setPinnedRange.of(scope) })
+          return { text: view.state.doc.sliceString(scope.from, scope.to) }
+        },
+        replacePinned: (markup) => {
+          const pin = view.state.field(pinnedRange)
+          if (pin === null) return
+          view.dispatch({
+            changes: { from: pin.from, to: pin.to, insert: markup },
+            selection: { anchor: pin.from + markup.length },
+            effects: setPinnedRange.of(null),
+            scrollIntoView: true,
+            userEvent: 'input',
+          })
+          view.focus()
+        },
+        clearPin: () => {
+          view.dispatch({ effects: setPinnedRange.of(null) })
         },
         focus: () => view.focus(),
         topVisibleLine: () => {

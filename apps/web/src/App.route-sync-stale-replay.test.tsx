@@ -93,9 +93,6 @@ const { App } = await import('./App.js')
 const BROWSER_LOCAL_STATE: ProviderState = {
   kind: 'browser-local',
   capabilities: {
-    canvasReadWrite: true,
-    migrationExport: true,
-    migrationImport: false,
     workspaces: false,
     versions: false,
     branches: false,

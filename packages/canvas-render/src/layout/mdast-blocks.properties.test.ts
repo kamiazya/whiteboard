@@ -177,6 +177,24 @@ function sourceTokens(node: MdastRoot | MdastFlowContent | MdastPhrasingContent)
   return children.flatMap((child) => sourceTokens(child))
 }
 
+/**
+ * The verbatim source text of every ATOMIC run — inline code, raw HTML,
+ * inline math. Only these are ever truncated (prose wraps instead), so this
+ * is the exact set a cut run's text must be a prefix of.
+ */
+function atomicValues(node: MdastRoot | MdastFlowContent | MdastPhrasingContent): string[] {
+  const type = (node as { type?: string }).type
+  const value = (node as { value?: unknown }).value
+  if (
+    typeof value === 'string' &&
+    (type === 'inlineCode' || type === 'html' || type === 'inlineMath')
+  ) {
+    return [value]
+  }
+  const children = (node as { children?: readonly MdastPhrasingContent[] }).children
+  return children ? children.flatMap((child) => atomicValues(child)) : []
+}
+
 describe('layoutMdastBlocks properties', () => {
   fcTest.prop([anyRootArb], withDefaults())('never throws, whatever the document', (root) => {
     expect(() => layout(root)).not.toThrow()
@@ -196,29 +214,67 @@ describe('layoutMdastBlocks properties', () => {
   })
 
   // The defect this pins drew long lines straight past the node's right
-  // edge. The documented exception is deliberate: a single token wider than
-  // maxWidth is left overflowing rather than broken mid-word.
+  // edge. Only two documented exceptions remain, and both are irreducible:
+  // there is nothing below a single code point to split, and an ATOMIC run
+  // (inline code, raw HTML, inline math) is never split because an interior
+  // space in it is not a word boundary.
   fcTest.prop([anyRootArb], withDefaults())(
-    'wraps every run inside maxWidth unless the run is one unbreakable token',
+    'wraps every run inside maxWidth unless it is one code point or atomic',
     (root) => {
       for (const { run, offsetX } of textRuns(layout(root))) {
         const right = offsetX + run.bbox.x + run.bbox.w
         if (right <= MAX_WIDTH + 0.001) continue
-        // Two documented reasons a run may legitimately overrun: a single
-        // token is never broken mid-word, and an ATOMIC run (inline code,
-        // raw HTML, inline math) is never split even when it holds spaces.
-        expect(tokens(run.text).length <= 1 || run.code === true).toBe(true)
+        expect([...run.text].length <= 1 || run.code === true).toBe(true)
       }
     },
   )
 
+  /**
+   * The rendered tokens re-joined wherever wrapping split ONE source token
+   * across a break — legitimate since a token with no break opportunity in it
+   * is broken by code point rather than left to overflow. A dropped word
+   * still comes out short, and two words fused across a wrap point (the
+   * "separator space silently dropped" defect) still come out over-long.
+   */
+  function rejoinSplitTokens(rendered: readonly string[], source: readonly string[]): string[] {
+    const out: string[] = []
+    let index = 0
+    for (const want of source) {
+      let joined = ''
+      while (index < rendered.length && joined.length < want.length) {
+        joined += rendered[index]
+        index += 1
+      }
+      out.push(joined)
+    }
+    out.push(...rendered.slice(index))
+    return out
+  }
+
   // Wrapping decides where spaces go, so this compares TOKEN SEQUENCES
-  // rather than raw strings: a line break legitimately replaces a space,
-  // but neither dropping a word nor fusing two words across a wrap point
-  // (the "separator space silently dropped" defect) survives it.
+  // rather than raw strings: a line break legitimately replaces a space.
+  //
+  // A TRUNCATED run is the one place text is deliberately dropped, so a
+  // document containing one is held to the weaker statement its contract
+  // actually makes: what survives is a PREFIX. Stated as two properties
+  // rather than one weakened property, so the un-truncated case — every
+  // document with no atomic overflow in it, which is nearly all of them —
+  // keeps the full strength it had.
   fcTest.prop([proseRootArb], withDefaults())('preserves every source word, in order', (root) => {
-    const rendered = textRuns(layout(root)).flatMap(({ run }) => tokens(run.text))
-    expect(rendered).toStrictEqual(sourceTokens(root))
+    const runs = textRuns(layout(root))
+    if (runs.some(({ run }) => run.truncated === true)) return
+    const rendered = runs.flatMap(({ run }) => tokens(run.text))
+    expect(rejoinSplitTokens(rendered, sourceTokens(root))).toStrictEqual(sourceTokens(root))
+  })
+
+  fcTest.prop([proseRootArb], withDefaults())('only ever cuts a run to a prefix', (root) => {
+    for (const { run } of textRuns(layout(root))) {
+      if (run.truncated !== true) continue
+      // The WHOLE retained text, not just its first token: a truncator that
+      // corrupts anything after the first word would satisfy a per-token
+      // check while painting text that was never in the document.
+      expect(atomicValues(root).some((value) => value.startsWith(run.text))).toBe(true)
+    }
   })
 
   // XML — and therefore an SVG <text> element — strips leading/trailing

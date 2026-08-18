@@ -342,6 +342,12 @@ export function DaemonDocumentPage({
       ),
     [controller.documents],
   )
+  // The same list the alias resolver reads, carried with ids so the picker
+  // can fall back to one when a name is ambiguous.
+  const linkTargets = useMemo(
+    () => controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
+    [controller.documents],
+  )
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
@@ -756,6 +762,7 @@ export function DaemonDocumentPage({
               theme: resolvedTheme,
               meta: coreFacets ?? { type: documentKind },
               resolveAlias,
+              linkTargets,
               onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
               resolveEmbed,
             }}

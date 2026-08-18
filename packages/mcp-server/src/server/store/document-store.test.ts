@@ -647,6 +647,33 @@ describe('listDocuments', () => {
     expect(paths).not.toContain('exports')
   })
 
+  it('omits kind for a row that records none, instead of guessing spatial', async () => {
+    // The guess used to escape as stored fact (wb_version_restore forked it
+    // into new rows), and no caller could tell "stored as spatial" from
+    // "never recorded". An unrecorded kind is now absent, not invented.
+    await saveDocument('session1', 'kindless', new LoroDoc())
+    const { getDb } = await import('./db/index.js')
+    const { getDataDir } = await import('../config.js')
+    const db = await getDb(getDataDir())
+    await db
+      .updateTable('documents')
+      .set({ kind: null })
+      .where('workspaceId', '=', 'session1')
+      .where('path', '=', 'kindless')
+      .execute()
+
+    const [entry] = await listDocuments('session1')
+
+    expect(entry?.path).toBe('kindless')
+    expect(entry?.kind).toBeUndefined()
+  })
+
+  it('reports a recorded kind unchanged', async () => {
+    await saveDocument('session1', 'a-note', new LoroDoc(), { kind: 'markdown' })
+    const [entry] = await listDocuments('session1')
+    expect(entry?.kind).toBe('markdown')
+  })
+
   it('returns an empty array for an empty session', async () => {
     const list = await listDocuments('session1')
     expect(list).toHaveLength(0)
@@ -681,10 +708,15 @@ describe('listDocuments', () => {
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
-  it('lists kind: spatial when saveDocument is called without a kind option (back-compat)', async () => {
+  it('omits kind when saveDocument is called without one — the row records none', async () => {
+    // saveDocument stores NULL for an omitted kind (it does not invent
+    // 'spatial'), and the listing now reports that absence rather than
+    // guessing. Clients that must render something (the gallery badge, the
+    // daemon page's editor choice) already default locally, so the rendered
+    // result is unchanged — only the claim in the data is gone.
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const list = await listDocuments('session1')
-    expect(list.find((c) => c.path === 'canvas-a')?.kind).toBe('spatial')
+    expect(list.find((c) => c.path === 'canvas-a')?.kind).toBeUndefined()
   })
 
   it('does not reset kind on an overwrite:true re-save', async () => {

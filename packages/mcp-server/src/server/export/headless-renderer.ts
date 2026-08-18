@@ -34,7 +34,6 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
@@ -137,7 +136,6 @@ export function buildSpatialScene(
 ): Scene {
   return layoutSpatialCanvas(canvas, {
     measure,
-    parseBody: parseMarkdownBody,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
     onDegrade,
   })

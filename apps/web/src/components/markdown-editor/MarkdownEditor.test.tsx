@@ -107,16 +107,18 @@ describe('MarkdownEditor', () => {
     expect(getByTestId('markdown-word-count').textContent).toContain('3')
   })
 
-  it('disables the formatting buttons in Read mode and re-enables them in Write', () => {
-    const { getByRole } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
-    const bold = getByRole('button', { name: 'Bold' }) as HTMLButtonElement
-    expect(bold.disabled).toBe(false)
+  it('withdraws the catalog doorway in Read mode and brings it back in Write', () => {
+    // Read mode has no source pane, so every verb in the catalog would have
+    // nothing to act on: the doorway goes away rather than opening onto
+    // disabled entries.
+    const { getByRole, queryByRole } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Read' }))
-    expect(bold.disabled).toBe(true)
+    expect(queryByRole('button', { name: 'Editing actions' })).toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Write' }))
-    expect(bold.disabled).toBe(false)
+    expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
   })
 
   it('falls back from Split to Write in a narrow container, reflecting it in the toolbar without overwriting the stored preference', () => {
