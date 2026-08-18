@@ -4,12 +4,12 @@
 // decision. Process-internal (a value in, a value out), so per
 // zod-schema-discipline no Zod schema is warranted.
 //
-// A markdown parser is an injected dependency, the same seam class as
-// `measure`/`renderMath`: this package never imports codec, so
-// `parseBody` is supplied by the caller (codec's
-// `parseMarkdownBody` in both current consumers). Likewise `appearance` is
-// an injected `SpatialAppearanceResolver` (spatial-appearance.ts) — layout
-// never chooses a color.
+// The markdown parser DEFAULTS to codec's `parseMarkdownBody` and stays
+// overridable: every production caller passed that exact function, so the
+// seam was seven identical lines, but layout tests parse with a stub for the
+// same reason they measure with one. `appearance` is a genuinely injected
+// `SpatialAppearanceResolver` (spatial-appearance.ts) — layout never chooses
+// a color.
 //
 // Total by construction: canvas-render's own layout/routing entry points
 // already degrade instead of throwing, and this module's one addition —
@@ -24,6 +24,7 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
@@ -86,7 +87,16 @@ export interface FacetCardData {
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
-  readonly parseBody: (text: string) => MdastRoot
+  /**
+   * How a `text` node's body becomes mdast. Defaults to codec's
+   * `parseMarkdownBody`, which is what EVERY production caller passed —
+   * seven identical lines whose only reason to exist was this package once
+   * being forbidden to depend on codec. It stays injectable because layout
+   * tests deliberately parse with a stub, the same way they measure with
+   * one: a layout assertion should not fail because a markdown parser
+   * changed.
+   */
+  readonly parseBody?: (text: string) => MdastRoot
   readonly appearance: SpatialAppearanceResolver
   /**
    * Geometry constants (padding/label font size/min content width).
@@ -208,6 +218,7 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly embedPath: ReadonlySet<string>
   readonly embedDepth: number
   readonly geometry: SpatialGeometry
+  readonly parseBody: (text: string) => MdastRoot
 }
 
 /**
@@ -796,6 +807,7 @@ export function layoutSpatialCanvasWithAnchors(
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
+    parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
   })
@@ -866,6 +878,7 @@ export function layoutSpatialEdges(
   return composeEdgesAndLabels(canvas, {
     ...options,
     geometry: resolveGeometry(options.geometry),
+    parseBody: options.parseBody ?? parseMarkdownBody,
     embedPath: new Set(),
     embedDepth: 0,
   }).content

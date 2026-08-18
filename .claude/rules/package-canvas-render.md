@@ -64,8 +64,10 @@ paths:
 ## Dependency rules
 
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
-  edges + the `./mdast` subset) and `zod` (via `catalog:`), for
-  `sceneDigestSchema` only.
+  edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
+  `parseBody`; every consumer already bundled it to pass that same function
+  in), `css-line-break` (UAX #14 break opportunities) and `zod` (via
+  `catalog:`), for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -472,6 +474,34 @@ paths:
       so it stays a pure function of the canvas snapshot, exactly parallel
       to the style opt-in above.
 
+11. **ONE reference seam, not one per content kind.** `SpatialLayoutOptions`
+    carries a single `resolveReference?: (ref: string) => ResolvedReference
+    | undefined`, where `ResolvedReference` is a record of independent
+    optional fields — `label`, `missing`, `image`, `canvas`, `markdown`,
+    `facets` — ranked in that order by `composeNode`. It replaced six
+    parallel callbacks (`resolveFileLabel`/`Missing`/`Canvas`/`Image`/
+    `Markdown`/`Facets`).
+    Three things the six could not do. A caller has ONE document per
+    reference, so six closures over the same lookup meant the same key was
+    resolved four times per file node. A record is plain DATA, which a
+    function can never be — the layout worker refuses a canvas whose file
+    seams are wired precisely because a function cannot cross
+    `postMessage`, and `apps/web`'s `composeReferenceSeam` is now the ONE
+    producer both threads build their seam through. And a content kind added
+    later is a field rather than a seventh callback threaded through every
+    consumer, of which there are four.
+    The price, stated because it is a real behaviour change: one resolver
+    means one failure. A throw used to cost the reference one RANK and now
+    costs it the whole resolution, falling straight to the plain label. A
+    caller that can partially fail has to handle that in its own lookup,
+    which is where it has the information to.
+    `expandFileNode` stays a separate seam: it is the caller's POLICY over a
+    node (the editor decides by on-screen size, export by intrinsic size),
+    not something known about the reference.
+    `MdastLayoutOptions.resolveEmbed` also stays its own — it is keyed by a
+    canvasId appearing in PROSE, a different key space from a spatial node's
+    reference, and it serves markdown documents with no file nodes at all.
+
 12. **Line breaking is UAX #14, not a hand-rolled character table**
     (`layout/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
     `lineBreak: 'strict'` supplies the break opportunities, which is what
@@ -510,7 +540,18 @@ paths:
     The parser is built on first Japanese text, NOT at module load: its
     constructor turns a ~24KB model into a Map, and charging that to whichever
     lazily-imported chunk pulls this module in turned two apps/web browser
-    tests red before it was made lazy. BudouX is VENDORED
+    tests red before it was made lazy.
+
+13. **`parseBody` DEFAULTS to codec's `parseMarkdownBody`** and stays
+    overridable. It was a required injected seam only because this package was
+    forbidden to depend on codec, and every production caller passed that one
+    function — seven identical lines across apps/web (x3), canvas-viewer,
+    server-core and mcp-server, plus an option threaded through apps/web's
+    `scene-render-core.ts` for a worker chunk that imported codec directly
+    anyway. It remains injectable because layout tests parse with a stub for
+    the same reason they measure with one: a layout assertion should not fail
+    because a markdown parser changed. No bundle grew — every one of those
+    consumers already bundled codec in order to pass the function in. BudouX is VENDORED
     (`src/vendor/budoux/`, Apache-2.0, with the equivalence check that was run
     before the dependency was dropped recorded in its README) and NOT a
     dependency: its only entry point re-exports the HTML processor, which
@@ -546,34 +587,6 @@ paths:
     reason to act on it.
     `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
     see the Tests section.
-
-11. **ONE reference seam, not one per content kind.** `SpatialLayoutOptions`
-    carries a single `resolveReference?: (ref: string) => ResolvedReference
-    | undefined`, where `ResolvedReference` is a record of independent
-    optional fields — `label`, `missing`, `image`, `canvas`, `markdown`,
-    `facets` — ranked in that order by `composeNode`. It replaced six
-    parallel callbacks (`resolveFileLabel`/`Missing`/`Canvas`/`Image`/
-    `Markdown`/`Facets`).
-    Three things the six could not do. A caller has ONE document per
-    reference, so six closures over the same lookup meant the same key was
-    resolved four times per file node. A record is plain DATA, which a
-    function can never be — the layout worker refuses a canvas whose file
-    seams are wired precisely because a function cannot cross
-    `postMessage`, and `apps/web`'s `composeReferenceSeam` is now the ONE
-    producer both threads build their seam through. And a content kind added
-    later is a field rather than a seventh callback threaded through every
-    consumer, of which there are four.
-    The price, stated because it is a real behaviour change: one resolver
-    means one failure. A throw used to cost the reference one RANK and now
-    costs it the whole resolution, falling straight to the plain label. A
-    caller that can partially fail has to handle that in its own lookup,
-    which is where it has the information to.
-    `expandFileNode` stays a separate seam: it is the caller's POLICY over a
-    node (the editor decides by on-screen size, export by intrinsic size),
-    not something known about the reference.
-    `MdastLayoutOptions.resolveEmbed` also stays its own — it is keyed by a
-    canvasId appearing in PROSE, a different key space from a spatial node's
-    reference, and it serves markdown documents with no file nodes at all.
 
 ## Conventions
 

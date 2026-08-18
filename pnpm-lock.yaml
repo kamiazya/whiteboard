@@ -303,6 +303,9 @@ importers:
 
   packages/canvas-render:
     dependencies:
+      '@kamiazya/whiteboard-codec':
+        specifier: workspace:*
+        version: link:../codec
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model

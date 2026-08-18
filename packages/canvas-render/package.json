@@ -19,6 +19,7 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
+    "@kamiazya/whiteboard-codec": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "css-line-break": "catalog:",
     "zod": "catalog:"

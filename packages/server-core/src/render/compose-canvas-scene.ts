@@ -9,7 +9,6 @@ import {
   layoutSpatialCanvas,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 
@@ -67,7 +66,6 @@ export function composeCanvasScene(
   const references = options?.references
   return layoutSpatialCanvas(canvas, {
     measure,
-    parseBody: parseMarkdownBody,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
     ...(references === undefined ? {} : { resolveReference: (ref: string) => references.get(ref) }),
