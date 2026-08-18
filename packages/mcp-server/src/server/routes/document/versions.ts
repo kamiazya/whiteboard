@@ -5,7 +5,7 @@ import {
   saveVersionRequestSchema,
 } from '../../../shared/api-contracts/document.js'
 import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
-import { getDoc } from '../../store/doc-cache.js'
+import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import { defaultHumanDisplayName, handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'

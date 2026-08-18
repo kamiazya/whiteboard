@@ -36,7 +36,9 @@ describe('what the picker writes is what the codec reads', () => {
   it.each([
     ['single ] bracket'],
     ['A|B'],
-    ['canvas:not-an-id'],
+    // A name shaped exactly like a document id. The references syntax carries
+    // no scheme, so this IS the id form and cannot be written as a target.
+    ['01BX5ZZKBKACTAV9WEVGEMMVRZ'],
     ['weird ]] name'],
   ])('a document named %j still links', (name) => {
     const odd: LinkTarget = { id: ID, name, kind: 'markdown' }

@@ -28,19 +28,23 @@ vi.mock('../daemon/ensure-daemon.js', () => ({
   })),
 }))
 
-// Mock doc-cache so getDoc can be gated to control interleaving against a
-// concurrent rename, mirroring canvas/workspaces.test.ts's phantom-duplicate pin.
-vi.mock('./store/doc-cache.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('./store/doc-cache.js')>('./store/doc-cache.js')
+// Mock the store so `getDoc` can be gated to control interleaving against a
+// concurrent rename/delete. It must be THIS module: `getDoc` is the store's
+// cached read, and doc-cache.js (which holds the LRU it reads through) never
+// exports it. Mocking the wrong module is silent — a factory spreading
+// `...actual` just adds a property nobody imports, and the race never stages.
+vi.mock('./store/document-store.js', async () => {
+  const actual = await vi.importActual<typeof import('./store/document-store.js')>(
+    './store/document-store.js',
+  )
   return { ...actual, getDoc: vi.fn(actual.getDoc) }
 })
 
 const { createApp } = await import('./app.js')
-const { clearCache, getDoc } = await import('./store/doc-cache.js')
+const { clearCache } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
-const { saveDocument } = await import('./store/document-store.js')
+const { getDoc, saveDocument } = await import('./store/document-store.js')
 const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
 
 function createRuntimeOptions() {
@@ -125,8 +129,9 @@ describe('performMerge vs rename race', () => {
     // after.
     const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
-    const actual =
-      await vi.importActual<typeof import('./store/doc-cache.js')>('./store/doc-cache.js')
+    const actual = await vi.importActual<typeof import('./store/document-store.js')>(
+      './store/document-store.js',
+    )
     vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
       signalGetDocCalled()
       await getDocGate

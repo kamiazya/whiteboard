@@ -1,6 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
+import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
@@ -8,6 +9,7 @@ import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
   layoutSpatialCanvas,
   layoutSpatialEdges,
+  naturalNodeContentSize,
   type ResolvedReference,
 } from './spatial-canvas.js'
 
@@ -536,9 +538,8 @@ const fractionArb = fc.integer({ min: 0, max: 120 }).map((n) => n / 100)
 
 /** What the body needs, measured the way the editor's grow probe measures. */
 function naturalHeight(width: number, text: string): number {
-  const blocks = blocksOf(textNodeAt(width, 1, text))
-  const bottom = Math.max(0, ...blocks.map((b) => b.y + b.h))
-  return Math.ceil(bottom + PADDING_PX)
+  const node = textNodeAt(width, 1, text).nodes[0]
+  return Math.ceil(naturalNodeContentSize(node, fitOptions).h + 2 * PADDING_PX)
 }
 
 describe('a text node fits its body to its own box (PBT)', () => {
@@ -569,14 +570,151 @@ describe('a text node fits its body to its own box (PBT)', () => {
     },
   )
 
-  fcTest.prop([widthArb, bodyArb], withDefaults())(
-    'a box with no room to fit against imposes no truncation, so the natural height stays measurable',
-    (width, text) => {
-      // The editor's grow-only auto-fit lays a node out at height 1 to read
-      // its natural content height. Truncating there caps what the probe can
-      // report and the box can never grow past one block.
-      expect(blocksOf(textNodeAt(width, 1, text)).length).toBe(
-        blocksOf(textNodeAt(width, 100_000, text)).length,
+  fcTest.prop([widthArb, bodyArb, fractionArb], withDefaults())(
+    'the natural content size is independent of the box it is stored in',
+    (width, text, fraction) => {
+      // What an auto-fit needs to know cannot be a function of the box it is
+      // trying to resize, or the box can never grow past what it already is.
+      const height = Math.max(1, Math.round(naturalHeight(width, text) * fraction))
+      const node = (h: number) => textNodeAt(width, h, text).nodes[0]
+
+      expect(naturalNodeContentSize(node(height), fitOptions)).toEqual(
+        naturalNodeContentSize(node(100_000), fitOptions),
+      )
+    },
+  )
+})
+
+/**
+ * The containment law, stated once for EVERY node kind rather than per seam.
+ *
+ * Several seams put content in a node's box — a text body, a resolved
+ * markdown body, a facet card, an image, a scaled canvas embed, a label —
+ * and each one that grew its own bound is a place the next overflow can
+ * appear. So the guarantee is written against the OUTPUT: whatever a node
+ * paints, wherever it came from, obeys the same rule.
+ *
+ * Two escapes, and they are enumerated rather than discovered:
+ *
+ * 1. A label placed ABOVE the frame. JSON Canvas puts a container's name
+ *    outside its box, and `placeAboveNode` is the one producer of it — an
+ *    element wholly above `node.y` is that label and nothing else.
+ * 2. The single piece of content kept when NOTHING fits, so a node one line
+ *    tall renders its line instead of an empty box.
+ *
+ * Only the vertical axis: horizontal overflow has its own declared
+ * exemptions (inline math is neither split nor cut, an atomic run is not
+ * split) and its own instrument in `text-wrapping-quality.test.ts`.
+ */
+const containmentShapeArb = fc.tuple(
+  fc.integer({ min: 8, max: 240 }),
+  fc.constantFrom(
+    'かあらた\n\nかたそ',
+    'a longer english line that wraps\n\nand a second block\n\nand a third',
+    'short',
+    '',
+    '__THROW__',
+  ),
+  fc.constantFrom('text' as const, 'file' as const, 'link' as const, 'group' as const),
+  fractionArb,
+)
+
+function containmentNode(
+  width: number,
+  text: string,
+  type: 'text' | 'file' | 'link' | 'group',
+  height: number,
+): SpatialNode {
+  const base = { id: 'n', x: 0, y: 0, width, height }
+  if (type === 'text') return { ...base, type, text }
+  if (type === 'file') return { ...base, type, file: 'md.md' }
+  if (type === 'link') return { ...base, type, url: 'https://example.com' }
+  return { ...base, type, label: text }
+}
+
+/**
+ * The reference RESOLVES to a body, so a file node takes the markdown seam
+ * (`fitBodyInNode`) rather than falling straight to its label. A
+ * label-only resolver leaves that seam — one of the three that put content
+ * in a box — untouched by every property below, which is exactly how the
+ * natural-size defect on small file nodes survived its first review.
+ */
+const containmentOptions = {
+  ...fitOptions,
+  resolveReference: () => ({
+    label: 'A referenced document',
+    markdown: parseParagraphs('かあらた\n\nかたそ'),
+  }),
+}
+
+describe('every node kind keeps its ink inside its own frame (PBT)', () => {
+  /**
+   * Height is drawn as a FRACTION OF THE NATURAL CONTENT HEIGHT, per kind
+   * and per body — never from a flat pixel range. Measured: a flat
+   * 1..160 range put roughly 1 run in 140 on a case where two blocks cross
+   * the frame, so the mutation check that deletes the fit entirely passed
+   * on some seeds and failed on others. Density is the fix, not more runs.
+   */
+  function nodeFor(
+    width: number,
+    text: string,
+    type: 'text' | 'file' | 'link' | 'group',
+    fraction: number,
+  ): SpatialNode {
+    const roomy = containmentNode(width, text, type, 100_000)
+    const natural = naturalNodeContentSize(roomy, containmentOptions).h + 2 * PADDING_PX
+    return containmentNode(width, text, type, Math.max(1, Math.round(natural * fraction)))
+  }
+
+  fcTest.prop([containmentShapeArb], withDefaults())(
+    'at most one element crosses the frame bottom, once the outside label is set aside',
+    ([width, text, type, fraction]) => {
+      const node = nodeFor(width, text, type, fraction)
+      const scene = layoutSpatialCanvas({ nodes: [node], edges: [] }, containmentOptions)
+      const inFrame = scene.nodes.filter(
+        (entry): entry is Exclude<SceneNode, { kind: 'edge' }> =>
+          entry.kind !== 'shape' && entry.kind !== 'edge' && entry.bbox.y >= node.y,
+      )
+      const crossing = inFrame.filter((entry) => entry.bbox.y + entry.bbox.h > node.y + node.height)
+
+      expect(crossing.length).toBeLessThanOrEqual(1)
+    },
+  )
+
+  fcTest.prop([containmentShapeArb], withDefaults())(
+    'nothing is painted above the frame except one container label, and only where a container can have one',
+    ([width, text, type, fraction]) => {
+      const node = nodeFor(width, text, type, fraction)
+      const scene = layoutSpatialCanvas({ nodes: [node], edges: [] }, containmentOptions)
+      const above = scene.nodes.filter(
+        (entry): entry is Exclude<SceneNode, { kind: 'edge' }> =>
+          entry.kind !== 'shape' && entry.kind !== 'edge' && entry.bbox.y < node.y,
+      )
+
+      // A COUNT alone would accept a brand-new above-frame producer on a
+      // text or link node, which has no outside label at all. `placeAboveNode`
+      // serves the two container-shaped kinds and emits exactly one run.
+      if (type === 'text' || type === 'link') {
+        expect(above).toEqual([])
+        return
+      }
+      expect(above.length).toBeLessThanOrEqual(1)
+      for (const entry of above) expect(entry.kind).toBe('textRun')
+    },
+  )
+
+  fcTest.prop([containmentShapeArb], withDefaults())(
+    'the natural content size is independent of the box, for every node kind',
+    ([width, text, type, fraction]) => {
+      // The text-only version of this property missed a real defect: a file
+      // node in a box smaller than its padding fell back to its label, so
+      // the natural size reported the label for a small box and the body for
+      // a large one.
+      const node = nodeFor(width, text, type, fraction)
+      const roomy = containmentNode(width, text, type, 100_000)
+
+      expect(naturalNodeContentSize(node, containmentOptions)).toEqual(
+        naturalNodeContentSize(roomy, containmentOptions),
       )
     },
   )

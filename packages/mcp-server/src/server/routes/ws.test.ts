@@ -768,7 +768,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
 
   it('two malformed frames dispatched concurrently (neither awaited before the next starts) still cause exactly one close', async () => {
     setAutoVersionTrigger(() => Promise.resolve(null))
-    const { getDoc } = await import('../store/doc-cache.js')
+    const { getDoc } = await import('../store/document-store.js')
     // Prime the cache so both concurrent `getDoc` calls below resolve off the
     // cache-hit branch instead of racing two independent fs reads, whose
     // completion order the test cannot control.

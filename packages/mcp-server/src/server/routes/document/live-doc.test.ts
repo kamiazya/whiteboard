@@ -17,8 +17,9 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const { saveDocument, loadDocument } = await import('../../store/document-store.js')
+const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+
+const { getDoc, saveDocument, loadDocument } = await import('../../store/document-store.js')
 const { createLiveDocRouter } = await import('./live-doc.js')
 const { createDocumentRouter } = await import('../document.js')
 

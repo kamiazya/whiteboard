@@ -11,8 +11,8 @@ import {
   requiredScopesForClientTextMessage,
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
-import { evictDoc, getDoc } from '../store/doc-cache.js'
-import { saveDocument, workspaceExists } from '../store/document-store.js'
+import { evictDoc } from '../store/doc-cache.js'
+import { getDoc, saveDocument, workspaceExists } from '../store/document-store.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 // From _shared, not from canvas.js which merely re-exports it: importing the

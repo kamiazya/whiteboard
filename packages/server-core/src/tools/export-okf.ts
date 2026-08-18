@@ -3,8 +3,8 @@ import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard
 import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
+import { loadDocument } from './document-io.js'
 
 /**
  * OKF-Markdown is a single-document format (frontmatter + body); a spatial
@@ -49,7 +49,7 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
  * document, and the `/okf` route reaches it directly for the workspace tree.
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
-  const { doc } = await loadSpatialCanvas(deps, input.documentId)
+  const { doc } = await loadDocument(deps, input.documentId)
   const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this

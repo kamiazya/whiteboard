@@ -6,7 +6,11 @@ import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
-import { layoutSpatialCanvas, layoutSpatialEdges } from './spatial-canvas.js'
+import {
+  layoutSpatialCanvas,
+  layoutSpatialEdges,
+  naturalNodeContentSize,
+} from './spatial-canvas.js'
 
 const NODE_PADDING_PX = 8
 const NODE_CORNER_RADIUS_PX = 4
@@ -743,31 +747,22 @@ describe('a text node keeps its body inside its own box', () => {
     expect(runBottoms(scene).length).toBeGreaterThan(0)
   })
 
-  it('does not truncate when the box gives no height to fit against', () => {
-    // The editor's grow-only auto-fit measures a text node's NATURAL content
-    // height by laying it out at height 1 and reading the scene's bottom
-    // edge. Truncating there caps what the probe can report, so a box can
-    // never grow past one block — which is how a fit meant to keep content
-    // inside the frame ends up DEFEATING the feature that keeps it inside
-    // the frame. Same reading `fitToWidth` gives an unusable maxWidth.
-    const probe: SpatialCanvas = {
-      nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 1, text: 'かあらた\n\nかたそ' },
-      ],
-      edges: [],
-    }
-    const roomy: SpatialCanvas = {
-      nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 400, text: 'かあらた\n\nかたそ' },
-      ],
-      edges: [],
-    }
+  it('reports a natural content size that the stored box cannot influence', () => {
+    // The editor's grow-only auto-fit asks "how big must this box be". That
+    // question is `naturalNodeContentSize`, not a layout at height 1: a box
+    // too small to bound anything answers it only by accident, and the
+    // layout API cannot tell that probe apart from a node someone really
+    // made 1px tall — which is how the escape hatch ended up open for every
+    // tiny node too.
     const opts = baseOptions({ measure: fullWidth, parseBody: parseParagraphs })
+    const sizeAt = (height: number) =>
+      naturalNodeContentSize(
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height, text: 'かあらた\n\nかたそ' },
+        opts,
+      )
 
-    // The degenerate probe must see every block a roomy box would.
-    expect(runBottoms(layoutSpatialCanvas(probe, opts)).length).toBe(
-      runBottoms(layoutSpatialCanvas(roomy, opts)).length,
-    )
+    expect(sizeAt(1)).toEqual(sizeAt(400))
+    expect(sizeAt(1).h).toBeGreaterThan(0)
   })
 
   it('still paints the blocks that do fit', () => {

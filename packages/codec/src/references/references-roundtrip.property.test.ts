@@ -55,7 +55,7 @@ describe('references export/import round-trip properties', () => {
 
       const node = firstParagraphChild(reimported)
       // The export fallback text for an embed is indistinguishable from a
-      // wikiLink's (`[[canvas:ID]]`, no `!` marker survives the degrade), so
+      // wikiLink's (`[[ID]]`, no `!` marker survives the degrade), so
       // only the documentId linkage — not the wikiLink/embed distinction — is
       // guaranteed to survive this cycle.
       expect(node.type === 'wikiLink' || node.type === 'embed').toBe(true)
@@ -120,7 +120,7 @@ describe('references export/import round-trip properties', () => {
         if (resolvable) {
           expect(value.value).toContain(`/notes/${documentId}.md`)
         } else {
-          expect(value.value).toBe(`[[canvas:${documentId}]]`)
+          expect(value.value).toBe(`[[${documentId}]]`)
           const reimported = resolveReferences(
             resolveReferencesForExport(wikiLinkRoot(documentId, undefined), resolver),
           )

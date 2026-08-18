@@ -21,20 +21,23 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock doc-cache so the cache is isolated in tests. getDoc is wrapped in
-// vi.fn (defaulting to the real implementation) so individual tests can
-// install a one-shot mockImplementationOnce to control interleaving against
-// a concurrent request.
-vi.mock('../../store/doc-cache.js', async () => {
-  const actual = await vi.importActual<typeof import('../../store/doc-cache.js')>(
-    '../../store/doc-cache.js',
+// Mock the store so `getDoc` can be gated to control interleaving against a
+// concurrent rename/delete. It must be THIS module: `getDoc` is the store's
+// cached read, and doc-cache.js (which holds the LRU it reads through) never
+// exports it. Mocking the wrong module is silent — a factory spreading
+// `...actual` just adds a property nobody imports, and the race never stages.
+vi.mock('../../store/document-store.js', async () => {
+  const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
+    '../../store/document-store.js',
   )
   return { ...actual, getDoc: vi.fn(actual.getDoc) }
 })
 
-const { clearCache, peekDoc, getDoc } = await import('../../store/doc-cache.js')
-const canvasStore = await import('../../store/document-store.js')
-const { saveDocument } = canvasStore
+const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+
+const { getDoc } = await import('../../store/document-store.js')
+const documentStore = await import('../../store/document-store.js')
+const { saveDocument } = documentStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
 const { createDocumentRouter } = await import('../document.js')
@@ -206,7 +209,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       body: JSON.stringify({ path: 'markdown-note', kind: 'markdown' }),
     })
     expect(markdownRes.status).toBe(200)
-    const markdownDoc = await canvasStore.loadDocument('ws1', 'markdown-note')
+    const markdownDoc = await documentStore.loadDocument('ws1', 'markdown-note')
     expect(readDocumentKind(markdownDoc)).toBe('markdown')
 
     const spatialRes = await app.request('/api/workspaces/ws1/documents', {
@@ -215,7 +218,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       body: JSON.stringify({ path: 'board', kind: 'spatial' }),
     })
     expect(spatialRes.status).toBe(200)
-    const spatialDoc = await canvasStore.loadDocument('ws1', 'board')
+    const spatialDoc = await documentStore.loadDocument('ws1', 'board')
     expect(readDocumentKind(spatialDoc)).toBe('spatial')
   })
 
@@ -227,7 +230,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       body: JSON.stringify({ path: 'legacy-kind-bytes' }),
     })
     expect(res.status).toBe(200)
-    const doc = await canvasStore.loadDocument('ws1', 'legacy-kind-bytes')
+    const doc = await documentStore.loadDocument('ws1', 'legacy-kind-bytes')
     expect(readDocumentKind(doc)).toBe('spatial')
   })
 
@@ -309,6 +312,22 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     expect(snapshotRes.status).toBe(404)
   })
 
+  // A refusal the caller can act on, not a server failure: 409 with the
+  // offending descendant named, so the UI can say which one to deal with.
+  it('returns 409 naming a descendant rather than stranding it', async () => {
+    await saveDocument('session1', 'design', new LoroDoc())
+    await saveDocument('session1', 'design/login', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/design', {
+      method: 'DELETE',
+    })
+
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toContain('design/login')
+  })
+
   it('returns 404 with Problem Details { title } for a missing canvas', async () => {
     const app = createDocumentRouter()
     const res = await app.request('/api/workspaces/session1/documents/never-created', {
@@ -340,7 +359,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const spy = vi
-      .spyOn(canvasStore, 'deleteDocument')
+      .spyOn(documentStore, 'deleteDocument')
       .mockRejectedValueOnce(
         corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
       )
@@ -415,6 +434,40 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+  })
+
+  // The store computes WHICH path actually collided; rebuilding the message
+  // from the requested path names one that is free, which is worse than
+  // saying nothing — the caller retries a rename that was never the problem.
+  it('names the descendant that collided, not the free path the caller asked for', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+    await saveDocument('session1', 'c/x', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'c' }),
+    })
+
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toContain('c/x')
+  })
+
+  it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
+    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('session1', 'a/x', new LoroDoc())
+    const app = createDocumentRouter()
+
+    const res = await app.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'a/x' }),
+    })
+
+    expect(res.status).toBe(400)
   })
 
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
@@ -506,8 +559,8 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     const getDocCalled = new Promise<void>((resolve) => {
       signalGetDocCalled = resolve
     })
-    const actual = await vi.importActual<typeof import('../../store/doc-cache.js')>(
-      '../../store/doc-cache.js',
+    const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
+      '../../store/document-store.js',
     )
     vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
       signalGetDocCalled()
@@ -655,7 +708,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const spy = vi
-      .spyOn(canvasStore, 'renameDocumentPath')
+      .spyOn(documentStore, 'renameDocumentPath')
       .mockRejectedValueOnce(
         corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
       )
