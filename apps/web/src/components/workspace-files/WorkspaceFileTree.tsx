@@ -26,6 +26,13 @@ export interface WorkspaceFileTreeProps {
    * still gets a working tree, with the kind icon below.
    */
   renderIcon?: (document: WorkspaceFileTreeDocument) => ReactNode
+  /**
+   * Look inside a folder. Optional: without it a folder row stays inert
+   * text, which is what a tree with no second pane beside it should be.
+   */
+  onSelectFolder?: (path: string) => void
+  /** The folder the pane beside this one is showing. */
+  selectedFolder?: string
   className?: string
 }
 
@@ -77,13 +84,21 @@ function TreeItem({
   node,
   onOpen,
   renderIcon,
+  onSelectFolder,
+  selectedFolder,
 }: {
   node: TreeNode
   onOpen: (canvas: WorkspaceFileTreeDocument) => void
   renderIcon?: (document: WorkspaceFileTreeDocument) => ReactNode
+  onSelectFolder?: (path: string) => void
+  selectedFolder?: string
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0
+  // A path with anything under it is a folder, whether or not a document
+  // also claims it. The document half of such a node is not lost: the pane
+  // listing this node's PARENT shows it in both roles.
+  const asFolder = hasChildren && onSelectFolder !== undefined
 
   return (
     // Generic containers carry the ARIA tree roles (APG tree pattern):
@@ -114,7 +129,18 @@ function TreeItem({
         ) : (
           <span className="w-[1.125rem]" aria-hidden="true" />
         )}
-        {node.canvas ? (
+        {asFolder ? (
+          <button
+            type="button"
+            aria-label={`Open folder ${node.name}`}
+            aria-current={node.path === selectedFolder ? 'true' : undefined}
+            onClick={() => onSelectFolder?.(node.path)}
+            className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+          >
+            <Folder className="text-muted-foreground size-3.5 shrink-0" />
+            <span className="truncate">{node.name}</span>
+          </button>
+        ) : node.canvas ? (
           <button
             type="button"
             onClick={() => node.canvas && onOpen(node.canvas)}
@@ -150,7 +176,14 @@ function TreeItem({
         // biome-ignore lint/a11y/useSemanticElements: role="group" inside a role="tree" is the APG tree pattern; the suggested semantic elements (fieldset/optgroup) are invalid tree children
         <div role="group" className="border-border/60 ml-3 border-l pl-2">
           {node.children.map((child) => (
-            <TreeItem key={child.path} node={child} onOpen={onOpen} renderIcon={renderIcon} />
+            <TreeItem
+              key={child.path}
+              node={child}
+              onOpen={onOpen}
+              renderIcon={renderIcon}
+              onSelectFolder={onSelectFolder}
+              selectedFolder={selectedFolder}
+            />
           ))}
         </div>
       )}
@@ -167,6 +200,8 @@ export function WorkspaceFileTree({
   documents,
   onOpen,
   renderIcon,
+  onSelectFolder,
+  selectedFolder,
   className,
 }: WorkspaceFileTreeProps) {
   const tree = useMemo(() => buildTree(documents), [documents])
@@ -182,7 +217,14 @@ export function WorkspaceFileTree({
   return (
     <div role="tree" aria-label="Workspace documents" className={cn('space-y-0.5', className)}>
       {tree.map((node) => (
-        <TreeItem key={node.path} node={node} onOpen={onOpen} renderIcon={renderIcon} />
+        <TreeItem
+          key={node.path}
+          node={node}
+          onOpen={onOpen}
+          renderIcon={renderIcon}
+          onSelectFolder={onSelectFolder}
+          selectedFolder={selectedFolder}
+        />
       ))}
     </div>
   )

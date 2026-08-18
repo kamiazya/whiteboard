@@ -6,6 +6,7 @@ import {
   listDocuments,
 } from '../../lib/daemon-api-client.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
+import { FolderContentsList } from './FolderContentsList.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
@@ -23,10 +24,14 @@ type OkfPreview =
   | { kind: 'error'; path: string }
 
 /**
- * The workspace document tree (`/api/v1`): nested document paths on the
- * left, a read-only OKF markdown preview of the clicked document on the
- * right. Read-only by design — editing stays with the MCP tools until the
- * editor surfaces migrate to the v1 world.
+ * The workspace document browser (`/api/v1`), in three panes: the folder
+ * tree, the contents of the selected folder, and a read-only OKF preview of
+ * the selected document. Read-only by design — editing stays with the MCP
+ * tools until the editor surfaces migrate to the v1 world.
+ *
+ * The tree narrows the middle pane and the middle pane fills the preview, so
+ * each pane is driven by exactly one to its left and the three can never
+ * disagree about what is selected.
  */
 export function WorkspaceFilesPanel({
   daemonFetch,
@@ -38,6 +43,8 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [preview, setPreview] = useState<OkfPreview>({ kind: 'idle' })
+  // '' is the workspace root, which is where a freshly loaded tree starts.
+  const [folder, setFolder] = useState('')
 
   // One loader for the whole tree, so a re-render does not hand every row a
   // new function and re-trigger its read.
@@ -58,6 +65,7 @@ export function WorkspaceFilesPanel({
     setDocuments(null)
     setListStatus('ok')
     setPreview({ kind: 'idle' })
+    setFolder('')
     // The RICH list, not /api/v1's: that one carries only {documentId, path},
     // so the tree could label a row by nothing but its path segment and had
     // no way to know a document's kind. Both are things the tree has to show.
@@ -120,15 +128,43 @@ export function WorkspaceFilesPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
-      <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row"
+      data-testid="workspace-files-panel"
+    >
+      {/* Below md the tree goes: the middle pane's breadcrumb already walks
+          the same hierarchy, and three columns in a phone's width leaves
+          none of them readable. */}
+      <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
         <WorkspaceFileTree
           documents={documents}
           onOpen={openDocument}
+          onSelectFolder={setFolder}
+          selectedFolder={folder}
           renderIcon={(entry) => (
             <DocumentMinimap key={entry.documentId} document={entry} loadOutline={loadRowOutline} />
           )}
         />
+      </div>
+      <div className="w-full shrink-0 overflow-y-auto md:w-64 md:border-r md:pr-3">
+        <Breadcrumb folder={folder} onSelect={setFolder} />
+        <div data-testid="folder-contents">
+          <FolderContentsList
+            documents={documents}
+            folder={folder}
+            selectedPath={preview.kind === 'idle' ? undefined : preview.path}
+            onOpen={(target) =>
+              target.kind === 'folder' ? setFolder(target.path) : openDocument(target.document)
+            }
+            renderIcon={(entry) => (
+              <DocumentMinimap
+                key={entry.documentId}
+                document={entry}
+                loadOutline={loadRowOutline}
+              />
+            )}
+          />
+        </div>
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (
@@ -155,5 +191,49 @@ export function WorkspaceFilesPanel({
         )}
       </div>
     </div>
+  )
+}
+
+/** Where the middle pane is, and the way back up. */
+function Breadcrumb({ folder, onSelect }: { folder: string; onSelect: (path: string) => void }) {
+  const segments = folder === '' ? [] : folder.split('/')
+  return (
+    <nav aria-label="Folder path" className="mb-1 flex flex-wrap items-center gap-0.5 text-xs">
+      <BreadcrumbLink label="Workspace" path="" current={folder === ''} onSelect={onSelect} />
+      {segments.map((segment, i) => (
+        <span key={segments.slice(0, i + 1).join('/')} className="flex items-center gap-0.5">
+          <span className="text-muted-foreground">/</span>
+          <BreadcrumbLink
+            label={segment}
+            path={segments.slice(0, i + 1).join('/')}
+            current={i === segments.length - 1}
+            onSelect={onSelect}
+          />
+        </span>
+      ))}
+    </nav>
+  )
+}
+
+function BreadcrumbLink({
+  label,
+  path,
+  current,
+  onSelect,
+}: {
+  label: string
+  path: string
+  current: boolean
+  onSelect: (path: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={current ? 'true' : undefined}
+      onClick={() => onSelect(path)}
+      className="hover:text-foreground text-muted-foreground aria-[current]:text-foreground rounded px-1 py-0.5 aria-[current]:font-medium"
+    >
+      {label}
+    </button>
   )
 }

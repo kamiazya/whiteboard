@@ -2,7 +2,14 @@
  * Files tab: the workspace document tree
  * reachable from the daemon index page, with a read-only OKF preview.
  */
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -90,6 +97,48 @@ describe('DaemonIndexPage tree view', () => {
     const design = await screen.findByText('design')
 
     fireEvent.click(design)
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
+    })
+  })
+
+  it('lists a folder’s contents in the middle pane and previews from there', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+
+    // At the root the middle pane shows the top level only — `notes` is
+    // there as a folder, its child is one level down and is not.
+    const contents = await screen.findByTestId('folder-contents')
+    expect(contents.textContent).toContain('notes')
+    expect(contents.textContent).not.toContain('design')
+
+    // Clicking the folder row in the middle pane moves INTO it.
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+
+    // The breadcrumb walks back out, and the tree drives the middle pane too.
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).not.toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByRole('tree')).getByRole('button', { name: 'Open folder notes' }),
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+
+    // And the preview comes from a click in the middle pane, not the tree.
+    fireEvent.click(
+      screen
+        .getByTestId('folder-contents')
+        .querySelector<HTMLButtonElement>('button') as HTMLButtonElement,
+    )
     await waitFor(() => {
       expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
     })
