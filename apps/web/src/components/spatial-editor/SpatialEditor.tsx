@@ -3239,7 +3239,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
             isLocked={isLocked}
             onToggleNodeLock={onToggleNodeLock}
-            onOpenInEditor={onOpenInEditor}
             applyBoxMoves={applyBoxMoves}
             extraIds={extraIds}
             selectedId={selectedId}
@@ -3557,6 +3556,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // target — one catalog, now with a visible doorway. Offered
               // for every selection (multi included: align/distribute were
               // the least discoverable actions of all).
+              // Only a single text node has a body to open, and only when the
+              // host has a surface to open it on.
+              onOpenInEditor={
+                onOpenInEditor !== undefined && !isMultiSelection && selectedNode?.type === 'text'
+                  ? () => onOpenInEditor(selectedNode.id, selectedNode.text)
+                  : undefined
+              }
               onMoreActions={(anchor) => {
                 const screen = canvasToScreen(anchor, viewport)
                 setContextMenu({

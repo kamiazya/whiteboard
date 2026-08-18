@@ -10,7 +10,7 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
-import { withNodeText } from '../components/document-editor/node-text.js'
+import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
@@ -325,6 +325,7 @@ export function DaemonDocumentPage({
   // and local-update forwarding as every other change, with no second write
   // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
   // value passed alongside is the unchanged one this command does not touch.
+  const nodeInEditor = useNodeInEditor(canvasValue, onChange)
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
@@ -346,8 +347,6 @@ export function DaemonDocumentPage({
   )
   // The same list the alias resolver reads, carried with ids so the picker
   // can fall back to one when a name is ambiguous.
-  // The node whose body is open on the full editing surface, if any.
-  const [nodeInEditor, setNodeInEditor] = useState<{ id: string; text: string } | null>(null)
   const linkTargets = useMemo(
     () => controller.documents.map((entry) => ({ id: entry.id ?? entry.path, name: entry.path })),
     [controller.documents],
@@ -814,7 +813,7 @@ export function DaemonDocumentPage({
                   lockedNodeIds={lockedNodeIds}
                   lockedEdgeIds={lockedEdgeIds}
                   onToggleNodeLock={setNodeLock}
-                  onOpenInEditor={(nodeId, text) => setNodeInEditor({ id: nodeId, text })}
+                  onOpenInEditor={nodeInEditor.open}
                   onToggleEdgeLock={setEdgeLock}
                   paletteLeading={
                     <HistoryCluster
@@ -836,20 +835,16 @@ export function DaemonDocumentPage({
                     />
                   }
                 />
-                {nodeInEditor !== null && (
+                {nodeInEditor.editing !== null && (
                   <NodeTextEditorOverlay
                     title={canvas?.path ?? 'Untitled'}
-                    initialText={nodeInEditor.text}
+                    initialText={nodeInEditor.editing.text}
                     theme={resolvedTheme}
                     resolveAlias={resolveAlias}
                     resolveEmbed={resolveEmbed}
                     linkTargets={linkTargets}
-                    onCommit={(text) => {
-                      const next = withNodeText(canvasValue, nodeInEditor.id, text)
-                      if (next === canvasValue) return
-                      onChange(next, { kind: 'set-text', id: nodeInEditor.id, text })
-                    }}
-                    onClose={() => setNodeInEditor(null)}
+                    onCommit={nodeInEditor.commit}
+                    onClose={nodeInEditor.close}
                   />
                 )}
               </div>

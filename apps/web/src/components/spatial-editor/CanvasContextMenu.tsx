@@ -44,7 +44,6 @@ import {
   SendToBack,
   Sparkles,
   SquareDashed,
-  SquarePen,
   StickyNote,
   Tag,
   Trash2,
@@ -117,12 +116,6 @@ export interface CanvasContextMenuProps {
   readonly isImageFileRef?: (file: string) => boolean
   readonly missingFileRef?: (file: string) => boolean
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
-  /**
-   * Hands a text node's body to a fuller editing surface the host owns.
-   * Absent means the host has none, and the verb is not offered — a door
-   * onto nothing is worse than no door.
-   */
-  readonly onOpenInEditor?: (nodeId: string, text: string) => void
   readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
   readonly copySelection: () => ClipboardFragment | null
   /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
@@ -163,7 +156,6 @@ export function CanvasContextMenu({
   isImageFileRef,
   missingFileRef,
   onOpenFileRef,
-  onOpenInEditor,
   openLinkNode,
   copySelection,
   cutSelection,
@@ -549,16 +541,6 @@ export function CanvasContextMenu({
               )
             },
           })
-          if (onOpenInEditor !== undefined) {
-            // The inline editor is bounded by the node's own box, which is
-            // the right size for a line and the wrong one for a body. This
-            // is the same text on a surface that has room for it.
-            verbs.push({
-              label: 'Open in editor',
-              icon: <SquarePen />,
-              onSelect: () => onOpenInEditor(node.id, node.text),
-            })
-          }
         }
         // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
         // right-click already made this node the primary selection,

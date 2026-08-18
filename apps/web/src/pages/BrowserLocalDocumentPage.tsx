@@ -9,7 +9,7 @@ import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
-import { withNodeText } from '../components/document-editor/node-text.js'
+import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
@@ -268,8 +268,6 @@ export function BrowserLocalDocumentPage({
         ? documents.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
         : [...documents, pageState.snapshot]
       : documents
-  // The node whose body is open on the full editing surface, if any.
-  const [nodeInEditor, setNodeInEditor] = useState<{ id: string; text: string } | null>(null)
   const linkTargets = useMemo(
     () => switcherOptions.map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind })),
     [switcherOptions],
@@ -387,6 +385,8 @@ export function BrowserLocalDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
   } = useDocumentSync(backend)
+
+  const nodeInEditor = useNodeInEditor(canvas, onChange)
 
   // Export rides the canvas row's operations kebab on this page (the top
   // bar keeps its export only in daemon mode, which has no canvas row).
@@ -837,7 +837,7 @@ export function BrowserLocalDocumentPage({
                   lockedNodeIds={lockedNodeIds}
                   lockedEdgeIds={lockedEdgeIds}
                   onToggleNodeLock={setNodeLock}
-                  onOpenInEditor={(nodeId, text) => setNodeInEditor({ id: nodeId, text })}
+                  onOpenInEditor={nodeInEditor.open}
                   onToggleEdgeLock={setEdgeLock}
                   paletteLeading={
                     <HistoryCluster
@@ -848,22 +848,16 @@ export function BrowserLocalDocumentPage({
                     />
                   }
                 />
-                {nodeInEditor !== null && (
+                {nodeInEditor.editing !== null && (
                   <NodeTextEditorOverlay
                     title={documentName ?? 'Untitled'}
-                    initialText={nodeInEditor.text}
+                    initialText={nodeInEditor.editing.text}
                     theme={resolvedTheme}
                     resolveAlias={resolveAlias}
                     resolveEmbed={resolveEmbed}
                     linkTargets={linkTargets}
-                    onCommit={(text) => {
-                      const next = withNodeText(canvas, nodeInEditor.id, text)
-                      // Same canvas back means the edit changed nothing that
-                      // could be written — no revision for a no-op.
-                      if (next === canvas) return
-                      onChange(next, { kind: 'set-text', id: nodeInEditor.id, text })
-                    }}
-                    onClose={() => setNodeInEditor(null)}
+                    onCommit={nodeInEditor.commit}
+                    onClose={nodeInEditor.close}
                   />
                 )}
               </div>

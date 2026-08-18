@@ -47,6 +47,35 @@ Concretely:
    shows the conforming shape: a `New canvas…` entry with an icon **and** a
    label.
 
+## Amendment (2026-08-18): vessels, and what a doorway is
+
+Two things were decided in code after this ADR and are recorded here because
+the ADR as written says otherwise, and a decision that lives only in an
+implementation comment is one the next surface will contradict.
+
+**The ⋯ catalog's `grid` and `sheet` vessels are icon-only.** Point 4 above
+says a menu shows icon and text; these two vessels do not, and that stays.
+They are one catalog rendered three ways — `list` (the right-click reading
+surface) keeps icon and text, while `grid` and `sheet` are compact
+object-action strips whose entries carry `aria-label` plus a tooltip. The
+cost is real and named: a tooltip needs hover, so on touch the `sheet`'s
+names are reachable only to a screen reader. What makes that acceptable is
+that the sheet is never the ONLY path to a verb — the same catalog is
+available as `list` wherever a pointer exists, and the keyboard has its own
+bindings.
+
+**A navigation is not an object verb, and does not belong in the catalog.**
+Every entry in the catalog changes the object and leaves you where you are.
+"Open in editor" changes nothing and moves you to another surface. Mixing the
+categories produced the failure this amendment was written for: two
+near-identical pencil icons side by side in an icon-only vessel, with no way
+to tell "edit this text here" from "take me somewhere else to edit it".
+
+So navigation lives on the OBJECT, beside the ⋯ doorway rather than inside
+it, and carries the arrow-leaving-a-frame glyph that means "this takes you
+elsewhere" everywhere else on the web. Two doorways, two categories, one
+look each — which is what point 4 was protecting in the first place.
+
 ## Consequences
 
 Easier:

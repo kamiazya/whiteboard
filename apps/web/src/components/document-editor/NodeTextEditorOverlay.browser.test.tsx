@@ -11,6 +11,8 @@ afterEach(cleanup)
 
 const BODY = '# Plan\n\n- one\n- two'
 
+const targets = [{ id: '01JWEEK', name: 'Weekly review', kind: 'markdown' as const }]
+
 function renderOverlay(
   overrides: { onCommit?: (text: string) => void; onClose?: () => void } = {},
 ) {
@@ -20,6 +22,7 @@ function renderOverlay(
     <NodeTextEditorOverlay
       title="Weekly review"
       initialText={BODY}
+      linkTargets={targets}
       onCommit={onCommit}
       onClose={onClose}
     />,
@@ -80,6 +83,44 @@ describe('the node text overlay (real browser)', () => {
 
     expect(onCommit).not.toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // Escape belongs to the innermost thing that can take it. The overlay
+  // listens at the window in the CAPTURE phase, which fires before any
+  // nested popup's own handler — so without a guard, dismissing a link
+  // picker would discard the whole edit instead.
+  it('lets a nested popup take Escape for itself', async () => {
+    const { container, getByRole, onClose, onCommit } = renderOverlay()
+    await waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
+
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
+    await userEvent.click(getByRole('menuitem', { name: 'Link' }))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="link-picker"]')).not.toBeNull(),
+    )
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(container.querySelector('[data-testid="link-picker"]')).toBeNull())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onCommit).not.toHaveBeenCalled()
+    // The surface is still there to keep editing on.
+    expect(container.querySelector('.cm-content')).not.toBeNull()
+  })
+
+  it('lets the catalog take Escape for itself', async () => {
+    const { container, getByRole, onClose } = renderOverlay()
+    await waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
+
+    await userEvent.click(getByRole('button', { name: 'Editing actions' }))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull(),
+    )
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('names the node it is editing', async () => {

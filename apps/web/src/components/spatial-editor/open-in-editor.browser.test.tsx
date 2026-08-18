@@ -56,31 +56,50 @@ const menuItemNamed = (container: HTMLElement, name: string) =>
     (item) => (item.textContent ?? '').trim() === name,
   )
 
+async function selectNode(container: HTMLElement): Promise<void> {
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 1,
+    clientX: r.left + 200,
+    clientY: r.top + 150,
+  })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 200, clientY: r.top + 150 })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="more-actions-handle"]')).not.toBeNull(),
+  )
+}
+
 describe('open in editor (real browser)', () => {
-  it('reports the node and its text to the host', async () => {
+  // Every other verb in the catalog CHANGES the node and leaves you on the
+  // canvas; this one changes nothing and moves you somewhere else. Mixing the
+  // two categories is what made two near-identical pencil icons sit side by
+  // side with no way to tell them apart, so the navigation lives on the node
+  // itself — beside the ⋯ doorway, not inside it.
+  it('is a doorway on the node, not a verb in the catalog', async () => {
     const onOpenInEditor = vi.fn()
     const { container } = render(<Host onOpenInEditor={onOpenInEditor} />)
-    await openNodeCatalog(container)
+    await selectNode(container)
 
-    const item = menuItemNamed(container, 'Open in editor')
-    expect(item).not.toBeUndefined()
-    fireEvent.click(item as HTMLElement)
+    const handle = container.querySelector('[data-testid="open-in-editor-handle"]')
+    expect(handle).not.toBeNull()
+    fireEvent.pointerUp(handle as Element, { pointerId: 2 })
 
     expect(onOpenInEditor).toHaveBeenCalledWith('a', LONG)
-    // The catalog closes, and the inline editor is NOT opened as well.
-    await vi.waitFor(() =>
-      expect(container.querySelector('[data-testid="context-menu"]')).toBeNull(),
-    )
-    expect(container.querySelector('[data-testid="node-editor"]')).toBeNull()
+    // It never entered the object-verb catalog.
+    await openNodeCatalog(container)
+    expect(menuItemNamed(container, 'Open in editor')).toBeUndefined()
+    // The inline verb stays — it is the one that always works.
+    expect(menuItemNamed(container, 'Edit text')).not.toBeUndefined()
   })
 
   // A host that cannot open an editor must not advertise a door to one.
-  it('offers nothing when the host has no editor to open', async () => {
+  it('offers no doorway when the host has no editor to open', async () => {
     const { container } = render(<Host />)
-    await openNodeCatalog(container)
+    await selectNode(container)
 
-    expect(menuItemNamed(container, 'Open in editor')).toBeUndefined()
-    // The inline verb stays either way — it is the one that always works.
-    expect(menuItemNamed(container, 'Edit text')).not.toBeUndefined()
+    expect(container.querySelector('[data-testid="open-in-editor-handle"]')).toBeNull()
+    expect(container.querySelector('[data-testid="more-actions-handle"]')).not.toBeNull()
   })
 })

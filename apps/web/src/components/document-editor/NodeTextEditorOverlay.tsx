@@ -49,6 +49,13 @@ export function NodeTextEditorOverlay({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // This listener runs at the WINDOW in the capture phase, so it fires
+      // before any nested popup's own handler and `stopPropagation` there
+      // cannot reach it. Escape belongs to the innermost thing that can take
+      // it: while the editor's catalog or link picker is open, that is the
+      // popup, and taking it here would discard the whole edit to dismiss a
+      // menu. Both popups mark themselves `data-editor-overlay`.
+      if (document.querySelector('[data-editor-overlay]') !== null) return
       if (event.key === 'Escape') {
         event.preventDefault()
         onClose()
