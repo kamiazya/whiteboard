@@ -563,7 +563,13 @@ function fitBodyInNode(
   root: MdastRoot,
   options: ResolvedLayoutOptions,
 ): Scene | undefined {
-  if (contentBox(node, options) === undefined) return undefined
+  // The degenerate-box guard is part of FITTING, not of laying out: under
+  // `naturalNodeContentSize` there is no box to be degenerate against, and
+  // returning `undefined` here made a file node fall back to its label, so
+  // the one function whose whole contract is "independent of the stored
+  // box" reported the label's height for a small box and the body's for a
+  // large one.
+  if (options.fitToBox && contentBox(node, options) === undefined) return undefined
   const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
   return fitSceneInNode(body, node, options)
 }

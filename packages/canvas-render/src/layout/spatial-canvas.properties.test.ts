@@ -632,9 +632,19 @@ function containmentNode(
   return { ...base, type, label: text }
 }
 
+/**
+ * The reference RESOLVES to a body, so a file node takes the markdown seam
+ * (`fitBodyInNode`) rather than falling straight to its label. A
+ * label-only resolver leaves that seam — one of the three that put content
+ * in a box — untouched by every property below, which is exactly how the
+ * natural-size defect on small file nodes survived its first review.
+ */
 const containmentOptions = {
   ...fitOptions,
-  resolveReference: () => ({ label: 'A referenced document' }),
+  resolveReference: () => ({
+    label: 'A referenced document',
+    markdown: parseParagraphs('かあらた\n\nかたそ'),
+  }),
 }
 
 describe('every node kind keeps its ink inside its own frame (PBT)', () => {
@@ -672,7 +682,7 @@ describe('every node kind keeps its ink inside its own frame (PBT)', () => {
   )
 
   fcTest.prop([containmentShapeArb], withDefaults())(
-    'nothing is painted above the frame except a single container label',
+    'nothing is painted above the frame except one container label, and only where a container can have one',
     ([width, text, type, fraction]) => {
       const node = nodeFor(width, text, type, fraction)
       const scene = layoutSpatialCanvas({ nodes: [node], edges: [] }, containmentOptions)
@@ -681,9 +691,31 @@ describe('every node kind keeps its ink inside its own frame (PBT)', () => {
           entry.kind !== 'shape' && entry.kind !== 'edge' && entry.bbox.y < node.y,
       )
 
-      // `placeAboveNode` emits exactly one run; a second producer of
-      // outside-the-frame ink would be a new escape nobody declared.
+      // A COUNT alone would accept a brand-new above-frame producer on a
+      // text or link node, which has no outside label at all. `placeAboveNode`
+      // serves the two container-shaped kinds and emits exactly one run.
+      if (type === 'text' || type === 'link') {
+        expect(above).toEqual([])
+        return
+      }
       expect(above.length).toBeLessThanOrEqual(1)
+      for (const entry of above) expect(entry.kind).toBe('textRun')
+    },
+  )
+
+  fcTest.prop([containmentShapeArb], withDefaults())(
+    'the natural content size is independent of the box, for every node kind',
+    ([width, text, type, fraction]) => {
+      // The text-only version of this property missed a real defect: a file
+      // node in a box smaller than its padding fell back to its label, so
+      // the natural size reported the label for a small box and the body for
+      // a large one.
+      const node = nodeFor(width, text, type, fraction)
+      const roomy = containmentNode(width, text, type, 100_000)
+
+      expect(naturalNodeContentSize(node, containmentOptions)).toEqual(
+        naturalNodeContentSize(roomy, containmentOptions),
+      )
     },
   )
 })
