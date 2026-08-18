@@ -53,6 +53,11 @@ export type MovePlan =
  * function has no opinion worth imposing.
  */
 export function planSubtreeMove(rows: readonly PathRow[], from: string, to: string): MovePlan {
+  // `from` need not name a document: a prefix that only has descendants is a
+  // legitimate source, and moving it relocates the subtree under it. That is
+  // what makes renaming a FOLDER expressible at all, since a folder is only
+  // ever a shared prefix here — see the depth-ordering conformance case,
+  // which moves `a/b` while no `a/b` document exists.
   const moving = rows.filter((row) => isSelfOrDescendant(row.path, from))
   if (moving.length === 0) return { ok: false, reason: 'not-found' }
 
