@@ -168,7 +168,7 @@ export function WorkspaceFilesPanel({
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (
-          <p className="text-muted-foreground text-sm">Select a canvas to preview its content.</p>
+          <p className="text-muted-foreground text-sm">Select a document to preview its content.</p>
         )}
         {preview.kind === 'loading' && (
           <p className="text-muted-foreground text-sm">Loading {preview.path}…</p>
