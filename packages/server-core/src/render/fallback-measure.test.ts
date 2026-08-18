@@ -50,3 +50,36 @@ describe('fallbackMeasureText', () => {
     expect(metrics.advanceWidth).toBeGreaterThan(0)
   })
 })
+
+describe('fullwidth text', () => {
+  const font = {
+    family: 'Roboto',
+    fallbackChain: ['sans-serif'],
+    weight: 400 as const,
+    style: 'normal' as const,
+    sizePx: 16,
+  }
+
+  // A uniform per-character ratio is not an approximation of Japanese, it is
+  // the wrong model: a kana occupies a full em where a Latin letter occupies
+  // about half of one. The agent-facing digest and SVG are laid out with this
+  // measurer, so a canvas written in Japanese came back with line breaks and
+  // a `truncated` verdict computed from widths roughly half the truth.
+  it('charges a fullwidth character a full em', () => {
+    expect(fallbackMeasureText('あ', font).advanceWidth).toBeCloseTo(16, 5)
+    expect(fallbackMeasureText('日本語', font).advanceWidth).toBeCloseTo(48, 5)
+  })
+
+  it('still charges a Latin character about half an em', () => {
+    const perChar = fallbackMeasureText('abcdefghij', font).advanceWidth / 10
+    expect(perChar).toBeGreaterThan(16 * 0.4)
+    expect(perChar).toBeLessThan(16 * 0.7)
+  })
+
+  it('adds the two up for mixed text', () => {
+    // 3 fullwidth + 3 Latin.
+    const mixed = fallbackMeasureText('日本語abc', font).advanceWidth
+    const latin = fallbackMeasureText('abc', font).advanceWidth
+    expect(mixed).toBeCloseTo(48 + latin, 5)
+  })
+})

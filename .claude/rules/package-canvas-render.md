@@ -94,6 +94,17 @@ paths:
    `measureText` in the browser). Layout never passes a string containing
    a newline to `measure`, and clamps any non-finite `advanceWidth` to `0`
    (`clampAdvance`) before it reaches geometry.
+   `isFullWidthCodePoint` also lives here, and is the one exception to "this
+   package never measures text": an ESTIMATING measurer (one with no font to
+   read an advance from) cannot do without it, and two of them exist —
+   server-core's agent-facing `fallbackMeasureText` and the text-wrapping
+   scoreboard's corpus measurer. Sharing it is not tidiness: charging every
+   character one ratio is not an approximation of Japanese but the wrong
+   model (`これは日本語です` measured 56.8px against a true 128px, and
+   `wb_scene_digest` answered `truncated` absent for a node the editor was
+   fading), and two estimators disagreeing about which code points are wide
+   would break the same canvas differently depending on which one ran. Each
+   estimator keeps its OWN Latin ratio. A real measurer never calls it.
 4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
    internal/versioned shape consumed later by loro-adapter's View-
    resolution layer. Root depth is `0`; a 4th nesting level is the cap
