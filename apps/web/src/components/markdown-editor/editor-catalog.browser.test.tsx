@@ -59,6 +59,21 @@ describe('the editor catalog (real browser)', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('# weekly review')
   })
 
+  it("wraps the caret's word as a document link", async () => {
+    const onChange = vi.fn()
+    const { container, getByRole } = render(
+      <MarkdownEditor value="see weekly review" onChange={onChange} />,
+    )
+    await caretInto(container, 6) // inside "weekly"
+
+    await userEvent.click(getByRole('button', { name: 'More actions' }))
+    // The label says the destination, so an external-link verb can join the
+    // band later without either one becoming ambiguous.
+    await userEvent.click(getByRole('menuitem', { name: 'Link to document' }))
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[weekly]] review')
+  })
+
   it('toggles the task checkbox of the caret line', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(

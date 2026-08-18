@@ -3,7 +3,7 @@ import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canva
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { Bold, Code, Italic, Link2, SquareCheck } from 'lucide-react'
+import { Bold, Code, FileSymlink, Italic, SquareCheck } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -436,8 +436,13 @@ export function MarkdownEditor({
       { label: 'Italic', icon: <Italic aria-hidden className="size-4" />, onSelect: wrap('*') },
       { label: 'Code', icon: <Code aria-hidden className="size-4" />, onSelect: wrap('`') },
       {
-        label: 'Wiki link',
-        icon: <Link2 aria-hidden className="size-4" />,
+        // Named for its destination, not its syntax: a chain icon and the
+        // word "link" would have to cover an external URL too, and this
+        // verb cannot — it wraps text in `[[ ]]`, which only ever resolves
+        // to a document in this workspace. The distinction has to survive
+        // an external-link verb arriving beside it.
+        label: 'Link to document',
+        icon: <FileSymlink aria-hidden className="size-4" />,
         onSelect: wrap('[[', ']]'),
       },
       { kind: 'separator' },
