@@ -110,4 +110,40 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 The integrator's push is guarded on two sides. **Local (pre-push, `lefthook`)**: `pnpm -r typecheck` + `pnpm test --project mcp-node` + `pnpm lint:noconsole` run before the commit leaves the machine (pre-commit only formats staged files, to not slow the dev-loop's worktree commits). **Cloud (post-push)**: GitHub Actions CI (`verify`) + CodeRabbit + AccessLint + WIP + CodeQL — monitor with the `Monitor` tool and triage with the `ci-triage` workflow/skill into Tasks / whiteboard canvases.
 
+**A green PR check does not say the MERGE is green.** `on: pull_request` builds
+a merge commit, so CI already tests a branch against main — but only as main
+stood when the PR last moved, and nothing re-runs it when main advances.
+Measured: #881's head was pushed at 11:37Z, #886 merged at 13:07Z, and #881
+stayed green the whole time against a base that no longer existed. Merging it
+broke `main` outright — three files importing a module #886 had deleted — and
+`MERGEABLE`, a zero-conflict `git merge-tree`, and 19/19 green all called it
+safe. None of them was answering the question: a branch that merely IMPORTS
+what the trunk deleted has nothing to conflict with. The same shape appeared
+four times in one stack, twice more as a clean auto-merge that duplicated a
+registration block and silently dropped a signal.
+
+"Require branches to be up to date" is the obvious fix and is deliberately NOT
+used (`strict: false`, user decision 2026-08-19): with several dev-loops in
+flight it makes every merge invalidate every other PR, which is the parallelism
+this whole flow is built on. The answer is a **merge queue** — it tests the
+speculative merge (main + anything queued ahead + this PR) at merge time,
+batched, so development stays parallel and only the final verification is
+ordered. `gh stack merge` composes with it: a stack is added to the queue.
+
+Its one hard prerequisite: **every required check must also run on
+`merge_group`**, or the queue waits forever for a check that cannot fire.
+`ci.yml` and `pr-title.yml` both declare that trigger; `pr-title` short-circuits
+there, because a merge group has no PR title to validate. Adding a required
+check means adding the trigger with it.
+
+Until the queue is enabled, the manual stand-in is to typecheck the MERGE
+RESULT rather than either side — and for a stacked set, to merge the reconciled
+PARENT into each child rather than main separately, which keeps one
+reconciliation instead of one per layer:
+
+```bash
+git worktree add -q --detach /tmp/premerge origin/<branch>
+cd /tmp/premerge && git merge --no-edit origin/main && pnpm -r typecheck
+```
+
 **PR merge gate.** `verify` + CodeQL are the authoritative gate. AI review is consulted **when it has actually run**, and its absence does not block a merge (user decision, 2026-08-02): CodeRabbit is on a plan whose per-developer rolling limit this repo's merge pace exhausts, so waiting on it serialises delivery behind a quota rather than behind a real signal. Batching several PRs at once is what burns the quota fastest — when a review matters for a specific change, open that PR alone and let it land. Before merging, still fetch **every bot's** PR review comments and triage each finding; the discipline below applies whenever there *are* comments. Fetch with `gh api repos/<owner>/<repo>/pulls/<n>/comments` + `gh pr view <n> --json reviews,comments`, then **read the comments from ALL bot authors — do not filter to a hardcoded reviewer list.** The surface currently includes **CodeRabbit** (`coderabbitai[bot]`, AI review — Free Plan so not guaranteed) and **`github-advanced-security[bot]`** (CodeQL code-scanning — its findings arrive as ordinary PR review comments on the plain `/pulls/<n>/comments` feed, no `security_events` scope needed, and are same-priority-or-higher security signal). (Gemini Code Assist is **sunset** as of 2026-07-27 — no longer reviews; do not wait on it.) Missing a bot because you scoped the sweep to two named reviewers is exactly the gap that let a CodeQL ReDoS comment slip past this gate — enumerate authors from the feed, don't assume. Triage each finding: (a) verify validity against the actual code (do not trust or dismiss blindly — check the claimed line/behavior; CodeQL security findings on untrusted-input paths get the same red-test-first + fix treatment as any CRITICAL, per the `ci-triage` skill's CodeQL rubric), (b) apply valid findings as commits on the PR branch, (c) for findings judged invalid/stale, record the reason (reply on the PR thread or note in the merge summary to the user). A reviewer skipping a PR (rate limits, plan limits) is acceptable to proceed past — note it when it happens, rather than waiting it out. **Dependabot** (dep-bump PRs + security alerts) has its own `dependabot-triage` workflow + `dependabot-review` skill. Hooks are a net, not the gate — CI is authoritative; `LEFTHOOK=0` / `--no-verify` bypass when justified.

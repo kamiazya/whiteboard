@@ -12,6 +12,10 @@ name: pr-title
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  # Required checks must report on `merge_group` too, or a merge queue waits
+  # forever for one that cannot run. A merge group has no PR title to check,
+  # so the job short-circuits rather than pretending to validate anything.
+  merge_group:
 
 permissions:
   contents: read
@@ -28,6 +32,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate PR title
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node tools/check-pr-title.mjs "$PR_TITLE"

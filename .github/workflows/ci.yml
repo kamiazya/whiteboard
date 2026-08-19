@@ -2,6 +2,13 @@ name: ci
 
 on:
   pull_request:
+  # A merge queue tests the SPECULATIVE merge — this branch on top of current
+  # main plus anything queued ahead of it — which is the only thing that
+  # answers "does the result compile". `pull_request` already builds a merge
+  # commit, but only as main stood when the PR last moved, and nothing re-runs
+  # it when main advances. That staleness let two PRs whose merge base
+  # predated a file deletion land a `main` that did not compile.
+  merge_group:
   push:
     branches: [main]
 
