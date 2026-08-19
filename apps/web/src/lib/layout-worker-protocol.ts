@@ -79,6 +79,37 @@ export type MarkdownRailResponse =
     }
   | { readonly type: 'failed'; readonly id: number; readonly reason: string }
 
+/**
+ * Render a markdown BODY to SVG.
+ *
+ * The sibling `markdown-rail` request deliberately returns no SVG, and its
+ * reasoning still holds where it was written: the rail redraws per keystroke
+ * and draws rectangles, so serializing a document's worth of SVG for it
+ * would be a cost with no reader. A row thumbnail HAS a reader — the SVG is
+ * the picture — and it is produced once per document, not per keystroke.
+ *
+ * The resolver seams do not cross here either, for the same reason (a
+ * function cannot be posted). An unresolved reference draws as the literal
+ * text the author typed, which at thumbnail scale is a difference no eye can
+ * find.
+ */
+export type MarkdownRenderRequest = {
+  readonly type: 'markdown-render'
+  readonly id: number
+  readonly body: string
+  readonly maxWidth: number
+}
+
+export type MarkdownRenderResponse =
+  | {
+      readonly type: 'markdown-render-done'
+      readonly id: number
+      readonly svg: string
+      /** What the SVG's own viewBox covers, so a caller can scale it. */
+      readonly bounds: BoundingBox
+    }
+  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+
 export type LayoutResponse =
   | {
       readonly type: 'laid-out'
