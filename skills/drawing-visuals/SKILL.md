@@ -206,7 +206,28 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | remove an edge | `{ op: "edge.remove", id }` |
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
+| make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
 | structure or intent is wrong | create a fresh document with `wb_document_create` and redraw |
+
+**`region.set` is the one op that deletes what you did NOT mention.** It
+reconciles a group's contents to the list you give it, so anything strictly
+inside that group and absent from your list is removed. Four rules make it safe
+to reach for:
+
+- Only nodes **fully enclosed** by the group are in scope. A node straddling
+  its edge — someone mid-drag — is untouched.
+- An **edge is in scope only when BOTH its endpoints are.** One that leaves the
+  group survives your list without being mentioned.
+- What you declare must also **land inside** the group. A node or edge that
+  would end up elsewhere is refused rather than moved, so a region edit can
+  never reach across the board.
+- A **locked** node or edge in scope **refuses the whole batch before anything
+  is written**, because this op deletes by omission and silently skipping a
+  locked element would be the worst possible reading of that.
+
+A node you list that already exists is merged rather than replaced, so omitting
+geometry leaves it where it is. Use it when you own the whole group; use plain
+`node.patch` / `node.remove` ops when you do not.
 
 **A lock binds you too.** A `patch` or `remove` on a locked element fails the batch. Unlocking is the
 one op a locked element still accepts, so you can lift your own lock in the same call:

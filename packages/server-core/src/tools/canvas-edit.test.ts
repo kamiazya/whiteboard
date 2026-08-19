@@ -855,3 +855,340 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
   })
 })
+
+/**
+ * `region.set` — the one declarative op. "This group should look like this",
+ * which makes it the only op that deletes something it was not told about.
+ *
+ * Its scope rule is STRICT containment, and that is what makes the boundary
+ * safe rather than a judgement call: a node straddling the group's edge — a
+ * human mid-drag, exactly the case that deferred this op — is not enclosed,
+ * so it is out of scope and survives untouched.
+ */
+describe('wb_canvas_edit — region.set', () => {
+  const GROUP = {
+    id: 'g',
+    type: 'group' as const,
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 500,
+    label: 'Phase 1',
+  }
+
+  test('replaces what is inside the group and leaves the rest of the board alone', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'inside-old', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'old' },
+        { id: 'outside', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'elsewhere' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'region.set',
+          within: 'g',
+          nodes: [
+            { id: 'inside-new', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'new' },
+          ],
+          edges: [],
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'inside-new', 'outside'])
+    expect(result.touched.nodes).toContain('inside-old')
+    expect(result.touched.nodes).toContain('inside-new')
+    expect(result.touched.nodes).not.toContain('outside')
+  })
+
+  test('does not touch a node straddling the boundary — the mid-drag case', async () => {
+    // Only STRICT containment is in scope. This is the whole reason the op
+    // is safe to hand an agent while a human is dragging.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        // Half in, half out: x+width = 540 > the group's 500.
+        { id: 'straddling', type: 'text', x: 460, y: 20, width: 80, height: 40, text: 'moving' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+    })
+
+    expect(result.touched.nodes).not.toContain('straddling')
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'straddling'])
+  })
+
+  test('never deletes the group it is scoped to', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => n.id)).toEqual(['g'])
+  })
+
+  test('keeps an edge that leaves the region, and replaces one wholly inside it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 200, y: 20, width: 80, height: 40, text: 'b' },
+        { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
+      ],
+      edges: [
+        { id: 'internal', fromNode: 'a', toNode: 'b' },
+        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'region.set',
+          within: 'g',
+          // 'a' survives (listed); 'b' does not; so 'internal' has nothing to
+          // connect and goes with it, while 'leaving' is out of scope.
+          nodes: [{ id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' }],
+          edges: [],
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
+  })
+
+  test('refuses when a locked node is inside the region', async () => {
+    // A lock binds every op, and this one deletes by omission — silently
+    // dropping a locked node would be the worst possible reading of it.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'pinned', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'pinned' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.lock', id: 'pinned', locked: true }],
+    })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'pinned'])
+  })
+
+  test('places a listed node that carries no geometry INSIDE the group', async () => {
+    // The default placement puts a node below existing content, which for
+    // this op would land it outside the very region it was declared in — and
+    // therefore out of scope on the next call, which is not idempotent.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'region.set',
+          within: 'g',
+          nodes: [{ id: 'fresh', type: 'text', text: 'no coordinates' }],
+          edges: [],
+        },
+      ],
+    })
+
+    const placed = result.geometry.find((entry) => entry.id === 'fresh')
+    expect(placed).toBeDefined()
+    expect(placed?.x).toBeGreaterThanOrEqual(GROUP.x)
+    expect(placed?.y).toBeGreaterThanOrEqual(GROUP.y)
+    expect((placed?.x ?? 0) + (placed?.width ?? 0)).toBeLessThanOrEqual(GROUP.x + GROUP.width)
+    expect((placed?.y ?? 0) + (placed?.height ?? 0)).toBeLessThanOrEqual(GROUP.y + GROUP.height)
+  })
+
+  test('is idempotent: applying the same region twice changes nothing the second time', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+    const op = {
+      op: 'region.set' as const,
+      within: 'g',
+      nodes: [{ id: 'one', type: 'text' as const, text: 'one' }],
+      edges: [],
+    }
+
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
+    const before = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
+    const after = await loadDocument(makeDeps(store), DOCUMENT_ID)
+
+    expect(after.canvas).toEqual(before.canvas)
+  })
+
+  test('refuses a `within` that is not a group on the canvas', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'plain', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'not a group' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'region.set', within: 'plain', nodes: [], edges: [] }],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'region.set', within: 'ghost', nodes: [], edges: [] }],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+  })
+
+  // `touchedEdges` accumulates across the WHOLE batch, so using it as the
+  // region's own deletion set makes an earlier op's edge collateral damage.
+  test('leaves an edge an earlier op touched alone when it is nowhere near the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
+        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        // Touches `outside` — and this edge is nowhere near `g`.
+        { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
+        { op: 'region.set', within: 'g', nodes: [], edges: [] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges.map((edge) => edge.id)).toEqual(['outside'])
+  })
+
+  // The lock preflight only walks the region, so a declaration naming
+  // something outside it is neither checked nor in scope — it would let a
+  // region edit reach any node on the board, locked ones included.
+  test('refuses to move a node that is not inside the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'outsider', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'keep me' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            op: 'region.set',
+            within: 'g',
+            nodes: [
+              {
+                id: 'outsider',
+                type: 'text',
+                x: 950,
+                y: 950,
+                width: 10,
+                height: 10,
+                text: 'moved',
+              },
+            ],
+            edges: [],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'outsider')).toMatchObject({ x: 900, y: 900 })
+  })
+
+  test('refuses an edge whose endpoints are not both inside the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
+        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            op: 'region.set',
+            within: 'g',
+            nodes: [],
+            edges: [{ id: 'smuggled', fromNode: 'far1', toNode: 'far2' }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges).toEqual([])
+  })
+})

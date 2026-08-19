@@ -502,6 +502,56 @@ async function main() {
   }
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
 
+  // region.set is the one op that deletes by OMISSION, so the smoke drives
+  // the full reconcile through the real wire: declare two, then declare one,
+  // and the other must be gone. The group sits far from everything else so
+  // nothing already on this canvas is enclosed by it.
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      {
+        op: 'node.add',
+        node: { id: 'region', type: 'group', x: 5000, y: 5000, width: 900, height: 600 },
+      },
+      {
+        op: 'region.set',
+        within: 'region',
+        nodes: [
+          { id: 'in-1', type: 'text', text: 'first' },
+          { id: 'in-2', type: 'text', text: 'second' },
+        ],
+        edges: [],
+      },
+    ],
+    follow: false,
+  })
+  const reconciled = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      {
+        op: 'region.set',
+        within: 'region',
+        nodes: [{ id: 'in-1', type: 'text', text: 'first' }],
+        edges: [],
+      },
+    ],
+    follow: false,
+  })
+  const survivors = reconciled.snapshot.nodes.map((node) => node.id)
+  if (!survivors.includes('in-1') || survivors.includes('in-2')) {
+    throw new Error(
+      `region.set did not reconcile the region: ${JSON.stringify({ survivors, touched: reconciled.touched })}`,
+    )
+  }
+  // Everything outside the region is untouched by it — the property that
+  // makes deleting-by-omission safe to hand an agent at all.
+  if (!survivors.includes('lockable') || !survivors.includes('batch-a')) {
+    throw new Error(`region.set reached outside its region: ${JSON.stringify(survivors)}`)
+  }
+  console.log('[e2e] wb_canvas_edit(region.set) → region reconciled, rest of the board untouched')
+
   // wb_viewport_set with nobody watching. This smoke runs headless, so
   // delivered:false IS the success path — the point is that asking a
   // browser to look somewhere does not FAIL when there is no browser, which
