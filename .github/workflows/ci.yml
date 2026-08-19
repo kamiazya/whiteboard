@@ -211,8 +211,30 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # This step cancelled `widget-smoke` in 4 of 25 ci runs, always at the
+      # job's 15-minute ceiling. The log shows WHY it is worth bounding at the
+      # apt level rather than only at the step: it produced no output at all
+      # for four minutes — not a slow download, a connection that never
+      # returns. `-qq` was hiding that.
+      #
+      # `Acquire::http::Timeout` is what actually fixes it: a stuck mirror
+      # fails in 15s instead of hanging, and `Acquire::Retries` then tries
+      # another. `--no-install-recommends` skips `fonts-noto-cjk-extra`, every
+      # remaining weight and none of what this smoke renders — worth having,
+      # but it was not the cause.
+      #
+      # A cancelled job is worse than a failed one here: `verify` NEEDS this,
+      # and a cancelled dependency SKIPS it rather than failing it, so the PR
+      # reads `verify: skipping` — no result rather than a red one, on the
+      # check the merge gate treats as authoritative.
       - name: Install CJK fallback font
-        run: sudo apt-get update -qq && sudo apt-get install -yqq fonts-noto-cjk
+        timeout-minutes: 5
+        env:
+          APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends fonts-noto-cjk
+          fc-list :lang=ja family | head -3
 
       - name: Build canvas-viewer widget
         run: pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
