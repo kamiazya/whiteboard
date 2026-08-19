@@ -75,28 +75,28 @@ export function ImportBrowserLocalPanel({
       // Sequential on purpose: each iteration merges a full Loro history into
       // a throwaway doc, which is memory-heavy for large documents.
       for (const canvas of documents) {
-        setResults((prev) => ({ ...prev, [canvas.id]: { status: 'pending' } }))
+        setResults((prev) => ({ ...prev, [canvas.documentId]: { status: 'pending' } }))
         try {
-          const loroLoad = await loroStore.load(canvas.id)
+          const loroLoad = await loroStore.load(canvas.documentId)
           const result = await importOneDocument({
             fetch: daemonFetch,
             daemonBaseUrl,
             workspaceId,
-            documentName: canvas.name,
+            documentPath: canvas.path,
             documentKind: canvas.kind,
             loroLoad,
           })
           if (result.kind === 'ok') {
             anySuccess = true
-            lastSuccessCanvasId = canvas.id
+            lastSuccessCanvasId = canvas.documentId
             setResults((prev) => ({
               ...prev,
-              [canvas.id]: { status: 'success', path: result.path },
+              [canvas.documentId]: { status: 'success', path: result.path },
             }))
           } else {
             setResults((prev) => ({
               ...prev,
-              [canvas.id]: { status: 'error', reason: result.reason },
+              [canvas.documentId]: { status: 'error', reason: result.reason },
             }))
           }
         } catch {
@@ -104,7 +104,7 @@ export function ImportBrowserLocalPanel({
           // must not abort the rest of the batch.
           setResults((prev) => ({
             ...prev,
-            [canvas.id]: {
+            [canvas.documentId]: {
               status: 'error',
               reason: 'Could not read this canvas from the browser.',
             },
@@ -148,9 +148,9 @@ export function ImportBrowserLocalPanel({
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-1">
         {documents.map((canvas) => {
-          const result = results[canvas.id]
+          const result = results[canvas.documentId]
           return (
-            <li key={canvas.id} className="flex items-center justify-between gap-2 text-sm">
+            <li key={canvas.documentId} className="flex items-center justify-between gap-2 text-sm">
               <span>{canvas.name}</span>
               {result?.status === 'success' && (
                 <span className="text-xs text-muted-foreground">{`Imported as ${result.path}`}</span>

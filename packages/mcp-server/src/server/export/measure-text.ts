@@ -10,6 +10,7 @@ import * as opentype from 'opentype.js'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, type ExportFontFace, resolveExportFontFaces } from './export-font.js'
+import { installedFontFiles } from './installed-fonts.js'
 
 const log = getLogger('export-measure-text')
 
@@ -159,6 +160,56 @@ async function parseFace(path: string | null): Promise<opentype.Font | null> {
   if (path === null) return null
   const buffer = await readFile(path)
   return opentypeApi.parse(buffer)
+}
+
+/**
+ * The parsed Regular face the export path draws with, or `null` when the
+ * vendored asset is unreachable and the render has already degraded to system
+ * fonts.
+ *
+ * Exposed for `undrawableCharacters`, which asks the same question the
+ * measurer asks internally — does this face carry a glyph for this code point
+ * — but reports the answer instead of silently estimating around it. Parsed
+ * on demand and NOT cached here: the answer is needed once per export, while
+ * the measurer's own cache exists because layout calls it per line.
+ */
+export async function loadExportFont(
+  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
+): Promise<opentype.Font | null> {
+  try {
+    return await parseFace((await resolveFontFiles()).regular)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every face the export path draws with: the vendored Regular plus whatever
+ * the user installed.
+ *
+ * This is the set `undrawableCharacters` has to ask, not just the vendored
+ * one. A report built from a narrower set than the renderer uses answers about
+ * a picture nobody produced — it would keep naming characters an installed
+ * font now draws perfectly.
+ *
+ * A face that fails to parse is skipped rather than fatal: it cannot draw
+ * anything, so it contributes nothing to the question being asked, and a
+ * corrupt file in the directory must not take the export down with it.
+ */
+export async function loadExportFonts(
+  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
+): Promise<readonly opentype.Font[]> {
+  const paths = [(await resolveFontFiles()).regular, ...(await installedFontFiles())]
+  const fonts: opentype.Font[] = []
+  for (const path of paths) {
+    try {
+      const font = await parseFace(path)
+      if (font !== null) fonts.push(font)
+    } catch {
+      // Skipped on purpose — see above.
+    }
+  }
+  return fonts
 }
 
 async function loadRealMeasurer(

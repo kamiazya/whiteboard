@@ -268,15 +268,14 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     await seedV6Fixture(documentId, doc.export({ mode: 'snapshot' }))
 
     const db = await openWhiteboardDb()
+    // Read before asserting, and assert after: a failed expect() between the
+    // open and the close would leak the connection, and every later test in
+    // this file would then meet a database clearDb cannot delete.
+    const storeNames = [...db.objectStoreNames].sort()
     // The old names are DELETED, not merely abandoned. A store left in place
     // would keep a second copy of every document readable by anything that
     // still remembers the old name.
-    expect([...db.objectStoreNames].sort()).toEqual([
-      'documentFiles',
-      'documents',
-      'loroDocuments',
-      'meta',
-    ])
+    expect(storeNames).toEqual(['documentFiles', 'documents', 'loroDocuments', 'meta'])
 
     const fileCount = await new Promise<number>((resolve, reject) => {
       const tx = db.transaction('documentFiles', 'readonly')
@@ -287,33 +286,35 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     })
     expect(fileCount).toBe(1)
 
-    // Read back through the PRODUCTION stores, which only know the new names:
-    // a copy that lost its key or its value would fail here even though the
-    // store-name assertion above passed.
-    const loroResult = await new LoroStore().load(documentId)
-    expect(loroResult.kind).toBe('ok')
-    if (loroResult.kind === 'ok') {
-      const restored = new Loro()
-      restored.import(loroResult.snapshot)
-      expect(restored.getList('elements').toArray()).toEqual([{ id: 'canonical-el' }])
-    }
+    // documentFiles is where the copy's record-carrying half is still
+    // observable: uploads are not addressed by workspace+path, so v8 leaves
+    // them alone. A copy that lost its key or its value fails the count above
+    // even though the store-name assertion passed.
 
     const metaStore = new IndexedDBStore()
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v7 document')
-    }
+    // The row does not survive: v8 DISCARDS a document with no workspace and
+    // no path, because there is nothing to migrate it to without inventing an
+    // address, and an invented one is indistinguishable from a chosen one.
+    // Everything a pre-path fixture holds therefore ends here — this migration
+    // path converges on an empty document store, by decision, not by accident.
+    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
+    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.listDocuments()).toEqual([])
+    // The bytes go with it rather than lingering as storage nothing names.
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
   })
 
-  it('carries the default pointer across the meta key rename', async () => {
+  it('renames the meta pointer key, then clears it because v8 discarded its target', async () => {
     const documentId = 'document-migrate-v7-pointer'
     await seedV6Fixture(documentId, new Loro().export({ mode: 'snapshot' }))
 
-    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(documentId)
-    // The old key is removed rather than duplicated — two pointers could
-    // disagree, and nothing would say which one won.
-    expect(await metaKeys()).toEqual(['defaultDocumentId'])
+    // Both halves matter and only the second is new: v7 moves the pointer to
+    // its new key (leaving the old one behind would let two pointers disagree
+    // with nothing to say which won), and v8 then clears it because the
+    // document it named is gone — a pointer at a discarded document would
+    // resume the editor into nothing.
+    expect(await metaKeys()).toEqual([])
+    expect(await new IndexedDBStore().getDefaultDocumentId()).toBeNull()
   })
 
   it('is a no-op for a fresh install, which never had the old stores', async () => {
@@ -367,17 +368,18 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     })
     expect(fileCount).toBe(1)
 
-    const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(documentId)
-    expect(loroResult.kind).toBe('ok')
+    // Discarded with its document — see the note below.
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v6 canvas')
-    }
+    // The row does not survive: v8 DISCARDS a document with no workspace and
+    // no path, because there is nothing to migrate it to without inventing an
+    // address, and an invented one is indistinguishable from a chosen one.
+    // Everything a pre-path fixture holds therefore ends here — this migration
+    // path converges on an empty document store, by decision, not by accident.
+    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
+    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.listDocuments()).toEqual([])
 
     // purgeLegacyReconnectCredentials() is exercised directly here (rather
     // than via a full App/router boot harness) — it is called unconditionally
@@ -435,17 +437,18 @@ describe('IndexedDB v4 -> v5', () => {
     })
     expect(fileCount).toBe(1)
 
-    const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(documentId)
-    expect(loroResult.kind).toBe('ok')
+    // Discarded with its document — see the note below.
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v5 canvas')
-    }
+    // The row does not survive: v8 DISCARDS a document with no workspace and
+    // no path, because there is nothing to migrate it to without inventing an
+    // address, and an invented one is indistinguishable from a chosen one.
+    // Everything a pre-path fixture holds therefore ends here — this migration
+    // path converges on an empty document store, by decision, not by accident.
+    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
+    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.listDocuments()).toEqual([])
   })
 })
 
@@ -468,17 +471,18 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     expect(db.objectStoreNames.contains('documentFiles')).toBe(true)
     db.close()
 
-    const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(documentId)
-    expect(loroResult.kind).toBe('ok')
+    // Discarded with its document — see the note below.
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
 
     const metaStore = new IndexedDBStore()
-    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v4 canvas')
-    }
+    // The row does not survive: v8 DISCARDS a document with no workspace and
+    // no path, because there is nothing to migrate it to without inventing an
+    // address, and an invented one is indistinguishable from a chosen one.
+    // Everything a pre-path fixture holds therefore ends here — this migration
+    // path converges on an empty document store, by decision, not by accident.
+    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
+    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.listDocuments()).toEqual([])
   })
 })
 
@@ -490,56 +494,30 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(3)
   })
 
-  it('opens a seeded v2 fixture at the current version without VersionError, strips scene, and keeps loroCanvases canonical', async () => {
+  it('opens a seeded v2 fixture at the current version without VersionError, and keeps nothing it cannot address', async () => {
     const documentId = 'canvas-migrate-1'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
-    const loroSnapshot = doc.export({ mode: 'snapshot' })
-    await seedV2Fixture(documentId, loroSnapshot)
+    await seedV2Fixture(documentId, doc.export({ mode: 'snapshot' }))
 
-    // (a) Open through the shared opener at the current DB_VERSION — must not VersionError.
+    // (a) The oldest shape still opens through the shared opener at the
+    // current DB_VERSION. This half is the durable one: every version bump
+    // since has had to keep it true, and a VersionError here is a bricked app
+    // for anyone who has not opened the tab in a while.
     const db = await openWhiteboardDb()
     db.close()
 
-    // (b) The loroCanvases record survives and its elements are canonical after load.
-    const loroStore = new LoroStore()
-    const loroResult = await loroStore.load(documentId)
-    expect(loroResult.kind).toBe('ok')
-    if (loroResult.kind === 'ok') {
-      const restored = new Loro()
-      restored.import(loroResult.snapshot)
-      expect(restored.getList('elements').toArray()).toEqual([{ id: 'canonical-el' }])
-    }
-
-    // (c) The 'documents' row has no scene / no old-schema orphan remains.
-    // Checked against the RAW stored row (not the parsed load() result): Zod's
-    // z.object() silently strips unrecognized keys from its parsed OUTPUT even
-    // when the underlying row still carries them, so asserting only against
-    // loadResult.snapshot would pass even if the upgrade never ran.
-    const rawRow = await readRawDocumentsRow(documentId)
-    expect(rawRow).not.toHaveProperty('scene')
-    expect(rawRow).toEqual({
-      id: documentId,
-      name: 'Pre-migration canvas',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    })
-
+    // (b) Nothing else survives. A v2 row carries no workspace and no path —
+    // and could not, they did not exist — so v8 discards it along with its
+    // Loro record. What the pre-v3 `scene` strip did to this row on the way
+    // through is no longer observable; the guard that it must not THROW on a
+    // corrupt row still is, and is the next test.
     const metaStore = new IndexedDBStore()
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot).toEqual({
-        id: documentId,
-        name: 'Pre-migration canvas',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        // Not stored in the v2 fixture: the schema's own default — a
-        // pre-kind row parses as a spatial canvas with no migration.
-        kind: 'spatial',
-      })
-    }
-
-    // (d) The default pointer/id is intact.
-    expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
+    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
+    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.listDocuments()).toEqual([])
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect(await metaStore.getDefaultDocumentId()).toBeNull()
   })
 
   it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {
@@ -563,7 +541,13 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
           db.close()
           resolve()
         }
-        tx.onerror = () => reject(tx.error)
+        tx.onerror = () => {
+          // Closed on the failure path too: a seeder that leaks a connection at
+          // an old version blocks the very upgrade the next test is there to
+          // exercise, and the error surfaces in that test rather than this one.
+          db.close()
+          reject(tx.error)
+        }
       }
       req.onerror = () => reject(req.error)
     })
@@ -600,5 +584,229 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
       tx.oncomplete = () => rawDb.close()
     })
     expect(raw).toHaveProperty('scene')
+  })
+})
+
+/** Seed a v7-shape fixture: current store names, rows in whatever shape is passed. */
+async function seedV7Fixture(rows: {
+  documents: readonly (readonly [key: string, value: unknown])[]
+  loro?: readonly string[]
+  defaultDocumentId?: string
+}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 7)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      for (const name of ['meta', 'documents', 'loroDocuments', 'documentFiles']) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name)
+      }
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction(['meta', 'documents', 'loroDocuments'], 'readwrite')
+      if (rows.defaultDocumentId !== undefined) {
+        tx.objectStore('meta').put(rows.defaultDocumentId, 'defaultDocumentId')
+      }
+      for (const [key, value] of rows.documents) tx.objectStore('documents').put(value, key)
+      for (const key of rows.loro ?? []) {
+        tx.objectStore('loroDocuments').put(
+          { v: 1, snapshot: new Loro().export({ mode: 'snapshot' }), updatedAt: 'x' },
+          key,
+        )
+      }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function storeKeys(name: string): Promise<string[]> {
+  const db = await openWhiteboardDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(name, 'readonly')
+    const req = tx.objectStore(name).getAllKeys()
+    req.onsuccess = () => resolve(req.result as string[])
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+const POST_PATH_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const PRE_PATH_ID = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6'
+
+describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 8 or higher (guards against reverting the bump alone)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(8)
+  })
+
+  it('deletes a document that carries no workspace or path, and its Loro record with it', async () => {
+    await seedV7Fixture({
+      documents: [
+        [PRE_PATH_ID, { id: PRE_PATH_ID, name: 'Old canvas', updatedAt: 'x', kind: 'spatial' }],
+      ],
+      loro: [PRE_PATH_ID],
+      defaultDocumentId: PRE_PATH_ID,
+    })
+
+    expect(await storeKeys('documents')).toEqual([])
+    // The bytes go too: a Loro record no document names is unreachable
+    // storage that nothing would ever clean up.
+    expect(await storeKeys('loroDocuments')).toEqual([])
+    // ...and the pointer, or the next load resumes into a document that is gone.
+    expect(await metaKeys()).toEqual([])
+  })
+
+  it('leaves a document that already carries workspace and path completely alone', async () => {
+    const row = {
+      documentId: POST_PATH_ID,
+      workspaceId: 'local',
+      path: 'design/login',
+      name: 'Login',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      kind: 'spatial',
+    }
+    await seedV7Fixture({
+      documents: [[POST_PATH_ID, row]],
+      loro: [POST_PATH_ID],
+      defaultDocumentId: POST_PATH_ID,
+    })
+
+    expect(await readRawDocumentsRow(POST_PATH_ID)).toEqual(row)
+    expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
+    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(POST_PATH_ID)
+  })
+
+  it('discards only the pre-path rows when a store holds both', async () => {
+    const keep = {
+      documentId: POST_PATH_ID,
+      workspaceId: 'local',
+      path: 'keep',
+      name: 'Keep',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      kind: 'spatial',
+    }
+    await seedV7Fixture({
+      documents: [
+        [POST_PATH_ID, keep],
+        [PRE_PATH_ID, { id: PRE_PATH_ID, name: 'Drop', updatedAt: 'x', kind: 'spatial' }],
+      ],
+      loro: [POST_PATH_ID, PRE_PATH_ID],
+      // Pointed at the SURVIVOR: a blanket clear would pass the first test
+      // while silently logging every user out of their remaining document.
+      defaultDocumentId: POST_PATH_ID,
+    })
+
+    expect(await storeKeys('documents')).toEqual([POST_PATH_ID])
+    expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
+    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(POST_PATH_ID)
+  })
+
+  it('survives a corrupt (non-object) row rather than aborting the whole upgrade', async () => {
+    await seedV7Fixture({ documents: [['junk', 42]], loro: ['junk'] })
+    expect(await storeKeys('documents')).toEqual([])
+  })
+})
+
+describe('v6 -> v8 in one upgrade (the discard must see what the v7 copy produced)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('discards a pre-path row that arrives in `documents` via the v7 rename copy', async () => {
+    // The two passes share ONE versionchange transaction: the rename copies
+    // `canvases` -> `documents` through a cursor whose puts land in its own
+    // callbacks, and the discard walks `documents`. A discard cursor opened
+    // before those puts have run sees an empty store and deletes nothing —
+    // which looks exactly like a successful upgrade.
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'el' })
+    await seedV6Fixture('pre-path-v6', doc.export({ mode: 'snapshot' }))
+
+    expect(await storeKeys('documents')).toEqual([])
+    expect(await storeKeys('loroDocuments')).toEqual([])
+  })
+})
+
+describe('cross-tab upgrades', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('an open connection closes itself so a newer version is not blocked behind it', async () => {
+    // Stands in for the second tab: a connection this module handed out and
+    // that nobody closed. Without `onversionchange` it holds the database at
+    // its own version and the upgrade below never fires — the request sits in
+    // `blocked` forever, which in the app is an editor that never loads and
+    // no error to explain why.
+    const idle = await openWhiteboardDb()
+
+    let blocked = false
+    const upgraded = await new Promise<boolean>((resolve) => {
+      const req = indexedDB.open('whiteboard', DB_VERSION + 1)
+      req.onblocked = () => {
+        blocked = true
+      }
+      req.onsuccess = () => {
+        req.result.close()
+        resolve(true)
+      }
+      req.onerror = () => resolve(false)
+      // Bounded so a genuine block fails the test instead of hanging it.
+      setTimeout(() => resolve(false), 4000)
+    })
+
+    // Closed BEFORE the assertion: a failure here would otherwise leave the
+    // connection open, and `afterEach`'s deleteDatabase then blocks on it —
+    // turning one failed test into a hung file.
+    idle.close()
+    expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
+  })
+
+  it('rejects with a message a caller can show when a connection that will NOT self-close holds the old version', async () => {
+    // The other half, and the one the self-close cannot cover: a tab still
+    // running a pre-v8 bundle has no `onversionchange` handler, so it sits on
+    // the old version until a person closes it. Without this branch the open
+    // request never settles, and every caller — the store, the Loro store, the
+    // file store — awaits a promise that has no outcome, which in the app is an
+    // editor that never loads with nothing on screen to explain why.
+    const stubborn = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', DB_VERSION - 1)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+
+    try {
+      // Raced against a short deadline on purpose. Without the branch the open
+      // request never settles at all, and an unbounded await would spend the
+      // whole per-test timeout (measured: 120s) reporting the same thing this
+      // says in three.
+      const outcome = await Promise.race([
+        openWhiteboardDb().then(
+          (db) => {
+            db.close()
+            return 'resolved'
+          },
+          (err: unknown) => (err instanceof Error ? err.message : String(err)),
+        ),
+        new Promise<string>((r) => setTimeout(() => r('never settled'), 3000)),
+      ])
+      expect(outcome).toMatch(/another tab/i)
+    } finally {
+      stubborn.close()
+      // The rejected request is still live and will upgrade the database the
+      // moment `stubborn` lets go. Draining it here, inside the test that
+      // created it, is what keeps the next test's seed from meeting a
+      // database at a version it did not put there.
+      await new Promise((r) => setTimeout(r, 300))
+      await clearDb()
+    }
   })
 })

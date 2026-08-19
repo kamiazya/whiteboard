@@ -27,3 +27,24 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
   while (siblings.has(`untitled-${n}`)) n++
   return `${prefix}untitled-${n}`
 }
+
+/**
+ * The paths a new document must number around, for the two callers where a
+ * failed read must not dead-end the user: the list page's create button and
+ * the editor's first-boot create.
+ *
+ * A broken list read is exactly when the create path matters most, so an
+ * unreadable store numbers from nothing rather than throwing. The store's own
+ * uniqueness check is still behind this: the worst case is a refused create
+ * that surfaces as the ordinary create-failed message, not two documents at
+ * one address.
+ */
+export async function takenPathsIn(store: {
+  listDocuments(): Promise<readonly { path: string }[]>
+}): Promise<string[]> {
+  try {
+    return (await store.listDocuments()).map((row) => row.path)
+  } catch {
+    return []
+  }
+}

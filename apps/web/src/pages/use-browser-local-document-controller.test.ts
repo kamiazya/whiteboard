@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import {
@@ -44,8 +44,18 @@ function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
+// ULIDs, because the stored schema validates them now. Named constants
+// rather than inline literals: a 26-character id read six times in one
+// assertion is unreadable, and the tests are about which document, not which
+// characters.
+const C1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const C2 = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
+const FRESH = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
+
 const snap: DocumentSnapshot = {
-  id: 'c1',
+  documentId: C1,
+  workspaceId: 'local',
+  path: 'untitled',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
@@ -87,7 +97,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('loads existing canvas from store on mount', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -96,7 +106,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('renameDocument transitions persistence pending -> saved via an immediate flush (no debounce)', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -115,7 +125,7 @@ describe('useBrowserLocalDocumentController', () => {
   it('degraded message is generic safe copy — raw error not exposed', async () => {
     // Explicitly bind all methods; class-instance spread copies data fields but not prototype methods.
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     const failingStore: BrowserLocalStore = {
       getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
@@ -144,7 +154,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('triggerCleanup flushes pending save then deletes canvas', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -162,7 +172,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('cleanupError is a generic safe copy when flush fails — raw error not exposed', async () => {
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     let shouldFailSave = false
     const store: BrowserLocalStore = {
@@ -205,7 +215,7 @@ describe('useBrowserLocalDocumentController', () => {
     // fix renameDocument's return type was `void`, so a real save failure could
     // never surface as a rejection — the caller always saw success.
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     let shouldFailSave = false
     const store: BrowserLocalStore = {
@@ -237,7 +247,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('cleanupError is null on successful cleanup', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -250,7 +260,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('triggerCleanup aborts when flush fails — preserves data copy', async () => {
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     let shouldFailSave = false
     const store: BrowserLocalStore = {
@@ -283,12 +293,12 @@ describe('useBrowserLocalDocumentController', () => {
     })
     expect(result.current.cleanupCompleted).toBe(false)
     expect(result.current.snapshot).not.toBeNull()
-    expect(await base.getDefaultDocumentId()).toBe('c1')
+    expect(await base.getDefaultDocumentId()).toBe(C1)
   })
 
   it('triggerCleanup is a no-op when del returns pointer-mismatch', async () => {
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     const store: BrowserLocalStore = {
       getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
@@ -310,7 +320,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('no phantom save re-populates store after triggerCleanup', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -325,12 +335,12 @@ describe('useBrowserLocalDocumentController', () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
     expect(await store.getDefaultDocumentId()).toBeNull()
-    expect((await store.load('c1')).kind).toBe('not-found')
+    expect((await store.load(C1)).kind).toBe('not-found')
   })
 
   it('startFresh deletes the old canvas record before repointing the default', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -338,17 +348,17 @@ describe('useBrowserLocalDocumentController', () => {
       await result.current.startFresh()
     })
     // The old canvas must not linger in the store: del() clears the default pointer,
-    // so it has to run while 'c1' is still the default — i.e. before setDefaultDocumentId(new).
-    expect((await store.load('c1')).kind).toBe('not-found')
+    // so it has to run while C1 is still the default — i.e. before setDefaultDocumentId(new).
+    expect((await store.load(C1)).kind).toBe('not-found')
     const newId = await store.getDefaultDocumentId()
     expect(newId).not.toBeNull()
-    expect(newId).not.toBe('c1')
+    expect(newId).not.toBe(C1)
     expect((await store.load(newId as string)).kind).toBe('ok')
   })
 
   it('startFresh degrades and cleans up its orphan when repointing the default fails', async () => {
     const base = new MemoryStore()
-    await base.setDefaultDocumentId('c1')
+    await base.setDefaultDocumentId(C1)
     await base.save(snap)
     const failingStore: BrowserLocalStore = {
       getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
@@ -356,8 +366,8 @@ describe('useBrowserLocalDocumentController', () => {
       save: base.save.bind(base),
       del: base.del.bind(base),
       removeDocument: base.removeDocument.bind(base),
-      generateId: () => 'fresh-1',
-      listDocuments: async () => [],
+      generateId: () => FRESH,
+      listDocuments: base.listDocuments.bind(base),
       setDefaultDocumentId: async () => {
         throw new Error('IndexedDB: meta write aborted')
       },
@@ -374,14 +384,14 @@ describe('useBrowserLocalDocumentController', () => {
     // del() ran before the failed repoint, so the abandoned canvas is gone and the pointer is
     // null — a retry starts cleanly. The freshly-saved canvas is cleaned up via removeDocument
     // so the failed recovery leaves no orphaned record behind.
-    expect((await base.load('c1')).kind).toBe('not-found')
-    expect((await base.load('fresh-1')).kind).toBe('not-found')
+    expect((await base.load(C1)).kind).toBe('not-found')
+    expect((await base.load(FRESH)).kind).toBe('not-found')
     expect(await base.getDefaultDocumentId()).toBeNull()
   })
 
   it('renameDocument updates snapshot.name and persists it', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -389,7 +399,7 @@ describe('useBrowserLocalDocumentController', () => {
       result.current.renameDocument('New name')
     })
     expect(result.current.snapshot?.name).toBe('New name')
-    const loadResult = await store.load('c1')
+    const loadResult = await store.load(C1)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe('New name')
@@ -398,7 +408,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('renameDocument racing with unmount does not warn or clobber a later mount', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { result, unmount } = renderHook(() => useBrowserLocalDocumentController(store))
@@ -424,7 +434,7 @@ describe('useBrowserLocalDocumentController', () => {
   it('renameDocument with whitespace-only input falls back to "untitled" and persists that, not empty', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(named)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -432,7 +442,7 @@ describe('useBrowserLocalDocumentController', () => {
       result.current.renameDocument('   ')
     })
     expect(result.current.snapshot?.name).toBe('untitled')
-    const loadResult = await store.load('c1')
+    const loadResult = await store.load(C1)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe('untitled')
@@ -443,7 +453,7 @@ describe('useBrowserLocalDocumentController', () => {
   it('renameDocument with empty string also falls back to "untitled"', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(named)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -455,7 +465,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('renameDocument before the initial load resolves is a safe no-op', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     // No awaited act() yet — the async load hasn't populated snapshotRef/pendingSnapshotRef.
@@ -467,7 +477,7 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result.current.persistence.kind).toBe('saved')
     // Let the load finish and confirm the store was never touched by the no-op call.
     await act(async () => {})
-    const loadResult = await store.load('c1')
+    const loadResult = await store.load(C1)
     expect(loadResult.kind).toBe('ok')
     if (loadResult.kind === 'ok') {
       expect(loadResult.snapshot.name).toBe(snap.name)
@@ -476,7 +486,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('renameDocument after cleanup cleared the snapshot is a safe no-op', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -493,7 +503,7 @@ describe('useBrowserLocalDocumentController', () => {
 
   it('renameDocument refreshes updatedAt and transitions persistence to saved', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
@@ -504,9 +514,54 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result.current.persistence.kind).toBe('saved')
   })
 
-  describe('initialDocumentId (deep-linked canvas)', () => {
+  // The shape change is only real if the controller MINTS the new fields.
+  // Converting the fixtures made 44 tests compile again while asserting
+  // nothing about workspace or path — both mutations below stayed green
+  // until these were written.
+  describe('the address a new document is given', () => {
+    it('stamps the local workspace on what it creates', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultDocumentId(C1)
+      await store.save(snap)
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, new FakeLoroStore()),
+      )
+      await act(async () => {})
+
+      let created: DocumentSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createDocument('Second')
+      })
+      expect(created?.workspaceId).toBe(LOCAL_WORKSPACE_ID)
+    })
+
+    // Two documents at one address is the failure the path exists to
+    // prevent, and a duplicate is the operation most likely to produce it.
+    it('gives a duplicate its own path, not the source’s', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultDocumentId(C1)
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      await loro.save(C1, realSnapshotWithElements([{ id: 'rect-1' }]))
+      const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
+      await act(async () => {})
+
+      let duplicated: DocumentSnapshot | undefined
+      await act(async () => {
+        duplicated = await result.current.duplicateDocument()
+      })
+
+      expect(duplicated?.path).not.toBe(snap.path)
+      const list = await store.listDocuments()
+      expect(new Set(list.map((row) => row.path)).size).toBe(list.length)
+    })
+  })
+
+  describe('initialPath (deep-linked document)', () => {
     const other: DocumentSnapshot = {
-      id: 'c2',
+      documentId: C2,
+      workspaceId: 'local',
+      path: 'other-canvas',
       name: 'other canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -514,41 +569,84 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('loads the requested canvas instead of the store default when given', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       await store.save(other)
-      const { result } = renderHook(() => useBrowserLocalDocumentController(store, undefined, 'c2'))
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, other.path),
+      )
       await act(async () => {})
       expect(result.current.snapshot).toEqual(other)
     })
 
-    it('repoints the store default to the requested canvas so a later plain load resumes there', async () => {
+    it('resolves by path only — the document id is not an address here', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       await store.save(other)
-      renderHook(() => useBrowserLocalDocumentController(store, undefined, 'c2'))
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, other.documentId),
+      )
       await act(async () => {})
-      expect(await store.getDefaultDocumentId()).toBe('c2')
+      expect(result.current.snapshot).toEqual(snap)
     })
 
-    it('falls back to the normal default-canvas flow when the requested id is not found (stale/bookmarked link)', async () => {
+    it('repoints the store default to the requested canvas so a later plain load resumes there', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
+      await store.save(snap)
+      await store.save(other)
+      renderHook(() => useBrowserLocalDocumentController(store, undefined, other.path))
+      await act(async () => {})
+      expect(await store.getDefaultDocumentId()).toBe(C2)
+    })
+
+    it('falls back to the normal default-canvas flow when the requested path is not found (stale/bookmarked link)', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const { result } = renderHook(() =>
         useBrowserLocalDocumentController(store, undefined, 'does-not-exist'),
       )
       await act(async () => {})
       // No error wall — silently lands on whatever the store's own default
-      // resolves to, exactly like a plain (no initialDocumentId) mount would.
+      // resolves to, exactly like a plain (no initialPath) mount would.
       expect(result.current.snapshot).toEqual(snap)
       expect(result.current.persistence.kind).toBe('saved')
     })
 
-    it('behaves exactly like today when initialDocumentId is omitted', async () => {
+    it('falls back to the default document when the list read itself fails', async () => {
+      // The deep link is resolved by listing, so a store that cannot list is
+      // indistinguishable from a path that is not there — and the fallback is
+      // the same. This is the reachable version of the create path's own
+      // tolerance: App only mounts this page WITH a path, so a throw here
+      // would dead-end every deep link on a degraded store, even though the
+      // default pointer below could still answer.
+      const base = new MemoryStore()
+      await base.setDefaultDocumentId(C1)
+      await base.save(snap)
+      const store: BrowserLocalStore = {
+        ...base,
+        getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
+        setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
+        load: base.load.bind(base),
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        removeDocument: base.removeDocument.bind(base),
+        generateId: base.generateId.bind(base),
+        listDocuments: () => Promise.reject(new Error('idb blocked')),
+      }
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, 'other-canvas'),
+      )
+      await act(async () => {})
+      expect(result.current.snapshot).toEqual(snap)
+      expect(result.current.persistence.kind).toBe('saved')
+    })
+
+    it('behaves exactly like today when initialPath is omitted', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const { result } = renderHook(() => useBrowserLocalDocumentController(store))
       await act(async () => {})
@@ -564,12 +662,12 @@ describe('useBrowserLocalDocumentController', () => {
       await act(async () => {})
       const list = await result.current.listDocuments()
       expect(list).toHaveLength(1)
-      expect(list[0].id).toBe(result.current.snapshot?.id)
+      expect(list[0].documentId).toBe(result.current.snapshot?.documentId)
     })
 
     it('createDocument returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -582,14 +680,14 @@ describe('useBrowserLocalDocumentController', () => {
       })
 
       expect(created).toBeDefined()
-      expect(created?.id).not.toBe('c1')
+      expect(created?.documentId).not.toBe(C1)
       expect(created?.name).toBe('Second canvas')
       expect(result.current.snapshot).toEqual(currentBefore)
-      expect(await store.getDefaultDocumentId()).toBe('c1')
+      expect(await store.getDefaultDocumentId()).toBe(C1)
 
-      const persisted = await store.load(created!.id)
+      const persisted = await store.load(created!.documentId)
       expect(persisted).toEqual({ kind: 'ok', snapshot: created })
-      expect(loro.saved.some((s) => s.id === created!.id)).toBe(true)
+      expect(loro.saved.some((s) => s.id === created!.documentId)).toBe(true)
     })
 
     it('createDocument defaults the name to "untitled" when none is given', async () => {
@@ -606,7 +704,7 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('createDocument rolls back the metadata row when the Loro write fails', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       loro.shouldThrow = true
@@ -625,7 +723,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       const list = await store.listDocuments()
       expect(list).toHaveLength(1)
-      expect(list[0].id).toBe('c1')
+      expect(list[0].documentId).toBe(C1)
     })
 
     it('listDocuments includes documents created via createDocument', async () => {
@@ -642,7 +740,7 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('switchDocument flushes a pending edit on the current canvas, then sets the target as current and updates the default pointer', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -658,13 +756,13 @@ describe('useBrowserLocalDocumentController', () => {
       })
 
       await act(async () => {
-        await result.current.switchDocument(created!.id)
+        await result.current.switchDocument(created!.documentId)
       })
 
-      expect(result.current.snapshot?.id).toBe(created!.id)
-      expect(await store.getDefaultDocumentId()).toBe(created!.id)
+      expect(result.current.snapshot?.documentId).toBe(created!.documentId)
+      expect(await store.getDefaultDocumentId()).toBe(created!.documentId)
 
-      const flushed = await store.load('c1')
+      const flushed = await store.load(C1)
       expect(flushed).toEqual({
         kind: 'ok',
         snapshot: { ...snap, name: 'Renamed before switch', updatedAt: expect.any(String) },
@@ -673,7 +771,7 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('switchDocument to an unknown id resolves false and leaves the current canvas untouched (recoverable miss)', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -691,12 +789,12 @@ describe('useBrowserLocalDocumentController', () => {
       expect(switched).toBe(false)
       expect(result.current.persistence.kind).toBe('saved')
       expect(result.current.snapshot).toEqual(before)
-      expect(await store.getDefaultDocumentId()).toBe('c1')
+      expect(await store.getDefaultDocumentId()).toBe(C1)
     })
 
     it('switchDocument clears a stale degraded banner from the previous canvas on a successful switch', async () => {
       const base = new MemoryStore()
-      await base.setDefaultDocumentId('c1')
+      await base.setDefaultDocumentId(C1)
       await base.save(snap)
       // 'corrupt-1' reads as an unreadable record: not-found is a
       // recoverable miss and no longer degrades, so a corrupt read is the
@@ -727,16 +825,16 @@ describe('useBrowserLocalDocumentController', () => {
       expect(result.current.persistence.kind).toBe('degraded')
 
       await act(async () => {
-        await result.current.switchDocument(created!.id)
+        await result.current.switchDocument(created!.documentId)
       })
 
       expect(result.current.persistence.kind).toBe('saved')
-      expect(result.current.snapshot?.id).toBe(created!.id)
+      expect(result.current.snapshot?.documentId).toBe(created!.documentId)
     })
 
     it('switchDocument degrades persistence instead of rejecting when load() throws', async () => {
       const base = new MemoryStore()
-      await base.setDefaultDocumentId('c1')
+      await base.setDefaultDocumentId(C1)
       await base.save(snap)
       const throwingStore: BrowserLocalStore = {
         getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
@@ -761,12 +859,12 @@ describe('useBrowserLocalDocumentController', () => {
       expect(result.current.persistence.kind).toBe('degraded')
       // Current snapshot and default pointer must stay untouched by the failed switch.
       expect(result.current.snapshot).toEqual(snap)
-      expect(await throwingStore.getDefaultDocumentId()).toBe('c1')
+      expect(await throwingStore.getDefaultDocumentId()).toBe(C1)
     })
 
     it('switchDocument degrades persistence instead of rejecting when setDefaultDocumentId() throws', async () => {
       const base = new MemoryStore()
-      await base.setDefaultDocumentId('c1')
+      await base.setDefaultDocumentId(C1)
       await base.save(snap)
       const throwingStore: BrowserLocalStore = {
         getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
@@ -789,17 +887,17 @@ describe('useBrowserLocalDocumentController', () => {
       })
 
       await act(async () => {
-        await result.current.switchDocument(created!.id)
+        await result.current.switchDocument(created!.documentId)
       })
 
       expect(result.current.persistence.kind).toBe('degraded')
       expect(result.current.snapshot).toEqual(snap)
-      expect(await base.getDefaultDocumentId()).toBe('c1')
+      expect(await base.getDefaultDocumentId()).toBe(C1)
     })
 
     it('switchDocument waits for an in-flight fire-and-forget rename flush before switching, and aborts the switch if that flush fails', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -836,7 +934,7 @@ describe('useBrowserLocalDocumentController', () => {
       expect(firstSaveStarted).toBe(true)
 
       let switchSettled = false
-      const switchPromise = result.current.switchDocument(created!.id).then(() => {
+      const switchPromise = result.current.switchDocument(created!.documentId).then(() => {
         switchSettled = true
       })
 
@@ -847,7 +945,7 @@ describe('useBrowserLocalDocumentController', () => {
         await Promise.resolve()
       })
       expect(switchSettled).toBe(false)
-      expect(await store.getDefaultDocumentId()).toBe('c1')
+      expect(await store.getDefaultDocumentId()).toBe(C1)
 
       await act(async () => {
         rejectFirstSave(new Error('save failed'))
@@ -858,8 +956,8 @@ describe('useBrowserLocalDocumentController', () => {
       expect(result.current.persistence.kind).toBe('degraded')
       // The failed flush must abort the switch: default pointer stays on the
       // original canvas instead of silently losing the rename.
-      expect(await store.getDefaultDocumentId()).toBe('c1')
-      expect(result.current.snapshot?.id).toBe('c1')
+      expect(await store.getDefaultDocumentId()).toBe(C1)
+      expect(result.current.snapshot?.documentId).toBe(C1)
     })
 
     it('two concurrent flush waiters both observe the second save that starts once the first settles', async () => {
@@ -869,7 +967,7 @@ describe('useBrowserLocalDocumentController', () => {
       // and kick off a second save while the other observed an already-null
       // pendingSnapshotRef and returned true before the second save settled.
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
@@ -919,7 +1017,7 @@ describe('useBrowserLocalDocumentController', () => {
 
       // A concurrent switchDocument call is a third waiter on the same save #1.
       let switchSettled = false
-      const switchPromise = result.current.switchDocument(created!.id).then(() => {
+      const switchPromise = result.current.switchDocument(created!.documentId).then(() => {
         switchSettled = true
       })
 
@@ -933,7 +1031,7 @@ describe('useBrowserLocalDocumentController', () => {
       expect(saveCallCount).toBe(2)
       // switchDocument must still be waiting — save #2 has not settled yet.
       expect(switchSettled).toBe(false)
-      expect(await store.getDefaultDocumentId()).toBe('c1')
+      expect(await store.getDefaultDocumentId()).toBe(C1)
 
       // Now let save #2 settle and confirm switchDocument only proceeds after it does.
       await act(async () => {
@@ -942,9 +1040,9 @@ describe('useBrowserLocalDocumentController', () => {
       })
       expect(switchSettled).toBe(true)
       expect(result.current.persistence.kind).toBe('saved')
-      expect(result.current.snapshot?.id).toBe(created!.id)
-      expect(await store.getDefaultDocumentId()).toBe(created!.id)
-      const flushed = await store.load('c1')
+      expect(result.current.snapshot?.documentId).toBe(created!.documentId)
+      expect(await store.getDefaultDocumentId()).toBe(created!.documentId)
+      const flushed = await store.load(C1)
       expect(flushed).toEqual({
         kind: 'ok',
         snapshot: { ...snap, name: 'Second rename', updatedAt: expect.any(String) },
@@ -955,10 +1053,10 @@ describe('useBrowserLocalDocumentController', () => {
   describe('duplicateDocument', () => {
     it('creates a new canvas named "<name> (copy)", copies the Loro bytes, and switches to it', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
-      await loro.save('c1', realSnapshotWithElements([{ id: 'rect-1' }]))
+      await loro.save(C1, realSnapshotWithElements([{ id: 'rect-1' }]))
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
 
@@ -968,12 +1066,12 @@ describe('useBrowserLocalDocumentController', () => {
       })
 
       expect(duplicated?.name).toBe('untitled (copy)')
-      expect(duplicated?.id).not.toBe('c1')
+      expect(duplicated?.documentId).not.toBe(C1)
       // switched to the duplicate
-      expect(result.current.snapshot?.id).toBe(duplicated?.id)
-      expect(await store.getDefaultDocumentId()).toBe(duplicated?.id)
+      expect(result.current.snapshot?.documentId).toBe(duplicated?.documentId)
+      expect(await store.getDefaultDocumentId()).toBe(duplicated?.documentId)
 
-      const copiedLoro = await loro.load(duplicated!.id)
+      const copiedLoro = await loro.load(duplicated!.documentId)
       expect(copiedLoro.kind).toBe('ok')
       if (copiedLoro.kind === 'ok') {
         const doc = new Loro()
@@ -984,16 +1082,18 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('increments the numeric suffix when "(copy)" is already taken', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       await store.save({
-        id: 'existing-copy',
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FD2',
+        workspaceId: 'local',
+        path: 'untitled-2',
         name: 'untitled (copy)',
         updatedAt: snap.updatedAt,
         kind: 'spatial' as const,
       })
       const loro = new FakeLoroStore()
-      await loro.save('c1', realSnapshotWithElements([]))
+      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
 
@@ -1007,10 +1107,10 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('flushes a pending rename before duplicating, so the copy is named from the latest title', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
-      await loro.save('c1', realSnapshotWithElements([]))
+      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
 
@@ -1028,10 +1128,10 @@ describe('useBrowserLocalDocumentController', () => {
 
     it('rolls back the metadata row when the Loro write fails', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
-      await loro.save('c1', realSnapshotWithElements([]))
+      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
 
@@ -1048,17 +1148,17 @@ describe('useBrowserLocalDocumentController', () => {
 
       const list = await store.listDocuments()
       expect(list).toHaveLength(1)
-      expect(list[0].id).toBe('c1')
+      expect(list[0].documentId).toBe(C1)
       // Never switched away from the source canvas on failure.
-      expect(result.current.snapshot?.id).toBe('c1')
+      expect(result.current.snapshot?.documentId).toBe(C1)
     })
 
     it('duplicating twice never mutates the original: editing the source after duplicating leaves the copy unchanged', async () => {
       const store = new MemoryStore()
-      await store.setDefaultDocumentId('c1')
+      await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
-      await loro.save('c1', realSnapshotWithElements([{ id: 'original-element' }]))
+      await loro.save(C1, realSnapshotWithElements([{ id: 'original-element' }]))
       const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
       await act(async () => {})
 
@@ -1070,14 +1170,14 @@ describe('useBrowserLocalDocumentController', () => {
       // Edit the ORIGINAL's stored Loro bytes directly (simulating further
       // edits to the source canvas after duplicating) and confirm the
       // duplicate's already-copied bytes are untouched.
-      const loadedOriginal = await loro.load('c1')
+      const loadedOriginal = await loro.load(C1)
       if (loadedOriginal.kind !== 'ok') throw new Error('unexpected load failure')
       const originalDoc = new Loro()
       originalDoc.import(loadedOriginal.snapshot)
       originalDoc.getList('elements').push({ id: 'added-after-duplicate' })
-      await loro.save('c1', originalDoc.export({ mode: 'snapshot' }))
+      await loro.save(C1, originalDoc.export({ mode: 'snapshot' }))
 
-      const copiedLoro = await loro.load(duplicated!.id)
+      const copiedLoro = await loro.load(duplicated!.documentId)
       expect(copiedLoro.kind).toBe('ok')
       if (copiedLoro.kind === 'ok') {
         const doc = new Loro()

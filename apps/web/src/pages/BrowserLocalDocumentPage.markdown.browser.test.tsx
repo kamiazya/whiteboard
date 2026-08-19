@@ -17,7 +17,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IndexedDBStore, LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import { waitForMenuClosed } from '../test-utils/menu.js'
@@ -245,7 +245,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // canvas this flow started from.
     const entry = (await store.listDocuments()).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
-    const loaded = await new LoroStore().load(entry?.id ?? '')
+    const loaded = await new LoroStore().load(entry?.documentId ?? '')
     expect(loaded.kind).toBe('ok')
     if (loaded.kind === 'ok') {
       const doc = new Loro()
@@ -351,9 +351,11 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
     const store = new IndexedDBStore()
-    await store.setDefaultDocumentId('spatial-1')
+    await store.setDefaultDocumentId('0JNRVY147ADGKPSWZ258BEHMQT')
     await store.save({
-      id: 'spatial-1',
+      documentId: '0JNRVY147ADGKPSWZ258BEHMQT',
+      workspaceId: 'local',
+      path: 'diagram-a',
       name: 'Diagram A',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -400,9 +402,11 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     const store = new IndexedDBStore()
     // Distinctly-named spatial canvas so the round trip back to it is
     // unambiguous (the fresh markdown note is also 'untitled').
-    await store.setDefaultDocumentId('spatial-1')
+    await store.setDefaultDocumentId('0JNRVY147ADGKPSWZ258BEHMQT')
     await store.save({
-      id: 'spatial-1',
+      documentId: '0JNRVY147ADGKPSWZ258BEHMQT',
+      workspaceId: 'local',
+      path: 'diagram-a-2',
       name: 'Diagram A',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -448,14 +452,18 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   it("offers the page's own documents to the link picker", async () => {
     const store = new IndexedDBStore()
     await store.save({
-      id: '01ARZ3NDEKTSV4RRFFQ69G5FBB',
+      documentId: '0SWZ258BEHMQTX0369CFJNRVY1',
+      workspaceId: 'local',
+      path: 'neighbour-note',
       name: 'Neighbour note',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'markdown' as const,
     })
     const HERE = '01BX5ZZKBKACTAV9WEVGEMMVAA'
     await store.save({
-      id: HERE,
+      documentId: HERE,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'this-note',
       name: 'This note',
       updatedAt: '2026-05-24T00:00:01.000Z',
       kind: 'markdown' as const,
@@ -485,13 +493,17 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
     const store = new IndexedDBStore()
     await store.save({
-      id: TARGET_ID,
+      documentId: TARGET_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'target-note',
       name: 'Target note',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'markdown' as const,
     })
     await store.save({
-      id: SOURCE_ID,
+      documentId: SOURCE_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'source-note',
       name: 'Source note',
       updatedAt: '2026-05-24T00:00:01.000Z',
       kind: 'markdown' as const,
@@ -540,7 +552,9 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // Navigation lands on the target note's route.
     await waitFor(
       () => {
-        expect(screen.getByTestId('location-probe').textContent).toBe(`/local/${TARGET_ID}`)
+        // The link names the target by ID (so it survives a move); the address
+        // bar names it by PATH. Following one crosses that boundary.
+        expect(screen.getByTestId('location-probe').textContent).toBe('/local/target-note')
       },
       { timeout: 10_000 },
     )
@@ -551,13 +565,17 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
     const store = new IndexedDBStore()
     await store.save({
-      id: TARGET_ID,
+      documentId: TARGET_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'embed-target',
       name: 'Embed target',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'markdown' as const,
     })
     await store.save({
-      id: SOURCE_ID,
+      documentId: SOURCE_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'embed-source',
       name: 'Embed source',
       updatedAt: '2026-05-24T00:00:01.000Z',
       kind: 'markdown' as const,
@@ -609,7 +627,9 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     async function seedLegacyNote(store: IndexedDBStore, name: string): Promise<void> {
       await store.save({
-        id: LEGACY_ID,
+        documentId: LEGACY_ID,
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: 'legacy-note',
         name,
         updatedAt: '2026-05-24T00:00:00.000Z',
         kind: 'markdown' as const,
@@ -683,7 +703,9 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       const store = new IndexedDBStore()
       await seedLegacyNote(store, 'Legacy embed target')
       await store.save({
-        id: SOURCE_ID,
+        documentId: SOURCE_ID,
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: 'embed-source',
         name: 'Embed source',
         updatedAt: '2026-05-24T00:00:01.000Z',
         kind: 'markdown' as const,

@@ -109,6 +109,35 @@ token exchange. Until that lands, discovery is convenience, not proof.
 - Canvas identifiers are validated before they are mapped to file paths.
 - Export and upload flows stay within daemon-controlled storage paths unless explicitly extended.
 
+## Outbound requests (font installation — decided, not yet implemented)
+
+The daemon makes **no outbound network requests today**. Every MCP tool operates
+headlessly on persisted documents, and nothing fetches a remote resource.
+
+[ADR-0012](../contributing/adr/0012-user-installed-fonts.md) decides the first
+exception — installing a font the user chose — and the constraints below are
+what keep it from becoming a general-purpose request forwarder. They are
+recorded here because they are trust-boundary properties, not implementation
+detail.
+
+- **A family NAME is the input, never a URL.** The daemon builds the request
+  from a pinned template, so the reachable hosts are a property of the code
+  rather than of a validator over attacker-influenced input.
+- **Only a user triggers it — it is not an MCP tool.** The daemon is driven by
+  AI agents, and agents act on instructions found in the documents they read.
+  A network primitive reachable from a tool call completes the chain
+  *malicious document → agent → request into the user's network*. Keeping the
+  trigger human removes it rather than bounding it. Exposing installation to
+  MCP later requires re-deciding this, not extending it.
+- **Redirects are not followed**, since an allowed host answering `302` would
+  otherwise reach anywhere.
+- **The stored filename is derived by the daemon**, never taken from the URL or
+  a `Content-Disposition` header — the same rule as the export/upload paths
+  above.
+- **Size cap and timeout** bound a hostile or broken response.
+- **The bytes must parse as a font before anything is written.** A file that
+  `opentype.js` cannot parse never reaches the data directory.
+
 ## Browser-dependent operations
 
 No current MCP tool requires a connected browser client — canvas editing

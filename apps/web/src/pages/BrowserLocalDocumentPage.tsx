@@ -3,7 +3,7 @@ import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
@@ -101,10 +101,10 @@ interface BrowserLocalDocumentPageProps {
   // Defaults to browser-local so existing callers/tests keep working
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
-  // A canvas id requested by the URL at mount (e.g. a bookmarked
-  // /local/:documentId deep link), read once — see
+  // A document path requested by the URL at mount (e.g. a bookmarked
+  // /local/:path deep link), read once — see
   // useBrowserLocalDocumentController's own contract for the same parameter.
-  initialDocumentId?: string
+  initialPath?: string
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -124,7 +124,7 @@ export function BrowserLocalDocumentPage({
   store,
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
-  initialDocumentId,
+  initialPath,
 }: BrowserLocalDocumentPageProps) {
   const {
     loro: resolvedLoro,
@@ -139,7 +139,7 @@ export function BrowserLocalDocumentPage({
     createDocument,
     switchDocument,
     duplicateDocument,
-  } = useBrowserLocalDocumentController(store, loro, initialDocumentId)
+  } = useBrowserLocalDocumentController(store, loro, initialPath)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -229,14 +229,19 @@ export function BrowserLocalDocumentPage({
   // keeps everything ordinary.
   const missingFileRef = useMemo(() => {
     if (documents.length === 0) return undefined
-    const known = new Set(documents.map((entry) => entry.id))
+    const known = new Set(documents.map((entry) => entry.documentId))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
   // (editor + chrome), not just the Excalidraw canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
-  const documentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
+  // The loaded document's own path — the address the URL carries. Read off the
+  // snapshot rather than looked up in the list, so it is known at the same
+  // instant the id is, and so this effect does not re-fire every time the list
+  // refreshes (which would overwrite a Back the user just performed).
+  const documentPath = pageState.kind === 'editing' ? pageState.snapshot.path : null
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
@@ -257,7 +262,15 @@ export function BrowserLocalDocumentPage({
   // [[Name]] resolution for the markdown preview: display names from the
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
-  const resolveAlias = useMemo(() => createSnapshotAliasResolver(documents), [documents])
+  // `createSnapshotAliasResolver` takes {id, name}; a stored row now says
+  // `documentId`, so the projection is explicit rather than structural.
+  const resolveAlias = useMemo(
+    () =>
+      createSnapshotAliasResolver(
+        documents.map((entry) => ({ id: entry.documentId, name: entry.name })),
+      ),
+    [documents],
+  )
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -265,12 +278,44 @@ export function BrowserLocalDocumentPage({
   // it entirely right after it was created.
   const switcherOptions =
     pageState.kind === 'editing'
-      ? documents.some((c) => c.id === pageState.snapshot.id)
-        ? documents.map((c) => (c.id === pageState.snapshot.id ? pageState.snapshot : c))
+      ? documents.some((c) => c.documentId === pageState.snapshot.documentId)
+        ? documents.map((c) =>
+            c.documentId === pageState.snapshot.documentId ? pageState.snapshot : c,
+          )
         : [...documents, pageState.snapshot]
       : documents
+  // The URL and the file-node reference speak different addresses: a route
+  // carries a path (so the hierarchy is visible and it matches the daemon's),
+  // while a reference carries the document id (so it survives a move). These
+  // two are the only places that convert, and everything else stays in one
+  // vocabulary.
+  const pathOfDocument = useCallback(
+    (id: string) => switcherOptions.find((entry) => entry.documentId === id)?.path ?? null,
+    [switcherOptions],
+  )
+  const documentIdOfPath = useCallback(
+    (path: string) => switcherOptions.find((entry) => entry.path === path)?.documentId ?? null,
+    [switcherOptions],
+  )
+
+  // Following a [[reference]]: it names a document id, the address bar names a
+  // path. An id with no path is a document the list has not caught up with —
+  // do nothing rather than navigate somewhere wrong.
+  const navigateToDocument = useCallback(
+    (id: string) => {
+      const path = pathOfDocument(id)
+      if (path !== null) navigate(browserLocalDocumentPath(path))
+    },
+    [pathOfDocument, navigate],
+  )
+
   const linkTargets = useMemo(
-    () => switcherOptions.map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind })),
+    () =>
+      switcherOptions.map((entry) => ({
+        id: entry.documentId,
+        name: entry.name,
+        kind: entry.kind,
+      })),
     [switcherOptions],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
@@ -282,9 +327,9 @@ export function BrowserLocalDocumentPage({
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
   // /document/:workspaceId/:path contract). This page only mounts on
-  // /local/:documentId (App routes '/' to the list), so on a normal open the
+  // /local/:path (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
-  // exists for the stale-deep-link case: a bookmarked id that no longer
+  // exists for the stale-deep-link case: a bookmarked path that no longer
   // exists falls back to the default canvas, and repairing the URL with a
   // push would leave the dead link as a history entry behind it. Every
   // subsequent switch (via the switcher, or create-then-switch) pushes.
@@ -295,14 +340,14 @@ export function BrowserLocalDocumentPage({
   // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
-    if (documentId === null) return
-    const path = browserLocalDocumentPath(documentId)
+    if (documentPath === null) return
+    const path = browserLocalDocumentPath(documentPath)
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
     navigate(path, { replace: isFirstSync })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, navigate])
+  }, [documentPath, navigate])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -320,22 +365,51 @@ export function BrowserLocalDocumentPage({
   // the URL still names the previously-known canvas id, that's this
   // component's own pending push catching up, not an external navigation —
   // skip it and let the other effect finish the sync.
+  // Whether listDocuments has answered at least once. Read by the URL ->
+  // document effect to tell "this path does not exist" from "the list has not
+  // arrived", which look identical in `switcherOptions`.
+  const documentsEnumeratedRef = useRef(false)
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (documentId === null) return
-    const requestedId = parseBrowserLocalRoute(location.pathname)?.documentId
+    if (documentId === null || documentPath === null) return
+    // Recorded before any early return: a run that finds nothing to do still
+    // establishes which document was loaded, and the guard below reads it to
+    // tell an external navigation from this component's own pending push.
     const lastKnownDocumentId = lastKnownCanvasIdRef.current
     lastKnownCanvasIdRef.current = documentId
-    if (requestedId === undefined || requestedId === documentId) return
-    if (requestedId === lastKnownDocumentId) return
+
+    const requestedPath = parseBrowserLocalRoute(location.pathname)?.path
+    if (requestedPath === undefined) return
+    // Compared against the loaded snapshot's OWN path rather than against the
+    // list, so this is right before the list has arrived — which is also what
+    // makes the unknown-path branch below safe to treat as genuinely unknown.
+    if (requestedPath === documentPath) return
+
+    const requestedId = documentIdOfPath(requestedPath)
+    if (requestedId === documentId) return
+    if (requestedId !== null && requestedId === lastKnownDocumentId) return
+
+    // Two ways the address bar can name something that is not the loaded
+    // document, and both are the same recoverable miss: keep the document and
+    // repair the URL. The path resolves to nothing (deleted, or hand-typed),
+    // or it resolves and the switch then finds no record.
+    const repair = () => navigate(browserLocalDocumentPath(documentPath), { replace: true })
+    if (requestedId === null) {
+      // ...but only once the list has actually been enumerated. Until then it
+      // holds this document alone, so "absent" means "not known yet" and
+      // repairing would overwrite a navigation to a perfectly valid document
+      // with nothing to undo it. Leaving the address bar alone keeps the
+      // user's intent visible; recovering the switch itself once the list
+      // lands needs this effect's own-push guard restructured first, since it
+      // assumes one run per loaded document.
+      if (documentsEnumeratedRef.current) repair()
+      return
+    }
     void switchDocument(requestedId).then((switched) => {
-      // A stale deep link (deleted/unknown canvas) is a recoverable miss:
-      // keep the loaded canvas and repair the address bar instead of
-      // leaving a URL that names nothing.
-      if (!switched) navigate(browserLocalDocumentPath(documentId), { replace: true })
+      if (!switched) repair()
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, documentId, switchDocument])
+  }, [location.pathname, documentId, documentPath, switchDocument])
 
   useEffect(() => {
     if (documentId === null) return
@@ -343,6 +417,7 @@ export function BrowserLocalDocumentPage({
     listDocuments()
       .then((list) => {
         if (generation !== listGenerationRef.current) return
+        documentsEnumeratedRef.current = true
         setDocuments(list)
       })
       .catch((err: unknown) => {
@@ -405,7 +480,7 @@ export function BrowserLocalDocumentPage({
     canvas,
     adapter: BROWSER_LOCAL_FILE_ADAPTER,
     stampOf: useMemo(
-      () => new Map(documents.map((entry) => [entry.id, entry.updatedAt])),
+      () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
       [documents],
     ),
   })
@@ -721,21 +796,24 @@ export function BrowserLocalDocumentPage({
               }
               dataMode="local"
               workspaceId="local"
-              path={pageState.snapshot.id}
+              path={pageState.snapshot.path}
               documents={switcherOptions.map((c) => ({
-                path: c.id,
+                path: c.path,
                 name: c.name,
                 updatedAt: c.updatedAt,
               }))}
-              onNavigateToDocument={(id) => void switchDocument(id)}
+              onNavigateToDocument={(path) => {
+                const id = documentIdOfPath(path)
+                if (id !== null) void switchDocument(id)
+              }}
               onRenameDocument={renameDocument}
               onCreateDocument={async () => {
                 const created = await createDocument()
-                await switchDocument(created.id)
+                await switchDocument(created.documentId)
               }}
               onCreateMarkdownCanvas={async () => {
                 const created = await createDocument(undefined, 'markdown')
-                await switchDocument(created.id)
+                await switchDocument(created.documentId)
               }}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
@@ -795,7 +873,7 @@ export function BrowserLocalDocumentPage({
                   title: titleOf(documentName),
                   resolveAlias,
                   linkTargets,
-                  onOpenDocument: (id) => navigate(browserLocalDocumentPath(id)),
+                  onOpenDocument: (id) => navigateToDocument(id),
                   resolveEmbed,
                 }
           }
@@ -828,9 +906,16 @@ export function BrowserLocalDocumentPage({
                   // File-node reference = browser-local canvas id; the current
                   // canvas is excluded (a self-reference card is pure noise).
                   fileRefOptions={documents
-                    .filter((entry) => entry.id !== documentId)
-                    .map((entry) => ({ file: entry.id, label: entry.name, kind: entry.kind }))}
-                  onOpenFileRef={(file) => navigate(browserLocalDocumentPath(file))}
+                    .filter((entry) => entry.documentId !== documentId)
+                    .map((entry) => ({
+                      file: entry.documentId,
+                      label: entry.name,
+                      kind: entry.kind,
+                    }))}
+                  // A file-node reference names a document id exactly like a
+                  // [[wikiLink]] does, so it follows through the same one
+                  // conversion rather than repeating it here.
+                  onOpenFileRef={navigateToDocument}
                   missingFileRef={missingFileRef}
                   {...fileSeams}
                   lockedNodeIds={lockedNodeIds}
@@ -857,7 +942,7 @@ export function BrowserLocalDocumentPage({
                     linkTargets={linkTargets}
                     onCommit={nodeInEditor.commit}
                     onClose={nodeInEditor.close}
-                    onOpenDocument={(id) => navigate(browserLocalDocumentPath(id))}
+                    onOpenDocument={(id) => navigateToDocument(id)}
                   />
                 )}
               </div>

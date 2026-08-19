@@ -12,19 +12,6 @@ import type { LoroLoadResult } from '../../lib/loro-store.js'
 const MAX_CREATE_ATTEMPTS = 3
 
 /**
- * Converts a canvas display name into a path matching the server's
- * validateDocumentPath charset (ASCII letters/digits/hyphen, no leading/trailing
- * hyphen, non-empty). Falls back to 'canvas' when nothing survives.
- */
-export function toPathSegment(name: string): string {
-  const collapsed = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return collapsed === '' ? 'canvas' : collapsed
-}
-
-/**
  * Imports a Loro snapshot plus its delta log into a throwaway LoroDoc and
  * exports one combined snapshot — the shape the daemon's /update route
  * expects (a fresh doc.import(bytes) call, not a delta stream).
@@ -44,7 +31,7 @@ interface ImportOneDocumentOptions {
   fetch: typeof globalThis.fetch
   daemonBaseUrl: string
   workspaceId: string
-  documentName: string
+  documentPath: string
   documentKind: DocumentKind
   loroLoad: LoroLoadResult
 }
@@ -74,8 +61,9 @@ async function parseErrorTitle(res: Response): Promise<string> {
 
 /**
  * Copy-first import of a single browser-local canvas: create it on the
- * daemon (retrying with a numeric path suffix on a name collision, bounded
- * to MAX_CREATE_ATTEMPTS), then push the merged snapshot. Never mutates or
+ * daemon (retrying with a numeric path suffix when that path is already
+ * taken THERE, bounded to MAX_CREATE_ATTEMPTS), then push the merged
+ * snapshot. Never mutates or
  * deletes the source browser-local data — the caller owns that lifecycle.
  */
 export async function importOneDocument(
@@ -94,13 +82,17 @@ export async function importOneDocument(
 async function importOneDocumentUnsafe(
   options: ImportOneDocumentOptions,
 ): Promise<ImportOneDocumentResult> {
-  const { fetch, daemonBaseUrl, workspaceId, documentName, documentKind, loroLoad } = options
+  const { fetch, daemonBaseUrl, workspaceId, documentPath, documentKind, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {
     return { kind: 'failed', reason: loroLoadFailureReason(loroLoad.kind) }
   }
 
-  const baseSegment = toPathSegment(documentName)
+  // The local document's own path, carried across rather than derived from
+  // its display name. Deriving one is what ADR-0008 measured and rejected —
+  // every non-Latin title collapsed to `untitled-N` — and a local document
+  // has a real path now, so there is nothing left to derive.
+  const baseSegment = documentPath
   let createdPath: string | null = null
 
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {

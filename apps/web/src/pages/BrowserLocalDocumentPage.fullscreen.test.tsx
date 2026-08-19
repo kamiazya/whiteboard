@@ -37,7 +37,9 @@ function render(ui: ReactElement) {
 }
 
 const snap: DocumentSnapshot = {
-  id: 'c1',
+  documentId: '0PV05AFMSY38DJQW16BGNTZ49E',
+  workspaceId: 'local',
+  path: 'canvas-a',
   name: 'Canvas A',
   kind: 'spatial',
   updatedAt: '2026-04-23T00:00:00Z',
@@ -54,7 +56,7 @@ function setFullscreenElement(el: Element | null) {
 
 async function renderLoaded() {
   const store = new MemoryStore()
-  await store.setDefaultDocumentId('c1')
+  await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
   await act(async () => {
     render(<BrowserLocalDocumentPage store={store} />)

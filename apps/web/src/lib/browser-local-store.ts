@@ -1,6 +1,17 @@
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { documentSnapshotSchema } from './whiteboard-client.js'
+
+/**
+ * The one workspace a browser-local install has.
+ *
+ * It is a real value in every stored row rather than a literal in JSX,
+ * because a row that does not carry its workspace cannot be turned into the
+ * addresses the port contracts take. Local staying single-workspace is a
+ * product decision; being unable to SAY which workspace was an accident.
+ */
+export const LOCAL_WORKSPACE_ID = 'local'
 
 export type LoadResult =
   | { kind: 'ok'; snapshot: DocumentSnapshot }
@@ -10,6 +21,16 @@ export type LoadResult =
 export type DeleteResult =
   | { deleted: true }
   | { deleted: false; reason: 'pointer-mismatch' | 'not-found' }
+
+// A path is an address: the URL, the switcher and every [[reference]] follow
+// resolve a document through it. Two documents sharing one would make that
+// lookup answer with whichever row came first, so `save` refuses it.
+class DuplicatePathError extends Error {
+  constructor(readonly path: string) {
+    super(`another document already holds the path "${path}"`)
+    this.name = 'DuplicatePathError'
+  }
+}
 
 export interface BrowserLocalStore {
   getDefaultDocumentId(): Promise<string | null>
@@ -44,7 +65,19 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
-    this.documents.set(snapshot.id, snapshot)
+    // The in-memory store is used only by tests, and it is the one place a
+    // fixture the real store would REJECT can otherwise sail through:
+    // IndexedDBStore hydrates every read through documentSnapshotSchema and
+    // silently skips a row that fails it, so a test seeding a non-ULID id here
+    // would pass while production saw no document at all. Parsing on write
+    // makes that a loud failure in the test that wrote it.
+    documentSnapshotSchema.parse(snapshot)
+    for (const existing of this.documents.values()) {
+      if (existing.path === snapshot.path && existing.documentId !== snapshot.documentId) {
+        throw new DuplicatePathError(snapshot.path)
+      }
+    }
+    this.documents.set(snapshot.documentId, snapshot)
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
@@ -60,7 +93,7 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   generateId(): string {
-    return crypto.randomUUID()
+    return generateDocumentId()
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
@@ -121,7 +154,33 @@ export class IndexedDBStore implements BrowserLocalStore {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
-      tx.objectStore('documents').put(snapshot, snapshot.id)
+      const store = tx.objectStore('documents')
+      // ponytail: linear scan inside the write transaction. A unique index on
+      // `path` would be the database's own answer, but it costs a DB_VERSION
+      // bump and a migration that has to decide what to do with rows already
+      // colliding; move to one if a local store ever grows past a few hundred
+      // documents. The scan shares the transaction with the put, so no
+      // concurrent save can slip between the check and the write.
+      const scan = store.openCursor()
+      scan.onsuccess = () => {
+        const cursor = scan.result
+        if (cursor) {
+          const row = documentSnapshotSchema.safeParse(cursor.value)
+          if (
+            row.success &&
+            row.data.path === snapshot.path &&
+            row.data.documentId !== snapshot.documentId
+          ) {
+            tx.abort()
+            reject(new DuplicatePathError(snapshot.path))
+            return
+          }
+          cursor.continue()
+          return
+        }
+        store.put(snapshot, snapshot.documentId)
+      }
+      scan.onerror = () => reject(scan.error)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -197,7 +256,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   generateId(): string {
-    return crypto.randomUUID()
+    return generateDocumentId()
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {

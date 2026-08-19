@@ -43,13 +43,25 @@ const DB_NAME = 'whiteboard'
  * guarded no-op on every v3+ row, and running it inside the copy avoids two
  * cursors contending over the same source store.
  *
- * Known limitation (accepted, not handled): if another tab holds a
- * connection open at the previous version, this open blocks
- * (onblocked/onversionchange) until that tab closes or upgrades — the same
- * behavior every prior DB_VERSION bump in this file has had. No new handling
- * is added for it here.
+ * v7 -> v8: DISCARDS every document row that predates workspace+path
+ * addressing. A pre-v8 row carries only `{id, name, updatedAt, kind}` — no
+ * workspace, no path, and a `crypto.randomUUID()` id the model's canonical
+ * ULID schema refuses — so there is nothing to migrate it TO without
+ * inventing an address, and an invented address is worse than none: it is
+ * indistinguishable from one the user chose. Local documents are discardable
+ * by explicit decision (0.0.x, no users), so the row and its Loro record are
+ * deleted outright, and the default pointer is cleared when it named one of
+ * them. Deleting the bytes matters as much as the row: a Loro record no
+ * document names is unreachable storage nothing would ever collect.
+ *
+ * Cross-tab upgrades are handled rather than accepted from v8 on: every
+ * connection this module opens closes itself on `versionchange`, so a newer
+ * tab's upgrade is not blocked by an older one sitting idle, and a block that
+ * happens anyway (a tab still running a pre-v8 bundle) rejects with a
+ * message a caller can show instead of hanging on a request that never
+ * settles.
  */
-export const DB_VERSION = 7
+export const DB_VERSION = 8
 
 const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
   ['canvases', 'documents'],
@@ -65,8 +77,17 @@ const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
  * but calling it while the copy's cursor is still walking would kill the
  * source out from under the requests that have not run yet.
  */
-function copyStoreThenDelete(db: IDBDatabase, tx: IDBTransaction, from: string, to: string): void {
-  if (!db.objectStoreNames.contains(from)) return
+function copyStoreThenDelete(
+  db: IDBDatabase,
+  tx: IDBTransaction,
+  from: string,
+  to: string,
+  onDone: () => void,
+): void {
+  if (!db.objectStoreNames.contains(from)) {
+    onDone()
+    return
+  }
   const source = tx.objectStore(from)
   const target = tx.objectStore(to)
   const cursorReq = source.openCursor()
@@ -74,6 +95,7 @@ function copyStoreThenDelete(db: IDBDatabase, tx: IDBTransaction, from: string, 
     const cursor = cursorReq.result
     if (!cursor) {
       db.deleteObjectStore(from)
+      onDone()
       return
     }
     target.put(stripLegacySceneField(cursor.value), cursor.key)
@@ -91,6 +113,49 @@ function stripLegacySceneField(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || !('scene' in value)) return value
   const { scene: _scene, ...metadataOnly } = value as Record<string, unknown>
   return metadataOnly
+}
+
+/**
+ * True for a row already addressed the way v8 stores one.
+ *
+ * Written out rather than delegating to `documentSnapshotSchema`: a migration
+ * has to keep meaning what it meant on the day it ran, and a live schema is
+ * free to gain a required field later, which would silently turn this into a
+ * discard of rows it was never meant to touch. Guarded against a non-object
+ * value — a corrupt row must not throw out of an upgrade transaction, which
+ * would abort it and brick the database open.
+ */
+function isPathAddressed(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const row = value as Record<string, unknown>
+  return (
+    typeof row.documentId === 'string' &&
+    typeof row.workspaceId === 'string' &&
+    typeof row.path === 'string'
+  )
+}
+
+function discardPrePathDocuments(tx: IDBTransaction): void {
+  const documents = tx.objectStore('documents')
+  const loro = tx.objectStore('loroDocuments')
+  const meta = tx.objectStore('meta')
+  const cursorReq = documents.openCursor()
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result
+    if (!cursor) return
+    if (!isPathAddressed(cursor.value)) {
+      const key = cursor.primaryKey
+      cursor.delete()
+      loro.delete(key)
+      // Cleared only when it named THIS row: a blanket clear would log a user
+      // out of the documents that survive.
+      const pointer = meta.get('defaultDocumentId')
+      pointer.onsuccess = () => {
+        if (pointer.result === key) meta.delete('defaultDocumentId')
+      }
+    }
+    cursor.continue()
+  }
 }
 
 function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
@@ -122,10 +187,35 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
       const tx = req.transaction
       if (!tx) return
-      for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to)
       renameMetaKey(tx, 'defaultCanvasId', 'defaultDocumentId')
+      // The discard runs only once every rename copy has drained, because it
+      // walks the store those copies are still filling. Calling it beside them
+      // is NOT equivalent: a cursor opened while the copy's puts are still
+      // queued in their own callbacks sees an empty store, deletes nothing,
+      // and looks exactly like a successful upgrade. Measured — a v6 pre-path
+      // row survived a v6->v8 open until this was ordered.
+      let pendingCopies = RENAMED_STORES.length
+      const onCopyDone = () => {
+        pendingCopies -= 1
+        if (pendingCopies === 0) discardPrePathDocuments(tx)
+      }
+      for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      const db = req.result
+      // Without this, an idle tab holding an older version blocks every newer
+      // tab's upgrade until someone closes it — the connection has no reason
+      // to outlive the schema it was opened against.
+      db.onversionchange = () => db.close()
+      resolve(db)
+    }
+    // The request is not aborted by this rejection: if the blocking tab later
+    // closes, `onsuccess` still runs and opens a connection nobody holds. That
+    // is deliberately left alone rather than closed — the `onversionchange`
+    // handler above is set on it too, so it steps aside for the next upgrade
+    // or delete, which is the only harm an unowned connection can do here.
+    req.onblocked = () =>
+      reject(new Error('another tab has this app open at an older version; close it and reload'))
     req.onerror = () => reject(req.error)
   })
 }

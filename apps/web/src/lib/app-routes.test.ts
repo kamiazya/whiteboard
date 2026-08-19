@@ -123,8 +123,36 @@ describe('daemonRoutePath', () => {
 })
 
 describe('parseBrowserLocalRoute', () => {
-  it('parses a browser-local canvas route', () => {
-    expect(parseBrowserLocalRoute('/local/abc-123')).toEqual({ documentId: 'abc-123' })
+  it('parses a browser-local document route', () => {
+    expect(parseBrowserLocalRoute('/local/abc-123')).toEqual({ path: 'abc-123' })
+  })
+
+  // The whole reason this changed: a local document has a real path now, and
+  // a single-segment route cannot express one. Separators stay unencoded so
+  // the hierarchy is visible in the URL, exactly as the daemon's is.
+  it('parses a multi-segment path', () => {
+    expect(parseBrowserLocalRoute('/local/design/login')).toEqual({ path: 'design/login' })
+    expect(parseBrowserLocalRoute('/local/design/notes/kickoff')).toEqual({
+      path: 'design/notes/kickoff',
+    })
+  })
+
+  // The round trip alone is not enough: encoding the separator on the way out
+  // and decoding it on the way back in agree with each other and produce a
+  // URL that hides the hierarchy. Assert the STRING.
+  it('leaves separators unencoded and encodes only the segments', () => {
+    expect(browserLocalDocumentPath('design/login')).toBe('/local/design/login')
+    expect(browserLocalDocumentPath('a b/c')).toBe('/local/a%20b/c')
+    expect(parseBrowserLocalRoute(browserLocalDocumentPath('design/login'))).toEqual({
+      path: 'design/login',
+    })
+  })
+
+  // An empty segment would name nothing, and joined segments are what stop
+  // `..` being expressible.
+  it('refuses an empty segment', () => {
+    expect(parseBrowserLocalRoute('/local//login')).toBeNull()
+    expect(parseBrowserLocalRoute('/local/design//login')).toBeNull()
   })
 
   it('returns null for the bare /local index and unrelated paths', () => {
@@ -148,6 +176,7 @@ describe('malformed percent-encoding', () => {
 describe('isKnownAppPath', () => {
   it('accepts every route in the closed set', () => {
     for (const p of [
+      '/local/design/login',
       '/',
       '/w/ws1',
       '/w/ws1/document/main',
@@ -168,7 +197,9 @@ describe('isKnownAppPath', () => {
       '/nope',
       '/document/ws1/main',
       '/w/ws1/canvas',
-      '/local/a/b',
+      // `/local/a/b` used to be here: a local document had no path, so a
+      // second segment could only be a typo. It is a real address now.
+      '/local//b',
       '/w/',
       '/settings/nope',
     ]) {

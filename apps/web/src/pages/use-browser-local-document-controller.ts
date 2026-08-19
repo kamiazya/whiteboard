@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-browser-local.js'
+import { newDocumentPathIn, takenPathsIn } from '../components/workspace-files/new-document-path.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -53,23 +55,33 @@ export interface BrowserLocalDocumentController {
 }
 
 function createCanvasSnapshot(
-  id: string,
+  documentId: string,
+  path: string,
   name?: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
 ): DocumentSnapshot {
-  return { id, name: name?.trim() || 'untitled', updatedAt: new Date().toISOString(), kind }
+  return {
+    documentId,
+    workspaceId: LOCAL_WORKSPACE_ID,
+    path,
+    name: name?.trim() || 'untitled',
+    updatedAt: new Date().toISOString(),
+    kind,
+  }
 }
 
 export function useBrowserLocalDocumentController(
   store: BrowserLocalStore,
   loro: LoroStoreLike = new LoroStore(),
-  // A canvas id requested by the URL (e.g. a bookmarked /local/:documentId
-  // deep link), read once at mount. Takes priority over the store's own
+  // A document PATH requested by the URL (e.g. a bookmarked /local/:path
+  // deep link), read once at mount. The URL addresses a document the way the
+  // daemon does — by workspace-relative path, not by id — so this resolves
+  // through the list before loading. Takes priority over the store's own
   // "default canvas" pointer, which it also repoints on success so a later
   // plain (no deep link) load resumes here — the same contract switchDocument
-  // already has. A stale/deleted id falls back to the normal flow rather
+  // already has. A stale/moved path falls back to the normal flow rather
   // than showing an error: a dead bookmark must not dead-end the user.
-  initialDocumentId?: string,
+  initialPath?: string,
 ): BrowserLocalDocumentController {
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -154,13 +166,22 @@ export function useBrowserLocalDocumentController(
     let cancelled = false
 
     async function load() {
-      if (initialDocumentId !== undefined) {
-        const requested = await storeRef.current.load(initialDocumentId)
+      if (initialPath !== undefined) {
+        // A store that cannot list is indistinguishable from a path that is
+        // not there, and both fall through to the same place. Letting the read
+        // throw instead would dead-end EVERY deep link on a degraded store —
+        // and App mounts this page only with a path, so that is every mount.
+        const listed = await storeRef.current.listDocuments().catch(() => [])
         if (cancelled) return
-        if (requested.kind === 'ok') {
-          await storeRef.current.setDefaultDocumentId(initialDocumentId)
-          if (!cancelled) setSnapshot(requested.snapshot)
-          return
+        const requestedId = listed.find((entry) => entry.path === initialPath)?.documentId
+        if (requestedId !== undefined) {
+          const requested = await storeRef.current.load(requestedId)
+          if (cancelled) return
+          if (requested.kind === 'ok') {
+            await storeRef.current.setDefaultDocumentId(requestedId)
+            if (!cancelled) setSnapshot(requested.snapshot)
+            return
+          }
         }
         // Not found / corrupted: silently fall through to the normal
         // default-canvas flow below rather than showing a degraded banner —
@@ -172,7 +193,9 @@ export function useBrowserLocalDocumentController(
 
       if (id === null) {
         id = storeRef.current.generateId()
-        const newSnapshot = createCanvasSnapshot(id)
+        const taken = await takenPathsIn(storeRef.current)
+        if (cancelled) return
+        const newSnapshot = createCanvasSnapshot(id, newDocumentPathIn('', taken))
         await storeRef.current.setDefaultDocumentId(id)
         await storeRef.current.save(newSnapshot)
         if (!cancelled) setSnapshot(newSnapshot)
@@ -270,7 +293,8 @@ export function useBrowserLocalDocumentController(
   const startFresh = useCallback(async () => {
     setCleanupError(null)
     const id = storeRef.current.generateId()
-    const fresh = createCanvasSnapshot(id)
+    const taken = (await storeRef.current.listDocuments()).map((row) => row.path)
+    const fresh = createCanvasSnapshot(id, newDocumentPathIn('', taken))
     try {
       // Save the new canvas BEFORE repointing the default id, so a failed write never
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
@@ -321,7 +345,16 @@ export function useBrowserLocalDocumentController(
       kind: DocumentSnapshot['kind'] = 'spatial',
     ): Promise<DocumentSnapshot> => {
       const id = storeRef.current.generateId()
-      const fresh = createCanvasSnapshot(id, name, kind)
+      const existing = await storeRef.current.listDocuments()
+      const fresh = createCanvasSnapshot(
+        id,
+        newDocumentPathIn(
+          '',
+          existing.map((row) => row.path),
+        ),
+        name,
+        kind,
+      )
       // Metadata first, then the Loro doc: if the Loro write fails, the
       // metadata row is rolled back so a failed create never leaves an
       // orphan metadata row with no backing Loro doc.
@@ -409,7 +442,7 @@ export function useBrowserLocalDocumentController(
     const source = snapshotRef.current
     if (source === null) throw new Error('No canvas is open to duplicate.')
 
-    const loroResult = await loroRef.current.load(source.id)
+    const loroResult = await loroRef.current.load(source.documentId)
     if (loroResult.kind !== 'ok') {
       throw new Error('The canvas data could not be read for duplication.')
     }
@@ -420,7 +453,14 @@ export function useBrowserLocalDocumentController(
     const newName = deriveCopyName(source.name, existingNames)
 
     const id = storeRef.current.generateId()
-    const fresh = createCanvasSnapshot(id, newName)
+    const fresh = createCanvasSnapshot(
+      id,
+      newDocumentPathIn(
+        '',
+        existingList.map((row) => row.path),
+      ),
+      newName,
+    )
     await storeRef.current.save(fresh)
     try {
       await loroRef.current.save(id, mergedSnapshot)
