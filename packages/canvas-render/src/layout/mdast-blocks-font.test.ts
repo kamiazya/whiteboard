@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
 import type { Scene, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { GITHUB_MARKDOWN_THEME } from '../theme/markdown-theme.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
@@ -139,7 +139,7 @@ describe('layoutMdastBlocks — declared font family matches the measured one', 
     // prose run picking up the mono family would still fail here.
     for (const run of runs) {
       expect(run.appearance?.fontFamily, `run "${run.text}"`).toBe(
-        run.code === true ? GITHUB_MARKDOWN_THEME.monoFontFamily : 'OneFamily',
+        run.code === true ? MARKDOWN_THEME.monoFontFamily : 'OneFamily',
       )
     }
     expect(runs.some((run) => run.code === true)).toBe(true)
@@ -165,8 +165,8 @@ describe('measured-vs-declared font SIZE on markdown runs', () => {
     )
     const heading = runs.find((run) => run.text === 'Title')
     const body = runs.find((run) => run.text === 'body')
-    expect(heading?.appearance?.fontSize).toBe(32)
-    expect(body?.appearance?.fontSize).toBe(16)
+    expect(heading?.appearance?.fontSize).toBe(MARKDOWN_THEME.headingFontSizePx[1])
+    expect(body?.appearance?.fontSize).toBe(MARKDOWN_THEME.bodyFontSizePx)
   })
 
   it('list items draw their marker glyph (bullet / ordinal) as a measured run', () => {

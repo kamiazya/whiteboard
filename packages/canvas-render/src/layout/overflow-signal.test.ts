@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
 import type { Scene, ShapeSceneNode } from '../scene-graph.js'
 import { createCorpusMeasure } from '../test-utils/text-wrapping-corpus.js'
+import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
+import { BODY_LINE_HEIGHT_PX } from './mdast-blocks.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const APPEARANCE = {
@@ -168,12 +170,17 @@ describe('a box too small for even ONE line', () => {
     expect(runs(layout(32, ONE_LONG_PARAGRAPH)).at(-1)?.truncated).toBe(true)
   })
 
+  // Derived, not pinned: the box that "holds both lines" is a fact about the
+  // theme's line height plus the node padding, and a literal stops being that
+  // box the moment either moves.
+  const TWO_LINE_BOX_PX = Math.ceil(2 * BODY_LINE_HEIGHT_PX + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+
   it('leaves the same paragraph alone in a box that holds both lines', () => {
-    const painted = runs(layout(64, ONE_LONG_PARAGRAPH))
+    const painted = runs(layout(TWO_LINE_BOX_PX, ONE_LONG_PARAGRAPH))
 
     expect(painted.length).toBe(2)
     expect(painted.some((run) => run.truncated)).toBe(false)
-    expect(chrome(layout(64, ONE_LONG_PARAGRAPH)).truncated).toBeUndefined()
+    expect(chrome(layout(TWO_LINE_BOX_PX, ONE_LONG_PARAGRAPH)).truncated).toBeUndefined()
   })
 })
 

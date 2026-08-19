@@ -7,7 +7,6 @@ import type {
   Appearance,
   BoundingBox,
   CodeBlockNode,
-  HeadingBlockNode,
   ListItemNode,
   Scene,
   SceneNode,
@@ -237,34 +236,18 @@ function renderListItem(item: ListItemNode): string {
 function renderTableCell(cell: TableCellSceneNode): string {
   const tx = cell.bbox.x
   const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
-  // The border is drawn in the cell's OWN translated frame, so its x is 0
-  // rather than `bbox.x` — the same relative-coordinate rule the runs follow.
-  const border =
-    cell.appearance !== undefined && isFiniteBox(cell.bbox)
-      ? `<rect ${rectAttrs({ x: 0, y: cell.bbox.y, w: cell.bbox.w, h: cell.bbox.h })}${withLeadingSpace(appearanceAttrs(cell.appearance))} ${PRESENTATION_ATTR}/>`
-      : ''
-  return `<g${transform}>${border}${cell.runs.map(renderTextRun).join('')}</g>`
+  return `<g${transform}>${cell.runs.map(renderTextRun).join('')}</g>`
 }
 
 function renderTableRow(row: TableRowSceneNode): string {
-  // Stripe first: it is a full-width wash the cell borders must draw over.
-  const stripe =
+  // A hairline on the row's bottom edge is the whole of a table's chrome —
+  // no cell grid, no zebra wash. Drawn at the row's own y so it separates
+  // this row from the next rather than boxing either.
+  const separator =
     row.appearance !== undefined && isFiniteBox(row.bbox)
-      ? `<rect ${rectAttrs(row.bbox)}${withLeadingSpace(appearanceAttrs(row.appearance))} ${PRESENTATION_ATTR}/>`
+      ? `<rect ${rectAttrs({ x: row.bbox.x, y: row.bbox.y + row.bbox.h - 1, w: row.bbox.w, h: 1 })}${withLeadingSpace(appearanceAttrs(row.appearance))} ${PRESENTATION_ATTR}/>`
       : ''
-  return `<g>${stripe}${row.cells.map(renderTableCell).join('')}</g>`
-}
-
-/** The hairline under an h1/h2, along the block's bottom edge. */
-function renderHeadingRule(node: HeadingBlockNode): string {
-  if (node.rule === undefined || !isFiniteBox(node.bbox)) return ''
-  const box = {
-    x: node.bbox.x,
-    y: node.bbox.y + node.bbox.h - node.rule.h,
-    w: node.bbox.w,
-    h: node.rule.h,
-  }
-  return `<rect ${rectAttrs(box)}${withLeadingSpace(appearanceAttrs(node.rule.appearance))} ${PRESENTATION_ATTR}/>`
+  return `<g>${separator}${row.cells.map(renderTableCell).join('')}</g>`
 }
 
 /**
@@ -372,7 +355,7 @@ function renderNode(node: SceneNode): string {
     case 'textRun':
       return renderTextRun(node)
     case 'heading':
-      return `<g>${node.runs.map(renderTextRun).join('')}${renderHeadingRule(node)}</g>`
+      return `<g>${node.runs.map(renderTextRun).join('')}</g>`
     case 'paragraph':
       return `<g>${node.runs.map(renderTextRun).join('')}</g>`
     case 'list':

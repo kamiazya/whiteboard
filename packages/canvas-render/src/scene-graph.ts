@@ -147,12 +147,6 @@ export interface HeadingBlockNode {
   readonly bbox: BoundingBox
   readonly level: 1 | 2 | 3 | 4 | 5 | 6
   readonly runs: readonly TextRunNode[]
-  /**
-   * Hairline rule along the block's bottom edge, `rule.h` tall. Carried as
-   * geometry rather than a boolean so the theme owns the thickness and the
-   * backend stays a serializer.
-   */
-  readonly rule?: { readonly h: number; readonly appearance: Appearance }
 }
 
 export interface ParagraphBlockNode {
@@ -228,7 +222,10 @@ export interface TableRowSceneNode {
   readonly cells: readonly TableCellSceneNode[]
   /** True for the header row, whose cells are laid out bold. */
   readonly header?: boolean
-  /** Zebra fill painted under the row, behind its cells' borders. */
+  /**
+   * Hairline separator along the row's BOTTOM edge — the whole of a table's
+   * chrome. Absent on the last row, which needs no line under it.
+   */
   readonly appearance?: Appearance
 }
 

@@ -138,7 +138,10 @@ describe('frame containment scoreboard', () => {
  * three cells are contained now, and the remaining ten are the irreducible
  * case where a single line is taller than the box.
  *
- * `hidden: 3` is `ja-heading` at 0.4, where a whole heading block is dropped
- * rather than shown crossing the frame.
+ * `hidden` was 3 — `ja-heading` at 0.4, where a whole heading block is
+ * dropped rather than shown crossing the frame. Compressing the heading
+ * scale for node width (32/24/20 -> 24/20/17) made that heading short enough
+ * to keep, so it is 2. An improvement in the figure, not a re-pin: nothing
+ * about hiding changed, the content simply fits now.
  */
-const PINNED_DEBT: Debt = { hidden: 3, crossed: 10 }
+const PINNED_DEBT: Debt = { hidden: 2, crossed: 10 }

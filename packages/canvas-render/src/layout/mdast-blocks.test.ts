@@ -1,6 +1,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
@@ -424,8 +425,11 @@ describe('layoutMdastBlocks — text run baseline', () => {
     // the surplus splits evenly above and below, so the baseline sits at
     // (lineHeight - fontSize) / 2 + ascent rather than at the ascent alone.
     // A heading's line height is 1.25 (fake measure: ascent = fontSize * 0.8).
-    const lineHeightPx = 32 * 1.25
-    expect(run.baseline).toBe((lineHeightPx - 32) / 2 + 32 * 0.8)
+    // Read from the theme rather than pinned: the RULE is what this test
+    // guards, and a literal here goes stale on every type-scale change.
+    const fontSizePx = MARKDOWN_THEME.headingFontSizePx[1]
+    const lineHeightPx = fontSizePx * MARKDOWN_THEME.headingLineHeight
+    expect(run.baseline).toBe((lineHeightPx - fontSizePx) / 2 + fontSizePx * 0.8)
     expect(run.bbox.h).toBe(lineHeightPx)
     // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds
     // keeps measuring a true top-left box.
@@ -902,9 +906,9 @@ describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   it('keeps every run inside the panel, not merely inside the node', () => {
     const scene = layoutMdastBlocks(root, { ...options, maxWidth })
     const code = scene.nodes.find((node) => node.kind === 'codeBlock')
-    if (code?.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
     const panelRight = code.bbox.x + code.bbox.w
-    for (const run of code.runs) {
+    for (const run of code.runs ?? []) {
       expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(panelRight)
     }
   })
@@ -912,9 +916,9 @@ describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   it('marks the run it cut, and leaves the one that fits alone', () => {
     const scene = layoutMdastBlocks(root, { ...options, maxWidth })
     const code = scene.nodes.find((node) => node.kind === 'codeBlock')
-    if (code?.kind !== 'codeBlock') throw new Error('expected a codeBlock')
-    expect(code.runs.map((run) => run.truncated)).toEqual([true, undefined])
-    expect(code.runs[1]?.text).toBe('ok()')
+    if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    expect((code.runs ?? []).map((run) => run.truncated)).toEqual([true, undefined])
+    expect(code.runs?.[1]?.text).toBe('ok()')
   })
 })
 

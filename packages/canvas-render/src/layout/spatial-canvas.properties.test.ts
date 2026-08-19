@@ -307,12 +307,14 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     // and the cut granularity `fitBlocksToHeight` offers — the finer the cut,
     // the less height the body needs and the narrower the card's window.
     // Re-probe it after touching either; do not nudge the number until the
-    // test passes. Measured at 200px wide: <= 40 shows the label, 41-45 is
-    // card-only, >= 46 renders the body. 43 sits mid-band on purpose, because
+    // test passes. Measured at 200px wide: <= 37 shows the label, 38-40 is
+    // card-only, >= 41 renders the body. 39 sits mid-band on purpose, because
     // an example pinned to a boundary reports a rounding change as a ranking
-    // bug.
+    // bug. The window has narrowed from five px to three as the type scale
+    // tightened, which is the comment above in action rather than a defect —
+    // a body that needs less height leaves the card less room to win in.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 43, file: 'a.md' }],
+      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 39, file: 'a.md' }],
       edges: [],
     }
     const text = collectRunText(
@@ -330,7 +332,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
 
   it('lets a small node degrade to the card while a bigger sibling renders the body', () => {
     // Two `a.md` file nodes differing only in height: 200x56 fits the
-    // markdown body, 200x43 does not and falls through to the card.
+    // markdown body, 200x39 does not and falls through to the card.
     // Both outcomes are correct, and a canvas-wide "no Card anywhere"
     // assertion called the pair a bug — this pins the mixed-size canvas the
     // property below now judges node by node. The heights sit either side of
@@ -338,7 +340,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     // boundary.
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 43, file: 'a.md' },
+        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 39, file: 'a.md' },
         { id: 'big', type: 'file', x: 0, y: 0, width: 200, height: 56, file: 'a.md' },
       ],
       edges: [],

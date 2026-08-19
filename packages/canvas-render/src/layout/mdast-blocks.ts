@@ -32,7 +32,7 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
-import { GITHUB_MARKDOWN_THEME } from '../theme/markdown-theme.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { jaModel } from '../vendor/budoux/ja-model.js'
 import { Parser } from '../vendor/budoux/parser.js'
 import { fitToWidth } from './truncate.js'
@@ -43,7 +43,7 @@ import { fitToWidth } from './truncate.js'
  * rest of the file reads as geometry rather than as a table of numbers, and
  * so restyling stays a data change.
  */
-const T = GITHUB_MARKDOWN_THEME
+const T = MARKDOWN_THEME
 const HEADING_FONT_SIZE_PX = T.headingFontSizePx
 export const BODY_FONT_SIZE_PX = T.bodyFontSizePx
 const BLOCK_GAP_PX = T.blockGapPx
@@ -62,19 +62,14 @@ const CODE_FONT_SIZE_PX = T.bodyFontSizePx * T.codeFontScale
 const CODE_LINE_HEIGHT_PX = CODE_FONT_SIZE_PX * T.codeLineHeight
 const THEMATIC_BREAK_HEIGHT_PX = T.thematicBreakHeightPx
 
-/** Chrome drawn as a filled panel (code backgrounds, table stripes). */
+/**
+ * Every piece of markdown chrome, drawn as one neutral at an opacity: the
+ * code surface, the blockquote rail, a table's row separators, the thematic
+ * break. There is no stroked variant — a markdown body draws surfaces and
+ * hairlines, never an outline around content.
+ */
 function panelPaint(opacity: number): Appearance {
   return { fill: T.chromeColor, fillOpacity: opacity }
-}
-
-/** Chrome drawn as a stroked outline (table cell borders). */
-function borderPaint(): Appearance {
-  return {
-    fill: 'none',
-    stroke: T.chromeColor,
-    strokeOpacity: T.borderOpacity,
-    strokeWidth: T.borderWidthPx,
-  }
 }
 
 /**
@@ -730,16 +725,12 @@ function layoutBlock(
         {},
         lineHeightPx,
       )
-      const ruled = T.ruledHeadingLevels.includes(node.depth)
-      // GitHub's `padding-bottom: .3em` between the text and the rule.
-      const rulePadPx = ruled ? fontSizePx * 0.3 + T.borderWidthPx : 0
-      const height = lineCount * lineHeightPx + rulePadPx
+      const height = lineCount * lineHeightPx
       const heading: HeadingBlockNode = {
         kind: 'heading',
         bbox: { x: cursor.x, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         level: node.depth,
         runs,
-        ...(ruled ? { rule: { h: T.borderWidthPx, appearance: panelPaint(T.borderOpacity) } } : {}),
       }
       cursor.y += height + BLOCK_GAP_PX
       return heading
@@ -919,7 +910,7 @@ function layoutBlock(
         // starts its zebra on the row after, so the parity check counts
         // from the header exactly as `tr:nth-child(2n)` does.
         const header = rowIndex === 0
-        const striped = rowIndex % 2 === 1
+        const last = rowIndex === node.children.length - 1
         let x = cursor.x
         // Cells are laid out BEFORE the row has a height: a column narrow
         // enough to wrap its content is reachable (tableColumnWidths scales
@@ -945,7 +936,6 @@ function layoutBlock(
           kind: 'tableCell',
           bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
           runs: cell.runs,
-          appearance: borderPaint(),
         }))
         cursor.y += rowHeight
         return {
@@ -953,7 +943,7 @@ function layoutBlock(
           bbox: { x: cursor.x, y: rowY, w: tableWidth, h: rowHeight },
           cells,
           ...(header ? { header: true } : {}),
-          ...(striped ? { appearance: panelPaint(T.tableStripeOpacity) } : {}),
+          ...(last ? {} : { appearance: panelPaint(T.borderOpacity) }),
         }
       })
       cursor.y += BLOCK_GAP_PX

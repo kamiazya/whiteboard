@@ -27,12 +27,6 @@ export interface MarkdownTheme {
   /** Headings pack tighter than prose, as they do on GitHub. */
   readonly headingLineHeight: number
   readonly headingFontSizePx: Readonly<Record<1 | 2 | 3 | 4 | 5 | 6, number>>
-  /**
-   * Heading levels that get a hairline rule under them. GitHub rules h1 and
-   * h2 only; that single line is most of what makes a long document scan as
-   * sections rather than as a wall of larger text.
-   */
-  readonly ruledHeadingLevels: readonly (1 | 2 | 3 | 4 | 5 | 6)[]
   /** Gap below every block (GitHub's uniform 16px `margin-bottom`). */
   readonly blockGapPx: number
   /**
@@ -82,20 +76,20 @@ export interface MarkdownTheme {
   readonly borderOpacity: number
   /** Applied to the INHERITED text fill for de-emphasised runs. */
   readonly mutedTextOpacity: number
-  /** Zebra striping on a table's even body rows. */
-  readonly tableStripeOpacity: number
 }
 
-export const GITHUB_MARKDOWN_THEME: MarkdownTheme = Object.freeze({
+export const MARKDOWN_THEME: MarkdownTheme = Object.freeze({
   bodyFontSizePx: 16,
-  bodyLineHeight: 1.5,
+  bodyLineHeight: 1.55,
   headingLineHeight: 1.25,
-  // GitHub's `em` scale against a 16px root: 2 / 1.5 / 1.25 / 1 / .875 / .85.
-  headingFontSizePx: Object.freeze({ 1: 32, 2: 24, 3: 20, 4: 16, 5: 14, 6: 14 }),
-  ruledHeadingLevels: Object.freeze([1, 2] as const),
-  blockGapPx: 16,
-  headingSpaceAbovePx: 24,
-  listIndentPx: 32,
+  // Compressed for a node rather than a page: a 32px h1 takes a third of a
+  // 280px box before a word of content lands. h4-h6 never drop BELOW body
+  // size — a heading set smaller than the prose under it reads as a rendering
+  // fault on a canvas; rank below h3 comes from weight instead.
+  headingFontSizePx: Object.freeze({ 1: 24, 2: 20, 3: 17, 4: 16, 5: 16, 6: 16 }),
+  blockGapPx: 12,
+  headingSpaceAbovePx: 18,
+  listIndentPx: 22,
   listMarkerGapPx: 8,
   listItemGapPx: 4,
   monoFontFamily:
@@ -108,12 +102,11 @@ export const GITHUB_MARKDOWN_THEME: MarkdownTheme = Object.freeze({
   blockquoteGapPx: 16,
   tableCellPaddingXPx: 13,
   tableCellPaddingYPx: 6,
-  thematicBreakHeightPx: 4,
+  thematicBreakHeightPx: 1,
   borderWidthPx: 1,
   cornerRadiusPx: 6,
   chromeColor: '#818b98',
   panelOpacity: 0.12,
   borderOpacity: 0.35,
   mutedTextOpacity: 0.7,
-  tableStripeOpacity: 0.06,
 })
