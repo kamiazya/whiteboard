@@ -1245,7 +1245,10 @@ describe('wb_canvas_edit — a node created without a height', () => {
 
     // The fixture has to out-grow the default, or this asserts nothing.
     expect(needs).toBeGreaterThan(DEFAULT_TEXT_HEIGHT)
-    expect(node.height).toBeGreaterThanOrEqual(needs)
+    // EXACTLY what it needs. A lower bound would also accept extra height,
+    // and height is placement geometry — a node taller than its content
+    // pushes whatever the cursor lays out after it.
+    expect(node.height).toBe(needs)
   })
 
   test('respects a height that was named, however small', async () => {
