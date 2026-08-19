@@ -29,8 +29,13 @@ describe('generateDocumentId', () => {
 
     generateDocumentId()
 
-    expect(getRandomValues).toHaveBeenCalled()
     expect(random).not.toHaveBeenCalled()
+    // The QUANTITY is the point, not just the source: one byte per character.
+    // Asking for four and stretching them across sixteen characters would
+    // keep the source check green while dropping 80 bits of entropy to 32.
+    const [bytes] = getRandomValues.mock.calls[0] ?? []
+    expect(bytes).toBeInstanceOf(Uint8Array)
+    expect(bytes).toHaveLength(16)
   })
 
   // 256 is a whole multiple of the 32-character alphabet, so a byte taken
