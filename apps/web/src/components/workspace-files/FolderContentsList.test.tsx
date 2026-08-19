@@ -15,8 +15,8 @@ describe('FolderContentsList', () => {
   it('lists one level: this folder’s documents and its child folders', () => {
     render(<FolderContentsList documents={docs} folder="design" onOpen={vi.fn()} />)
 
-    const rows = screen.getAllByRole('listitem').map((li) => li.textContent)
-    expect(rows).toEqual(['notes1', 'Login'])
+    const rows = screen.getAllByTestId('card-title').map((el) => el.textContent)
+    expect(rows).toEqual(['notes', 'Login'])
   })
 
   it('opens a document by its entry and a folder by its path', () => {
@@ -61,7 +61,7 @@ describe('FolderContentsList', () => {
         documents={docs}
         folder="design"
         onOpen={vi.fn()}
-        renderIcon={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
+        renderThumbnail={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
       />,
     )
     expect(screen.getByTestId('custom-icon').textContent).toBe('d1')
@@ -78,9 +78,42 @@ describe('FolderContentsList', () => {
     ).toBe('spatial')
   })
 
+  // The card carries the folder's own count, which is what makes a folder
+  // worth clicking into rather than a guess.
+  it('says how much is inside a folder', () => {
+    render(<FolderContentsList documents={docs} folder="design" onOpen={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Open folder notes' }).textContent).toContain('1')
+  })
+
+  // The card says what the document is and how stale it is — the two things
+  // a name alone cannot tell you when forty of them are on screen.
+  it('says a document’s kind and age on its card', () => {
+    const dated: WorkspaceDocumentEntry[] = [
+      {
+        documentId: 'd1',
+        path: 'design/login',
+        name: 'Login',
+        kind: 'markdown',
+        updatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      },
+    ]
+    render(<FolderContentsList documents={dated} folder="design" onOpen={vi.fn()} />)
+    // The subtitle specifically: the placeholder standing in for a missing
+    // thumbnail also prints the kind, so asserting on the whole card would
+    // pass with the subtitle saying nothing at all.
+    expect(screen.getByTestId('card-subtitle').textContent).toBe('markdown · 2d ago')
+  })
+
+  // A daemon that does not record the time must not make the card say
+  // something false about it.
+  it('carries no age when the daemon did not record one', () => {
+    render(<FolderContentsList documents={docs} folder="design" onOpen={vi.fn()} />)
+    expect(screen.getAllByTestId('card-subtitle')[0]?.textContent).toBe('markdown')
+  })
+
   it('labels a document by its path segment when nobody named it', () => {
     const unnamed: WorkspaceDocumentEntry[] = [{ documentId: 'd9', path: 'design/untitled-3' }]
     render(<FolderContentsList documents={unnamed} folder="design" onOpen={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /untitled-3/ }).textContent).toBe('untitled-3')
+    expect(screen.getByTestId('card-title').textContent).toBe('untitled-3')
   })
 })

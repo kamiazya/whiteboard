@@ -1,14 +1,15 @@
-import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
+import { ChevronRight, Folder } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { cn } from '../../lib/utils.js'
+import { formatRelative } from '../document-list/DocumentListView.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { folderContents } from './folder-contents.js'
 
 /**
- * What a click in the middle pane means. A folder and a document are opened
- * by different panes — one moves the browser, the other fills the preview —
- * so the list reports which it was rather than taking two handlers that a
- * caller could wire to the same place.
+ * What a click in the contents pane means. A folder and a document are
+ * opened by different panes — one moves the browser, the other fills the
+ * preview — so the list reports which it was rather than taking two handlers
+ * a caller could wire to the same place.
  */
 export type FolderContentsOpen =
   | { kind: 'folder'; path: string }
@@ -21,9 +22,19 @@ export interface FolderContentsListProps {
   onOpen: (target: FolderContentsOpen) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
-  /** A row's miniature — the same capability slot the tree takes. */
-  renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
+  /**
+   * A card's picture. This component neither fetches nor renders, so a
+   * caller with no daemon to read from still gets a working list — with the
+   * kind label the list already carries.
+   */
+  renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
+}
+
+/** `markdown · 2d ago`, dropping whichever half the daemon did not record. */
+function cardSubtitle(entry: WorkspaceDocumentEntry): string {
+  const age = entry.updatedAt === undefined ? '' : formatRelative(entry.updatedAt)
+  return [entry.kind ?? '', age].filter((part) => part !== '').join(' · ')
 }
 
 export function FolderContentsList({
@@ -31,7 +42,7 @@ export function FolderContentsList({
   folder,
   onOpen,
   selectedPath,
-  renderIcon,
+  renderThumbnail,
   className,
 }: FolderContentsListProps) {
   const { folders, documents: here } = useMemo(
@@ -44,23 +55,31 @@ export function FolderContentsList({
   }
 
   return (
-    <ul className={cn('space-y-0.5', className)}>
+    <ul
+      className={cn('grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 p-0.5', className)}
+    >
       {folders.map((child) => (
         <li key={child.path}>
           <button
             type="button"
             aria-label={`Open folder ${child.name}`}
             onClick={() => onOpen({ kind: 'folder', path: child.path })}
-            className="hover:bg-accent hover:text-accent-foreground flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-sm"
+            className="hover:bg-accent flex w-full flex-col overflow-hidden rounded-md border text-left"
           >
-            <Folder className="text-muted-foreground size-4 shrink-0" />
-            <span className="truncate">{child.name}</span>
-            {/* How much is inside, so a folder is not a blind alley to click
-                into — and the chevron says this row navigates. */}
-            <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
-              {child.count}
+            <span className="bg-muted/40 text-muted-foreground flex h-16 w-full items-center justify-center">
+              <Folder className="size-7" />
             </span>
-            <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+            <span className="flex min-w-0 items-center gap-1 px-2 py-1.5">
+              <span data-testid="card-title" className="truncate text-sm">
+                {child.name}
+              </span>
+              {/* How much is inside, so a folder is not a blind alley to
+                  click into — and the chevron says this card navigates. */}
+              <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+                {child.count}
+              </span>
+              <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+            </span>
           </button>
         </li>
       ))}
@@ -70,21 +89,29 @@ export function FolderContentsList({
             type="button"
             aria-current={entry.path === selectedPath ? 'true' : undefined}
             onClick={() => onOpen({ kind: 'document', document: entry })}
-            className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-sm"
+            className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
           >
-            {renderIcon?.(entry) ??
-              (entry.kind === 'spatial' ? (
-                <LayoutGrid data-kind="spatial" className="text-muted-foreground size-4 shrink-0" />
-              ) : (
-                <FileText
+            <span className="bg-muted/40 flex h-16 w-full items-center justify-center overflow-hidden">
+              {renderThumbnail?.(entry) ?? (
+                <span
                   data-kind={entry.kind ?? 'markdown'}
-                  className="text-muted-foreground size-4 shrink-0"
-                />
-              ))}
-            {/* The display name is the label everywhere else; the segment is
-                the fallback for a document nobody named, never a name
-                invented from the path. */}
-            <span className="truncate">{entry.name ?? entry.path.split('/').at(-1)}</span>
+                  className="text-muted-foreground text-xs"
+                >
+                  {entry.kind ?? 'markdown'}
+                </span>
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col px-2 py-1.5">
+              {/* The display name is the label everywhere else; the segment
+                  is the fallback for a document nobody named, never a name
+                  invented from the path. */}
+              <span data-testid="card-title" className="truncate text-sm">
+                {entry.name ?? entry.path.split('/').at(-1)}
+              </span>
+              <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
+                {cardSubtitle(entry)}
+              </span>
+            </span>
           </button>
         </li>
       ))}

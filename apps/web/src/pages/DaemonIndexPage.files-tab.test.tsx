@@ -140,14 +140,15 @@ describe('DaemonIndexPage tree view', () => {
       expect(screen.getByTestId('folder-contents').textContent).toContain('design')
     })
 
-    // And the preview comes from a click in the middle pane, not the tree.
+    // And the preview is filled from a click in the contents pane, not the
+    // sidebar. It shows the document itself — jsdom has no worker, so the
+    // drawing is a browser test's job; what belongs here is that the pane is
+    // now ABOUT the selected document.
     fireEvent.click(
-      screen
-        .getByTestId('folder-contents')
-        .querySelector<HTMLButtonElement>('button') as HTMLButtonElement,
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
     )
     await waitFor(() => {
-      expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
     })
   })
 
@@ -171,14 +172,14 @@ describe('DaemonIndexPage tree view', () => {
       within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
     )
     await waitFor(() => {
-      expect(screen.getByTestId('okf-preview').textContent).toContain('# Palette decisions')
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
     await waitFor(() => {
-      expect(screen.getByTestId('okf-preview').textContent).toContain('Select a document')
+      expect(screen.queryByTestId('okf-preview')).toBeNull()
     })
-    expect(screen.getByTestId('okf-preview').textContent).not.toContain('# Palette decisions')
+    expect(screen.getByText(/Select a document/)).not.toBeNull()
   })
 
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {

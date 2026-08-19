@@ -15,4 +15,6 @@ export interface WorkspaceDocumentEntry {
   readonly name?: string
   /** Which editor opens it, and which shape its icon takes. */
   readonly kind?: 'spatial' | 'markdown'
+  /** Absent for a daemon that does not record it; the card then carries no age. */
+  readonly updatedAt?: string
 }

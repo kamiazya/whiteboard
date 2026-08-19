@@ -387,6 +387,7 @@ export function DaemonIndexPage({
                 daemonFetch={daemonFetch}
                 daemonBaseUrl={daemonBaseUrl}
                 workspaceId={selectedWorkspace}
+                onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
               />
             </div>
           ) : (
