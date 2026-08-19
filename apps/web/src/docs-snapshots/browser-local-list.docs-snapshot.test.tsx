@@ -27,19 +27,25 @@ describe('docs snapshot: browser-local canvas list', () => {
     const store = new MemoryStore()
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
     await store.save({
-      id: 'id-a',
+      documentId: '0RVY147ADGKPSWZ258BEHMQTX0',
+      workspaceId: 'local',
+      path: 'meeting-notes',
       name: 'Meeting notes',
       updatedAt: '2026-05-01T12:00:00.000Z',
       kind: 'markdown',
     })
     await store.save({
-      id: 'id-b',
+      documentId: '0Z258BEHMQTX0369CFJNRVY147',
+      workspaceId: 'local',
+      path: 'trip-plan',
       name: 'Trip plan',
       updatedAt: '2026-04-30T12:00:00.000Z',
       kind: 'spatial',
     })
     await store.save({
-      id: 'id-c',
+      documentId: '069CFJNRVY147ADGKPSWZ258BE',
+      workspaceId: 'local',
+      path: 'sketches',
       name: 'Sketches',
       updatedAt: '2026-04-27T12:00:00.000Z',
       kind: 'spatial',

@@ -5,7 +5,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IndexedDBStore, LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 
 type OnChange = (next: SpatialCanvas, command: unknown) => void
@@ -43,7 +43,9 @@ describe('open in editor (page seam)', () => {
     const id = '01ARZ3NDEKTSV4RRFFQ69G5FCC'
     const store = new IndexedDBStore()
     await store.save({
-      id,
+      documentId: id,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'board',
       name: 'Board',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,

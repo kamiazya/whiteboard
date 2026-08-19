@@ -231,7 +231,7 @@ export function App({ providerState }: AppProps) {
   // initialDocumentId a single time), so App re-routes only when the URL
   // crosses the list/editor boundary — including browser Back from the
   // editor to the list.
-  const browserLocalDocumentId = parseBrowserLocalRoute(location.pathname)?.documentId
+  const browserLocalPath = parseBrowserLocalRoute(location.pathname)?.path
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -625,20 +625,20 @@ export function App({ providerState }: AppProps) {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-            {browserLocalDocumentId === undefined ? (
+            {browserLocalPath === undefined ? (
               // '/' (and any non-/local path) lands on the canvas list. The
-              // editor mounts only for /local/:documentId, whose in-editor
+              // editor mounts only for /local/:path, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
               <BrowserLocalIndexPage
                 store={browserLocalStore}
-                onOpenDocument={(id) => navigate(browserLocalDocumentPath(id))}
+                onOpenDocument={(path) => navigate(browserLocalDocumentPath(path))}
               />
             ) : (
               <BrowserLocalDocumentPage
                 store={browserLocalStore}
                 capabilities={effectiveState.capabilities}
-                initialDocumentId={browserLocalDocumentId}
+                initialPath={browserLocalPath}
               />
             )}
           </Suspense>

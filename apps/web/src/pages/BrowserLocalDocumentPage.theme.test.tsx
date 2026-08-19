@@ -55,7 +55,9 @@ function render(ui: ReactElement) {
 }
 
 const snap: DocumentSnapshot = {
-  id: 'c1',
+  documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
+  workspaceId: 'local',
+  path: 'untitled',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
@@ -74,7 +76,7 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
   it('threads resolvedTheme=dark into SpatialEditor when the stored preference is dark', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId('0W16BGNTZ49EKRX27CHPV05AFM')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)
@@ -86,7 +88,7 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
   it('threads resolvedTheme=light into SpatialEditor when the stored preference is light', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId('0W16BGNTZ49EKRX27CHPV05AFM')
     await store.save(snap)
     await act(async () => {
       render(<BrowserLocalDocumentPage store={store} />)

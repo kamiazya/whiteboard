@@ -1,14 +1,15 @@
 /**
- * A stale /local/:id deep link (bookmark to a deleted canvas) must not
- * dead-end: the page falls back to the default canvas, the URL is
- * replaced with the real id, and no degraded screen hides the editor.
- * Before this slice the URL→canvas effect switched to the missing id and
- * parked the page on "The canvas could not be switched." with no editor.
+ * A stale /local/:path deep link (bookmark to a deleted document) must not
+ * dead-end: the page falls back to the default document, the URL is replaced
+ * with the real path, and no degraded screen hides the editor. Two entry
+ * points reach it and they are different code — the initial mount goes
+ * through the controller's store-backed load, a MID-SESSION history
+ * navigation goes through the page's own URL→document effect.
  */
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { LoroStoreLike } from './use-browser-local-document-controller.js'
 
@@ -51,12 +52,16 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 afterEach(cleanup)
 
-describe('stale /local/:id deep link', () => {
+describe('stale /local/:path deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('real-1')
+    await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
-      id: 'real-1',
+      documentId: '005AFMSY38DJQW16BGNTZ49EKR',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      // Deliberately not the id: the fallback below has to be reached by PATH,
+      // and an id-shaped path could not tell the two apart.
+      path: 'real-canvas',
       name: 'Real canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -65,12 +70,12 @@ describe('stale /local/:id deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/local/:documentId?',
+          path: '/local/*',
           element: (
             <BrowserLocalDocumentPage
               store={store}
               loro={new FakeLoroStore()}
-              initialDocumentId="gone-123"
+              initialPath="gone-123"
             />
           ),
         },
@@ -85,9 +90,135 @@ describe('stale /local/:id deep link', () => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
     })
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/local/real-1')
+      expect(router.state.location.pathname).toBe('/local/real-canvas')
     })
     // No degraded dead-end screen.
     expect(screen.queryByText('The canvas could not be switched.')).toBeNull()
+  })
+
+  it('repairs the address bar when a mid-session navigation names a path this workspace does not have', async () => {
+    // The mounted page never remounts across /local/:path changes (see
+    // App.tsx's routing comment), so the effect below is the ONLY thing that
+    // can answer a Back onto a document that has since been deleted. It
+    // resolves the requested path against the in-memory list, and a path that
+    // is not in it used to make the effect return before reaching its own
+    // documented repair — leaving the address bar naming nothing.
+    const store = new MemoryStore()
+    await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
+    await store.save({
+      documentId: '005AFMSY38DJQW16BGNTZ49EKR',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'real-canvas',
+      name: 'Real canvas',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/local/*',
+          element: (
+            <BrowserLocalDocumentPage
+              store={store}
+              loro={new FakeLoroStore()}
+              initialPath="real-canvas"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ['/local/real-canvas'] },
+    )
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
+    })
+
+    await act(async () => {
+      await router.navigate('/local/gone-123')
+    })
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/local/real-canvas')
+    })
+    // The loaded document is untouched — a dead link costs the address bar, not
+    // the editor.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
+  })
+
+  it('does not repair a path it cannot judge yet, while the document list is still loading', async () => {
+    // `documents` starts empty and fills asynchronously, so during that window
+    // "not in the list" means "not known yet", not "does not exist". Repairing
+    // there would overwrite a navigation to a perfectly valid document with
+    // the current path, and the list arriving later cannot undo it.
+    const store = new MemoryStore()
+    await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
+    await store.save({
+      documentId: '005AFMSY38DJQW16BGNTZ49EKR',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'real-canvas',
+      name: 'Real canvas',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
+    await store.save({
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'other-canvas',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
+
+    // Held open so the navigation below lands inside the enumeration window.
+    // The FIRST call is the controller resolving `initialPath` — letting that
+    // through is what gets a document loaded at all; the page's own list
+    // effect is the second, and that is the one this test suspends.
+    let releaseList: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      releaseList = resolve
+    })
+    const listDocuments = store.listDocuments.bind(store)
+    let calls = 0
+    store.listDocuments = async () => {
+      calls += 1
+      if (calls === 2) await held
+      return listDocuments()
+    }
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/local/*',
+          element: (
+            <BrowserLocalDocumentPage
+              store={store}
+              loro={new FakeLoroStore()}
+              initialPath="real-canvas"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ['/local/real-canvas'] },
+    )
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
+    })
+
+    await act(async () => {
+      await router.navigate('/local/other-canvas')
+    })
+    expect(router.state.location.pathname).toBe('/local/other-canvas')
+
+    releaseList?.()
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(router.state.location.pathname).toBe('/local/other-canvas')
   })
 })

@@ -26,8 +26,11 @@ export function browserLocalIndexPath(): string {
   return '/local'
 }
 
-export function browserLocalDocumentPath(documentId: string): string {
-  return `/local/${encodeURIComponent(documentId)}`
+// Per-segment encoding, separators left alone — the same rule `documentPath`
+// follows for the daemon. Encoding the separators would collapse a hierarchy
+// the browser shows into one opaque URL segment.
+export function browserLocalDocumentPath(path: string): string {
+  return `/local/${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
 export type DaemonRoute =
@@ -82,11 +85,12 @@ export function daemonRoutePath(route: DaemonRoute): string {
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 
-export function parseBrowserLocalRoute(pathname: string): { documentId: string } | null {
-  const match = pathname.match(/^\/local\/([^/]+)\/?$/)
+export function parseBrowserLocalRoute(pathname: string): { path: string } | null {
+  const match = pathname.match(/^\/local\/(.+?)\/?$/)
   if (!match) return null
-  const documentId = decodeSegment(match[1])
-  return documentId === null ? null : { documentId }
+  const segments = (match[1] as string).split('/').map(decodeSegment)
+  if (segments.some((segment) => segment === null || segment === '')) return null
+  return { path: segments.join('/') }
 }
 
 export type SettingsSection = 'general' | 'data' | 'connections'

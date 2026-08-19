@@ -4,7 +4,9 @@ import { derivePageState } from './browser-local-page-state.js'
 import type { BrowserLocalPersistenceState } from './use-browser-local-document-controller.js'
 
 const snapshot: DocumentSnapshot = {
-  id: 'canvas-A',
+  documentId: '0ADGKPSWZ258BEHMQTX0369CFJ',
+  workspaceId: 'local',
+  path: 'untitled',
   name: 'untitled',
   updatedAt: '2026-05-04T00:00:00.000Z',
   kind: 'spatial' as const,

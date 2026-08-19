@@ -61,6 +61,14 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
+// The switcher addresses a document by PATH; the store's default pointer and
+// every persistence helper here address it by id. This is the one conversion.
+async function pathOf(store: IndexedDBStore, documentId: string): Promise<string> {
+  const found = (await store.listDocuments()).find((row) => row.documentId === documentId)
+  if (found === undefined) throw new Error(`no document ${documentId}`)
+  return found.path
+}
+
 describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -138,13 +146,18 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
     await waitForMenuClosed()
 
     // Switch back to A via the switcher control. Both A and B default to the
-    // "untitled" display name, so disambiguate by the raw id shown in each
-    // menu item's subtitle line (only rendered when the name differs from
-    // the path/id, which it always does for a browser-local canvas).
+    // "untitled" display NAME, so the only thing that separates them in the
+    // menu is their path — which is also what the switcher navigates by.
+    const pathA = await pathOf(store, idA)
+    const pathB = await pathOf(store, idB)
+    expect(pathA).not.toBe(pathB)
     const switcherB = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
-    const idALabel = await screen.findByText(idA)
-    const itemA = idALabel.closest('[role="menuitem"]') as HTMLElement
+    const items = await screen.findAllByRole('menuitem')
+    const itemA = items.find(
+      (item) => item.textContent?.includes(pathA) && !item.textContent.includes(pathB),
+    ) as HTMLElement
+    expect(itemA).toBeDefined()
     // `latestMountedCanvases` accumulates every mount, including the one from
     // when A was originally open. Only mounts recorded from here on can show
     // that switching BACK re-hydrated A — searching the whole history would

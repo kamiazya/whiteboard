@@ -76,7 +76,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   it('confirming deletion shows the cleanup-completed view and removes the canvas row', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await store.listDocuments()).map((c) => c.id)
+    const beforeIds = (await store.listDocuments()).map((c) => c.documentId)
     expect(beforeIds.length).toBeGreaterThan(0)
 
     const dialog = await openDeleteDialog()
@@ -87,7 +87,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listDocuments()).map((c) => c.id)
+    const afterIds = (await store.listDocuments()).map((c) => c.documentId)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }
@@ -145,7 +145,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
     let store = await renderLoaded()
-    const beforeIds = (await store.listDocuments()).map((c) => c.id)
+    const beforeIds = (await store.listDocuments()).map((c) => c.documentId)
 
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
@@ -198,7 +198,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listDocuments()).map((c) => c.id)
+    const afterIds = (await store.listDocuments()).map((c) => c.documentId)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }
